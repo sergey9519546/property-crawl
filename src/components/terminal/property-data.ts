@@ -70,6 +70,8 @@ export interface PropertyListing {
   auctionProgram?: string | null;
   notes?: string | null;
   isHomestead?: boolean | null;
+  isTaxSale?: boolean | null;
+  distressType?: string | null;
   /** Publisher lifecycle value; deliberately separate from auction completion. */
   lifecycle?: string | null;
   lifecycleStatus?: string | null;

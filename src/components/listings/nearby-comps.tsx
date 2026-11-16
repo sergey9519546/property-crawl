@@ -62,8 +62,16 @@ export function NearbyComps({
     );
   }
 
-  if (error || !data) {
-    return null; // Fail-soft if endpoint unavailable or errored
+  if (error) {
+    return (
+      <div className="rounded-card border border-line bg-card p-6 shadow-sm">
+        <p className="text-xs font-medium text-catch-ink">Comparable auctions could not be loaded: {error}</p>
+      </div>
+    );
+  }
+
+  if (!data) {
+    return null;
   }
 
   const comps = Array.isArray(data.comps) ? data.comps : [];

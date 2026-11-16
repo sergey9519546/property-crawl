@@ -10,9 +10,15 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 
 export type MemberState = { email: string; entitled: boolean } | null;
 
+export type WorkspaceRole = "operator" | "analyst" | "viewer";
+
 type SessionState = {
   /** Operator session (shared key). */
   authenticated: boolean;
+  /** Authenticated workspace role when unlocked. */
+  role: WorkspaceRole | null;
+  /** Fine-grained permissions granted to the current session. */
+  permissions: string[];
   /** Signed-in email member, entitled or not. */
   member: MemberState;
   /** Per-user tools (hunts, watchlist, portfolio, alerts) are usable. */
@@ -42,8 +48,18 @@ function readMember(value: unknown): MemberState {
   return m && typeof m.email === "string" ? { email: m.email, entitled: m.entitled === true } : null;
 }
 
+function parseRole(value: unknown): WorkspaceRole | null {
+  return value === "operator" || value === "analyst" || value === "viewer" ? value : null;
+}
+
+function parsePermissions(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
 const defaultSession: SessionState = {
   authenticated: false,
+  role: null,
+  permissions: [],
   member: null,
   memberTools: false,
   configured: false,
@@ -90,6 +106,8 @@ export function useResolvedWorkspaceSession(): SessionState | null {
         const member = response.ok ? readMember(result.member) : null;
         setProbed({
           authenticated,
+          role: authenticated ? parseRole(result.role) : null,
+          permissions: authenticated ? parsePermissions(result.permissions) : [],
           member,
           memberTools: authenticated || Boolean(member?.entitled),
           configured: result.configured !== false,
@@ -110,9 +128,11 @@ export function useResolvedWorkspaceSession(): SessionState | null {
   return fromContext ?? probed;
 }
 
-export function WorkspaceShell({ children }: { children: React.ReactNode }) {
+export function WorkspaceSessionProvider({ children, includeChrome = false }: { children: React.ReactNode; includeChrome?: boolean }) {
   const pathname = usePathname();
   const [authenticated, setAuthenticated] = React.useState(false);
+  const [role, setRole] = React.useState<WorkspaceRole | null>(null);
+  const [permissions, setPermissions] = React.useState<string[]>([]);
   const [member, setMember] = React.useState<MemberState>(null);
   const [configured, setConfigured] = React.useState(true);
   const [expiresAt, setExpiresAt] = React.useState<string | null>(null);
@@ -133,6 +153,8 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
       if (requestId !== authRequest.current) return false;
       const accepted = Boolean(response.ok && result.authenticated);
       setAuthenticated(accepted);
+      setRole(accepted ? parseRole(result.role) : null);
+      setPermissions(accepted ? parsePermissions(result.permissions) : []);
       setMember(response.ok ? readMember(result.member) : null);
       setConfigured(result.configured !== false);
       setExpiresAt(typeof result.expiresAt === "string" ? result.expiresAt : null);
@@ -140,6 +162,8 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
     } catch {
       if (requestId !== authRequest.current) return false;
       setAuthenticated(false);
+      setRole(null);
+      setPermissions([]);
       setExpiresAt(null);
       return false;
     } finally { if (requestId === authRequest.current) setLoading(false); }
@@ -194,7 +218,7 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
         return;
       }
       if (!response.ok) throw new Error(result.error || "Workspace could not be unlocked");
-      setAuthenticated(true); setConfigured(true); setLoading(false); setExpiresAt(result.expiresAt || null); setCredential(""); setUnlockOpen(false); setShellError("");
+      setAuthenticated(true); setRole(parseRole(result.role)); setPermissions(parsePermissions(result.permissions)); setConfigured(true); setLoading(false); setExpiresAt(result.expiresAt || null); setCredential(""); setUnlockOpen(false); setShellError("");
     } catch (caught) { setError(caught instanceof Error ? caught.message : "Workspace could not be unlocked"); }
     finally { setSubmitting(false); setLoading(false); }
   }
@@ -206,21 +230,21 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
     try {
       const response = await fetch("/api/workspace/session", { method: "DELETE", credentials: "same-origin" });
       if (!response.ok) throw new Error("Workspace could not be locked. Please try again.");
-      setAuthenticated(false); setExpiresAt(null);
+      setAuthenticated(false); setRole(null); setPermissions([]); setExpiresAt(null);
     } catch {
       setShellError("Workspace could not be locked. Please try again.");
     } finally { setSubmitting(false); setLoading(false); }
   }
 
   const context = React.useMemo<SessionState>(() => ({
-    authenticated, member, memberTools: authenticated || Boolean(member?.entitled), configured, expiresAt, loading,
+    authenticated, role, permissions, member, memberTools: authenticated || Boolean(member?.entitled), configured, expiresAt, loading,
     requestUnlock: openUnlock,
     refresh,
-  }), [authenticated, member, configured, expiresAt, loading, refresh, openUnlock]);
+  }), [authenticated, role, permissions, member, configured, expiresAt, loading, refresh, openUnlock]);
 
   return <SessionContext.Provider value={context}>
     <div className="workspace-shell min-h-screen bg-paper text-ink">
-      <header className="sticky top-0 z-40 border-b border-line bg-card/95 px-4 py-3 shadow-sm backdrop-blur sm:px-8">
+      {includeChrome ? (<header className="sticky top-0 z-40 border-b border-line bg-card/95 px-4 py-3 shadow-sm backdrop-blur sm:px-8">
         <div className="mx-auto flex max-w-[1480px] flex-wrap items-center gap-3">
           <Link href="/" className="mr-2 flex items-center" aria-label="PerfectProperty home"><Logo className="text-body" /></Link>
           <nav aria-label="Research workspace" className="order-3 flex w-full flex-nowrap overflow-x-auto gap-1 sm:order-none sm:w-auto sm:flex-1">
@@ -237,7 +261,7 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
               : <button type="button" onClick={openUnlock} className="inline-flex items-center gap-1.5 rounded-control bg-ink px-3 py-2 text-xs font-semibold text-white hover:bg-ink-2"><LockKeyhole size={14} />{loading ? "Checking…" : "Unlock"}</button>}
           </div>
         </div>
-      </header>
+      </header>) : null}
       {authenticated && expiresAt && <p className="sr-only">Private operator session expires {new Date(expiresAt).toLocaleString()}.</p>}
       {shellError ? <p role="alert" className="mx-auto my-3 max-w-[1440px] rounded-control bg-catch-wash px-5 py-3 text-sm text-catch-ink">{shellError}</p> : null}
       {children}
@@ -251,7 +275,7 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
         <p className="mt-1 text-xs leading-5 text-ink-3">The shared operator key also opens research, sources, reviews, and collection controls.</p>
         <form onSubmit={unlock} className="mt-5">
           <label htmlFor="workspace-credential" className="text-xs font-semibold">Operator key <span className="sr-only">(Workspace access key)</span></label>
-          <div className="mt-2 flex items-center gap-2 rounded-control border border-line-strong px-3"><KeyRound size={16} className="text-ink-3" /><input id="workspace-credential" autoFocus required disabled={submitting} type="password" autoComplete="current-password" value={credential} onChange={(event) => setCredential(event.target.value)} className="min-w-0 flex-1 bg-transparent py-3 text-sm outline-none" /></div>
+          <div className="mt-2 flex items-center gap-2 rounded-control border border-line-strong bg-card px-3 focus-within:border-yours focus-within:ring-2 focus-within:ring-yours/20"><KeyRound size={16} className="text-ink-3" /><input id="workspace-credential" autoFocus required disabled={submitting} type="password" autoComplete="current-password" value={credential} onChange={(event) => setCredential(event.target.value)} className="min-w-0 flex-1 bg-transparent py-3 text-sm outline-none focus-visible:shadow-none" /></div>
           {!configured && <p className="mt-3 rounded-control bg-paper p-3 text-xs leading-5 text-ink-2">Enter the operator key configured for this deployment.</p>}
           {error && <p role="alert" className="mt-3 rounded-control bg-catch-wash p-3 text-xs leading-5 text-catch-ink">{error}</p>}
           <button disabled={submitting || !configured} className="mt-4 w-full rounded-control bg-ink px-4 py-3 text-sm font-semibold text-white hover:bg-ink-2 disabled:opacity-50">{submitting ? "Unlocking…" : "Unlock workspace"}</button>
@@ -261,7 +285,12 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
   </SessionContext.Provider>;
 }
 
+export function WorkspaceShell({ children }: { children: React.ReactNode }) {
+  return <WorkspaceSessionProvider includeChrome>{children}</WorkspaceSessionProvider>;
+}
+
 export function PrivateWorkspaceGate({ title = "Unlock your research workspace", headingLevel = 2, children }: { title?: string; headingLevel?: 1 | 2 | 3; children?: React.ReactNode }) {
+
   const session = useWorkspaceSession();
   // headingLevel exists because the answer is not uniform.
   //

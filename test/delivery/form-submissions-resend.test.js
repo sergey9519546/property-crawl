@@ -85,3 +85,58 @@ test('Form Inbound Delivery: falls back cleanly to local JSONL when unconfigured
   assert.ok(result.storedPath);
   assert.ok(fs.existsSync(result.storedPath));
 });
+
+test('Form Inbound Delivery: refuses submitter email as operator fallback and fires webhook alongside mail', async () => {
+  const tmpOutbox = fs.mkdtempSync(path.join(os.tmpdir(), 'mail-outbox-both-'));
+  const requests = [];
+  const mockFetch = async (url, options) => {
+    requests.push({ url, body: JSON.parse(options.body) });
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ id: 'msg_ok' }),
+    };
+  };
+
+  // Submitter email must NOT become the Resend operator recipient when OPERATOR_EMAIL is unset
+  const noInboxResult = await persistFormSubmission('contact', {
+    name: 'NoOp Inbox',
+    email: 'submitter@example.com',
+    message: 'Testing fail-closed recipient.',
+  }, {
+    env: {
+      RESEND_API_KEY: 're_test_key',
+      RESEND_FROM: 'alerts@perfectproperty.app',
+      CONTACT_WEBHOOK_URL: 'https://hooks.example.com/contact',
+    },
+    fetchImpl: mockFetch,
+    outboxDir: tmpOutbox,
+  });
+  assert.equal(noInboxResult.delivery, 'forwarded');
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].url, 'https://hooks.example.com/contact');
+
+  // When both Resend + OPERATOR_EMAIL AND webhook are set, both dispatch cleanly
+  requests.length = 0;
+  const bothResult = await persistFormSubmission('contact', {
+    name: 'Dual Delivery',
+    email: 'dual@example.com',
+    message: 'Testing simultaneous mail and webhook.',
+  }, {
+    env: {
+      RESEND_API_KEY: 're_test_key',
+      RESEND_FROM: 'alerts@perfectproperty.app',
+      OPERATOR_EMAIL: 'ops@perfectproperty.app',
+      CONTACT_WEBHOOK_URL: 'https://hooks.example.com/contact',
+    },
+    fetchImpl: mockFetch,
+    outboxDir: tmpOutbox,
+  });
+  assert.equal(bothResult.delivery, 'sent');
+  assert.equal(bothResult.forward.forwarded, true);
+  assert.equal(requests.length, 2);
+  assert.equal(requests[0].url, 'https://api.resend.com/emails');
+  assert.equal(requests[1].url, 'https://hooks.example.com/contact');
+
+  fs.rmSync(tmpOutbox, { recursive: true, force: true });
+});

@@ -17,6 +17,10 @@ const handlePropertyImageProviders = require('./routes/property-image-providers'
     'google-geocoding': handlePropertyImage.defaultService ? handlePropertyImage.defaultService.geocodingCircuit : null,
     'google-streetview': handlePropertyImage.defaultService ? handlePropertyImage.defaultService.circuit : null
   },
+  providerCaches: {
+    panoramax: handlePropertyImage.defaultService ? handlePropertyImage.defaultService.panoramaxCache : null,
+    mapillary: handlePropertyImage.defaultService ? handlePropertyImage.defaultService.mapillaryCache : null
+  },
   cache: handlePropertyImage.defaultService ? handlePropertyImage.defaultService.panoramaxCache : null
 });
 const handleSourceNetwork = require('./routes/source-network');
@@ -554,6 +558,33 @@ async function startServer() {
     }
     await refreshDbCapabilities(15000);
     wireStoresAfterVerify(db);
+    if (db.isPg && db.pool) {
+      try {
+        const docReview = require('./routes/document-review');
+        const reviewStore = typeof docReview.getStore === 'function'
+          ? docReview.getStore(db)
+          : (typeof docReview._getStore === 'function' ? docReview._getStore() : null);
+        if (reviewStore && typeof reviewStore.loadPg === 'function') {
+          const loadedReviews = await reviewStore.loadPg();
+          if (loadedReviews > 0) {
+            console.log('[Server] Loaded ' + loadedReviews + ' document review(s) from PostgreSQL.');
+          }
+        }
+      } catch (docReviewErr) {
+        console.warn('[Server] Document review Postgres load warning:', docReviewErr && docReviewErr.message ? docReviewErr.message : docReviewErr);
+      }
+    }
+    if (db.isPg && db.pool) {
+      try {
+        const { syncEvidenceLedgerWithPostgres } = require('./discovery/evidence-ledger');
+        const syncRes = await syncEvidenceLedgerWithPostgres(db.pool);
+        if (syncRes && syncRes.synced) {
+          console.log(`[Server] Evidence ledger Postgres anchor active (anchored=${syncRes.anchoredEntries}, hydrated=${syncRes.hydratedFromPostgres})`);
+        }
+      } catch (ledgerErr) {
+        console.warn('[Server] Evidence ledger Postgres anchor sync warning:', ledgerErr && ledgerErr.message ? ledgerErr.message : ledgerErr);
+      }
+    }
     return true;
   };
 
@@ -569,10 +600,39 @@ async function startServer() {
     console.log(`[Server] dataMode=${db.dataMode()} postgresReachable=${db.postgresReachable === true}\n`);
     const reason = db.inventoryUnavailableReason();
     if (reason) console.log(`[Server] NO INVENTORY WILL BE SERVED - ${reason}\n`);
+    const CACHE_HYGIENE_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
+    const CACHE_HYGIENE_TMP_AGE_MS = 30 * 60 * 1000;
+    const runCacheHygiene = (reason = 'maintenance') => {
+      if (process.env.NODE_ENV === 'test') return;
+      try {
+        const { runFullCacheCompaction, compactCacheDirectory } = require('./discovery/cache-compaction');
+        const cacheRoot = path.resolve(__dirname, '..', '.cache');
+        const compacted = runFullCacheCompaction(cacheRoot, {
+          maxAgeMs: CACHE_HYGIENE_MAX_AGE_MS,
+          staleTmpAgeMs: CACHE_HYGIENE_TMP_AGE_MS,
+          dryRun: false
+        });
+        const tmpSweep = compactCacheDirectory(cacheRoot, {
+          maxAgeMs: null,
+          staleTmpAgeMs: CACHE_HYGIENE_TMP_AGE_MS,
+          skipDirs: ['pgdata', 'document-vault', 'form-submissions', 'discovery-snapshots'],
+          dryRun: false
+        });
+        const removed = (compacted?.totalEntriesRemoved || 0) + (tmpSweep?.entriesRemoved || 0);
+        if (removed > 0) {
+          console.log('[Server] Cache hygiene (' + reason + ') removed ' + removed + ' expired/temp artifact(s).');
+        }
+      } catch (cacheErr) {
+        console.warn('[Server] Cache hygiene (' + reason + ') warning:', cacheErr && cacheErr.message ? cacheErr.message : cacheErr);
+      }
+    };
     let bootMaintenancePromise = Promise.resolve();
     const transientPgBootFailure = !db.isPg
       && Boolean((db.env && db.env.DATABASE_URL) || process.env.DATABASE_URL)
       && /timeout|terminat|reset|too many|authentication did not complete/i.test(db.postgresError || '');
+    if (process.env.NODE_ENV !== 'test' && !db.isPg && !transientPgBootFailure) {
+      setTimeout(() => runCacheHygiene('boot'), 20000).unref();
+    }
     if (process.env.NODE_ENV !== 'test' && (db.isPg || transientPgBootFailure)) {
       if (db.isPg) refreshHealthDiagnostics().catch(() => {});
       bootMaintenancePromise = new Promise((resolve) => {
@@ -610,6 +670,7 @@ async function startServer() {
               );
               refreshHealthDiagnostics().catch(() => {});
             }
+            runCacheHygiene('boot');
           } catch (err) {
             console.warn('[Server] Boot maintenance warning:', err && err.message ? err.message : err);
           } finally {
@@ -618,12 +679,18 @@ async function startServer() {
         }, 20000).unref();
       });
     }
+    const scheduleStandaloneCacheHygiene = () => {
+      if (process.env.NODE_ENV === 'test') return;
+      setInterval(() => runCacheHygiene('periodic'), 6 * 60 * 60 * 1000).unref();
+    };
     if (!scheduler.shouldAllowRealScrapers(process.env)) {
       console.log('[Server] Background scrapers disabled for this test/offline environment.');
+      scheduleStandaloneCacheHygiene();
       return;
     }
     if (!scheduler.backgroundCollectionEnabled(process.env)) {
       console.log('[Server] Manual source collection enabled; background collection is disabled.');
+      scheduleStandaloneCacheHygiene();
       return;
     }
 
@@ -643,11 +710,15 @@ async function startServer() {
           if ((res?.deleted || 0) > 0 || (res?.observationsDeleted || 0) > 0) {
             console.log(`[Server] Post-cycle purge removed ${res?.deleted || 0} stale listings and ${res?.observationsDeleted || 0} stale observations.`);
           }
+          if (typeof db.refreshNeighborhoodStatsMaterializedView === 'function') {
+            await db.refreshNeighborhoodStatsMaterializedView({ concurrent: true }).catch(() => {});
+          }
           refreshHealthDiagnostics().catch(() => {});
         } catch (purgeErr) {
           console.warn('[Server] Post-cycle purge warning:', purgeErr && purgeErr.message ? purgeErr.message : purgeErr);
         }
       }
+      runCacheHygiene('cycle');
       scheduleContinuation();
     };
     const CONTINUATION_DELAY_MS = 120000;

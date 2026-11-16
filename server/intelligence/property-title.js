@@ -14,16 +14,19 @@ const RISK_BANDS = {
 
 class PropertyTitleClient {
   constructor(options = {}) {
-    this.apiKey = options.apiKey || process.env.PROPERTY_TITLE_API_KEY || process.env.API_MARKET_KEY;
-    if (!this.apiKey) throw new Error('PROPERTY_TITLE_API_KEY is required');
+    this.apiKey = options.apiKey || process.env.PROPERTY_TITLE_API_KEY || process.env.API_MARKET_KEY || null;
     this.baseUrl = (options.baseUrl || process.env.PROPERTY_TITLE_BASE_URL || DEFAULT_BASE_URL).replace(/\/$/, '');
     this.timeout = options.timeout || 12000;
   }
 
   async _request(path, method = 'GET', data = null) {
+    const apiKey = this.apiKey || process.env.PROPERTY_TITLE_API_KEY || process.env.API_MARKET_KEY || null;
+    if (!apiKey) {
+      throw new Error('PROPERTY_TITLE_API_KEY is required');
+    }
     const url = new URL(this.baseUrl + path);
     const headers = {
-      'x-api-market-key': this.apiKey,
+      'x-api-market-key': apiKey,
       'Content-Type': 'application/json'
     };
 
@@ -93,7 +96,7 @@ class PropertyTitleClient {
     if (params.limit) query.set('limit', String(params.limit));
     if (params.offset) query.set('offset', String(params.offset));
     if (params.state) query.set('state', String(params.state));
-    if (params.county) query.set('country', String(params.county));
+    if (params.county) query.set('county', String(params.county));
     if (params.property_type) query.set('property_type', String(params.property_type));
     if (params.q) query.set('q', String(params.q));
 

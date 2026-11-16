@@ -36,7 +36,7 @@ test('storage validates configuration and fails closed when statfs fails', () =>
 test('readiness remains false when PostgreSQL is healthy but collector storage is low', async () => {
   const result = await discoveryReadiness({
     env: { DATABASE_URL: 'postgres://injected' },
-    databaseProbe: async () => ({ postgis: true, tables: ['listings', 'discovery_source_runs', 'discovery_snapshots', 'discovery_checkpoints', 'discovery_jobs', 'discovery_leases'] }),
+    databaseProbe: async () => ({ postgis: true, tables: ['listings', 'discovery_source_runs', 'discovery_snapshots', 'discovery_observations', 'discovery_checkpoints', 'discovery_jobs', 'discovery_leases'] }),
     storageProbe: () => ({ ready: false, code: 'DISCOVERY_STORAGE_LOW', freeBytes: 10, minimumFreeBytes: 20 })
   });
   assert.equal(result.checks.database.ready, true);

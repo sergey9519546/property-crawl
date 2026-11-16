@@ -62,10 +62,10 @@ function appendJsonl(kind, payload) {
   return file;
 }
 
-async function forwardWebhook(url, payload) {
+async function forwardWebhook(url, payload, fetchImpl = fetch) {
   if (!url) return { forwarded: false, reason: 'no-endpoint' };
   try {
-    const response = await fetch(url, {
+    const response = await fetchImpl(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify(payload),
@@ -99,9 +99,13 @@ async function persistFormSubmission(kind, fields, options = {}) {
   const env = options.env || process.env;
   let forward = { forwarded: false, reason: 'no-endpoint' };
   let mail = null;
+  const webhookUrl = options.webhookUrl
+    || (kind === 'newsletter'
+      ? env.NEWSLETTER_ENDPOINT || env.NEWSLETTER_WEBHOOK_URL || ''
+      : env.CONTACT_ENDPOINT || env.CONTACT_WEBHOOK_URL || '');
   if (mailIsConfigured(env)) {
     const operatorInbox = isEmail(env.OPERATOR_EMAIL || env.CONTACT_TO || env.RESEND_TO);
-    const recipient = kind === 'newsletter' ? isEmail(fields.email) : (operatorInbox || isEmail(fields.email));
+    const recipient = kind === 'newsletter' ? isEmail(fields.email) : operatorInbox;
     const subject = kind === 'newsletter'
       ? 'PerfectProperty list subscription'
       : `New Inbound Contact Inquiry: ${fields.name || 'Anonymous'}`;
@@ -115,13 +119,8 @@ async function persistFormSubmission(kind, fields, options = {}) {
         { env, fetchImpl: options.fetchImpl, outboxDir: options.outboxDir }
       );
     }
-  } else {
-    const webhookUrl = options.webhookUrl
-      || (kind === 'newsletter'
-        ? env.NEWSLETTER_ENDPOINT || env.NEWSLETTER_WEBHOOK_URL || ''
-        : env.CONTACT_ENDPOINT || env.CONTACT_WEBHOOK_URL || '');
-    forward = await forwardWebhook(webhookUrl, record);
   }
+  forward = await forwardWebhook(webhookUrl, record, options.fetchImpl);
   const delivery = mail?.delivery === 'sent'
     ? 'sent'
     : forward.forwarded
@@ -141,30 +140,61 @@ async function persistFormSubmission(kind, fields, options = {}) {
   };
 }
 
-function removeNewsletterEmail(email) {
+function removeNewsletterEmail(email, options = {}) {
   const normalized = isEmail(email);
   if (!normalized) return { removed: 0 };
   const file = path.join(submissionDir(), 'newsletter.jsonl');
   if (!fs.existsSync(file)) return { removed: 0 };
-  const lines = fs.readFileSync(file, 'utf8').split(/\n/).filter((line) => line.length > 0);
-  const kept = [];
-  let removed = 0;
-  for (const line of lines) {
-    try {
-      const row = JSON.parse(line);
-      if (isEmail(row.email) === normalized) {
-        removed += 1;
-        continue;
+  const lockPath = `${file}.lock`;
+  const acquireLock = () => fs.openSync(lockPath, 'wx', 0o600);
+  let lock;
+  try {
+    lock = acquireLock();
+  } catch (error) {
+    if (error.code === 'EEXIST') {
+      const staleLockMs = typeof options.staleLockMs === 'number' ? options.staleLockMs : 30_000;
+      let stale = false;
+      try { stale = Date.now() - fs.statSync(lockPath).mtimeMs > staleLockMs; } catch (_) {}
+      if (stale) {
+        try { fs.unlinkSync(lockPath); } catch (_) {}
+        try { lock = acquireLock(); } catch (_) {}
       }
-    } catch {
-      // Keep a line that is not a newsletter record.
+      if (lock === undefined) throw error;
+    } else {
+      throw error;
     }
-    kept.push(line);
   }
   const temporary = `${file}.${process.pid}.tmp`;
-  fs.writeFileSync(temporary, kept.length ? `${kept.join('\n')}\n` : '', 'utf8');
-  fs.renameSync(temporary, file);
-  return { removed };
+  try {
+    const lines = fs.existsSync(file)
+      ? fs.readFileSync(file, 'utf8').split(/\n/).filter((line) => line.length > 0)
+      : [];
+    const kept = [];
+    let removed = 0;
+    for (const line of lines) {
+      try {
+        const row = JSON.parse(line);
+        if (isEmail(row.email) === normalized) {
+          removed += 1;
+          continue;
+        }
+      } catch {
+        // Keep a line that is not a newsletter record.
+      }
+      kept.push(line);
+    }
+    fs.writeFileSync(temporary, kept.length ? `${kept.join('\n')}\n` : '', 'utf8');
+    fs.renameSync(temporary, file);
+    return { removed };
+  } finally {
+    if (fs.existsSync(temporary)) {
+      try { fs.unlinkSync(temporary); } catch (_) {}
+    }
+    if (lock !== undefined) fs.closeSync(lock);
+    if (fs.existsSync(lockPath)) {
+      try { fs.unlinkSync(lockPath); } catch (_) {}
+    }
+  }
 }
 
 function resetFormSubmissionsForTests(kind) {

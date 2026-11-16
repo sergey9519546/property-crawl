@@ -43,7 +43,19 @@ const STREET_SUFFIXES = {
   CT: 'Ct',
   COURT: 'Ct',
   WAY: 'Way',
-  PKWY: 'Pkwy'
+  PKWY: 'Pkwy',
+  PARKWAY: 'Pkwy',
+  PL: 'Pl',
+  PLACE: 'Pl',
+  CIR: 'Cir',
+  CIRCLE: 'Cir',
+  TER: 'Ter',
+  TERR: 'Ter',
+  TERRACE: 'Ter',
+  HWY: 'Hwy',
+  HIGHWAY: 'Hwy',
+  TRL: 'Trl',
+  TRAIL: 'Trl'
 };
 
 /**
@@ -78,9 +90,35 @@ function normalizeAddressAndParcel(rawString = '') {
   let state = '';
   let streetName = addrPart;
 
-  let cityStateMatch = addrPart.match(/,\s*([A-Za-z]+)\s+([A-Z]{2})(?:\s+(\d{5}))?/i);
+  let cityStateMatch = null;
+  const commaCand = addrPart.match(/,\s*([A-Za-z][^,]{0,60}?)\s*,?\s*([A-Z]{2})(?:\s+(\d{5})(?:-\d{4})?)?[\s\.,]*$/i);
+  if (commaCand && US_STATE_OR_TERRITORY_CODES.has(commaCand[2].toUpperCase())) {
+    cityStateMatch = commaCand;
+  }
   if (!cityStateMatch) {
-    const noCommaMatch = addrPart.match(/\s+([A-Za-z]+)\s+([A-Z]{2})(?:\s+(\d{5}))?[\s\.,]*$/i);
+    const stateTail = addrPart.match(/\s+([A-Z]{2})(?:\s+(\d{5})(?:-\d{4})?)?[\s\.,]*$/i);
+    const headBeforeState = stateTail ? addrPart.slice(0, stateTail.index).trim() : '';
+    const headTokens = headBeforeState ? headBeforeState.split(/\s+/) : [];
+    let lastSuffixIdx = -1;
+    for (let ti = 0; ti < headTokens.length; ti++) {
+      const tokNorm = headTokens[ti].toUpperCase().replace(/[\.,]/g, '');
+      if (STREET_SUFFIXES[tokNorm]) {
+        const isSaintCityPrefix = tokNorm === 'ST' && lastSuffixIdx >= 1 && ti < headTokens.length - 1
+          && /^(?:louis|paul|petersburg|augustine|charles|cloud|george|joseph|lucie|thomas|clair|johns?|helens?|marys?)$/i.test(headTokens[ti + 1] || '');
+        if (!isSaintCityPrefix) lastSuffixIdx = ti;
+      }
+    }
+    const multiCityTokens = (lastSuffixIdx >= 0 && lastSuffixIdx < headTokens.length - 1 && (headTokens.length - 1 - lastSuffixIdx) <= 4)
+      ? headTokens.slice(lastSuffixIdx + 1)
+      : null;
+    let noCommaMatch = null;
+    if (stateTail && multiCityTokens) {
+      const cityStr = multiCityTokens.join(' ');
+      const idx = headBeforeState.length - cityStr.length;
+      noCommaMatch = Object.assign([addrPart.slice(idx), cityStr, stateTail[1], stateTail[2]], { index: idx - 1 });
+    } else {
+      noCommaMatch = addrPart.match(/\s+([A-Za-z]+)\s+([A-Z]{2})(?:\s+(\d{5}))?[\s\.,]*$/i);
+    }
     if (noCommaMatch) {
       const stateCand = noCommaMatch[2].toUpperCase();
       const cityCand = noCommaMatch[1].toUpperCase();
@@ -90,8 +128,9 @@ function normalizeAddressAndParcel(rawString = '') {
     }
   }
   if (cityStateMatch) {
-    const rawCity = cityStateMatch[1].toUpperCase();
-    city = CITY_NORMALIZATION[rawCity] || cityStateMatch[1];
+    const cleanedCity = cityStateMatch[1].trim();
+    const rawCity = cleanedCity.toUpperCase();
+    city = CITY_NORMALIZATION[rawCity] || cleanedCity;
     state = cityStateMatch[2].toUpperCase();
     streetName = addrPart.substring(0, cityStateMatch.index).trim();
   }

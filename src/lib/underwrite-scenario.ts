@@ -26,6 +26,11 @@ export interface UnderwriteScenario {
   customOpeningBid?: string;
   holdingMonths?: number;
   maxAllowableOffer?: number | null;
+  isHomestead?: boolean;
+  ltvPct?: number;
+  interestRatePct?: number;
+  monthlyInsurance?: number;
+  redemptionProbabilityPct?: number;
 }
 
 function blankScenario(): UnderwriteScenario {
@@ -82,6 +87,33 @@ export function readUnderwriteScenario(listingId: string): UnderwriteScenario | 
         if (Number.isFinite(mao) && mao >= 0) {
           scenario.maxAllowableOffer = mao;
         }
+      }
+    }
+    if (typeof source.isHomestead === "boolean") {
+      scenario.isHomestead = source.isHomestead;
+    }
+    if (source.ltvPct !== undefined) {
+      const ltv = Number(source.ltvPct);
+      if (Number.isFinite(ltv) && ltv >= 0 && ltv <= 100) {
+        scenario.ltvPct = ltv;
+      }
+    }
+    if (source.interestRatePct !== undefined) {
+      const rate = Number(source.interestRatePct);
+      if (Number.isFinite(rate) && rate >= 0 && rate <= 25) {
+        scenario.interestRatePct = rate;
+      }
+    }
+    if (source.monthlyInsurance !== undefined) {
+      const ins = Number(source.monthlyInsurance);
+      if (Number.isFinite(ins) && ins >= 0 && ins <= 10_000) {
+        scenario.monthlyInsurance = ins;
+      }
+    }
+    if (source.redemptionProbabilityPct !== undefined) {
+      const rp = Number(source.redemptionProbabilityPct);
+      if (Number.isFinite(rp) && rp >= 0 && rp <= 100) {
+        scenario.redemptionProbabilityPct = rp;
       }
     }
     return scenario;

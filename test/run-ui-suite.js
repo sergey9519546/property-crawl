@@ -199,7 +199,7 @@ if (bundleIsStale()) {
       ? 'python'
       : (spawnSync('python3', ['--version']).status === 0 ? 'python3' : 'python');
     process.exitCode = 0;
-    for (const suite of ['next_ui_e2e_test.py', 'detail_media_recovery_e2e_test.py']) {
+    for (const suite of ['next_ui_e2e_test.py', 'detail_media_recovery_e2e_test.py', 'discovery_ui_regression_test.py']) {
       const result = spawnSync(py, [path.join('test', suite)], {
         cwd: ROOT,
         stdio: 'inherit',

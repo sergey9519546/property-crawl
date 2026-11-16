@@ -62,6 +62,13 @@ export const ROLE_HIERARCHY: Record<Role, number> = Object.freeze({
   viewer: 1,
 });
 
+export function permissionsForRole(role: Role | string | null | undefined): Permission[] {
+  if (!role || typeof role !== "string") return [];
+  const normalizedRole = role.trim().toLowerCase() as Role;
+  if (!CANONICAL_ROLES.includes(normalizedRole)) return [];
+  return [...(ROLE_PERMISSIONS[normalizedRole] || [])];
+}
+
 /**
  * Permission check enforcing role boundaries.
  */

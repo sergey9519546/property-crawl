@@ -275,3 +275,43 @@ describe('ZillowMcpClient', () => {
     });
   });
 });
+
+
+test('ZillowMcpClient: deferred API key check, post_resolve_zillow_url tool name, and Zestimate/WalkScore exports', async () => {
+  const mod = require('../server/intelligence/zillow-mcp');
+  assert.equal(typeof mod.getZestimate, 'function');
+  assert.equal(typeof mod.getWalkScore, 'function');
+
+  const prevZillow = process.env.ZILLOW_MCP_API_KEY;
+  const prevMarket = process.env.API_MARKET_KEY;
+  delete process.env.ZILLOW_MCP_API_KEY;
+  delete process.env.API_MARKET_KEY;
+  try {
+    let client;
+    assert.doesNotThrow(() => {
+      client = new ZillowMcpClient();
+    });
+    const invalidRes = await client.autocomplete('');
+    assert.equal(invalidRes.code, 400);
+
+    const missingKeyRes = await client.listTools();
+    assert.equal(missingKeyRes.ok, false);
+    assert.equal(missingKeyRes.code, 401);
+    assert.match(missingKeyRes.error, /ZILLOW_MCP_API_KEY/);
+  } finally {
+    if (prevZillow !== undefined) process.env.ZILLOW_MCP_API_KEY = prevZillow;
+    if (prevMarket !== undefined) process.env.API_MARKET_KEY = prevMarket;
+  }
+
+  const spyClient = new ZillowMcpClient({ apiKey: 'test-key' });
+  let calledTool = null;
+  let calledArgs = null;
+  spyClient._callTool = async (name, args) => {
+    calledTool = name;
+    calledArgs = args;
+    return { ok: true, result: {} };
+  };
+  await spyClient.resolveZillowUrl('https://www.zillow.com/homes/cleveland/');
+  assert.equal(calledTool, 'post_resolve_zillow_url');
+  assert.deepEqual(calledArgs, { body: { url: 'https://www.zillow.com/homes/cleveland/' } });
+});

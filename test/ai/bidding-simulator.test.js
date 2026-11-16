@@ -182,3 +182,44 @@ test('simulateClearingProbability: plaintiffUpsetRisk flag is true when bid < up
   const out = simulateClearingProbability({ openingBid: 50000, judgment: 100000, assessed: 200000 }, 60000);
   assert.equal(out.plaintiffUpsetRisk, true);
 });
+
+
+test('generateBiddingNarrative: uses AI when key configured and falls back deterministically offline or on error', async () => {
+  const listing = { address: '500 Oak Ave', state: 'OH', openingBid: 60000, judgment: 90000, assessed: 150000 };
+
+  const offline = await BiddingSimulator.generateBiddingNarrative(listing, null, {
+    targetBid: 75000,
+    useAi: true,
+    env: {},
+    fetchFn: async () => { throw new Error('must not fetch'); },
+  });
+  assert.equal(offline.mode, 'deterministic');
+  assert.equal(offline.aiFallbackReason, 'api_key_missing');
+  assert.equal(offline.verified, false);
+  assert.match(offline.narrative, /Valuation range \(estLow\/estHigh\) absent; no ARV is imputed/);
+
+  const errorFallback = await BiddingSimulator.generateBiddingNarrative(listing, null, {
+    targetBid: 75000,
+    useAi: true,
+    env: { OPENAI_API_KEY: 'sk-test' },
+    fetchFn: async () => ({ ok: false, status: 503 }),
+  });
+  assert.equal(errorFallback.mode, 'deterministic');
+  assert.equal(errorFallback.aiFallbackReason, 'llm_unavailable');
+
+  const aiSuccess = await BiddingSimulator.generateBiddingNarrative(listing, null, {
+    targetBid: 75000,
+    useAi: true,
+    env: { GEMINI_API_KEY: 'gem-test' },
+    fetchFn: async () => ({
+      ok: true,
+      json: async () => ({
+        candidates: [{ content: { parts: [{ text: 'Modeled bid $75,000 sits below the $90,000 debt/upset ceiling with missing ARV.' }] } }],
+      }),
+    }),
+  });
+  assert.equal(aiSuccess.mode, 'ai');
+  assert.equal(aiSuccess.provider, 'gemini');
+  assert.equal(aiSuccess.verified, false);
+  assert.match(aiSuccess.narrative, /\$75,000/);
+});

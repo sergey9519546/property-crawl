@@ -143,3 +143,17 @@ describe('PropertyTitle Intelligence & Underwriting', () => {
     });
   });
 });
+
+test('PropertyTitleClient.listProperties sends county query param (not country)', async () => {
+  const { PropertyTitleClient: PTClient } = require('../server/intelligence/property-title');
+  const ptClient = new PTClient({ apiKey: 'test-key' });
+  let capturedPath = null;
+  ptClient._request = async (reqPath) => {
+    capturedPath = reqPath;
+    return { ok: true, data: { results: [] } };
+  };
+  await ptClient.listProperties({ state: 'OH', county: 'Cuyahoga', limit: 10 });
+  assert.ok(capturedPath, 'Expected _request to be called');
+  assert.match(capturedPath, /[?&]county=Cuyahoga(?:&|$)/);
+  assert.doesNotMatch(capturedPath, /[?&]country=/);
+});

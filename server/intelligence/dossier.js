@@ -1,3 +1,4 @@
+const crypto = require('node:crypto');
 const { verifiedSnapshotReceipt } = require('../scrapers/discovery-snapshots');
 const { computePublicBenchmarkConsensus } = require('../enrichment/public-benchmark-consensus');
 const { loadObservedHpiSeries } = require('../enrichment/hpi-series');
@@ -7,15 +8,242 @@ const { buildDocumentEvidence } = require('./document-evidence');
 const { getHudSafmrBenchmark } = require('../enrichment/hud-safmr');
 const { buildPossessionDossier } = require('./post-sale-possession');
 const { calculateSurplusEquityWaterfall } = require('./surplus-waterfall');
-const { evaluateAuctionProceedProbability } = require('./auction-microstructure');
+const { evaluateAuctionProceedProbability, calculateDocketClearingAnalytics } = require('./auction-microstructure');
 const { getAuctionDepositRules, calculateRequiredDeposit } = require('./escrow-optimizer');
 const { arbitrateTitleRisk } = require('./title-risk-engine');
+const { triggerWeightManager } = require('../swarm/trigger-weights');
+const {
+  normalizeCoordinates: normalizeHazardCoords,
+  evaluateFloodRisk,
+  estimateNfipReserve,
+  loadCache: loadFemaCache,
+} = require('../enrichment/fema-flood');
+const { evaluateEnvironmentalLiability, loadCache: loadEpaCache } = require('../enrichment/epa-hazard');
+const { classifySlope, loadCache: loadTerrainCache } = require('../enrichment/usgs-terrain');
+
+function coordHash(coords, suffix = '') {
+  const base = `${coords.lat},${coords.lng}${suffix ? `,${suffix}` : ''}`;
+  return crypto.createHash('sha256').update(base).digest('hex').slice(0, 32);
+}
+
+function resolveSyncFederalHazards(listing = {}, publicRecords = null, hazardCachePaths = null, now = Date.now()) {
+  if (listing.federalHazards) return listing.federalHazards;
+  if (publicRecords?.federalHazards) return publicRecords.federalHazards;
+
+  const rawLat = listing.lat ?? listing.latitude ?? publicRecords?.parcel?.lat ?? publicRecords?.geocode?.lat;
+  const rawLng = listing.lng ?? listing.longitude ?? publicRecords?.parcel?.lng ?? publicRecords?.geocode?.lng;
+  const coords = (rawLat !== null && rawLat !== undefined && rawLng !== null && rawLng !== undefined)
+    ? normalizeHazardCoords(rawLat, rawLng)
+    : null;
+  const cacheOpts = hazardCachePaths && typeof hazardCachePaths === 'object' ? hazardCachePaths : {};
+
+  let floodResult = null;
+  const inlineFlood = listing.femaFlood || publicRecords?.femaFlood;
+  if (inlineFlood && inlineFlood.status === 'success' && inlineFlood.floodRisk) {
+    floodResult = inlineFlood;
+  } else if (typeof listing.floodZone === 'string' && listing.floodZone.trim()) {
+    const risk = evaluateFloodRisk(listing.floodZone, listing.floodZoneSubtype || '', listing.sfhaFlag || '');
+    floodResult = {
+      status: 'success',
+      fromCache: false,
+      observedAt: listing.sourceObservedAt || new Date(now).toISOString(),
+      coords,
+      floodRisk: risk,
+      nfipReserve: estimateNfipReserve(risk),
+      provenance: 'listing-reported-flood-zone',
+    };
+  } else if (coords) {
+    const femaCache = cacheOpts.femaFlood ? loadFemaCache(cacheOpts.femaFlood) : loadFemaCache();
+    const cached = femaCache[coordHash(coords)];
+    if (cached && cached.schemaVersion === 2 && cached.floodRisk) {
+      floodResult = {
+        status: 'success',
+        fromCache: true,
+        observedAt: cached.observedAt,
+        coords,
+        floodRisk: cached.floodRisk,
+        nfipReserve: cached.nfipReserve,
+        rawAttributes: cached.rawAttributes,
+        provenance: 'fema-nfhl-spatial-query',
+      };
+    }
+  }
+  if (!floodResult) {
+    floodResult = {
+      status: 'unavailable',
+      reason: coords ? 'fema_cache_miss_offline' : 'invalid_or_missing_coordinates',
+      floodRisk: null,
+      provenance: 'fema-nfhl-spatial-query',
+    };
+  }
+
+  let epaResult = null;
+  const inlineEpa = listing.epaHazard || publicRecords?.epaHazard;
+  if (inlineEpa && inlineEpa.status === 'success' && inlineEpa.environmentalLiability) {
+    epaResult = inlineEpa;
+  } else if (Array.isArray(listing.epaFacilities) || Array.isArray(publicRecords?.epaFacilities)) {
+    const facilities = Array.isArray(listing.epaFacilities) ? listing.epaFacilities : publicRecords.epaFacilities;
+    epaResult = {
+      status: 'success',
+      fromCache: false,
+      observedAt: listing.sourceObservedAt || new Date(now).toISOString(),
+      coords,
+      environmentalLiability: evaluateEnvironmentalLiability(facilities),
+      facilities,
+      provenance: 'listing-reported-epa-facilities',
+    };
+  } else if (coords) {
+    const epaCache = cacheOpts.epaHazard ? loadEpaCache(cacheOpts.epaHazard) : loadEpaCache();
+    const cached = epaCache[coordHash(coords, '0.25')];
+    if (cached && cached.schemaVersion === 2 && cached.environmentalLiability) {
+      epaResult = {
+        status: 'success',
+        fromCache: true,
+        observedAt: cached.observedAt,
+        coords,
+        environmentalLiability: cached.environmentalLiability,
+        facilities: cached.facilities,
+        provenance: 'epa-envirofacts-spatial-query',
+      };
+    }
+  }
+  if (!epaResult) {
+    epaResult = {
+      status: 'unavailable',
+      reason: coords ? 'epa_cache_miss_offline' : 'invalid_or_missing_coordinates',
+      environmentalLiability: null,
+      provenance: 'epa-envirofacts-spatial-query',
+    };
+  }
+
+  let terrainResult = null;
+  const inlineTerrain = listing.usgsTerrain || publicRecords?.usgsTerrain;
+  const rawSlopePct = listing.terrainSlopePct;
+  const hasExplicitTerrainSlope =
+    rawSlopePct !== null &&
+    rawSlopePct !== undefined &&
+    typeof rawSlopePct !== 'boolean' &&
+    (typeof rawSlopePct !== 'string' || rawSlopePct.trim() !== '') &&
+    Number.isFinite(Number(rawSlopePct));
+  if (inlineTerrain && inlineTerrain.status === 'success' && inlineTerrain.slopeAnalysis) {
+    terrainResult = inlineTerrain;
+  } else if (hasExplicitTerrainSlope) {
+    const pct = Number(rawSlopePct);
+    const slopeAnalysis = classifySlope(pct, 100);
+    terrainResult = {
+      status: 'success',
+      fromCache: false,
+      observedAt: listing.sourceObservedAt || new Date(now).toISOString(),
+      coords,
+      slopeAnalysis,
+      provenance: 'listing-reported-slope',
+    };
+  } else if (coords) {
+    const terrainCache = cacheOpts.usgsTerrain ? loadTerrainCache(cacheOpts.usgsTerrain) : loadTerrainCache();
+    const cached = terrainCache[coordHash(coords)];
+    if (cached && cached.slopeAnalysis) {
+      terrainResult = {
+        status: 'success',
+        fromCache: true,
+        observedAt: cached.observedAt,
+        coords,
+        slopeAnalysis: cached.slopeAnalysis,
+        elevationMeters: cached.elevationMeters,
+        samples: cached.samples,
+        provenance: 'usgs-3dep-elevation-query',
+      };
+    }
+  }
+  if (!terrainResult) {
+    terrainResult = {
+      status: 'unavailable',
+      reason: coords ? 'usgs_cache_miss_offline' : 'invalid_or_missing_coordinates',
+      slopeAnalysis: null,
+      provenance: 'usgs-3dep-elevation-query',
+    };
+  }
+
+  const flags = [];
+  let compositeScore = 100;
+
+  if (floodResult.status === 'success' && floodResult.floodRisk) {
+    const fr = floodResult.floodRisk;
+    if (fr.riskTier === 'critical') {
+      compositeScore -= 40;
+      flags.push({ layer: 'fema_flood', severity: 'critical', label: `Coastal High Hazard Flood Zone (${fr.zone})`, detail: fr.description });
+    } else if (fr.riskTier === 'high') {
+      compositeScore -= 25;
+      flags.push({ layer: 'fema_flood', severity: 'high', label: `Special Flood Hazard Area 100-Year Floodplain (${fr.zone})`, detail: 'Mandatory flood insurance required by federally-regulated mortgagees.' });
+    } else if (fr.riskTier === 'moderate') {
+      compositeScore -= 10;
+      flags.push({ layer: 'fema_flood', severity: 'moderate', label: `500-Year Floodplain (${fr.zone})`, detail: fr.description });
+    }
+  }
+
+  if (epaResult.status === 'success' && epaResult.environmentalLiability) {
+    const el = epaResult.environmentalLiability;
+    if (el.liabilityTier === 'critical') {
+      compositeScore -= 50;
+      flags.push({ layer: 'epa_superfund', severity: 'critical', label: 'Active Superfund / SEMS Site within 0.25 Miles', detail: el.summary });
+    } else if (el.liabilityTier === 'high') {
+      compositeScore -= 30;
+      flags.push({ layer: 'epa_hazardous', severity: 'high', label: 'Multiple RCRA / Brownfield Facilities within 0.25 Miles', detail: el.summary });
+    } else if (el.liabilityTier === 'moderate') {
+      compositeScore -= 15;
+      flags.push({ layer: 'epa_hazardous', severity: 'moderate', label: 'EPA Regulated Facility in Proximity', detail: el.summary });
+    }
+  }
+
+  if (terrainResult.status === 'success' && terrainResult.slopeAnalysis) {
+    const sl = terrainResult.slopeAnalysis;
+    if (sl.classification === 'severe_slope') {
+      compositeScore -= 45;
+      flags.push({ layer: 'usgs_terrain', severity: 'critical', label: `Severe Ravine/Cliff Slope (${sl.slopePct}%)`, detail: sl.summary });
+    } else if (sl.classification === 'steep_slope') {
+      compositeScore -= 25;
+      flags.push({ layer: 'usgs_terrain', severity: 'high', label: `Steep Building Slope (${sl.slopePct}%)`, detail: sl.summary });
+    } else if (sl.classification === 'moderate_slope') {
+      compositeScore -= 10;
+      flags.push({ layer: 'usgs_terrain', severity: 'moderate', label: `Moderate Grade Slope (${sl.slopePct}%)`, detail: sl.summary });
+    }
+  }
+
+  compositeScore = Math.max(0, Math.min(100, compositeScore));
+  let overallTier = 'minimal_hazard';
+  if (compositeScore < 40) overallTier = 'critical_hazard';
+  else if (compositeScore < 70) overallTier = 'high_hazard';
+  else if (compositeScore < 85) overallTier = 'moderate_hazard';
+
+  const availableLayers = [floodResult, epaResult, terrainResult].filter((layer) => layer.status === 'success').length;
+  const complete = availableLayers === 3;
+  const status = complete ? 'success' : availableLayers > 0 ? 'partial' : 'unavailable';
+
+  return {
+    status,
+    ...(status === 'unavailable' ? { reason: coords ? 'hazard_cache_unpopulated_offline' : 'invalid_or_missing_coordinates' } : {}),
+    evaluatedAt: new Date(now).toISOString(),
+    compositeScore: complete ? compositeScore : null,
+    overallTier: complete ? overallTier : 'unknown',
+    flags,
+    layers: {
+      femaFlood: floodResult,
+      epaHazard: epaResult,
+      usgsTerrain: terrainResult,
+    },
+    underwritingImpact: {
+      nfipAnnualReserve: floodResult.status === 'success' ? floodResult.nfipReserve?.estimatedAnnualPremiumReserve ?? null : null,
+      phaseOneEsaRequired: epaResult.status === 'success' ? epaResult.environmentalLiability?.phaseOneRecommended ?? null : null,
+      gradingContingencyRequired: terrainResult.status === 'success' && Number.isFinite(terrainResult.slopeAnalysis?.slopePct) ? terrainResult.slopeAnalysis.slopePct > 15 : null,
+    },
+    provenance: 'federal-environmental-physical-gis-v1',
+  };
+}
 
 function known(value) { return value !== null && value !== undefined && value !== ''; }
 
-function buildPropertyDossier(listing, { observations = { records: {}, signals: [] }, publicRecords = null, operatorInput = null, now = Date.now(), historyUnavailable = false, countyStats = null } = {}) {
+function buildPropertyDossier(listing, { observations = { records: {}, signals: [] }, publicRecords = null, operatorInput = null, now = Date.now(), historyUnavailable = false, countyStats = null, hazardCachePaths = null, triggerWeights = triggerWeightManager } = {}) {
   const timestamp = listing.sourceObservedAt || listing.provenance?.observedAt;
-  const publisherObserved = listing.provenance?.origin === 'live'
+  const publisherObserved = (listing.provenance?.origin === 'live' || listing.provenance?.origin === 'email_notice')
     && validateListingForIngestion(listing).isValid && Date.parse(timestamp) <= now + 300_000;
   const archived = listing.provenance?.origin === 'archive' && listing.provenance?.observed === true
     && /^[a-f0-9]{64}$/i.test(listing.provenance?.datasetSha256 || '')
@@ -47,7 +275,19 @@ function buildPropertyDossier(listing, { observations = { records: {}, signals: 
   const signals = tracked ? observations.signals.filter((signal) => signal.listingId === listing.id && signal.sourceId === listing.source
     && (!signal.recordId || signal.recordId === String(listing.provenance?.recordId))
     && signal.evidence?.every((point) => recordUrls.has(point.sourceUrl))).slice(0, 10) : [];
-  const titleRisk = listing.titleRisk || publicRecords?.titleRisk || arbitrateTitleRisk(listing, listing.raw || '');
+  const resolvedViolations = Array.isArray(listing.municipalViolations)
+    ? listing.municipalViolations
+    : Array.isArray(listing.codeViolations)
+      ? listing.codeViolations
+      : Array.isArray(listing.codeEnforcement?.violations)
+        ? listing.codeEnforcement.violations
+        : Array.isArray(publicRecords?.municipalRecords?.violations)
+          ? publicRecords.municipalRecords.violations
+          : null;
+  const listingForTitle = (!Array.isArray(listing.municipalViolations) && resolvedViolations)
+    ? { ...listing, municipalViolations: resolvedViolations }
+    : listing;
+  const titleRisk = listing.titleRisk || publicRecords?.titleRisk || arbitrateTitleRisk(listingForTitle, listing.raw || '');
   const gaps = [];
   const VOI_POINTS = { source_identity: 25, title_docket_joinder: 24, omitted_party_joinder: 24, title: 22, municipal_payoff: 21, municipal_liens: 21, value_and_debt: 20, opening_bid: 18, payment_terms: 15, sale_date_passed: 14, transaction_outcome: 12, source_stale: 10, occupancy: 10, archive_snapshot: 8 };
   const VOI_TIER = { source_identity: 'critical_risk', title_docket_joinder: 'critical_risk', omitted_party_joinder: 'critical_risk', municipal_payoff: 'critical_risk', municipal_liens: 'critical_risk', title: 'critical_risk', value_and_debt: 'high_leverage', opening_bid: 'high_leverage', payment_terms: 'high_leverage', sale_date_passed: 'high_leverage', transaction_outcome: 'standard', source_stale: 'standard', occupancy: 'standard', archive_snapshot: 'standard' };
@@ -128,7 +368,18 @@ function buildPropertyDossier(listing, { observations = { records: {}, signals: 
     rules: getAuctionDepositRules(listing.source, { state: listing.state }),
     requiredDeposit: calculateRequiredDeposit(listing),
   };
-  const auctionMicrostructure = evaluateAuctionProceedProbability(listing, countyStats || listing.countyStats || null);
+  const rawDocketHistory = Array.isArray(countyStats?.historicalEvents)
+    ? countyStats.historicalEvents
+    : Array.isArray(countyStats?.events)
+      ? countyStats.events
+      : Array.isArray(listing.historicalEvents)
+        ? listing.historicalEvents
+        : null;
+  const docketClearingAnalytics = rawDocketHistory
+    ? calculateDocketClearingAnalytics(rawDocketHistory, { county: listing.county, state: listing.state })
+    : (countyStats && typeof countyStats === 'object' && Number.isFinite(countyStats.totalDockets) ? countyStats : null);
+  const effectiveCountyStats = countyStats || listing.countyStats || (docketClearingAnalytics && docketClearingAnalytics.sampleSufficient ? docketClearingAnalytics : null);
+  const auctionMicrostructure = evaluateAuctionProceedProbability(listing, effectiveCountyStats);
   // Zero-Fabrication: a published opening bid is a minimum asking term, not a
   // realized gavel price, and the canonical judgment column is `judgment`
   // (LISTING_SELECT in server/db/client.js); `judgmentAmount` is only a legacy
@@ -148,19 +399,55 @@ function buildPropertyDossier(listing, { observations = { records: {}, signals: 
     state: listing.state,
     liens: listing.liens || publicRecords?.liens || [],
   });
+  const weightManager = triggerWeights || triggerWeightManager;
+  const CALIBRATED_CAPABILITIES = ['geocode', 'cadastral_parcel', 'hpi_benchmark', 'hud_safmr', 'code_enforcement', 'title_risk'];
+  const calibration = {
+    neutralDefaultWeight: 1.0,
+    weights: Object.fromEntries(CALIBRATED_CAPABILITIES.map((cap) => [cap, {
+      weight: weightManager.getWeight(cap),
+      calibratedConfidence: weightManager.applyCalibration(1.0, cap),
+      observed: typeof weightManager.hasObservations === 'function' ? weightManager.hasObservations(cap) : false,
+    }])),
+  };
+  const calibratedSignals = signals.map((sig) => {
+    const baseConf = Number.isFinite(sig.confidence) ? sig.confidence : 1.0;
+    const signalKey = sig.capability || sig.type || 'dossier_synthesis';
+    return {
+      ...sig,
+      calibratedConfidence: weightManager.applyCalibration(baseConf, signalKey),
+    };
+  });
+  const calibratedOpportunitySignals = Array.isArray(opportunityEvaluation.signals)
+    ? opportunityEvaluation.signals.map((sig) => {
+        const baseConf = sig.status === 'supported' ? 1.0 : 0.0;
+        const sigKey = sig.key || sig.id || '';
+        const capKey =
+          sigKey === 'title_risk' || sigKey === 'title_equity_unresolved'
+            ? 'title_risk'
+            : sigKey === 'code_enforcement' || sigKey === 'municipal_code_enforcement'
+              ? 'code_enforcement'
+              : sigKey;
+        return {
+          ...sig,
+          calibratedConfidence: weightManager.applyCalibration(baseConf, capKey),
+        };
+      })
+    : opportunityEvaluation.signals;
   return {
     evidenceReceipt: verifiedSnapshotReceipt(listing),
     publicBenchmarks: computePublicBenchmarkConsensus({ ...listing, parcel: publicRecords?.parcel || null }, { hpiSeries: loadObservedHpiSeries() }),
     version: 1, generatedAt: new Date(now).toISOString(), listingId: listing.id, address: listing.address,
-    source, facts, signals, contradictions, gaps, documentEvidence,
+    source, facts, signals: calibratedSignals, contradictions, gaps, documentEvidence,
     hudSafmr: listing.hudSafmr || (listing.zip ? getHudSafmrBenchmark({ zip: listing.zip, bedrooms: listing.beds ?? 2 }) : null),
-    federalHazards: listing.federalHazards || publicRecords?.federalHazards || null,
+    federalHazards: resolveSyncFederalHazards(listing, publicRecords, hazardCachePaths, now),
+    calibration,
     titleRisk,
     possessionTimeline,
     auctionDepositTerms,
     auctionMicrostructure,
+    docketClearingAnalytics,
     surplusWaterfall,
-    opportunitySignals: opportunityEvaluation.signals,
+    opportunitySignals: calibratedOpportunitySignals,
     trajectory: opportunityEvaluation.trajectory,
     triagePriority: opportunityEvaluation.triagePriority,
     opportunityWeights: opportunityEvaluation.weights,

@@ -7,9 +7,12 @@ const {
   submitIndexNowUrls,
   pingSitemap,
   INDEXNOW_ENDPOINT,
+  DEFAULT_TEST_KEY,
   MAX_URLS_PER_CHUNK,
   DEFAULT_HOST,
   DEFAULT_SITEMAP_URL,
+  SITEMAP_PING_ENDPOINTS,
+  DEPRECATED_SITEMAP_PING_ENDPOINTS,
 } = require('../../server/seo/indexing-ping.js');
 
 test('IndexNow: dryRun mode constructs valid payload without HTTP requests', async () => {
@@ -127,42 +130,102 @@ test('IndexNow: handles empty list and network errors gracefully', async () => {
   assert.match(failRes.errors[0].message, /Connection reset by peer/);
 });
 
-test('Sitemap Ping: dryRun mode simulates pings to Google and Bing', async () => {
+test('IndexNow: refuses default_test_key and unset key when NODE_ENV === production', async () => {
+  let fetchCalled = 0;
+  const mockFetch = async () => {
+    fetchCalled += 1;
+    return { ok: true, status: 200 };
+  };
+
+  const unsetProd = await submitIndexNowUrls({
+    host: DEFAULT_HOST,
+    urls: ['https://perfectproperty.org/listings/1'],
+    env: { NODE_ENV: 'production' },
+    fetchFn: mockFetch,
+  });
+  assert.equal(unsetProd.success, false);
+  assert.equal(unsetProd.submittedCount, 0);
+  assert.equal(unsetProd.batches.length, 0);
+  assert.equal(unsetProd.errors[0].code, 'INDEXNOW_KEY_REQUIRED');
+
+  const explicitDefaultProd = await submitIndexNowUrls({
+    host: DEFAULT_HOST,
+    key: DEFAULT_TEST_KEY,
+    urls: ['https://perfectproperty.org/listings/1'],
+    env: { NODE_ENV: 'production' },
+    dryRun: true,
+    fetchFn: mockFetch,
+  });
+  assert.equal(explicitDefaultProd.success, false);
+  assert.equal(explicitDefaultProd.errors[0].code, 'INDEXNOW_KEY_REQUIRED');
+  assert.equal(fetchCalled, 0);
+
+  const realKeyProd = await submitIndexNowUrls({
+    host: DEFAULT_HOST,
+    urls: ['https://perfectproperty.org/listings/1'],
+    env: { NODE_ENV: 'production', INDEXNOW_KEY: 'prod_verified_indexnow_key' },
+    fetchFn: mockFetch,
+  });
+  assert.equal(realKeyProd.success, true);
+  assert.equal(fetchCalled, 1);
+});
+
+test('Sitemap Ping: defaults to IndexNow only and excludes retired Google/Bing endpoints by default', async () => {
+  assert.equal(SITEMAP_PING_ENDPOINTS.google, undefined);
+  assert.equal(SITEMAP_PING_ENDPOINTS.bing, undefined);
+  assert.equal(SITEMAP_PING_ENDPOINTS.indexnow, INDEXNOW_ENDPOINT);
+  assert.match(DEPRECATED_SITEMAP_PING_ENDPOINTS.google, /google\.com\/ping/);
+  assert.match(DEPRECATED_SITEMAP_PING_ENDPOINTS.bing, /bing\.com\/ping/);
+
+  const calls = [];
   const pingRes = await pingSitemap({
     sitemapUrl: 'https://perfectproperty.org/sitemap.xml',
-    engines: ['google', 'bing'],
     dryRun: true,
+    fetchFn: async (url) => {
+      calls.push(url);
+      return { ok: true, status: 200 };
+    },
   });
 
   assert.equal(pingRes.success, true);
-  assert.equal(pingRes.results.length, 2);
-
-  const google = pingRes.results.find((r) => r.engine === 'google');
-  assert.ok(google);
-  assert.equal(google.status, 200);
-  assert.match(google.url, /google\.com\/ping\?sitemap=https%3A%2F%2Fperfectproperty\.org%2Fsitemap\.xml/);
-
-  const bing = pingRes.results.find((r) => r.engine === 'bing');
-  assert.ok(bing);
-  assert.equal(bing.status, 200);
-  assert.match(bing.url, /bing\.com\/ping\?sitemap=https%3A%2F%2Fperfectproperty\.org%2Fsitemap\.xml/);
+  assert.equal(pingRes.results.length, 1);
+  assert.equal(pingRes.results[0].engine, 'indexnow');
+  assert.equal(pingRes.results[0].url, INDEXNOW_ENDPOINT);
+  assert.equal(pingRes.results[0].status, 200);
+  assert.equal(calls.length, 0);
 });
 
-test('Sitemap Ping: sends HTTP GET requests via mock fetch and handles unsupported engines', async () => {
+test('Sitemap Ping: skips retired Google/Bing URLs unless allowDeprecatedEndpoints is explicitly set and rejects unknown engines', async () => {
   const pingCalls = [];
   const mockFetch = async (url) => {
     pingCalls.push(url);
     return { ok: true, status: 200 };
   };
 
-  const pingRes = await pingSitemap({
+  const blockedRes = await pingSitemap({
     sitemapUrl: DEFAULT_SITEMAP_URL,
     engines: ['google', 'bing', 'unknown_engine'],
     dryRun: false,
     fetchFn: mockFetch,
   });
 
+  assert.equal(pingCalls.length, 0);
+  assert.equal(blockedRes.success, false);
+  assert.equal(blockedRes.results.length, 2);
+  assert.equal(blockedRes.results.every((r) => r.deprecated === true && r.skipped === true && r.status === 410), true);
+  assert.equal(blockedRes.errors.length, 3);
+  assert.match(blockedRes.errors[2].message, /Unsupported search engine/);
+
+  const optInRes = await pingSitemap({
+    sitemapUrl: DEFAULT_SITEMAP_URL,
+    engines: ['google', 'bing'],
+    allowDeprecatedEndpoints: true,
+    dryRun: false,
+    fetchFn: mockFetch,
+  });
+
+  assert.equal(optInRes.success, true);
   assert.equal(pingCalls.length, 2);
-  assert.equal(pingRes.errors.length, 1);
-  assert.match(pingRes.errors[0].message, /Unsupported search engine/);
+  assert.match(pingCalls[0], /google\.com\/ping\?sitemap=/);
+  assert.match(pingCalls[1], /bing\.com\/ping\?sitemap=/);
 });

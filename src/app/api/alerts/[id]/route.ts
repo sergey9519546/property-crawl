@@ -5,6 +5,12 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  let listingId: string;
+  try {
+    listingId = decodeURIComponent(id);
+  } catch {
+    return Response.json({ error: "Invalid listing identifier encoding" }, { status: 400 });
+  }
   const url = new URL(request.url);
   url.pathname = "/api/alerts";
   return proxyWatchlistPropertyApi(
@@ -14,7 +20,7 @@ export async function DELETE(
         ...Object.fromEntries(request.headers.entries()),
         "content-type": "application/json",
       },
-      body: JSON.stringify({ listingId: decodeURIComponent(id) }),
+      body: JSON.stringify({ listingId }),
     })
   );
 }

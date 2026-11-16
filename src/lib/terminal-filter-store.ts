@@ -234,7 +234,11 @@ export function listingMatchesFilters<T extends FilterableListing>(
   } = {},
 ): boolean {
   if (filters.observedOnly && options.isObserved && !options.isObserved(listing)) return false;
-  if (filters.selectedState !== "all" && listing.state !== filters.selectedState) return false;
+  if (filters.selectedState !== "all") {
+    const states = filters.selectedState.split(",").map((s) => s.trim().toUpperCase()).filter(Boolean);
+    const gotState = typeof listing.state === "string" ? listing.state.trim().toUpperCase() : "";
+    if (states.length > 0 && (!gotState || !states.includes(gotState))) return false;
+  }
   if (filters.selectedSource !== "all" && listing.source !== filters.selectedSource) return false;
 
   const dealScore = knownNumber(listing.dealScore);

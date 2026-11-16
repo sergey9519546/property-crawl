@@ -28,7 +28,7 @@ async function loadPages<T extends RecordIdentity>(fetchImpl: typeof fetch, sign
     const response = await fetchImpl(`/api/listings?limit=${pageSize}&offset=${offset}`, {
       cache: "no-store", signal: signal || AbortSignal.timeout(15_000),
     });
-    const payload = await response.json();
+    const payload = await response.json().catch(() => null);
     if (!response.ok || !Array.isArray(payload?.listings)) throw new Error("Inventory could not be refreshed. Your last loaded records are retained.");
     total = Number.isSafeInteger(payload.total) && payload.total >= 0 ? payload.total : payload.listings.length;
     for (const record of payload.listings) {

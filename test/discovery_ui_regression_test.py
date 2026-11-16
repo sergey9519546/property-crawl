@@ -4,7 +4,7 @@ import re
 import unittest
 from urllib.parse import parse_qs, urlparse
 
-from playwright.sync_api import Route, sync_playwright
+from playwright.sync_api import Route, expect, sync_playwright
 
 
 BASE_URL = os.environ.get("NEXT_UI_URL", "http://localhost:3103").rstrip("/")
@@ -155,14 +155,14 @@ class DiscoveryUiRegression(unittest.TestCase):
                 self.assertEqual(image_requests, [], "thumbnail fetched Street View before user action")
 
                 check = page.get_by_role(
-                    "button", name="Load Street View for 125 Fixture Avenue, Los Angeles, CA 90049"
+                    "button", name="Check Street View for 125 Fixture Avenue, Los Angeles, CA 90049"
                 )
                 check.click()
                 page.get_by_text("Coverage is temporarily unavailable.", exact=True).wait_for()
                 self.assertEqual(image_requests, ["metadata"])
 
                 page.get_by_role(
-                    "button", name="Load Street View for 125 Fixture Avenue, Los Angeles, CA 90049"
+                    "button", name="Retry Street View for 125 Fixture Avenue, Los Angeles, CA 90049"
                 ).click()
                 street = page.get_by_test_id("listing-thumbnail-streetview")
                 street.wait_for()
@@ -253,17 +253,28 @@ class DiscoveryUiRegression(unittest.TestCase):
         page.route("**/api/listings?**", lambda route: route.fulfill(json=listing_payload()))
         page.goto(f"{BASE_URL}/listings", wait_until="domcontentloaded")
         opener = page.get_by_role(
+            "button", name="Save search", exact=True
+        )
+        bookmark = page.get_by_role(
             "button", name="Add to watchlist: 125 Fixture Avenue, Los Angeles, CA 90049"
+        )
+        bookmark.wait_for()
+        bookmark.click()
+        self.assertEqual(
+            page.get_by_role(
+                "button", name="Remove from watchlist: 125 Fixture Avenue, Los Angeles, CA 90049"
+            ).get_attribute("aria-pressed"),
+            "true",
         )
         opener.wait_for()
         opener.click()
         dialog = page.get_by_role("dialog", name="Unlock operator tools")
         dialog.wait_for()
         password = page.get_by_label("Workspace access key")
-        self.assertTrue(password.evaluate("element => document.activeElement === element"))
+        expect(password).to_be_focused()
         page.keyboard.press("Escape")
         dialog.wait_for(state="hidden")
-        self.assertTrue(opener.evaluate("element => document.activeElement === element"))
+        expect(opener).to_be_focused()
         context.close()
 
     def test_source_release_gate_distinguishes_never_run_from_completed_canary(self):

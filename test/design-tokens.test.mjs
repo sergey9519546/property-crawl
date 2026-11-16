@@ -12,14 +12,11 @@ import test from 'node:test';
 const ROOT = path.resolve(import.meta.dirname, '..');
 
 // Not migrated on purpose: the shadcn library (themed through CSS variables in
-// globals.css), the hero and its map (kept by the owner), and staff-only tools.
+// globals.css) and the hero and its map (kept by the owner).
 const LEGACY = [
   /^src\/components\/ui\//,
   /^src\/components\/site\/hero\.tsx$/,
   /^src\/components\/site\/deal-discovery-map\.tsx$/,
-  /^src\/components\/(research|sources|documents|activity)\//,
-  /^src\/components\/workspace\/(review-split-pane|operator-unlock-form)\.tsx$/,
-  /^src\/app\/(workspace|research)\//,
 ];
 
 // Lower these when the debt shrinks; never raise them. Use text-display/title/

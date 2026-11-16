@@ -133,6 +133,149 @@ class BiddingSimulator {
       upsetBidCeiling: Math.floor(upsetBidCeiling)
     };
   }
+
+  /**
+   * Builds a strictly grounded offline narrative from observed listing fields and computed simulation metrics.
+   * Enforces Zero-Fabrication by explicitly reporting absent debt/assessment/valuation figures.
+   */
+  static buildDeterministicNarrative(listing = {}, simulation = null, options = {}) {
+    const safeListing = listing && typeof listing === 'object' ? listing : {};
+    const targetBid = Number(options.targetBid ?? safeListing.openingBid ?? 0) || 0;
+    const sim = simulation || BiddingSimulator.simulateClearingProbability(safeListing, targetBid);
+    const openBid = Number(safeListing.openingBid);
+    const debt = Number(safeListing.judgment ?? safeListing.debt);
+    const assessed = Number(safeListing.assessed ?? safeListing.assessedValue);
+    const lines = [
+      `Target bid modeled: $${targetBid.toLocaleString('en-US')}.`,
+      Number.isFinite(openBid) && openBid > 0
+        ? `Published opening bid: $${openBid.toLocaleString('en-US')}.`
+        : 'Published opening bid: unverified / omitted.',
+      `Estimated clearing price (${sim.plaintiffUpsetRisk ? 'below' : 'at/above'} upset ceiling $${sim.upsetBidCeiling.toLocaleString('en-US')}): $${sim.expectedClearingPrice.toLocaleString('en-US')}; modeled win probability ${sim.winProbability}%.`
+    ];
+    if (!Number.isFinite(debt) || debt <= 0) {
+      lines.push('Judgment/debt balance not present in listing fields; plaintiff upset ceiling cannot be verified from docket debt.');
+    }
+    if (!Number.isFinite(assessed) || assessed <= 0) {
+      lines.push('Assessed value not present in listing fields; market clearing floor relies strictly on bid/debt records.');
+    }
+    if (safeListing.estLow == null || safeListing.estHigh == null) {
+      lines.push('Valuation range (estLow/estHigh) absent; no ARV is imputed.');
+    }
+    lines.push('Deterministic underwriting model only — not a bid recommendation or title clearance.');
+    return lines.join(' ');
+  }
+
+  /**
+   * Generates a grounded bidding analysis narrative, using an LLM when requested and an API key is available,
+   * and cleanly falling back to the deterministic narrative offline or on provider error.
+   */
+  static async generateBiddingNarrative(listing = {}, simulation = null, options = {}) {
+    const safeListing = listing && typeof listing === 'object' ? listing : {};
+    const targetBid = Number(options.targetBid ?? safeListing.openingBid ?? 0) || 0;
+    const sim = simulation || BiddingSimulator.simulateClearingProbability(safeListing, targetBid);
+    const deterministic = BiddingSimulator.buildDeterministicNarrative(safeListing, sim, { targetBid });
+    const env = options.env || process.env;
+    const fetchFn = options.fetchFn || globalThis.fetch;
+    const openaiKey = options.apiKey || env?.OPENAI_API_KEY || null;
+    const geminiKey = env?.GEMINI_API_KEY || env?.GOOGLE_AI_API_KEY || null;
+    const wantsAi = Boolean(options.useAi);
+
+    if (!wantsAi || typeof fetchFn !== 'function' || (!openaiKey && !geminiKey)) {
+      return {
+        narrative: deterministic,
+        mode: 'deterministic',
+        provider: null,
+        model: 'bidding-narrative-deterministic-v1',
+        verified: false,
+        aiFallbackReason: wantsAi ? (typeof fetchFn !== 'function' ? 'fetch_unavailable' : 'api_key_missing') : 'ai_not_requested',
+        simulation: sim,
+      };
+    }
+
+    const prompt = [
+      'Summarize ONLY the provided auction underwriting metrics and observed listing fields in 2-4 concise sentences.',
+      'Zero-Fabrication Rule: Do NOT invent ARV, rehab costs, condition, occupancy, or lien status. Explicitly mention missing debt/assessed/valuation fields when null.',
+      `Context: ${JSON.stringify({
+        address: safeListing.address || null,
+        state: safeListing.state || null,
+        openingBid: safeListing.openingBid ?? null,
+        debt: safeListing.judgment ?? safeListing.debt ?? null,
+        assessedValue: safeListing.assessed ?? safeListing.assessedValue ?? null,
+        estLow: safeListing.estLow ?? null,
+        estHigh: safeListing.estHigh ?? null,
+        targetBid,
+        simulation: sim,
+      })}`
+    ].join('\n');
+
+    const tryOpenAi = async () => {
+      if (!openaiKey) return null;
+      const model = options.model || 'gpt-4o-mini';
+      const resp = await fetchFn('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${openaiKey}` },
+        body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], temperature: 0 }),
+        signal: options.signal || AbortSignal.timeout(8000),
+      });
+      if (!resp || !resp.ok) return null;
+      const body = await resp.json();
+      const text = body?.choices?.[0]?.message?.content?.trim();
+      return text ? { narrative: text, provider: 'openai', model } : null;
+    };
+
+    const tryGemini = async () => {
+      if (!geminiKey) return null;
+      const model = options.model || 'gemini-2.0-flash-lite';
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(geminiKey)}`;
+      const resp = await fetchFn(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0 },
+        }),
+        signal: options.signal || AbortSignal.timeout(8000),
+      });
+      if (!resp || !resp.ok) return null;
+      const body = await resp.json();
+      const text = (body?.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('').trim();
+      return text ? { narrative: text, provider: 'gemini', model } : null;
+    };
+
+    const attempts = openaiKey ? [tryOpenAi, tryGemini] : [tryGemini, tryOpenAi];
+    for (const attempt of attempts) {
+      try {
+        const res = await attempt();
+        if (res && res.narrative) {
+          return {
+            narrative: res.narrative,
+            mode: 'ai',
+            provider: res.provider,
+            model: res.model,
+            verified: false,
+            aiFallbackReason: null,
+            simulation: sim,
+          };
+        }
+      } catch (_) {
+        // Fall through to alternate provider or deterministic baseline
+      }
+    }
+
+    return {
+      narrative: deterministic,
+      mode: 'deterministic',
+      provider: null,
+      model: 'bidding-narrative-deterministic-v1',
+      verified: false,
+      aiFallbackReason: 'llm_unavailable',
+      simulation: sim,
+    };
+  }
 }
 
-module.exports = { BiddingSimulator };
+module.exports = {
+  BiddingSimulator,
+  buildDeterministicNarrative: BiddingSimulator.buildDeterministicNarrative,
+  generateBiddingNarrative: BiddingSimulator.generateBiddingNarrative,
+};

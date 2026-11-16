@@ -972,12 +972,47 @@ export const INSURANCE_BASE_RATE_PER_1000: Readonly<Record<string, number>> = {
 export const DEFAULT_NATIONAL_INSURANCE_RATE_PER_1000 = 5.52;
 export const DEFAULT_NATIONAL_TAX_RATE = 0.011;
 
+export function publishedRedemptionDays(listing: {
+  redemptionDays?: number | string | null;
+  provenance?: { derivedFields?: { redemption?: unknown } } | null;
+} | null | undefined): number | null {
+  if (listing?.provenance?.derivedFields?.redemption != null) return null;
+  const raw = listing?.redemptionDays;
+  if (raw === null || raw === undefined || raw === "") return null;
+  const parsed = typeof raw === "number" ? raw : Number(raw);
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.round(parsed) : null;
+}
+
+export function isTaxSaleContext(params: {
+  isTaxSale?: boolean | null;
+  distressType?: string | null;
+  auctionProgram?: string | null;
+  program?: string | null;
+  source?: string | null;
+  notes?: string | null;
+} | null | undefined): boolean {
+  if (!params) return false;
+  if (params.isTaxSale === false) return false;
+  return Boolean(
+    params.isTaxSale ||
+    params.distressType === "tax_sale" ||
+    params.auctionProgram === "tax_deed" ||
+    params.auctionProgram === "tax_sale" ||
+    (typeof params.source === "string" && params.source.toLowerCase().includes("tax")) ||
+    (typeof params.program === "string" && params.program.toLowerCase().includes("tax")) ||
+    (typeof params.notes === "string" && /\btax\s*(?:deed|sale|lien|foreclosure)\b/i.test(params.notes))
+  );
+}
+
 export function computeStatutoryDeadlinesAndCarry(params: {
   saleDate?: string | null;
   state?: string | null;
   source?: string | null;
   distressType?: string | null;
-  isTaxSale?: boolean;
+  auctionProgram?: string | null;
+  program?: string | null;
+  notes?: string | null;
+  isTaxSale?: boolean | null;
   isHomestead?: boolean;
   purchasePrice?: number | string | null;
   redemptionDays?: number | null;
@@ -1026,11 +1061,7 @@ export function computeStatutoryDeadlinesAndCarry(params: {
     objectionOrConfirmationDays = 0;
     objectionLabel = "NV non-judicial deed of trust trustee sale (NRS 107.080; 0-day post-sale redemption)";
   } else if (st === "TX") {
-    const isTax = Boolean(
-      params.isTaxSale ||
-      params.distressType === "tax_sale" ||
-      (typeof params.source === "string" && params.source.toLowerCase().includes("tax"))
-    );
+    const isTax = isTaxSaleContext(params);
     if (isTax) {
       objectionOrConfirmationDays = 20;
       objectionLabel = "TX 20-day constable deed processing & confirmation period (Tex. Tax Code § 34.01)";
@@ -1039,11 +1070,7 @@ export function computeStatutoryDeadlinesAndCarry(params: {
       objectionLabel = "TX non-judicial deed of trust sale (Tex. Prop. Code § 51.002; title passes upon deed delivery)";
     }
   } else if (st === "GA") {
-    const isTax = Boolean(
-      params.isTaxSale ||
-      params.distressType === "tax_sale" ||
-      (typeof params.source === "string" && params.source.toLowerCase().includes("tax"))
-    );
+    const isTax = isTaxSaleContext(params);
     if (isTax) {
       objectionOrConfirmationDays = 30;
       objectionLabel = "GA 30-day tax deed execution & recording window (O.C.G.A. § 48-4-40 1-yr redemption applies)";
@@ -1052,11 +1079,7 @@ export function computeStatutoryDeadlinesAndCarry(params: {
       objectionLabel = "GA non-judicial foreclosure under power of sale (O.C.G.A. § 44-14-162; 0-day post-sale redemption)";
     }
   } else if (st === "TN") {
-    const isTax = Boolean(
-      params.isTaxSale ||
-      params.distressType === "tax_sale" ||
-      (typeof params.source === "string" && params.source.toLowerCase().includes("tax"))
-    );
+    const isTax = isTaxSaleContext(params);
     if (isTax) {
       objectionOrConfirmationDays = 30;
       objectionLabel = "TN 30-day chancery court decree of confirmation window (T.C.A. § 67-5-2701 1-yr redemption applies)";
@@ -1065,11 +1088,7 @@ export function computeStatutoryDeadlinesAndCarry(params: {
       objectionLabel = "TN non-judicial deed of trust foreclosure under power of sale (T.C.A. § 35-5-101; 0-day redemption)";
     }
   } else if (st === "WA") {
-    const isTax = Boolean(
-      params.isTaxSale ||
-      params.distressType === "tax_sale" ||
-      (typeof params.source === "string" && params.source.toLowerCase().includes("tax"))
-    );
+    const isTax = isTaxSaleContext(params);
     if (isTax) {
       objectionOrConfirmationDays = 30;
       objectionLabel = "WA 30-day tax foreclosure judgment appeal window (RCW 84.64.120; 0-day post-deed redemption)";
@@ -1078,11 +1097,7 @@ export function computeStatutoryDeadlinesAndCarry(params: {
       objectionLabel = "WA non-judicial trustee sale under deed of trust (RCW 61.24.040; 0-day post-sale redemption)";
     }
   } else if (st === "MD") {
-    const isTax = Boolean(
-      params.isTaxSale ||
-      params.distressType === "tax_sale" ||
-      (typeof params.source === "string" && params.source.toLowerCase().includes("tax"))
-    );
+    const isTax = isTaxSaleContext(params);
     if (isTax) {
       objectionOrConfirmationDays = 30;
       objectionLabel = "MD 30-day tax certificate issuance window (Md. Code Tax-Prop. § 14-827 6-month redemption applies)";
@@ -1113,74 +1128,42 @@ export function computeStatutoryDeadlinesAndCarry(params: {
   const irsRedemptionDays = params.hasIrsLien ? 120 : 0;
   let stateRedemptionDays = Math.max(0, Math.round(nonNegativeNumber(params.redemptionDays) ?? 0));
   if (stateRedemptionDays === 0 && st === "TX") {
-    const isTax = Boolean(
-      params.isTaxSale ||
-      params.distressType === "tax_sale" ||
-      (typeof params.source === "string" && params.source.toLowerCase().includes("tax"))
-    );
+    const isTax = isTaxSaleContext(params);
     if (isTax) {
       stateRedemptionDays = params.isHomestead ? 730 : 180;
     }
   } else if (stateRedemptionDays === 0 && st === "GA") {
-    const isTax = Boolean(
-      params.isTaxSale ||
-      params.distressType === "tax_sale" ||
-      (typeof params.source === "string" && params.source.toLowerCase().includes("tax"))
-    );
+    const isTax = isTaxSaleContext(params);
     if (isTax) {
       stateRedemptionDays = 365;
     }
   } else if (stateRedemptionDays === 0 && st === "TN") {
-    const isTax = Boolean(
-      params.isTaxSale ||
-      params.distressType === "tax_sale" ||
-      (typeof params.source === "string" && params.source.toLowerCase().includes("tax"))
-    );
+    const isTax = isTaxSaleContext(params);
     if (isTax) {
       stateRedemptionDays = 365;
     }
   } else if (stateRedemptionDays === 0 && st === "MD") {
-    const isTax = Boolean(
-      params.isTaxSale ||
-      params.distressType === "tax_sale" ||
-      (typeof params.source === "string" && params.source.toLowerCase().includes("tax"))
-    );
+    const isTax = isTaxSaleContext(params);
     if (isTax) {
       stateRedemptionDays = 180;
     }
   } else if (stateRedemptionDays === 0 && st === "SC") {
-    const isTax = Boolean(
-      params.isTaxSale ||
-      params.distressType === "tax_sale" ||
-      (typeof params.source === "string" && params.source.toLowerCase().includes("tax"))
-    );
+    const isTax = isTaxSaleContext(params);
     if (isTax) {
       stateRedemptionDays = 365;
     }
   } else if (stateRedemptionDays === 0 && st === "IN") {
-    const isTax = Boolean(
-      params.isTaxSale ||
-      params.distressType === "tax_sale" ||
-      (typeof params.source === "string" && params.source.toLowerCase().includes("tax"))
-    );
+    const isTax = isTaxSaleContext(params);
     if (isTax) {
       stateRedemptionDays = 365;
     }
   } else if (stateRedemptionDays === 0 && st === "MO") {
-    const isTax = Boolean(
-      params.isTaxSale ||
-      params.distressType === "tax_sale" ||
-      (typeof params.source === "string" && params.source.toLowerCase().includes("tax"))
-    );
+    const isTax = isTaxSaleContext(params);
     if (isTax) {
       stateRedemptionDays = 365;
     }
   } else if (stateRedemptionDays === 0 && st === "AZ") {
-    const isTax = Boolean(
-      params.isTaxSale ||
-      params.distressType === "tax_sale" ||
-      (typeof params.source === "string" && params.source.toLowerCase().includes("tax"))
-    );
+    const isTax = isTaxSaleContext(params);
     if (isTax) {
       stateRedemptionDays = 1095; // 3 years under A.R.S. § 42-18153
     }

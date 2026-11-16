@@ -15,7 +15,8 @@
 
 const db = require('../db/client');
 const { scanAllListings } = require('../db/listings-scan');
-const { computeNeighborhoodStats, getNeighborhoodStats } = require('../intelligence/neighborhood-stats');
+const neighborhoodStats = require('../intelligence/neighborhood-stats');
+const { computeNeighborhoodStats, getNeighborhoodStats } = neighborhoodStats;
 
 function boundedInt(raw, fallback, min, max) {
   if (raw === null || raw === undefined || raw === '') return fallback;
@@ -25,17 +26,180 @@ function boundedInt(raw, fallback, min, max) {
   return n;
 }
 
+function normalizeCountyToken(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/\b(county|parish|borough|census area|municipality)\b/g, ' ')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function parseStatePrefixSlug(raw) {
+  const match = String(raw || '').match(/^([A-Za-z]{2})[-:](.+)$/);
+  if (!match) return null;
+  const state = match[1].toUpperCase();
+  const slug = match[2].trim();
+  if (!slug || slug === '.' || slug === '..' || /[\\/]/.test(slug)) return null;
+  return { state, slug };
+}
+
 function parseKey(remaining) {
-  // The key is everything after /api/neighborhoods/. Two shapes:
-  //   zip:12345      → { kind: 'zip', key: '12345' }
-  //   city:tx:houston → { kind: 'city', key: 'TX::houston' }
-  if (!remaining || !remaining.includes(':')) return null;
-  const [kind, ...rest] = remaining.split(':');
-  if (kind === 'zip') return { kind: 'zip', key: rest.join(':') };
-  if (kind === 'city' && rest.length === 2) {
-    return { kind: 'city', key: `${rest[0].toUpperCase()}::${rest[1].toLowerCase()}` };
+  // Supported shapes after /api/neighborhoods/:
+  //   Colon-delimited: zip:12345, city:TX:houston, county:FL:Miami-Dade, county:FL-Miami-Dade
+  //   Two-segment proxy: zip/12345, city/FL-Miami, county/FL-Miami-Dade
+  if (typeof remaining !== 'string' || !remaining) return null;
+  let decoded;
+  try {
+    decoded = decodeURIComponent(remaining);
+  } catch {
+    return null;
+  }
+  if (!decoded || /[\u0000-\u001f\u007f\\]/.test(decoded)) return null;
+
+  if (decoded.includes('/')) {
+    const parts = decoded.split('/');
+    if (parts.length !== 2) return null;
+    const [kindRaw, rawVal] = parts;
+    const kind = kindRaw.toLowerCase();
+    if (!rawVal || rawVal === '.' || rawVal === '..' || rawVal.includes(':')) {
+      if (!(kind === 'city' && /^[A-Za-z]{2}:[^:]+$/.test(rawVal))) return null;
+    }
+    if (kind === 'zip') {
+      const m = rawVal.match(/^(\d{5})(?:-\d{4})?$/);
+      return m ? { kind: 'zip', key: m[1] } : null;
+    }
+    if (kind === 'city') {
+      const parsedCity = parseStatePrefixSlug(rawVal);
+      if (!parsedCity) return null;
+      return {
+        kind: 'city',
+        key: `${parsedCity.state}::${parsedCity.slug.replace(/-/g, ' ').trim().toLowerCase()}`
+      };
+    }
+    if (kind === 'county') {
+      const parsedCounty = parseStatePrefixSlug(rawVal);
+      if (!parsedCounty) return null;
+      const cleanSlug = parsedCounty.slug.replace(/\s+/g, '-');
+      if (!normalizeCountyToken(cleanSlug)) return null;
+      return { kind: 'county', key: `${parsedCounty.state}-${cleanSlug}` };
+    }
+    return null;
+  }
+
+  if (!decoded.includes(':')) return null;
+  const parts = decoded.split(':');
+  if (parts.some((p) => !p || p === '.' || p === '..')) return null;
+  const [kindRaw, ...rest] = parts;
+  const kind = kindRaw.toLowerCase();
+  if (kind === 'zip') {
+    const val = rest.join(':');
+    const m = val.match(/^(\d{5})(?:-\d{4})?$/);
+    return m ? { kind: 'zip', key: m[1] } : null;
+  }
+  if (kind === 'city' && rest.length === 2 && /^[A-Za-z]{2}$/.test(rest[0])) {
+    return { kind: 'city', key: `${rest[0].toUpperCase()}::${rest[1].trim().toLowerCase()}` };
+  }
+  if (kind === 'county') {
+    if (rest.length === 2 && /^[A-Za-z]{2}$/.test(rest[0])) {
+      const cleanSlug = rest[1].trim().replace(/\s+/g, '-');
+      return normalizeCountyToken(cleanSlug)
+        ? { kind: 'county', key: `${rest[0].toUpperCase()}-${cleanSlug}` }
+        : null;
+    }
+    if (rest.length === 1) {
+      const parsedCounty = parseStatePrefixSlug(rest[0]);
+      if (!parsedCounty || !normalizeCountyToken(parsedCounty.slug)) return null;
+      return { kind: 'county', key: `${parsedCounty.state}-${parsedCounty.slug.replace(/\s+/g, '-')}` };
+    }
   }
   return null;
+}
+
+function medianNumber(values) {
+  if (!values.length) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+function computeCountyBucket(countyKey, pool, { maxAgeDays = 365, nowMs = Date.now() } = {}) {
+  const parsed = parseStatePrefixSlug(countyKey);
+  if (!parsed || !Array.isArray(pool)) return null;
+  const targetToken = normalizeCountyToken(parsed.slug);
+  if (!targetToken) return null;
+
+  const cutoffMs = nowMs - maxAgeDays * 86_400_000;
+  const matched = [];
+  let displayCounty = null;
+
+  for (const listing of pool) {
+    if (!listing || typeof listing !== 'object') continue;
+    if (String(listing.state || '').toUpperCase() !== parsed.state) continue;
+    const rawCounty = String(listing.county || '').trim();
+    if (!rawCounty || normalizeCountyToken(rawCounty) !== targetToken) continue;
+
+    const observedRaw = listing.sourceObservedAt || listing.observedAt;
+    const observedMs = observedRaw ? Date.parse(observedRaw) : NaN;
+    if (!Number.isFinite(observedMs) || observedMs < cutoffMs) continue;
+
+    if (!displayCounty) displayCounty = rawCounty;
+    matched.push(listing);
+  }
+
+  if (matched.length === 0) return null;
+
+  const bids = [];
+  const sqfts = [];
+  const scores = [];
+  const discounts = [];
+  const sources = {};
+  const propTypes = {};
+
+  for (const row of matched) {
+    if (typeof row.openingBid === 'number' && Number.isFinite(row.openingBid) && row.openingBid > 0) {
+      bids.push(row.openingBid);
+    }
+    if (typeof row.sqft === 'number' && Number.isFinite(row.sqft) && row.sqft > 0) {
+      sqfts.push(row.sqft);
+    }
+    if (typeof row.dealScore === 'number' && Number.isFinite(row.dealScore)) {
+      scores.push(row.dealScore);
+    }
+    if (
+      typeof row.openingBid === 'number' && Number.isFinite(row.openingBid) && row.openingBid > 0 &&
+      typeof row.mid === 'number' && Number.isFinite(row.mid) && row.mid > 0
+    ) {
+      discounts.push(1 - row.openingBid / row.mid);
+    }
+    const src = row.source ? String(row.source) : 'unknown';
+    sources[src] = (sources[src] || 0) + 1;
+    const pt = row.propType ? String(row.propType) : 'Unknown';
+    propTypes[pt] = (propTypes[pt] || 0) + 1;
+  }
+
+  const medianOpeningBid = medianNumber(bids);
+  const meanOpeningBid = bids.length
+    ? Number((bids.reduce((sum, v) => sum + v, 0) / bids.length).toFixed(2))
+    : null;
+  const medianSqft = medianNumber(sqfts);
+  const rawMedianScore = medianNumber(scores);
+  const medianDealScore = rawMedianScore === null ? null : Number(rawMedianScore.toFixed(1));
+  const rawMedianDiscount = medianNumber(discounts);
+  const medianDiscount = rawMedianDiscount === null ? null : Number(rawMedianDiscount.toFixed(4));
+
+  return {
+    kind: 'county',
+    key: `${parsed.state}-${parsed.slug}`,
+    label: `${displayCounty}, ${parsed.state}`,
+    count: matched.length,
+    medianOpeningBid,
+    meanOpeningBid,
+    medianSqft,
+    medianDealScore,
+    medianDiscount,
+    sources,
+    propTypes
+  };
 }
 
 function serializeBucket(bucket) {
@@ -65,6 +229,17 @@ function createNeighborhoodsHandler(dependencies = {}) {
       res.statusCode = 405;
       res.setHeader('Allow', 'GET');
       return res.json({ error: 'method_not_allowed' });
+    }
+
+    const sendJsonStatus = (code, payload) => {
+      if (typeof res.status === 'function') return res.status(code).json(payload);
+      res.statusCode = code;
+      return res.json(payload);
+    };
+
+    const rawPath = String(req?.url || '').split('?')[0];
+    if (/(?:^|\/)\.\.?(?:\/|$)|%2e/i.test(rawPath)) {
+      return sendJsonStatus(400, { error: 'invalid_neighborhood_key', remaining: rawPath });
     }
 
     const url = urlInput instanceof URL ? urlInput : new URL(req.url, 'http://localhost');
@@ -150,13 +325,17 @@ function createNeighborhoodsHandler(dependencies = {}) {
 
     const parsed = parseKey(remaining);
     if (!parsed) {
-      return res.status(400).json({ error: 'invalid_neighborhood_key', remaining });
+      return sendJsonStatus(400, { error: 'invalid_neighborhood_key', remaining });
     }
 
-    if (database.isPg && typeof database.getSingleNeighborhoodStatsNative === 'function') {
+    if (
+      parsed.kind !== 'county' &&
+      database.isPg &&
+      typeof database.getSingleNeighborhoodStatsNative === 'function'
+    ) {
       const nativeSingle = await database.getSingleNeighborhoodStatsNative(parsed.kind, parsed.key, { maxAgeDays, nowMs: now() });
       if (!nativeSingle) {
-        return res.status(404).json({ error: 'neighborhood_not_found', key: `${parsed.kind}:${parsed.key}` });
+        return sendJsonStatus(404, { error: 'neighborhood_not_found', key: `${parsed.kind}:${parsed.key}` });
       }
       res.setHeader('Cache-Control', 'no-store');
       return res.json({
@@ -170,12 +349,29 @@ function createNeighborhoodsHandler(dependencies = {}) {
     }
 
     const filters = { summary: true };
-    if (stateFilter) filters.state = stateFilter;
+    if (stateFilter) {
+      filters.state = stateFilter;
+    } else if (parsed.kind === 'county' || parsed.kind === 'city') {
+      const derivedState = parsed.key.slice(0, 2);
+      if (/^[A-Z]{2}$/.test(derivedState)) filters.state = derivedState;
+    }
     const { pool, availableTotal, scanned, truncated } = await scanAllListings(database, filters);
 
-    const bucket = getNeighborhoodStats(`${parsed.kind}:${parsed.key}`, pool, { maxAgeDays, nowMs: now() });
+    let bucket = null;
+    const statsOpts = { maxAgeDays, nowMs: now() };
+    if (parsed.kind === 'county') {
+      bucket = typeof neighborhoodStats.computeCountyStats === 'function'
+        ? neighborhoodStats.computeCountyStats(parsed.key, pool, statsOpts)
+        : computeCountyBucket(parsed.key, pool, statsOpts);
+    } else if (parsed.kind === 'zip' && typeof neighborhoodStats.computeZipStats === 'function') {
+      bucket = neighborhoodStats.computeZipStats(parsed.key, pool, statsOpts);
+    } else if (parsed.kind === 'city' && typeof neighborhoodStats.computeCityStats === 'function') {
+      bucket = neighborhoodStats.computeCityStats(parsed.key, pool, statsOpts);
+    } else {
+      bucket = getNeighborhoodStats(`${parsed.kind}:${parsed.key}`, pool, statsOpts);
+    }
     if (!bucket) {
-      return res.status(404).json({ error: 'neighborhood_not_found', key: `${parsed.kind}:${parsed.key}` });
+      return sendJsonStatus(404, { error: 'neighborhood_not_found', key: `${parsed.kind}:${parsed.key}` });
     }
     res.setHeader('Cache-Control', 'no-store');
     return res.json({

@@ -121,7 +121,7 @@ function normalize(image, target, radius) {
     license: DISPLAY_LICENSE,
     attribution: { provider: 'Mapillary', producer: producer || null },
     sourcePage: viewerUrlFor(pictureId),
-    thumbUrl: typeof image.thumb_2048_url === 'string' ? image.thumb_2048_url : null,
+    thumbUrl: typeof image.thumb_2048_url === 'string' ? image.thumb_2048_url : (typeof image.thumb_1024_url === 'string' ? image.thumb_1024_url : null),
   };
 }
 

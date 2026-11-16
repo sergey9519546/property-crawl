@@ -3,6 +3,8 @@
 import React, { useEffect, useState } from "react";
 import type { Listing } from "@/data/listings";
 import { restoreChecklistStatuses } from "@/lib/evidence";
+import { useWorkspaceSession } from "@/components/workspace/workspace-shell";
+import { readUnderwriteScenario } from "@/lib/underwrite-scenario";
 import { AdversarialTrialDocket } from "./adversarial-trial-docket";
 import {
   computeStatutoryFeePreset,
@@ -46,6 +48,32 @@ interface CheckItem {
 export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceChecklistProps) {
   const openingBid = positiveNumber(listing.openingBid) ?? 0;
   const stateCode = (listing.state || "US").toUpperCase();
+  const session = useWorkspaceSession();
+  const [linkedCaseId, setLinkedCaseId] = useState<string | null>(null);
+  const [caseSyncBusy, setCaseSyncBusy] = useState(false);
+  const [caseSyncNotice, setCaseSyncNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!session.authenticated || !listing.id) {
+      setLinkedCaseId(null);
+      return;
+    }
+    let cancelled = false;
+    void fetch(`/api/workspace/cases?listingId=${encodeURIComponent(listing.id)}`, {
+      cache: "no-store",
+      credentials: "same-origin",
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (cancelled) return;
+        const first = Array.isArray(data?.items) ? data.items[0] : null;
+        setLinkedCaseId(typeof first?.id === "string" ? first.id : null);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [session.authenticated, listing.id]);
 
   // 1. Detect statutory presets and carry deadlines
   const feePreset = computeStatutoryFeePreset({
@@ -90,7 +118,7 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
   const [waterfallBid, setWaterfallBid] = useState<string>(openingBid > 0 ? String(openingBid) : "");
   const [waterfallLienType, setWaterfallLienType] = useState<
     "unknown" | "first_mortgage" | "second_mortgage" | "heloc" | "hoa_assessment" | "tax_deed"
-  >("unknown");
+  >(detectedForeclosingType);
   const [waterfallSeniorMtg, setWaterfallSeniorMtg] = useState<string>("");
   const [waterfallTaxes, setWaterfallTaxes] = useState<string>("");
   const [showWaterfallDetails, setShowWaterfallDetails] = useState<boolean>(isSeniorLienRisk);
@@ -186,7 +214,7 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
     setWaterfallBid(openingBid > 0 ? String(openingBid) : "");
     setWaterfallSeniorMtg("");
     setWaterfallTaxes("");
-    setWaterfallLienType("unknown");
+    setWaterfallLienType(detectedForeclosingType);
   }, [storageKey]);
 
   const setStatus = (id: string, status: CheckStatus) => {
@@ -215,6 +243,70 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
   const verifiedCount = Object.values(itemStatuses).filter((s) => s === "verified").length;
   const flaggedCount = Object.values(itemStatuses).filter((s) => s === "flagged").length;
   const pendingCount = Object.values(itemStatuses).filter((s) => s === "pending").length;
+
+  const syncBinderToCase = async () => {
+    if (!session.authenticated) {
+      session.requestUnlock();
+      return;
+    }
+    setCaseSyncBusy(true);
+    setCaseSyncNotice(null);
+    try {
+      const underwriteScenario = readUnderwriteScenario(listing.id);
+      const res = await fetch("/api/workspace/cases", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          listingId: listing.id,
+          origin: { type: "manual" },
+          underwriteScenario: underwriteScenario || undefined,
+        }),
+      });
+      if (res.status === 401) {
+        session.requestUnlock();
+        throw new Error("Unlock operator session to sync.");
+      }
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.case?.id) {
+        throw new Error(data?.error || "Could not sync binder to workspace.");
+      }
+      const caseRecord = data.case as {
+        id: string;
+        revision: number;
+        state: string;
+        decision?: { reasonCodes?: string[]; note?: string | null } | null;
+      };
+      setLinkedCaseId(caseRecord.id);
+
+      const summaryLine = `[Checklist: ${verifiedCount}/7 clear, ${flaggedCount} flagged, ${pendingCount} pending; Lien=${waterfallLienType}]`;
+      if (
+        (caseRecord.state === "pursue" || caseRecord.state === "pass") &&
+        Number.isInteger(caseRecord.revision)
+      ) {
+        const existingNote = (caseRecord.decision?.note || "").trim();
+        const cleanedNote = existingNote.replace(/\s*\[Checklist:[^\]]*\]/g, "").trim();
+        const nextNote = [cleanedNote, summaryLine].filter(Boolean).join(" ").slice(0, 2000);
+        await fetch(`/api/workspace/cases/${encodeURIComponent(caseRecord.id)}`, {
+          method: "PATCH",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            expectedRevision: caseRecord.revision,
+            state: caseRecord.state,
+            reasonCodes: caseRecord.decision?.reasonCodes || [],
+            note: nextNote,
+            underwriteScenario: underwriteScenario || undefined,
+          }),
+        }).catch(() => {});
+      }
+      setCaseSyncNotice(`Synced to case ${caseRecord.id}`);
+    } catch (err) {
+      setCaseSyncNotice(err instanceof Error ? err.message : "Sync failed; binder saved locally.");
+    } finally {
+      setCaseSyncBusy(false);
+    }
+  };
 
   return (
     <section
@@ -245,15 +337,36 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
           </div>
         </div>
 
-        <div className="flex items-center gap-2 print:hidden">
-          <button
-            onClick={() => window.print()}
-            type="button"
-            className="inline-flex items-center gap-1.5 rounded-control border border-line-strong bg-card px-3 py-2 text-xs font-semibold text-ink-2 shadow-sm transition hover:bg-paper hover:text-ink"
-          >
-            <Printer className="h-3.5 w-3.5 text-ink-3" />
-            Print Bidding Binder
-          </button>
+        <div className="flex flex-col items-end gap-1.5 print:hidden">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={syncBinderToCase}
+              disabled={caseSyncBusy}
+              type="button"
+              className="inline-flex items-center gap-1.5 rounded-control border border-line-strong bg-paper px-3 py-2 text-xs font-semibold text-ink shadow-sm transition hover:bg-card disabled:opacity-60"
+            >
+              {caseSyncBusy
+                ? "Syncing..."
+                : linkedCaseId
+                  ? `Synced (${linkedCaseId})`
+                  : session.authenticated
+                    ? "Sync Binder to Case"
+                    : "Unlock to Sync Case"}
+            </button>
+            <button
+              onClick={() => window.print()}
+              type="button"
+              className="inline-flex items-center gap-1.5 rounded-control border border-line-strong bg-card px-3 py-2 text-xs font-semibold text-ink-2 shadow-sm transition hover:bg-paper hover:text-ink"
+            >
+              <Printer className="h-3.5 w-3.5 text-ink-3" />
+              Print Bidding Binder
+            </button>
+          </div>
+          {caseSyncNotice && (
+            <p className="text-xs text-ink-3" role="status">
+              {caseSyncNotice}
+            </p>
+          )}
         </div>
       </div>
 

@@ -115,3 +115,22 @@ test('deploy does not treat an advisory failure as a successful workflow', () =>
       `${f} gates on workflow_run but never inspects the conclusion`);
   }
 });
+
+test('production-e2e-pg job is blocking so PostgreSQL migration and parity failures fail CI', () => {
+  const ci = readWorkflow('ci.yml');
+  const all = jobs(ci);
+  const pgJob = all.find(j => j.name === 'production-e2e-pg');
+  assert.ok(pgJob, 'ci.yml must define production-e2e-pg');
+  assert.doesNotMatch(
+    withoutComments(pgJob.body),
+    /continue-on-error:\s*true/,
+    'production-e2e-pg runs real PostGIS migrations and live DB e2e and must block CI on failure'
+  );
+  const extJob = all.find(j => j.name === 'extended-suite');
+  assert.ok(extJob, 'ci.yml must retain extended-suite');
+  assert.match(
+    withoutComments(extJob.body),
+    /continue-on-error:\s*true/,
+    'extended-suite stays advisory for optional external env suites'
+  );
+});

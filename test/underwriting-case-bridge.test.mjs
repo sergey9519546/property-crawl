@@ -7,6 +7,7 @@ import os from 'node:os';
 import { terminalFiltersToDiscovery } from '../src/lib/discovery-query.ts';
 import { buildHuntFromSavedSearch } from '../src/lib/saved-searches.ts';
 import { computeCashToClose } from '../src/lib/underwriting.ts';
+import { evaluateListing } from '../server/intelligence/hunts.js';
 import {
   createCase,
   listCases,
@@ -80,6 +81,57 @@ test('buildHuntFromSavedSearch normalizes state filters to uppercase USPS codes'
     { id: 'srv1', label: 'Test', filters: { states: ['ca', 'nv'] }, createdAt: '' }
   );
   assert.equal(hunt2.criteria.discoveryFilters.state, 'CA,NV');
+  const hunt3 = buildHuntFromSavedSearch(
+    { id: 's3', name: 'Full Filter Bridge', state: 'All', minScore: 55, maxBid: 250000, createdAt: '' },
+    {
+      id: 'srv3',
+      label: 'Test',
+      filters: {
+        states: ['nj', 'nv'],
+        counties: ['Bergen County'],
+        sources: ['civilview'],
+        propTypes: ['Single Family'],
+        keywords: '  main  ',
+      },
+      createdAt: '',
+    }
+  );
+  assert.equal(hunt3.criteria.discoveryFilters.state, 'NJ,NV');
+  assert.equal(hunt3.criteria.discoveryFilters.county, 'Bergen County');
+  assert.equal(hunt3.criteria.discoveryFilters.source, 'civilview');
+  assert.equal(hunt3.criteria.discoveryFilters.type, 'Single Family');
+  assert.equal(hunt3.criteria.discoveryFilters.q, 'main');
+
+  const emailNoticeListing = {
+    id: 'email-bridge-1',
+    dealScore: 75,
+    title: 'Sheriff Notice',
+    source: 'civilview',
+    sourceUrl: 'https://salesweb.civilview.com/Sales/SaleDetails?PropertyId=1',
+    state: 'NJ',
+    county: 'Bergen County',
+    address: '100 Main St',
+    propType: 'Single Family',
+    openingBid: 100000,
+    status: 'upcoming',
+    saleDate: '2026-12-01',
+    raw: 'Notice of foreclosure sale 100 Main St',
+    provenance: {
+      observed: true,
+      origin: 'email_notice',
+      publisher: 'civilview',
+      recordId: 'email-bridge-1',
+      capturedAt: '2026-10-20T12:00:00Z',
+      observedAt: '2026-10-20T12:00:00Z',
+      sourceRecordUrl: 'https://salesweb.civilview.com/Sales/SaleDetails?PropertyId=1',
+    },
+  };
+  const evalRes = evaluateListing(emailNoticeListing, {
+    id: 'hunt-email-bridge',
+    criteria: hunt3.criteria,
+  });
+  assert.equal(evalRes.status, 'match');
+  assert.deepEqual(evalRes.validationErrors, []);
 });
 
 test('research case lifecycle persists underwriting scenario, emits accurate history events, and exports to markdown/json', (t) => {

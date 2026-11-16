@@ -3,6 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 
 const {
@@ -51,7 +52,8 @@ test('Document Review Workflow: rejects invalid status mutations', () => {
 });
 
 test('Document Review Store: persists decisions atomically and survives corruption', () => {
-  const tmpPath = path.resolve(__dirname, `../.cache/test-doc-review-${Date.now()}.json`);
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'test-doc-review-'));
+  const tmpPath = path.join(tmpDir, 'document-review-store.json');
 
   try {
     const store = createDocumentReviewStore({ storePath: tmpPath });
@@ -86,6 +88,6 @@ test('Document Review Store: persists decisions atomically and survives corrupti
     assert.ok(safeStore.quarantined);
     assert.equal(safeStore.map.size, 0);
   } finally {
-    if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });

@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { ArrowRight, Check, Clock3, ExternalLink, GitCompareArrows, RotateCcw, SearchCheck } from "lucide-react";
-import { useWorkspaceSession } from "@/components/workspace/workspace-shell";
+import { useResolvedWorkspaceSession } from "@/components/workspace/workspace-shell";
 
 type ChangeItem = {
   id: string;
@@ -50,13 +50,13 @@ function formatCurrency(val: number | null | undefined): string {
 }
 
 export function SecondLookShowcase() {
-  const session = useWorkspaceSession();
+  const session = useResolvedWorkspaceSession();
   const [items, setItems] = React.useState<ChangeItem[]>(DEMO_ITEMS);
   const [isLive, setIsLive] = React.useState(false);
   const [active, setActive] = React.useState<string>(DEMO_ITEMS[0].id);
 
   React.useEffect(() => {
-    if (!session.authenticated) return;
+    if (!(session?.memberTools || session?.authenticated)) return;
     let unmounted = false;
     async function loadLiveFeed() {
       try {
@@ -86,7 +86,7 @@ export function SecondLookShowcase() {
     }
     void loadLiveFeed();
     return () => { unmounted = true; };
-  }, [session.authenticated]);
+  }, [session?.memberTools, session?.authenticated]);
 
   const selected = items.find((item) => item.id === active) || items[0] || null;
 

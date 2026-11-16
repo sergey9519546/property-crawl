@@ -15,6 +15,7 @@ const {
   PublicNoticesEmailScraper,
   writePackets,
   DEFAULT_KEYWORDS,
+  extractImapFetchPayload,
 } = require('../server/scrapers/email-ingest');
 
 const FIXTURE_DIR = path.join(__dirname, 'fixtures', 'email-notices');
@@ -128,4 +129,134 @@ test('writePackets is idempotent for the same notice hash', () => {
   const second = writePackets(packets, storePath);
   assert.equal(first.appended, packets.length);
   assert.equal(second.appended, 0);
+});
+
+test('envConfig and isConfigured accept both IMAP_PASSWORD and IMAP_PASS with IMAP_PASSWORD priority', async () => {
+  const { envConfig, ingestImapMailbox } = require('../server/scrapers/email-ingest');
+  const fromPassword = envConfig({ IMAP_HOST: 'imap.example.com', IMAP_USER: 'alerts', IMAP_PASSWORD: 'pw-primary' });
+  assert.equal(fromPassword.pass, 'pw-primary');
+  assert.equal(isConfigured({ IMAP_HOST: 'imap.example.com', IMAP_USER: 'alerts', IMAP_PASSWORD: 'pw-primary' }), true);
+
+  const both = envConfig({
+    IMAP_HOST: 'imap.example.com',
+    IMAP_USER: 'alerts',
+    IMAP_PASSWORD: 'pw-primary',
+    IMAP_PASS: 'pw-fallback',
+  });
+  assert.equal(both.pass, 'pw-primary');
+
+  const missing = await ingestImapMailbox({ env: {} });
+  assert.equal(missing.ok, false);
+  assert.match(missing.reason, /IMAP_PASSWORD \(or IMAP_PASS\)/);
+});
+
+test('IMAP framing handles custom tags and ignores NO/BAD inside email body literals', () => {
+  const {
+    findTaggedImapResponse,
+    extractImapFetchPayload,
+    parseImapSearchUids,
+  } = require('../server/scrapers/email-ingest');
+
+  const uids = parseImapSearchUids('* SEARCH 41 42\r\nT1 OK SEARCH completed\r\n');
+  assert.deepEqual(uids, [41, 42]);
+
+  const emailLiteral = [
+    'From: alerts@floridapublicnotices.com',
+    'Subject: Foreclosure Notice',
+    '',
+    'Status: NO redemption remains; BAD check notice.',
+    'T99 NO fake inline marker',
+  ].join('\r\n');
+  const wire =
+    `* 1 FETCH (UID 41 BODY[TEXT] {${Buffer.byteLength(emailLiteral, 'utf8')}}\r\n` +
+    emailLiteral +
+    `\r\n)\r\nT99 OK FETCH completed\r\n`;
+
+  const framed = findTaggedImapResponse(Buffer.from(wire, 'utf8'), 'T99');
+  assert.equal(framed.complete, true);
+  assert.equal(framed.status, 'OK');
+  assert.match(extractImapFetchPayload(framed.rawText), /T99 NO fake inline marker/);
+});
+
+test('ingestImapMailbox only sends UID STORE +FLAGS (\\Seen) after durable save succeeds', async () => {
+  const { ingestImapMailbox } = require('../server/scrapers/email-ingest');
+  const makeFakeClient = () => {
+    const cmds = [];
+    return {
+      cmds,
+      async connect() {},
+      async close() {},
+      async command(cmd) {
+        cmds.push(cmd);
+        if (cmd.startsWith('UID SEARCH')) return '* SEARCH 77\r\nA3 OK SEARCH done\r\n';
+        if (cmd.startsWith('UID FETCH')) {
+          return '* 1 FETCH (BODY[TEXT])\r\nFrom: alerts@floridapublicnotices.com\r\nSubject: Foreclosure sale\r\n\r\nNotice of foreclosure sale at 100 Oak St, Tampa, FL 33602 Case No 26-CA-99\r\n)\r\nA4 OK FETCH done\r\n';
+        }
+        return 'A9 OK done\r\n';
+      },
+    };
+  };
+
+  const failClient = makeFakeClient();
+  const failed = await ingestImapMailbox(
+    { IMAP_HOST: 'imap.example.com', IMAP_USER: 'u', IMAP_PASSWORD: 'p' },
+    {
+      imapClient: failClient,
+      onSave: async () => { throw new Error('disk full'); },
+    }
+  );
+  assert.equal(failed.ok, false);
+  assert.equal(failClient.cmds.some((c) => c.includes('\\Seen')), false);
+
+  const okClient = makeFakeClient();
+  const saved = [];
+  const succeeded = await ingestImapMailbox(
+    { IMAP_HOST: 'imap.example.com', IMAP_USER: 'u', IMAP_PASSWORD: 'p' },
+    {
+      imapClient: okClient,
+      onSave: async (pkts) => { saved.push(...pkts); },
+    }
+  );
+  assert.equal(succeeded.ok, true);
+  assert.equal(succeeded.persisted, true);
+  assert.equal(saved.length > 0, true);
+  assert.equal(okClient.cmds.some((c) => c === 'UID STORE 77 +FLAGS (\\Seen)'), true);
+});
+
+test('writePackets leaves no temporary or lock files after atomic write', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'email-ingest-atomic-'));
+  const storePath = path.join(dir, 'notices.json');
+  const packets = messageToPackets({
+    subject: 'Notice of Foreclosure Sale',
+    from: 'alerts@floridapublicnotices.com',
+    body: 'Foreclosure sale at 200 Pine Ave, Orlando, FL 32801 Case No. 2026-CA-0123.',
+    messageId: '<atomic@example>',
+  }, { keywords: DEFAULT_KEYWORDS }).packets;
+
+  const res = writePackets(packets, storePath);
+  assert.equal(res.appended, packets.length);
+  const files = fs.readdirSync(dir);
+  assert.deepEqual(files, ['notices.json']);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+
+test('extractImapFetchPayload stitches header + body literals and parseRfc822 preserves body-only text', () => {
+  const rawFetch = [
+    '* 12 FETCH (BODY[HEADER.FIELDS (FROM SUBJECT DATE MESSAGE-ID CONTENT-TYPE)] {62}',
+    'From: alerts@floridapublicnotices.com\r\nSubject: Sheriff Sale\r\n',
+    ' BODY[TEXT] {68}',
+    'Foreclosure auction at 405 Oak Ave, Miami, FL 33130 Case 2026-CA-99',
+    ')',
+    'A0004 OK UID FETCH completed',
+  ].join('\r\n');
+  const combined = extractImapFetchPayload(rawFetch);
+  const parsedCombined = parseRfc822(combined);
+  assert.equal(parsedCombined.subject, 'Sheriff Sale');
+  assert.equal(parsedCombined.from, 'alerts@floridapublicnotices.com');
+  assert.match(parsedCombined.body, /405 Oak Ave, Miami, FL 33130/);
+
+  const bodyOnly = parseRfc822('Notice of Foreclosure Sale at 500 Pine Rd, Tampa, FL 33602 Case 2026-CA-100');
+  assert.equal(bodyOnly.subject, '');
+  assert.match(bodyOnly.body, /500 Pine Rd, Tampa, FL 33602/);
 });

@@ -184,3 +184,25 @@ test('CITY_NORMALIZATION is exported and contains every documented abbreviation'
     assert.ok(CITY_NORMALIZATION[abbr], `CITY_NORMALIZATION should have ${abbr}`);
   }
 });
+
+
+test('normalizeAddressAndParcel: handles multi-word cities and PL, CIR, TER, HWY, TRL suffixes', () => {
+  const commaMulti = normalizeAddressAndParcel('200 Oak PL, Salt Lake City, UT 84101');
+  assert.equal(commaMulti.city, 'Salt Lake City');
+  assert.equal(commaMulti.state, 'UT');
+  assert.equal(commaMulti.standardizedAddress, '200 Oak Pl, Salt Lake City, UT');
+
+  const noCommaMulti = normalizeAddressAndParcel('450 Sunset CIR Coral Springs FL');
+  assert.equal(noCommaMulti.city, 'Coral Springs');
+  assert.equal(noCommaMulti.state, 'FL');
+  assert.equal(noCommaMulti.standardizedAddress, '450 Sunset Cir, Coral Springs, FL');
+
+  const saintCity = normalizeAddressAndParcel('88 Oak LN St Louis MO');
+  assert.equal(saintCity.city, 'St Louis');
+  assert.equal(saintCity.state, 'MO');
+  assert.equal(saintCity.standardizedAddress, '88 Oak Ln, St Louis, MO');
+
+  assert.match(normalizeAddressAndParcel('10 Harbor TER, TPA FL').standardizedAddress, /\bTer\b/);
+  assert.match(normalizeAddressAndParcel('55 Dixie HWY, MIA FL').standardizedAddress, /\bHwy\b/);
+  assert.match(normalizeAddressAndParcel('99 Cedar TRL, ORL FL').standardizedAddress, /\bTrl\b/);
+});

@@ -1,5 +1,10 @@
 'use strict';
 
+const fs = require('node:fs');
+const path = require('node:path');
+
+const DEFAULT_STORAGE_PATH = path.resolve(__dirname, '../../.cache/trigger-weights.json');
+
 /**
  * server/swarm/trigger-weights.js
  *
@@ -31,6 +36,11 @@ class TriggerWeightManager {
 
     // Node statistics: { weight, totalCalls, successes, failures, lastLatencyMs, avgYieldRatio }
     this.nodes = new Map();
+    this.filePath = options.filePath || null;
+    this.autoPersist = options.autoPersist !== undefined ? Boolean(options.autoPersist) : Boolean(this.filePath);
+    if (this.filePath && options.autoLoad !== false) {
+      this.loadFromDisk(this.filePath);
+    }
   }
 
   /**
@@ -136,6 +146,10 @@ class TriggerWeightManager {
     const newWeight = node.weight * (1 - alpha) + targetQuality * alpha;
     node.weight = this.clamp(newWeight);
 
+    if (this.autoPersist && this.filePath) {
+      this.saveToDisk(this.filePath);
+    }
+
     return node.weight;
   }
 
@@ -153,6 +167,53 @@ class TriggerWeightManager {
     const weight = this.getWeight(capabilityName);
     const calibrated = baseline * weight;
     return Math.round(calibrated * 10000) / 10000;
+  }
+
+  hasObservations(capabilityName) {
+    if (!capabilityName || typeof capabilityName !== 'string') return false;
+    const node = this.nodes.get(capabilityName);
+    return Boolean(node && node.totalCalls > 0);
+  }
+
+  applyCalibration(baseConfidence, signalKey) {
+    return this.getCalibratedConfidence(signalKey, baseConfidence);
+  }
+
+  loadFromDisk(filePath = this.filePath || DEFAULT_STORAGE_PATH) {
+    if (!filePath) return false;
+    try {
+      if (!fs.existsSync(filePath)) return false;
+      const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+      const weights = parsed && typeof parsed === 'object' && parsed.weights && typeof parsed.weights === 'object'
+        ? parsed.weights
+        : parsed;
+      this.importWeights(weights);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  saveToDisk(filePath = this.filePath || DEFAULT_STORAGE_PATH) {
+    if (!filePath) return false;
+    const tmpPath = `${filePath}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    try {
+      const dir = path.dirname(filePath);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      const payload = {
+        version: 1,
+        updatedAt: new Date().toISOString(),
+        weights: this.exportWeights(),
+      };
+      fs.writeFileSync(tmpPath, JSON.stringify(payload, null, 2), 'utf8');
+      fs.renameSync(tmpPath, filePath);
+      return true;
+    } catch (_) {
+      try {
+        if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+      } catch (_) {}
+      return false;
+    }
   }
 
   /**
@@ -198,6 +259,8 @@ class TriggerWeightManager {
         totalCalls: state.totalCalls,
         successes: state.successes,
         failures: state.failures,
+        lastLatencyMs: Number.isFinite(state.lastLatencyMs) ? state.lastLatencyMs : 0,
+        avgYieldRatio: Number.isFinite(state.avgYieldRatio) ? state.avgYieldRatio : 1.0,
       };
     }
     return out;
@@ -211,20 +274,31 @@ class TriggerWeightManager {
     if (!data || typeof data !== 'object') return;
     for (const [name, state] of Object.entries(data)) {
       if (state && Number.isFinite(state.weight)) {
+        const parsedLatency = Number(state.lastLatencyMs);
+        const parsedYield = Number(state.avgYieldRatio);
         this.nodes.set(name, {
           weight: this.clamp(state.weight),
           totalCalls: Number(state.totalCalls) || 0,
           successes: Number(state.successes) || 0,
           failures: Number(state.failures) || 0,
-          lastLatencyMs: 0,
-          avgYieldRatio: 1.0,
+          lastLatencyMs: Number.isFinite(parsedLatency) && parsedLatency >= 0 ? parsedLatency : 0,
+          avgYieldRatio: Number.isFinite(parsedYield) && parsedYield >= 0 && parsedYield <= 1.0 ? parsedYield : 1.0,
         });
       }
     }
   }
 }
 
-const defaultTriggerWeightManager = new TriggerWeightManager();
+const IS_TEST_RUNTIME =
+  process.env.NODE_ENV === 'test' ||
+  Boolean(process.env.NODE_TEST_CONTEXT) ||
+  process.execArgv.some((arg) => arg === '--test' || arg.startsWith('--test-'));
+
+const defaultTriggerWeightManager = new TriggerWeightManager({
+  filePath: process.env.TRIGGER_WEIGHTS_PATH || DEFAULT_STORAGE_PATH,
+  autoPersist: !IS_TEST_RUNTIME,
+  autoLoad: !IS_TEST_RUNTIME,
+});
 
 module.exports = {
   MIN_WEIGHT,

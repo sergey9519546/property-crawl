@@ -350,7 +350,7 @@ export function Hero() {
                   }}
                   onClick={() => selectSuggestion(suggestion)}
                   className={`flex cursor-pointer items-center gap-3 rounded-control px-3.5 py-3 text-sm font-medium text-ink transition-colors ${
-                    activeSuggestion === index ? "bg-paper-2" : "hover:bg-paper"
+                    activeSuggestion === index ? "bg-paper ring-1 ring-line-strong" : "hover:bg-paper"
                   }`}
                 >
                   {suggestion.kind === "address" ? <House className="h-4 w-4 shrink-0 text-ink" aria-hidden /> : null}

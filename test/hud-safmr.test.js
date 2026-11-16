@@ -128,3 +128,13 @@ test('formatDecisionPacketMarkdown formats HUD SAFMR rent table when hudSafmr is
   assert.match(md, /Section 8 FMR Baseline/);
   assert.match(md, /90% Benchmark Scenario/);
 });
+
+
+test('HUD SAFMR benchmark normalizes ZIP+4 strings to their 5-digit benchmark', () => {
+  const benchmarks = loadBenchmarks();
+  const validZip = Object.keys(benchmarks)[0];
+  const plusFour = getHudSafmrBenchmark({ zip: `${validZip}-1234`, bedrooms: 2 });
+  assert.ok(plusFour, 'expected ZIP+4 input to match 5-digit benchmark');
+  assert.equal(plusFour.zip, validZip);
+  assert.equal(plusFour.bedrooms, 2);
+});

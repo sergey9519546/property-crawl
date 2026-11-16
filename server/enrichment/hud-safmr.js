@@ -32,7 +32,8 @@ function loadBenchmarks() {
  */
 function getHudSafmrBenchmark({ zip, bedrooms = 2 } = {}) {
   if (!zip) return null;
-  const cleanZip = String(zip).trim().padStart(5, '0').slice(0, 5);
+  const rawZip = String(zip).trim().split(/[\s-]+/)[0] || '';
+  const cleanZip = /^\d{1,5}$/.test(rawZip) ? rawZip.padStart(5, '0') : '';
   if (!/^\d{5}$/.test(cleanZip)) return null;
 
   const data = loadBenchmarks();

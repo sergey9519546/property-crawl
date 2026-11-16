@@ -10,6 +10,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   confidenceBandColor,
   confidenceBandLabel,
+  fetchEnrichmentAdapters,
   fetchEnrichmentByParcelKey,
   formatConfidence,
   refreshEnrichmentByParcelKey,
@@ -33,12 +34,41 @@ const ADAPTER_LABELS: Record<string, string> = {
 export function EnrichmentView({ parcelKey, fetchImpl, showRefreshButton = true }: EnrichmentViewProps) {
   const session = useWorkspaceSession();
   const [view, setView] = useState<EnrichmentAggregateResponse | null>(null);
+  const [adapters, setAdapters] = useState<string[]>(() => Object.keys(ADAPTER_LABELS));
+  const [selectedSources, setSelectedSources] = useState<string[]>(() => Object.keys(ADAPTER_LABELS));
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshStatus, setRefreshStatus] = useState<string | null>(null);
 
   const isValidKey = typeof parcelKey === "string" && /^[A-Za-z0-9._:-]{1,128}$/.test(parcelKey);
+
+  useEffect(() => {
+    let active = true;
+    fetchEnrichmentAdapters({ fetchImpl })
+      .then((res) => {
+        if (!active || !Array.isArray(res?.adapters)) return;
+        const names = res.adapters
+          .map((item) => item?.source)
+          .filter((name): name is string => typeof name === "string" && name.trim().length > 0);
+        if (names.length > 0) {
+          setAdapters(names);
+          setSelectedSources(names);
+        }
+      })
+      .catch(() => {
+        // Keep static label fallback if /api/enrichment metadata is temporarily unreachable
+      });
+    return () => {
+      active = false;
+    };
+  }, [fetchImpl]);
+
+  const toggleSource = useCallback((source: string) => {
+    setSelectedSources((prev) =>
+      prev.includes(source) ? prev.filter((item) => item !== source) : [...prev, source]
+    );
+  }, []);
 
   const load = useCallback(async () => {
     if (!isValidKey) return;
@@ -65,11 +95,15 @@ export function EnrichmentView({ parcelKey, fetchImpl, showRefreshButton = true 
       session.requestUnlock();
       return;
     }
+    const sourcesToRun = selectedSources.length > 0 ? selectedSources : adapters;
     setRefreshing(true);
     setRefreshStatus(null);
     setError(null);
     try {
-      const refreshed = await refreshEnrichmentByParcelKey(parcelKey as string, { fetchImpl });
+      const refreshed = await refreshEnrichmentByParcelKey(parcelKey as string, {
+        fetchImpl,
+        sources: sourcesToRun,
+      });
       setView(refreshed.view);
       const counts = refreshed.adapterOutcomes.reduce<Record<string, number>>((acc, outcome: EnrichmentAdapterOutcome) => {
         acc[outcome.outcome] = (acc[outcome.outcome] || 0) + 1;
@@ -83,7 +117,7 @@ export function EnrichmentView({ parcelKey, fetchImpl, showRefreshButton = true 
     } finally {
       setRefreshing(false);
     }
-  }, [parcelKey, fetchImpl, isValidKey, session]);
+  }, [parcelKey, fetchImpl, isValidKey, session, selectedSources, adapters]);
 
   if (!isValidKey) {
     return (
@@ -115,13 +149,42 @@ export function EnrichmentView({ parcelKey, fetchImpl, showRefreshButton = true 
     ? 'Refreshing...'
     : (!fetchImpl && !session.authenticated ? 'Unlock to refresh adapters' : 'Refresh from adapters');
 
+  const adapterSelector = showRefreshButton && adapters.length > 0 ? (
+    <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-ink-3">
+      <span className="font-semibold text-ink-2">Adapters:</span>
+      {adapters.map((source) => {
+        const checked = selectedSources.includes(source);
+        return (
+          <label
+            key={source}
+            className="inline-flex cursor-pointer items-center gap-1.5 rounded-control border border-line bg-paper px-2 py-1 text-ink-2"
+          >
+            <input
+              type="checkbox"
+              checked={checked}
+              onChange={() => toggleSource(source)}
+              className="h-3.5 w-3.5 accent-ink"
+            />
+            <span>{ADAPTER_LABELS[source] || source}</span>
+          </label>
+        );
+      })}
+    </div>
+  ) : null;
+
   if (!view || !view.found) {
     return (
       <section className="rounded-card border border-line bg-card p-6 text-sm text-ink-3">
         <header className="mb-2 text-base font-semibold text-ink-2">Enrichment view</header>
         <p>No other source has reported a listing that shares the parcelKey <code>{parcelKey}</code>.</p>
+        {error ? <p className="mt-2 text-xs text-catch-ink">{error}</p> : null}
+        {adapterSelector}
         {showRefreshButton && (
-          <button onClick={onRefresh} disabled={refreshing} className="mt-3 rounded-control border border-line bg-card px-3 py-1.5 text-sm font-semibold">
+          <button
+            onClick={onRefresh}
+            disabled={refreshing || selectedSources.length === 0}
+            className="mt-3 rounded-control border border-line bg-card px-3 py-1.5 text-sm font-semibold disabled:opacity-50"
+          >
             {refreshLabel}
           </button>
         )}
@@ -146,19 +209,21 @@ export function EnrichmentView({ parcelKey, fetchImpl, showRefreshButton = true 
         {showRefreshButton && (
           <button
             onClick={onRefresh}
-            disabled={refreshing}
-            className="rounded-control border border-line bg-card px-3 py-1.5 text-sm font-semibold"
+            disabled={refreshing || selectedSources.length === 0}
+            className="rounded-control border border-line bg-card px-3 py-1.5 text-sm font-semibold disabled:opacity-50"
           >
             {refreshLabel}
           </button>
         )}
       </header>
 
-      {refreshStatus && <p className="mb-3 rounded-control bg-go-wash px-3 py-2 text-xs text-go">{refreshStatus}</p>}
-      {error && <p className="mb-3 rounded-control bg-catch-wash px-3 py-2 text-xs text-catch-ink">{error}</p>}
+      {adapterSelector}
+
+      {refreshStatus && <p className="mt-3 mb-3 rounded-control bg-go-wash px-3 py-2 text-xs text-go">{refreshStatus}</p>}
+      {error && <p className="mt-3 mb-3 rounded-control bg-catch-wash px-3 py-2 text-xs text-catch-ink">{error}</p>}
 
       {view.freshestObservation && (
-        <div className="mb-4 rounded-control bg-paper p-4">
+        <div className="my-4 rounded-control bg-paper p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-sm font-semibold text-ink-2">
               Freshest cross-source observation

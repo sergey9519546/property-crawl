@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { exactAddress, inspectSecondaryMedia } = require('../scrapers/secondary-property-media');
+const { acquireOwnedLock, releaseOwnedLock, replaceFileWithRetry } = require('../intelligence/research-store');
 const defaultPath = () => process.env.PROPERTY_MEDIA_CACHE_PATH || path.resolve(__dirname, '../../.cache/property-media.json');
 
 function readMediaStore(file = defaultPath()) {
@@ -22,23 +23,30 @@ function attachMedia(listing, entries) {
   return listing;
 }
 
-function saveMedia(listing, media, file = defaultPath()) {
+function saveMedia(listing, media, file = defaultPath(), options = {}) {
   if (!inspectSecondaryMedia({ ...listing, provenance: { media: { secondary: media } } }).accepted) throw new Error('Secondary media failed exact-address evidence gate');
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  const lock = fs.openSync(file + '.lock', 'wx', 0o600);
+  const lockPath = file + '.lock';
+  const lockHandle = acquireOwnedLock(lockPath, { staleLockMs: options.staleLockMs });
   const temporary = file + '.' + crypto.randomUUID() + '.tmp';
   try {
+    const maxEntries = Number.isInteger(options.maxEntries) && options.maxEntries >= 1 ? options.maxEntries : 1000;
+    const maxBytes = Number.isInteger(options.maxBytes) && options.maxBytes >= 64 ? options.maxBytes : 5_000_000;
     const entries = readMediaStore(file);
     const key = JSON.stringify(exactAddress(listing));
     const next = [media, ...entries.filter(item => JSON.stringify(exactAddress(item.matchedAddress)) !== key)];
-    if (next.length > 1000) throw new Error('Property media entry limit reached');
-    const body = JSON.stringify({ version: 1, entries: next });
-    if (Buffer.byteLength(body) > 5_000_000) throw new Error('Property media store exceeds size limit');
+    if (next.length > maxEntries) next.length = maxEntries;
+    let body = JSON.stringify({ version: 1, entries: next });
+    while (Buffer.byteLength(body, 'utf8') > maxBytes && next.length > 1) {
+      next.pop();
+      body = JSON.stringify({ version: 1, entries: next });
+    }
+    if (Buffer.byteLength(body, 'utf8') > maxBytes) throw new Error('Property media store exceeds size limit');
     fs.writeFileSync(temporary, body, { flag: 'wx', mode: 0o600 });
-    fs.renameSync(temporary, file);
+    replaceFileWithRetry(temporary, file, options.replaceOptions);
   } finally {
-    if (fs.existsSync(temporary)) fs.unlinkSync(temporary);
-    fs.closeSync(lock); fs.unlinkSync(file + '.lock');
+    try { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); } catch (_) {}
+    releaseOwnedLock(lockHandle);
   }
 }
 module.exports = { readMediaStore, attachMedia, saveMedia };

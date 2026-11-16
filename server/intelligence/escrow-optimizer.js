@@ -268,6 +268,23 @@ function calculateRequiredDeposit(auctionListing = {}, options = {}) {
  * @param {string} [options.sortBy='priority'] - 'priority' | 'chronological' | 'bidding_power'
  * @returns {object} Escrow optimization plan
  */
+function isEscrowActiveAtTime(item, t) {
+  if (item.lockupStartTime === item.recyclableTime) {
+    return t === item.lockupStartTime;
+  }
+  return t >= item.lockupStartTime && t < item.recyclableTime;
+}
+
+function areEscrowWindowsOverlapping(a, b) {
+  const aZero = a.lockupStartTime === a.recyclableTime;
+  const bZero = b.lockupStartTime === b.recyclableTime;
+  if (aZero && bZero) return a.lockupStartTime === b.lockupStartTime;
+  if (aZero) return a.lockupStartTime >= b.lockupStartTime && a.lockupStartTime < b.recyclableTime;
+  if (bZero) return b.lockupStartTime >= a.lockupStartTime && b.lockupStartTime < a.recyclableTime;
+  const separated = a.recyclableTime <= b.lockupStartTime || a.lockupStartTime >= b.recyclableTime;
+  return !separated;
+}
+
 function optimizeEscrowAllocation(auctions = [], totalCapital = 0, options = {}) {
   const allowRecycling = options.allowRecycling !== false;
   const liquidCapital = Number.isFinite(totalCapital) && totalCapital > 0 ? totalCapital : 0;
@@ -290,7 +307,9 @@ function optimizeEscrowAllocation(auctions = [], totalCapital = 0, options = {})
     const id = item.id || item.listingId || `auction_${idx + 1}`;
     const depositCalc = calculateRequiredDeposit(item);
     const saleDateStr = item.saleDate || item.auctionDate || null;
-    const saleTime = saleDateStr ? new Date(saleDateStr).getTime() : Date.now() + (idx * 86400000);
+    const rawParsedTime = saleDateStr ? new Date(saleDateStr).getTime() : NaN;
+    const hasValidSaleDate = Number.isFinite(rawParsedTime);
+    const saleTime = hasValidSaleDate ? rawParsedTime : Date.now() + (idx * 86400000);
     const leadTimeMs = depositCalc.leadTimeHours * 3600 * 1000;
     const lockupStartMs = saleTime - leadTimeMs;
     const refundMs = depositCalc.refundTurnaroundDays * 24 * 3600 * 1000;
@@ -310,12 +329,12 @@ function optimizeEscrowAllocation(auctions = [], totalCapital = 0, options = {})
       depositPercent: depositCalc.depositPercent,
       paymentMethod: depositCalc.paymentMethod,
       platform: depositCalc.rules.platform,
-      saleDate: saleDateStr ? new Date(saleTime).toISOString() : null,
+      saleDate: hasValidSaleDate ? new Date(saleTime).toISOString() : null,
       saleTime,
       lockupStartTime: lockupStartMs,
       recyclableTime: recyclableMs,
-      lockupStartDate: new Date(lockupStartMs).toISOString(),
-      recyclableDate: new Date(recyclableMs).toISOString(),
+      lockupStartDate: Number.isFinite(lockupStartMs) ? new Date(lockupStartMs).toISOString() : null,
+      recyclableDate: Number.isFinite(recyclableMs) ? new Date(recyclableMs).toISOString() : null,
       refundTurnaroundDays: depositCalc.refundTurnaroundDays,
       priorityScore,
     };
@@ -390,7 +409,7 @@ function optimizeEscrowAllocation(auctions = [], totalCapital = 0, options = {})
     let peakCommitted = 0;
     let peakActiveItems = [];
     for (const t of criticalTimes) {
-      const activeAtT = testList.filter((item) => t >= item.lockupStartTime && t < item.recyclableTime);
+      const activeAtT = testList.filter((item) => isEscrowActiveAtTime(item, t));
       const sumAtT = activeAtT.reduce((sum, item) => sum + item.requiredDeposit, 0);
       if (sumAtT > peakCommitted) {
         peakCommitted = sumAtT;
@@ -399,11 +418,7 @@ function optimizeEscrowAllocation(auctions = [], totalCapital = 0, options = {})
     }
 
     const conflictingExisting = peakActiveItems.filter((item) => item.id !== candidate.id);
-    const overlappingExisting = fundedList.filter((existing) => {
-      const separated = candidate.recyclableTime <= existing.lockupStartTime ||
-                        candidate.lockupStartTime >= existing.recyclableTime;
-      return !separated;
-    });
+    const overlappingExisting = fundedList.filter((existing) => areEscrowWindowsOverlapping(candidate, existing));
 
     if (peakCommitted <= liquidCapital) {
       fundedList.push(candidate);
@@ -451,7 +466,7 @@ function optimizeEscrowAllocation(auctions = [], totalCapital = 0, options = {})
     }
 
     for (const t of criticalTimes) {
-      const activeAtT = fundedList.filter((f) => t >= f.lockupStartTime && t < f.recyclableTime);
+      const activeAtT = fundedList.filter((f) => isEscrowActiveAtTime(f, t));
       const sumAtT = activeAtT.reduce((sum, f) => sum + f.requiredDeposit, 0);
       if (sumAtT > peakCommittedCapital) {
         peakCommittedCapital = sumAtT;

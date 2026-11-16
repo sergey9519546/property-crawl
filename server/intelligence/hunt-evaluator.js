@@ -83,7 +83,7 @@ function evaluateListingAcrossHunts(listing, hunts = []) {
   for (const hunt of hunts) {
     const evaluation = evaluateListingAgainstHunt(listing, hunt);
     if (evaluation.isMatch) {
-      const matchId = `ALERT-${hunt.id || 'HUNT'}-${listing.id}-${Date.now()}`;
+      const matchId = `ALERT-${hunt.id || 'HUNT'}-${listing.id}-${crypto.randomUUID()}`;
       matches.push({
         id: matchId,
         huntId: hunt.id,
@@ -165,7 +165,8 @@ function generateHuntEmailDigest(hunt, matchedListings = []) {
     return `- ${l.address || 'Address Unrecorded'} (${l.city || ''}, ${l.state || ''}) — Bid: ${bid} ${score ? `· ${score}` : ''}`;
   });
 
-  const textBody = `New distressed opportunities matched your hunt "${huntTitle}":\n\n${summaryRows.join('\n')}\n\nView and underwrite in your workspace:\nhttps://propertycrawl.com/hunts`;
+  const appOrigin = (process.env.PUBLIC_APP_ORIGIN || 'https://propertycrawl.com').replace(/\/+$/, '');
+  const textBody = `New distressed opportunities matched your hunt "${huntTitle}":\n\n${summaryRows.join('\n')}\n\nView and underwrite in your workspace:\n${appOrigin}/hunts`;
 
   return {
     to,

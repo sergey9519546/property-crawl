@@ -4,6 +4,8 @@ import * as React from "react";
 import Link from "next/link";
 import { Check, ExternalLink } from "lucide-react";
 import { findGaps, type GapListing } from "@/lib/evidence";
+import { useWorkspaceSession } from "@/components/workspace/workspace-shell";
+import { readUnderwriteScenario } from "@/lib/underwrite-scenario";
 
 /**
  * "What this listing can't tell you": the facts a buyer needs that the listing
@@ -11,7 +13,8 @@ import { findGaps, type GapListing } from "@/lib/evidence";
  *
  * Rules: rows come only from fields that are actually empty; contacts are never
  * invented (we link the source notice or a generic action, nothing else); ticks
- * are stored on this device only.
+ * persist locally on this device and can also sync to an authenticated research
+ * case on the workspace server.
  */
 function useTicks(id: string) {
   const key = `pp:gaps:${id}`;
@@ -40,6 +43,96 @@ export function GapLedger({ listing, className = "" }: { listing: GapListing; cl
   const gaps = findGaps(listing);
   const [ticks, toggle] = useTicks(listing.id);
   const done = gaps.filter((g) => ticks[g.key]).length;
+  const session = useWorkspaceSession();
+  const [linkedCaseId, setLinkedCaseId] = React.useState<string | null>(null);
+  const [syncBusy, setSyncBusy] = React.useState(false);
+  const [syncNotice, setSyncNotice] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (!session.authenticated || !listing.id) {
+      setLinkedCaseId(null);
+      return;
+    }
+    let cancelled = false;
+    void fetch(`/api/workspace/cases?listingId=${encodeURIComponent(listing.id)}`, {
+      cache: "no-store",
+      credentials: "same-origin",
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (cancelled) return;
+        const first = Array.isArray(data?.items) ? data.items[0] : null;
+        setLinkedCaseId(typeof first?.id === "string" ? first.id : null);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [session.authenticated, listing.id]);
+
+  async function syncToWorkspaceCase() {
+    if (!session.authenticated) {
+      session.requestUnlock();
+      return;
+    }
+    setSyncBusy(true);
+    setSyncNotice(null);
+    try {
+      const underwriteScenario = readUnderwriteScenario(listing.id);
+      const res = await fetch("/api/workspace/cases", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          listingId: listing.id,
+          origin: { type: "manual" },
+          underwriteScenario: underwriteScenario || undefined,
+        }),
+      });
+      if (res.status === 401) {
+        session.requestUnlock();
+        throw new Error("Unlock operator session to sync.");
+      }
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.case?.id) {
+        throw new Error(data?.error || "Could not sync to research workspace.");
+      }
+      const caseRecord = data.case as {
+        id: string;
+        revision: number;
+        state: string;
+        decision?: { reasonCodes?: string[]; note?: string | null } | null;
+      };
+      setLinkedCaseId(caseRecord.id);
+
+      const summaryLine = `[Gap Ledger: ${done}/${gaps.length} checked]`;
+      if (
+        (caseRecord.state === "pursue" || caseRecord.state === "pass") &&
+        Number.isInteger(caseRecord.revision)
+      ) {
+        const existingNote = (caseRecord.decision?.note || "").trim();
+        const cleanedNote = existingNote.replace(/\s*\[Gap Ledger:[^\]]*\]/g, "").trim();
+        const nextNote = [cleanedNote, summaryLine].filter(Boolean).join(" ").slice(0, 2000);
+        await fetch(`/api/workspace/cases/${encodeURIComponent(caseRecord.id)}`, {
+          method: "PATCH",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            expectedRevision: caseRecord.revision,
+            state: caseRecord.state,
+            reasonCodes: caseRecord.decision?.reasonCodes || [],
+            note: nextNote,
+            underwriteScenario: underwriteScenario || undefined,
+          }),
+        }).catch(() => {});
+      }
+      setSyncNotice(`Synced with workspace case ${caseRecord.id}`);
+    } catch (err) {
+      setSyncNotice(err instanceof Error ? err.message : "Sync failed; ticks saved on this device.");
+    } finally {
+      setSyncBusy(false);
+    }
+  }
 
   return (
     <section aria-labelledby={`gaps-${listing.id}`} className={`rounded-card border border-catch/30 bg-card p-5 sm:p-6 ${className}`}>
@@ -47,12 +140,29 @@ export function GapLedger({ listing, className = "" }: { listing: GapListing; cl
         <h2 id={`gaps-${listing.id}`} className="text-title font-semibold tracking-[-0.01em] text-ink">
           What this listing can&apos;t tell you
         </h2>
-        {gaps.length ? (
-          <p className="text-meta text-ink-3" aria-live="polite">
-            {done} of {gaps.length} checked
-          </p>
-        ) : null}
+        <div className="flex flex-wrap items-center gap-3">
+          {gaps.length ? (
+            <p className="text-meta text-ink-3" aria-live="polite">
+              {done} of {gaps.length} checked
+            </p>
+          ) : null}
+          {session.authenticated ? (
+            <button
+              type="button"
+              disabled={syncBusy}
+              onClick={() => void syncToWorkspaceCase()}
+              className="rounded-control border border-line-strong bg-paper px-2.5 py-1 text-xs font-semibold text-ink-2 transition hover:bg-line disabled:opacity-50"
+            >
+              {syncBusy ? "Syncing…" : linkedCaseId ? "Sync case state" : "Save to case"}
+            </button>
+          ) : null}
+        </div>
       </div>
+      {syncNotice && (
+        <p className="mt-1.5 text-meta text-ink-3" role="status">
+          {syncNotice}
+        </p>
+      )}
 
       {gaps.length === 0 ? (
         <p className="mt-2 text-meta text-ink-2">

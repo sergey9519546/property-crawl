@@ -850,6 +850,16 @@ test('compileSavedSearchToHuntCriteria: handles empty, all-values, and nested fi
   assert.equal(extraPayload.criteria.discoveryFilters.freshness, 'observed');
   assert.equal(extraPayload.criteria.discoveryFilters.hasDocuments, 'true');
   assert.equal(extraPayload.criteria.discoveryFilters.minScore, '50');
+
+  const multiCountyPayload = compileSavedSearchToHuntCriteria({
+    label: 'Ohio Multi-County',
+    filters: {
+      states: ['OH'],
+      counties: ['Cuyahoga County', 'Summit'],
+    },
+  });
+  assert.equal(multiCountyPayload.criteria.discoveryFilters.state, 'OH');
+  assert.equal(multiCountyPayload.criteria.discoveryFilters.county, 'Cuyahoga County,Summit');
 });
 
 test('AlertsModal and saved-searches client library expose one-click Promote to Hunt action', () => {

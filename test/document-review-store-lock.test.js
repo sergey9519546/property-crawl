@@ -111,3 +111,68 @@ test('HTTP POST rejects illegal terminal->pending transition', async () => {
   route._resetForTests({ storePath: null, env: { ...process.env, NODE_ENV: 'test' } });
   delete process.env.SCRAPER_ADMIN_TOKEN;
 });
+
+test('owned lock release does not unlink another writer active lock token', () => {
+  const { acquireOwnedLock, releaseOwnedLock } = require('../server/intelligence/research-store');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'owned-lock-token-'));
+  try {
+    const lockPath = path.join(dir, 'store.json.lock');
+    const first = acquireOwnedLock(lockPath);
+    assert.ok(fs.readFileSync(lockPath, 'utf8').includes(':'));
+
+    // Simulate Writer B breaking stale lock and writing its own token while Writer A is stalled.
+    fs.closeSync(first.fd);
+    fs.unlinkSync(lockPath);
+    const second = acquireOwnedLock(lockPath);
+    assert.notEqual(second.token, first.token);
+
+    // Writer A's delayed finally cleanup MUST NOT unlink Writer B's lock.
+    assert.equal(releaseOwnedLock(first), false);
+    assert.equal(fs.existsSync(lockPath), true);
+    assert.equal(fs.readFileSync(lockPath, 'utf8'), second.token);
+
+    assert.equal(releaseOwnedLock(second), true);
+    assert.equal(fs.existsSync(lockPath), false);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('owned lock handles fd 0 cleanly without treating 0 as missing lock', () => {
+  const { acquireOwnedLock, releaseOwnedLock } = require('../server/intelligence/research-store');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'owned-lock-fd0-'));
+  const lockPath = path.join(dir, 'fd0.lock');
+  const origOpen = fs.openSync;
+  const origWrite = fs.writeSync;
+  const origClose = fs.closeSync;
+  let wroteToken = '';
+  try {
+    fs.openSync = (p, ...rest) => {
+      if (p === lockPath) {
+        origOpen.call(fs, lockPath, ...rest);
+        return 0;
+      }
+      return origOpen.call(fs, p, ...rest);
+    };
+    fs.writeSync = (fd, data, ...rest) => {
+      if (fd === 0) {
+        wroteToken = String(data);
+        fs.writeFileSync(lockPath, wroteToken, 'utf8');
+        return wroteToken.length;
+      }
+      return origWrite.call(fs, fd, data, ...rest);
+    };
+    fs.closeSync = (fd) => (fd === 0 ? undefined : origClose.call(fs, fd));
+
+    const handle = acquireOwnedLock(lockPath);
+    assert.equal(handle.fd, 0);
+    assert.equal(fs.readFileSync(lockPath, 'utf8'), handle.token);
+    assert.equal(releaseOwnedLock(handle), true);
+    assert.equal(fs.existsSync(lockPath), false);
+  } finally {
+    fs.openSync = origOpen;
+    fs.writeSync = origWrite;
+    fs.closeSync = origClose;
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

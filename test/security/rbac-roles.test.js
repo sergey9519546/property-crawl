@@ -166,3 +166,87 @@ test('RBAC: token role extraction maintains 100% backward compatibility for sing
   assert.equal(serverAuth.extractRoleFromToken('', { allowNull: true }), null);
   assert.equal(clientAuth.extractRoleFromToken(null, { allowNull: true }), null);
 });
+
+test('RBAC: Next workspace-proxy enforces role permissions across private, member, and watchlist proxies', async () => {
+  const prevSecret = process.env.SCRAPER_ADMIN_TOKEN;
+  const prevAnalyst = process.env.PROPERTY_ANALYST_SECRET;
+  const prevViewer = process.env.PROPERTY_VIEWER_SECRET;
+  process.env.SCRAPER_ADMIN_TOKEN = 'op-secret-test';
+  process.env.PROPERTY_ANALYST_SECRET = 'an-secret-test';
+  process.env.PROPERTY_VIEWER_SECRET = 'vw-secret-test';
+
+  const forwardedCalls = [];
+  function loadProxy() {
+    const filename = path.resolve(__dirname, '../../src/lib/workspace-proxy.ts');
+    const instance = new Module(filename, module);
+    instance.filename = filename;
+    instance.paths = Module._nodeModulePaths(path.dirname(filename));
+    const originalRequire = instance.require.bind(instance);
+    instance.require = function (name) {
+      if (name === 'server-only') return {};
+      if (name === '@/lib/workspace-session') return clientAuth;
+      if (name === '@/lib/member-account') return { currentMember: async () => null };
+      if (name === '@/lib/property-api') {
+        return {
+          proxyPropertyApi: async (req, opts = {}) => {
+            forwardedCalls.push({ url: req.url, method: req.method, opts });
+            return Response.json({ proxied: true, hasToken: Boolean(opts.operatorToken) }, { status: 200 });
+          },
+        };
+      }
+      return originalRequire(name);
+    };
+    instance._compile(
+      transformSync(fs.readFileSync(filename, 'utf8'), {
+        filename,
+        module: { type: 'commonjs' },
+        jsc: { parser: { syntax: 'typescript' }, target: 'es2022' },
+      }).code,
+      filename
+    );
+    return instance.exports;
+  }
+
+  try {
+    const { proxyPrivatePropertyApi, proxyMemberPropertyApi, proxyWatchlistPropertyApi } = loadProxy();
+    const makeCookie = (role) => `${clientAuth.WORKSPACE_SESSION_COOKIE}=${clientAuth.issueWorkspaceSession(Date.now(), process.env, role).value}`;
+
+    // 1. Viewer cannot call document-review, scrapers, or hunt mutations
+    const viewerHeaders = { cookie: makeCookie('viewer'), origin: 'http://localhost:3001' };
+    const docReviewViewer = await proxyPrivatePropertyApi(new Request('http://localhost:3001/api/document-review', { method: 'GET', headers: viewerHeaders }));
+    assert.equal(docReviewViewer.status, 403);
+    const huntMutateViewer = await proxyMemberPropertyApi(new Request('http://localhost:3001/api/hunts', { method: 'POST', headers: viewerHeaders }));
+    assert.equal(huntMutateViewer.status, 403);
+    const alertDeleteViewer = await proxyWatchlistPropertyApi(new Request('http://localhost:3001/api/alerts', { method: 'DELETE', headers: viewerHeaders }));
+    assert.equal(alertDeleteViewer.status, 403);
+
+    // 2. Viewer watchlist GET stays isolated (no operatorToken credential leak)
+    forwardedCalls.length = 0;
+    const alertReadViewer = await proxyWatchlistPropertyApi(new Request('http://localhost:3001/api/alerts', { method: 'GET', headers: viewerHeaders }));
+    assert.equal(alertReadViewer.status, 200);
+    assert.equal(forwardedCalls[0].opts.operatorToken, undefined);
+
+    // 3. Analyst can review documents & manage hunts, but cannot run scrapers or enrichments
+    const analystHeaders = { cookie: makeCookie('analyst'), origin: 'http://localhost:3001' };
+    const scraperRunAnalyst = await proxyPrivatePropertyApi(new Request('http://localhost:3001/api/scrapers/run', { method: 'POST', headers: analystHeaders }));
+    assert.equal(scraperRunAnalyst.status, 403);
+    const enrichmentAnalyst = await proxyPrivatePropertyApi(new Request('http://localhost:3001/api/enrichment/refresh', { method: 'POST', headers: analystHeaders }));
+    assert.equal(enrichmentAnalyst.status, 403);
+    const docReviewAnalyst = await proxyPrivatePropertyApi(new Request('http://localhost:3001/api/document-review', { method: 'GET', headers: analystHeaders }));
+    assert.equal(docReviewAnalyst.status, 200);
+    const huntCreateAnalyst = await proxyMemberPropertyApi(new Request('http://localhost:3001/api/hunts', { method: 'POST', headers: analystHeaders }));
+    assert.equal(huntCreateAnalyst.status, 200);
+
+    // 4. Operator has full access
+    const operatorHeaders = { cookie: makeCookie('operator'), origin: 'http://localhost:3001' };
+    const scraperRunOp = await proxyPrivatePropertyApi(new Request('http://localhost:3001/api/scrapers/run', { method: 'POST', headers: operatorHeaders }));
+    assert.equal(scraperRunOp.status, 200);
+  } finally {
+    if (prevSecret === undefined) delete process.env.SCRAPER_ADMIN_TOKEN;
+    else process.env.SCRAPER_ADMIN_TOKEN = prevSecret;
+    if (prevAnalyst === undefined) delete process.env.PROPERTY_ANALYST_SECRET;
+    else process.env.PROPERTY_ANALYST_SECRET = prevAnalyst;
+    if (prevViewer === undefined) delete process.env.PROPERTY_VIEWER_SECRET;
+    else process.env.PROPERTY_VIEWER_SECRET = prevViewer;
+  }
+});

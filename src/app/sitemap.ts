@@ -11,7 +11,9 @@ import type { MetadataRoute } from 'next';
  * inventory, or from nothing at all.
  */
 const API_BASE = process.env.PROPERTY_API_URL || 'http://localhost:3000';
-const MAX_LISTING_URLS = 5_000;
+const LISTINGS_PAGE_SIZE = 1_000;
+const MAX_LISTING_PAGES = 25;
+const MAX_LISTING_URLS = LISTINGS_PAGE_SIZE * MAX_LISTING_PAGES;
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.PUBLIC_APP_ORIGIN || 'https://property-crawl.onrender.com';
@@ -22,13 +24,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${baseUrl}/listings`, lastModified: now, changeFrequency: 'hourly', priority: 0.9 },
     { url: `${baseUrl}/states`, lastModified: now, changeFrequency: 'daily', priority: 0.6 },
     { url: `${baseUrl}/sources`, lastModified: now, changeFrequency: 'weekly', priority: 0.7 },
-    { url: `${baseUrl}/hunts`, lastModified: now, changeFrequency: 'weekly', priority: 0.6 },
-    { url: `${baseUrl}/research`, lastModified: now, changeFrequency: 'weekly', priority: 0.6 },
     { url: `${baseUrl}/activity`, lastModified: now, changeFrequency: 'weekly', priority: 0.5 },
     { url: `${baseUrl}/about`, lastModified: now, changeFrequency: 'monthly', priority: 0.5 },
     { url: `${baseUrl}/resources`, lastModified: now, changeFrequency: 'monthly', priority: 0.5 },
+    { url: `${baseUrl}/case-studies`, lastModified: now, changeFrequency: 'monthly', priority: 0.5 },
+    { url: `${baseUrl}/enterprise`, lastModified: now, changeFrequency: 'monthly', priority: 0.5 },
+    { url: `${baseUrl}/security`, lastModified: now, changeFrequency: 'monthly', priority: 0.4 },
+    { url: `${baseUrl}/contact`, lastModified: now, changeFrequency: 'monthly', priority: 0.4 },
+    { url: `${baseUrl}/register`, lastModified: now, changeFrequency: 'monthly', priority: 0.4 },
     { url: `${baseUrl}/sign-in`, lastModified: now, changeFrequency: 'yearly', priority: 0.3 },
-    { url: `${baseUrl}/checkout`, lastModified: now, changeFrequency: 'monthly', priority: 0.4 },
     { url: `${baseUrl}/terms`, lastModified: now, changeFrequency: 'yearly', priority: 0.3 },
     { url: `${baseUrl}/privacy`, lastModified: now, changeFrequency: 'yearly', priority: 0.3 },
   ];
@@ -36,26 +40,45 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // A live inventory is a bonus, not a requirement. If it cannot be read, the
   // honest sitemap is the static pages alone - never a stand-in list of records
   // that do not exist.
-  let listingPages: MetadataRoute.Sitemap = [];
+  const listingPages: MetadataRoute.Sitemap = [];
+  const seenListingIds = new Set<string>();
   let countyPages: MetadataRoute.Sitemap = [];
   try {
-    const response = await fetch(`${API_BASE}/api/listings?limit=${MAX_LISTING_URLS}`, {
-      cache: 'no-store',
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (response.ok) {
+    for (let page = 0; page < MAX_LISTING_PAGES && listingPages.length < MAX_LISTING_URLS; page++) {
+      const offset = page * LISTINGS_PAGE_SIZE;
+      const response = await fetch(`${API_BASE}/api/listings?limit=${LISTINGS_PAGE_SIZE}&offset=${offset}`, {
+        cache: 'no-store',
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!response.ok) break;
       const payload = await response.json();
       const records: unknown[] = Array.isArray(payload?.listings) ? payload.listings : [];
-      listingPages = records
-        .filter((record): record is { id: string; saleDate?: string | null } =>
-          Boolean(record && typeof (record as { id?: unknown }).id === 'string'
-            && (record as { id: string }).id))
-        .map((record) => ({
-          url: `${baseUrl}/listings/${encodeURIComponent(record.id)}`,
-          lastModified: record.saleDate ? new Date(record.saleDate) : now,
-          changeFrequency: 'daily',
-          priority: 0.8,
-        }));
+      if (records.length === 0) break;
+
+      let addedOnPage = 0;
+      for (const record of records) {
+        if (
+          record &&
+          typeof (record as { id?: unknown }).id === 'string' &&
+          (record as { id: string }).id
+        ) {
+          const typed = record as { id: string; saleDate?: string | null };
+          if (seenListingIds.has(typed.id)) continue;
+          seenListingIds.add(typed.id);
+          addedOnPage++;
+          listingPages.push({
+            url: `${baseUrl}/listings/${encodeURIComponent(typed.id)}`,
+            lastModified: typed.saleDate && Number.isFinite(Date.parse(typed.saleDate)) ? new Date(typed.saleDate) : now,
+            changeFrequency: 'daily',
+            priority: 0.8,
+          });
+          if (listingPages.length >= MAX_LISTING_URLS) break;
+        }
+      }
+
+      const total = typeof payload?.total === 'number' && Number.isFinite(payload.total) ? payload.total : null;
+      if (records.length < LISTINGS_PAGE_SIZE || addedOnPage === 0) break;
+      if (total !== null && offset + records.length >= total) break;
     }
   } catch {
     // Inventory unreachable at build time; static pages still describe the site.

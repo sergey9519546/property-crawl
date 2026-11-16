@@ -142,19 +142,21 @@ test('legal notice extraction parses OCR text, prompt injections, and multi-parc
 
   const result = pipeline.processEmail(email);
   assert.equal(result.state, 'TX');
-  assert.equal(result.listings.length, 2, 'Should extract 2 discrete parcels');
+  assert.equal(result.listings.length, 0, 'Adversarial prompt injection quarantines parcels into lowConfidenceNotices');
+  assert.equal(result.lowConfidenceNotices.length, 2, 'Should extract and quarantine 2 discrete parcels');
 
-  const p1 = result.listings[0];
+  const p1 = result.lowConfidenceNotices[0].listing;
   assert.equal(p1.state, 'TX');
   assert.match(p1.address, /4502 Washington Ave/);
   assert.equal(p1.openingBid, 180000, 'OCR letter O repaired to zero');
   assert.equal(p1.judgment, 250000);
   assert.doesNotMatch(p1.raw, /SYSTEM INSTRUCTION/, 'Adversarial prompt injection neutralized');
+  assert.ok(result.lowConfidenceNotices[0].reasons.includes('ADVERSARIAL_INJECTION_DETECTED'));
   assert.equal(p1.provenance.origin, 'email_notice');
   assert.equal(p1.provenance.observed, true);
   assert.equal(p1.provenance.publisher, 'Texas Public Notices');
 
-  const p2 = result.listings[1];
+  const p2 = result.lowConfidenceNotices[1].listing;
   assert.match(p2.address, /1209 Heights Blvd/);
   assert.equal(p2.openingBid, 210000);
   assert.equal(p2.judgment, 300000);
@@ -186,7 +188,7 @@ test('standardize output produces canonical listing objects with full provenance
   };
 
   const canonical = standardizeEmailNoticeListing(parsed, meta);
-  assert.equal(canonical.source, 'email-notices');
+  assert.equal(canonical.source, 'public-notices-email');
   assert.equal(canonical.state, 'OH');
   assert.equal(canonical.address, '100 Main St, Columbus, OH 43215');
   assert.equal(canonical.openingBid, 95000);
@@ -209,6 +211,7 @@ test('ingestion flow upserts accepted listings through db', async () => {
       IN THE COURT OF COMMON PLEAS, CUYAHOGA COUNTY, OHIO.
       U.S. Bank National Association vs. Frank Gallagher
       Case No. CV-24-998811
+      APN: 101-12-034
       Sale Date: December 01, 2026
       1200 West 9th St, Cleveland, OH 44113
       Opening bid: $175,000.00
@@ -238,10 +241,151 @@ test('ingestion flow upserts accepted listings through db', async () => {
   assert.equal(upsertedListings.length, 1);
 
   const saved = upsertedListings[0];
-  assert.equal(saved.source, 'email-notices');
+  assert.equal(saved.source, 'public-notices-email');
   assert.equal(saved.state, 'OH');
   assert.match(saved.address, /1200 West 9th St/);
   assert.equal(saved.openingBid, 175000);
   assert.equal(saved.provenance.origin, 'email_notice');
   assert.equal(saved.provenance.observed, true);
+});
+
+test('unknown-state notice stays UNKNOWN instead of fabricating OH and avoids hidden vault write in processEmail', () => {
+  const { defaultVault } = require('../../server/storage/document-vault');
+  const { EmailNoticesPipeline } = require('../../server/sources/email-notices');
+  const origPut = defaultVault.putDocumentSync;
+  let putCalls = 0;
+  defaultVault.putDocumentSync = (...args) => {
+    putCalls += 1;
+    return origPut.apply(defaultVault, args);
+  };
+  try {
+    const pipeline = new EmailNoticesPipeline({ vault: null });
+    const out = pipeline.processEmail({
+      id: '<unknown-state@example>',
+      from: 'notices@other-domain.example',
+      subject: 'Foreclosure auction notice',
+      body: 'Property at 404 Elm Rd. Sale date 2026-12-01. Case 2026-999.',
+    });
+    assert.equal(out.state, 'UNKNOWN');
+    assert.equal(out.listings.length, 0);
+    assert.equal(out.lowConfidenceNotices.length, 1);
+    assert.equal(out.lowConfidenceNotices[0].state, 'UNKNOWN');
+    assert.equal(out.lowConfidenceNotices[0].listing.state, 'UNKNOWN');
+    assert.equal(out.lowConfidenceNotices[0].listing.source, 'public-notices-email');
+    assert.ok(out.lowConfidenceNotices[0].reasons.includes('UNKNOWN_STATE'));
+    assert.equal(putCalls, 0);
+  } finally {
+    defaultVault.putDocumentSync = origPut;
+  }
+});
+
+test('ingest loads PG reviews, preserves revision, writes docId vault once, and defers \\Seen until persist succeeds', async () => {
+  const { EmailNoticesPipeline } = require('../../server/sources/email-notices');
+  const { documentId } = require('../../server/routes/document-review');
+
+  const sampleLowConfEmail = {
+    id: '<review-defer@fl>',
+    from: 'alerts@floridapublicnotices.com',
+    subject: 'Legal Foreclosure Notice',
+    body: 'Foreclosure sale on 2026-11-30 for ambiguous parcel.',
+  };
+
+  const prePipeline = new EmailNoticesPipeline({ vault: null });
+  const preview = prePipeline.processEmail(sampleLowConfEmail);
+  const item = preview.lowConfidenceNotices[0];
+  const expectedDocId = documentId(item.recordId, 0, item.noticeUrl);
+
+  const makeMockClient = () => {
+    const commands = [];
+    return {
+      commands,
+      async connect() {},
+      async close() {},
+      async command(cmd) {
+        commands.push(cmd);
+        if (cmd.startsWith('UID SEARCH')) return '* SEARCH 88\r\nA3 OK\r\n';
+        if (cmd.startsWith('UID FETCH')) {
+          return (
+            '* 1 FETCH (UID 88 BODY[TEXT])\r\n' +
+            `From: ${sampleLowConfEmail.from}\r\n` +
+            `Subject: ${sampleLowConfEmail.subject}\r\n` +
+            `Message-ID: ${sampleLowConfEmail.id}\r\n\r\n` +
+            `${sampleLowConfEmail.body}\r\n)\r\nA4 OK\r\n`
+          );
+        }
+        return 'A9 OK\r\n';
+      },
+    };
+  };
+
+  // Case 1: persistAsync returns false -> do NOT mark \Seen
+  const failReviewStore = {
+    map: new Map(),
+    loadCalled: false,
+    async loadPg() {
+      this.loadCalled = true;
+    },
+    async persistAsync() {
+      return false;
+    },
+  };
+  const failVaultKeys = [];
+  const failClient = makeMockClient();
+  const p1 = new EmailNoticesPipeline({
+    host: 'imap.example.com',
+    user: 'u',
+    password: 'p',
+    imapClient: failClient,
+    documentReviewStore: failReviewStore,
+    vault: {
+      putDocumentSync(key) { failVaultKeys.push(key); },
+    },
+  });
+  await p1.ingest();
+  assert.equal(failReviewStore.loadCalled, true);
+  assert.equal(failVaultKeys.length, 1);
+  assert.equal(failVaultKeys[0], `reviews/${encodeURIComponent(expectedDocId)}.txt`);
+  assert.equal(failClient.commands.some((c) => c.includes('\\Seen')), false);
+
+  // Case 2: existing approved review loaded by loadPg() -> preserve status & revision, mark \Seen after persist
+  const okReviewStore = {
+    map: new Map(),
+    loadCalled: false,
+    persistCalledBeforeSeen: false,
+    async loadPg() {
+      this.loadCalled = true;
+      this.map.set(expectedDocId, {
+        id: expectedDocId,
+        listingId: item.recordId,
+        status: 'approved',
+        reviewer: 'op-alice',
+        reviewedAt: '2026-10-01T00:00:00.000Z',
+        notes: 'Verified by county docket',
+        revision: 3,
+        priorStatus: 'pending',
+        extractedAt: '2026-09-30T00:00:00.000Z',
+      });
+    },
+    async persistAsync() {
+      this.persistCalledBeforeSeen = !okClient.commands.some((c) => c.includes('\\Seen'));
+      return true;
+    },
+  };
+  const okClient = makeMockClient();
+  const p2 = new EmailNoticesPipeline({
+    host: 'imap.example.com',
+    user: 'u',
+    password: 'p',
+    imapClient: okClient,
+    documentReviewStore: okReviewStore,
+    vault: { putDocumentSync() {} },
+  });
+  await p2.ingest();
+  assert.equal(okReviewStore.loadCalled, true);
+  assert.equal(okReviewStore.persistCalledBeforeSeen, true);
+  const stored = okReviewStore.map.get(expectedDocId);
+  assert.equal(stored.status, 'approved');
+  assert.equal(stored.revision, 3);
+  assert.equal(stored.reviewer, 'op-alice');
+  assert.equal(okClient.commands.some((c) => c === 'UID STORE 88 +FLAGS (\\Seen)'), true);
 });

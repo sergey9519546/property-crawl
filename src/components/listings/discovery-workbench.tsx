@@ -36,9 +36,12 @@ import {
 } from "@/lib/listing-display";
 import {
   getAuctionCalendar,
+  getNeighborhoodDetail,
   listNeighborhoods,
   calendarDatedTotal,
   type AuctionCalendarResponse,
+  type NeighborhoodBucket,
+  type NeighborhoodDetailResponse,
   type NeighborhoodsResponse,
 } from "@/lib/intelligence-client";
 import {
@@ -161,14 +164,14 @@ const DiscoverySearchField = React.memo(function DiscoverySearchField({
         onSearch(draft);
       }}
     >
-      <label className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-line-strong px-3 focus-within:border-ink-3">
+      <label className="flex min-w-0 flex-1 items-center gap-2 rounded-control border border-line-strong bg-card px-3 focus-within:border-yours focus-within:ring-2 focus-within:ring-yours/20">
         <span className="sr-only">Search properties</span>
         <Search size={17} className="text-ink-3" />
         <input
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           placeholder="Address, parcel, court case, or keyword"
-          className="min-w-0 flex-1 bg-transparent py-3 text-sm outline-none"
+          className="min-w-0 flex-1 bg-transparent py-3 text-sm outline-none focus-visible:shadow-none"
         />
       </label>
       <button type="submit" className="rounded-xl bg-ink px-5 py-3 text-sm font-bold text-white">Search</button>
@@ -212,6 +215,111 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
   savedRef.current = saved;
   const [moreFiltersOpen, setMoreFiltersOpen] = React.useState(false);
   const [showSavedOnly, setShowSavedOnly] = React.useState(false);
+  const [watchlistListings, setWatchlistListings] = React.useState<PropertyListing[] | null>(null);
+  const [watchlistLoading, setWatchlistLoading] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!showSavedOnly) {
+      setWatchlistListings(null);
+      setWatchlistLoading(false);
+      return;
+    }
+    const savedIds = Array.from(saved).slice(0, 100);
+    if (savedIds.length === 0) {
+      setWatchlistListings([]);
+      setWatchlistLoading(false);
+      return;
+    }
+    const controller = new AbortController();
+    let active = true;
+    setWatchlistLoading(true);
+
+    const matchesActiveFilters = (listing: PropertyListing) => {
+      if (filters.state && String(listing.state || "").toUpperCase() !== filters.state.toUpperCase()) return false;
+      if (filters.county && !String(listing.county || "").toLowerCase().includes(filters.county.toLowerCase())) return false;
+      if (filters.source && String(listing.source || "").toLowerCase() !== filters.source.toLowerCase()) return false;
+      if (filters.type && String(listing.propType || "").toLowerCase() !== filters.type.toLowerCase()) return false;
+      if (filters.maxBid && Number(filters.maxBid) > 0) {
+        if (typeof listing.openingBid !== "number" || listing.openingBid > Number(filters.maxBid)) return false;
+      }
+      if (filters.minScore && Number(filters.minScore) > 0) {
+        if (typeof listing.dealScore !== "number" || listing.dealScore < Number(filters.minScore)) return false;
+      }
+      if (filters.saleFrom && (!listing.saleDate || listing.saleDate < filters.saleFrom)) return false;
+      if (filters.saleTo && (!listing.saleDate || listing.saleDate > filters.saleTo)) return false;
+      if (filters.q) {
+        const hay = `${listing.id} ${listing.address || ""} ${listing.city || ""} ${listing.county || ""} ${listing.state || ""} ${listing.zip || ""}`.toLowerCase();
+        if (!hay.includes(filters.q.toLowerCase())) return false;
+      }
+      return true;
+    };
+
+    const loadWatchlist = async () => {
+      try {
+        const params = discoverySearchParams(filters, {
+          limit: Math.max(48, Math.min(200, savedIds.length)),
+          facets: "state,county,source,type,program,lifecycle,occupancy,freshness",
+        });
+        params.set("ids", savedIds.join(","));
+        const res = await fetch(`/api/listings?${params.toString()}`, {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        const data = (await res.json().catch(() => null)) as Payload | null;
+        if (!active || controller.signal.aborted) return;
+
+        const returned = Array.isArray(data?.listings) ? data.listings : [];
+        const byId = new Map<string, PropertyListing>();
+        for (const item of returned) {
+          if (item && typeof item.id === "string" && saved.has(item.id)) {
+            byId.set(item.id, item);
+          }
+        }
+        // When the backend ignores `ids=` (returns non-watchlist rows), hydrate missing saved IDs directly.
+        const ignoredIdsParam = returned.some((item) => item && typeof item.id === "string" && !saved.has(item.id));
+        const missingIds = savedIds.filter((id) => !byId.has(id));
+        if (ignoredIdsParam && missingIds.length > 0) {
+          for (let i = 0; i < missingIds.length; i += 6) {
+            if (!active || controller.signal.aborted) break;
+            const chunk = missingIds.slice(i, i + 6);
+            const resolved = await Promise.all(
+              chunk.map(async (id) => {
+                try {
+                  const itemRes = await fetch(`/api/listings/${encodeURIComponent(id)}`, {
+                    cache: "no-store",
+                    signal: controller.signal,
+                  });
+                  if (!itemRes.ok) return null;
+                  const itemData = await itemRes.json();
+                  return itemData && typeof itemData.id === "string" ? (itemData as PropertyListing) : null;
+                } catch {
+                  return null;
+                }
+              }),
+            );
+            for (const item of resolved) {
+              if (item && matchesActiveFilters(item)) {
+                byId.set(item.id, item);
+              }
+            }
+          }
+        }
+        if (res.ok && data && Array.isArray(data.listings)) {
+          setWatchlistListings(Array.from(byId.values()));
+        }
+      } catch {
+        // Retain current page filtering on transient failure
+      } finally {
+        if (active) setWatchlistLoading(false);
+      }
+    };
+
+    void loadWatchlist();
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [showSavedOnly, saved, filters]);
   const requestRef = React.useRef<{ controller: AbortController; id: number } | null>(null);
   const pendingSaves = React.useRef(new Set<string>());
   const [savingIds, setSavingIds] = React.useState<Set<string>>(new Set());
@@ -417,8 +525,9 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
   const anyTriageActive = Object.values(triageFilters).some(Boolean);
   const distressStageFilter = filters.distressStage;
   const filteredListings = React.useMemo(() => {
-    if (!payload?.listings) return [];
-    return payload.listings.filter((listing) => {
+    if (!showSavedOnly && !payload?.listings) return [];
+    const sourceListings = showSavedOnly && watchlistListings !== null ? watchlistListings : (payload?.listings || []);
+    return sourceListings.filter((listing) => {
       if (showSavedOnly && !saved.has(listing.id)) return false;
       if (distressStageFilter && distressStageFilter !== "all") {
         if ((listing.triage?.distressStage || "unknown") !== distressStageFilter) return false;
@@ -434,7 +543,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
       if (triageFilters.occupancyKnown && !t.occupancyKnown) return false;
       return true;
     });
-  }, [payload?.listings, triageFilters, anyTriageActive, distressStageFilter, showSavedOnly, saved]);
+  }, [payload?.listings, watchlistListings, triageFilters, anyTriageActive, distressStageFilter, showSavedOnly, saved]);
   const facetOptions = (field: keyof DiscoveryFilters) => {
     const options = facets[field] || [];
     const selected = filters[field];
@@ -450,7 +559,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
   // they run against the records already in payload.listings.
   const localFilterActive = anyTriageActive
     || Boolean(distressStageFilter && distressStageFilter !== "all")
-    || showSavedOnly;
+;
   // A minimum on a DERIVED field (deal score, bid spread) excludes every record
   // that lacks one. When the inventory carries none, the filter can only ever
   // return nothing, and the empty state has to say so.
@@ -519,8 +628,8 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
     window.location.assign(`/api/export?${params}`);
   };
   // Same words as the sort menu below, never the raw URL key ("bid-asc").
-  // No "triage" entry: discovery-query.ts drops sort=triage and the discovery
-  // SQL rejects it, so offering it would sort by score while claiming triage.
+
+
   const sortLabel = `Sorted by ${({
     score: "Deal Score, highest first",
     opportunity: "opportunity rank",
@@ -576,19 +685,19 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
               <option value="tax_sale">Tax sale</option>
               <option value="unknown">Not stated</option>
             </select>
-            <label className="rounded-lg border border-line-strong bg-card px-3 py-2 text-xs font-semibold">Sale from<input type="date" value={filters.saleFrom || ""} onChange={(event) => setFilters({ saleFrom: event.target.value || undefined })} className="mt-1 block w-full bg-transparent text-sm outline-none" /></label>
-            <label className="rounded-lg border border-line-strong bg-card px-3 py-2 text-xs font-semibold">Sale to<input type="date" value={filters.saleTo || ""} onChange={(event) => setFilters({ saleTo: event.target.value || undefined })} className="mt-1 block w-full bg-transparent text-sm outline-none" /></label>
-            <label className="rounded-lg border border-line-strong bg-card px-3 py-2 text-xs font-semibold">Max opening bid<input inputMode="numeric" value={filters.maxBid || ""} onChange={(event) => setFilters({ maxBid: event.target.value || undefined })} placeholder="$" className="mt-1 block w-full bg-transparent text-sm outline-none" /></label>
-            <label className="rounded-lg border border-line-strong bg-card px-3 py-2 text-xs font-semibold">Min deal score<input type="number" min={0} max={99} value={filters.minScore || ""} onChange={(event) => setFilters({ minScore: event.target.value || undefined })} placeholder="0" className="mt-1 block w-full bg-transparent text-sm outline-none" /></label>
-            <label className="rounded-lg border border-line-strong bg-card px-3 py-2 text-xs font-semibold">Min equity (value minus bid) ($)<input type="number" min={0} value={filters.minEquity || ""} onChange={(event) => setFilters({ minEquity: event.target.value || undefined })} placeholder="0" className="mt-1 block w-full bg-transparent text-sm outline-none" /></label>
+            <label className="rounded-control border border-line-strong bg-card px-3 py-2 text-xs font-semibold focus-within:border-yours focus-within:ring-2 focus-within:ring-yours/20">Sale from<input type="date" value={filters.saleFrom || ""} onChange={(event) => setFilters({ saleFrom: event.target.value || undefined })} className="mt-1 block w-full bg-transparent text-sm outline-none focus-visible:shadow-none" /></label>
+            <label className="rounded-control border border-line-strong bg-card px-3 py-2 text-xs font-semibold focus-within:border-yours focus-within:ring-2 focus-within:ring-yours/20">Sale to<input type="date" value={filters.saleTo || ""} onChange={(event) => setFilters({ saleTo: event.target.value || undefined })} className="mt-1 block w-full bg-transparent text-sm outline-none focus-visible:shadow-none" /></label>
+            <label className="rounded-control border border-line-strong bg-card px-3 py-2 text-xs font-semibold focus-within:border-yours focus-within:ring-2 focus-within:ring-yours/20">Max opening bid<input inputMode="numeric" value={filters.maxBid || ""} onChange={(event) => setFilters({ maxBid: event.target.value || undefined })} placeholder="$" className="mt-1 block w-full bg-transparent text-sm outline-none focus-visible:shadow-none" /></label>
+            <label className="rounded-control border border-line-strong bg-card px-3 py-2 text-xs font-semibold focus-within:border-yours focus-within:ring-2 focus-within:ring-yours/20">Min deal score<input type="number" min={0} max={99} value={filters.minScore || ""} onChange={(event) => setFilters({ minScore: event.target.value || undefined })} placeholder="0" className="mt-1 block w-full bg-transparent text-sm outline-none focus-visible:shadow-none" /></label>
+            <label className="rounded-control border border-line-strong bg-card px-3 py-2 text-xs font-semibold focus-within:border-yours focus-within:ring-2 focus-within:ring-yours/20">Min equity (value minus bid) ($)<input type="number" min={0} value={filters.minEquity || ""} onChange={(event) => setFilters({ minEquity: event.target.value || undefined })} placeholder="0" className="mt-1 block w-full bg-transparent text-sm outline-none focus-visible:shadow-none" /></label>
             <select aria-label="Documents" value={filters.hasDocuments || "all"} onChange={(event) => selectValue("hasDocuments", event.target.value)} className="min-h-10 rounded-lg border border-line-strong bg-card px-3 text-sm">
+              <option value="all">Any documents</option><option value="true">Documents available</option><option value="false">No documents posted</option><option value="unknown">Not stated</option>
+            </select>
             <select aria-label="Senior lien risk" value={filters.seniorLien || "all"} onChange={(event) => selectValue("seniorLien", event.target.value)} className="min-h-10 rounded-lg border border-line-strong bg-card px-3 text-sm">
-              <option value="all">Any senior lien status</option><option value="clean">Clean title (low/none)</option><option value="risk">High senior lien risk</option>
+              <option value="all">Any senior lien status</option><option value="clean">No senior-lien flag posted</option><option value="risk">High senior lien risk</option>
             </select>
             <select aria-label="Redemption period" value={filters.redemption || "all"} onChange={(event) => selectValue("redemption", event.target.value)} className="min-h-10 rounded-lg border border-line-strong bg-card px-3 text-sm">
               <option value="all">Any redemption timeline</option><option value="immediate">Immediate deed (0 days)</option><option value="redemption_active">Active redemption period</option>
-            </select>
-              <option value="all">Any documents</option><option value="true">Documents available</option><option value="false">No documents posted</option><option value="unknown">Not stated</option>
             </select>
           </div>
         )}
@@ -607,7 +716,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
                   }
                   className="inline-flex items-center gap-1 rounded-full bg-line px-2.5 py-1 text-label font-semibold text-ink"
                 >
-                  {filterLabels[key] || key}: {key === "hasDocuments" ? value === "true" ? "Available" : value === "false" ? "None posted" : "Not stated" : key === "seniorLien" ? value === "clean" ? "Clean title" : "High risk" : key === "redemption" ? value === "immediate" ? "Immediate deed" : "Active redemption" : sourceDisplayText(value!).replace(/_/g, " ")}
+                  {filterLabels[key] || key}: {key === "hasDocuments" ? value === "true" ? "Available" : value === "false" ? "None posted" : "Not stated" : key === "seniorLien" ? value === "clean" ? "No senior-lien flag" : "High risk" : key === "redemption" ? value === "immediate" ? "Immediate deed" : "Active redemption" : sourceDisplayText(value!).replace(/_/g, " ")}
                   <X size={12} />
                 </button>
               ))}
@@ -1007,13 +1116,52 @@ function DiscoveryCalendar({
   const [calendarRollup, setCalendarRollup] = React.useState<AuctionCalendarResponse | null>(null);
   const [neighborhoodRollup, setNeighborhoodRollup] = React.useState<NeighborhoodsResponse | null>(null);
   const [rollupLoading, setRollupLoading] = React.useState<boolean>(true);
+  const [selectedMarketLabel, setSelectedMarketLabel] = React.useState<string | null>(null);
+  const [marketDetail, setMarketDetail] = React.useState<NeighborhoodDetailResponse | null>(null);
+  const [marketDetailLoading, setMarketDetailLoading] = React.useState<boolean>(false);
+  const [marketDetailError, setMarketDetailError] = React.useState<string | null>(null);
+
+  const loadMarketDrilldown = React.useCallback(async (label: string, kind: "zip" | "city" | "county", key: string) => {
+    setSelectedMarketLabel(label);
+    setMarketDetailLoading(true);
+    setMarketDetailError(null);
+    try {
+      const detail = await getNeighborhoodDetail(kind, key);
+      setMarketDetail(detail);
+    } catch (err) {
+      setMarketDetail(null);
+      setMarketDetailError(err instanceof Error ? err.message : "Area drilldown unavailable.");
+    } finally {
+      setMarketDetailLoading(false);
+    }
+  }, []);
 
   React.useEffect(() => {
     let cancelled = false;
     setRollupLoading(true);
     Promise.all([
-      getAuctionCalendar({ windowDays: 60, states: filters.state || undefined }).catch(() => null),
-      listNeighborhoods({ state: filters.state || undefined, limit: 6 }).catch(() => null),
+      getAuctionCalendar({
+        windowDays: 60,
+        states: filters.state || undefined,
+        county: filters.county || undefined,
+        source: filters.source || undefined,
+        type: filters.type || undefined,
+        q: filters.q || undefined,
+        maxBid: filters.maxBid ? Number(filters.maxBid) : undefined,
+        saleFrom: filters.saleFrom || undefined,
+        saleTo: filters.saleTo || undefined,
+      }).catch(() => null),
+      listNeighborhoods({
+        state: filters.state || undefined,
+        county: filters.county || undefined,
+        source: filters.source || undefined,
+        type: filters.type || undefined,
+        q: filters.q || undefined,
+        maxBid: filters.maxBid ? Number(filters.maxBid) : undefined,
+        saleFrom: filters.saleFrom || undefined,
+        saleTo: filters.saleTo || undefined,
+        limit: 12,
+      }).catch(() => null),
     ]).then(([cal, hoods]) => {
       if (cancelled) return;
       setCalendarRollup(cal);
@@ -1023,7 +1171,16 @@ function DiscoveryCalendar({
     return () => {
       cancelled = true;
     };
-  }, [filters.state]);
+  }, [
+    filters.state,
+    filters.county,
+    filters.source,
+    filters.type,
+    filters.q,
+    filters.maxBid,
+    filters.saleFrom,
+    filters.saleTo,
+  ]);
 
   const groups = new Map<string, PropertyListing[]>();
   for (const listing of listings) {
@@ -1045,7 +1202,7 @@ function DiscoveryCalendar({
           <h2 className="mt-1 text-xl font-bold">Calendar view</h2>
         </div>
         <span className="text-xs text-ink-3">
-          Only sales with a published date appear here.
+          Dated sales are ordered chronologically; undated records are grouped below.
         </span>
       </div>
 
@@ -1066,7 +1223,7 @@ function DiscoveryCalendar({
           </div>
           {calendarRollup && calendarRollup.weeks.length > 0 ? (
             <div className="mt-3 space-y-2">
-              {calendarRollup.weeks.slice(0, 5).map((week) => (
+              {calendarRollup.weeks.map((week) => (
                 <div
                   key={week.weekStart}
                   className="flex items-center justify-between rounded-lg border border-line bg-card px-3 py-2 text-xs"
@@ -1099,6 +1256,21 @@ function DiscoveryCalendar({
           <div className="flex items-center justify-between gap-2">
             <h3 className="text-xs font-bold uppercase tracking-wider text-ink-2">
               Typical prices by area
+              {filters.state && filters.county ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    void loadMarketDrilldown(
+                      `${filters.county}, ${filters.state}`,
+                      "county",
+                      `${filters.state}-${filters.county}`,
+                    )
+                  }
+                  className="ml-2 rounded-md border border-line bg-card px-2 py-0.5 text-xs font-semibold normal-case tracking-normal text-ink-2 hover:bg-paper"
+                >
+                  County stats
+                </button>
+              ) : null}
             </h3>
             <span className="text-xs font-semibold text-ink-3">
               {rollupLoading
@@ -1110,13 +1282,29 @@ function DiscoveryCalendar({
           </div>
           {neighborhoodRollup && neighborhoodRollup.neighborhoods.length > 0 ? (
             <div className="mt-3 space-y-2">
-              {neighborhoodRollup.neighborhoods.slice(0, 5).map((bucket) => (
+              {neighborhoodRollup.neighborhoods.map((bucket) => (
                 <div
                   key={bucket.key}
                   className="flex items-center justify-between rounded-lg border border-line bg-card px-3 py-2 text-xs"
                 >
                   <div className="min-w-0">
-                    <span className="font-semibold text-ink">{bucket.label}</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void loadMarketDrilldown(
+                          bucket.label,
+                          bucket.kind === "city"
+                            ? "city"
+                            : bucket.kind === "county"
+                              ? "county"
+                              : "zip",
+                          bucket.key,
+                        )
+                      }
+                      className="font-semibold text-ink underline decoration-line-strong underline-offset-2 hover:text-ink-2"
+                    >
+                      {bucket.label}
+                    </button>
                     <span className="ml-2 text-ink-3">
                       {bucket.count.toLocaleString()} active
                       {bucket.medianSqft !== null ? ` · ${bucket.medianSqft.toLocaleString()} sqft` : ""}
@@ -1144,6 +1332,66 @@ function DiscoveryCalendar({
           ) : null}
         </div>
       </div>
+
+      {selectedMarketLabel && (
+        <div className="mt-4 rounded-xl border border-line bg-paper/70 p-4 text-xs" data-testid="market-drilldown-panel">
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-semibold text-ink">
+              Area breakdown: {selectedMarketLabel}
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedMarketLabel(null);
+                setMarketDetail(null);
+                setMarketDetailError(null);
+              }}
+              className="text-ink-3 underline hover:text-ink"
+            >
+              Close
+            </button>
+          </div>
+          {marketDetailLoading ? (
+            <p className="mt-2 text-ink-3">Loading area stats…</p>
+          ) : marketDetailError ? (
+            <p className="mt-2 text-catch-ink">{marketDetailError}</p>
+          ) : marketDetail ? (() => {
+            const bucket = marketDetail.neighborhood ?? marketDetail.bucket ?? marketDetail;
+            return (
+              <div className="mt-3 grid grid-cols-2 gap-3 text-ink-2 sm:grid-cols-4">
+                <div>
+                  <span className="block text-label font-bold uppercase text-ink-3">Active listings</span>
+                  <strong className="mt-0.5 block text-sm text-ink">
+                    {typeof bucket.count === "number" ? bucket.count.toLocaleString() : "—"}
+                  </strong>
+                </div>
+                <div>
+                  <span className="block text-label font-bold uppercase text-ink-3">Median bid</span>
+                  <strong className="mt-0.5 block text-sm text-ink">
+                    {typeof bucket.medianOpeningBid === "number"
+                      ? displayMoney(bucket.medianOpeningBid)
+                      : "Not published"}
+                  </strong>
+                </div>
+                <div>
+                  <span className="block text-label font-bold uppercase text-ink-3">Median sqft</span>
+                  <strong className="mt-0.5 block text-sm text-ink">
+                    {typeof bucket.medianSqft === "number"
+                      ? `${bucket.medianSqft.toLocaleString()} sqft`
+                      : "Not published"}
+                  </strong>
+                </div>
+                <div>
+                  <span className="block text-label font-bold uppercase text-ink-3">Median score</span>
+                  <strong className="mt-0.5 block text-sm text-ink">
+                    {typeof bucket.medianDealScore === "number" ? bucket.medianDealScore : "—"}
+                  </strong>
+                </div>
+              </div>
+            );
+          })() : null}
+        </div>
+      )}
 
       <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {truncated && (

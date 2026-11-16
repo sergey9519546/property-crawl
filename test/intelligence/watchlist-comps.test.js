@@ -261,3 +261,32 @@ test('findWatchlistComps: scoring is bounded in [0, 1] for every candidate', () 
     assert.ok(c.score >= 0 && c.score <= 1, `score out of bounds: ${c.score}`);
   }
 });
+
+test('findWatchlistComps: closer openingBid comps rank higher than distant-price comps', () => {
+  const target = listing({ id: 'T', lat: 27.45, lng: -98.88, sqft: 1500, openingBid: 100000, propType: 'Single Family' });
+  const pool = [
+    listing({ id: 'PRICE-WIDER', lat: 27.46, lng: -98.88, sqft: 1500, openingBid: 135000, propType: 'Single Family' }),
+    listing({ id: 'PRICE-CLOSE', lat: 27.46, lng: -98.88, sqft: 1500, openingBid: 105000, propType: 'Single Family' })
+  ];
+  const result = findWatchlistComps(target, pool, { nowMs: NOW_MS });
+  assert.equal(result.comps.length, 2);
+  assert.equal(result.comps[0].listing.id, 'PRICE-CLOSE');
+  assert.equal(result.comps[1].listing.id, 'PRICE-WIDER');
+  assert.ok(result.comps[0].score > result.comps[1].score);
+});
+
+test('findWatchlistComps: partial geocode (lat present, lng null) reports target_geocode_missing when unmatched', () => {
+  const target = listing({ id: 'T', lat: 27.45, lng: null, zip: null, city: 'Bruni' });
+  const pool = [listing({ id: 'P', lat: 27.5, lng: -98.9, sqft: 1500, openingBid: 50000, city: 'Houston' })];
+  const result = findWatchlistComps(target, pool, { nowMs: NOW_MS });
+  assert.equal(result.comps.length, 0);
+  assert.equal(result.reason, 'target_geocode_missing');
+});
+
+test('findWatchlistComps: keeps reason=no_candidates_in_pool when city fallback matched geo before band filters', () => {
+  const target = listing({ id: 'T', lat: null, lng: null, zip: null, city: 'Laredo', sqft: 1500, openingBid: 100000 });
+  const sameCityWideSqft = listing({ id: 'P', lat: null, lng: null, zip: null, city: 'Laredo', sqft: 9000, openingBid: 100000 });
+  const result = findWatchlistComps(target, [sameCityWideSqft], { nowMs: NOW_MS });
+  assert.equal(result.comps.length, 0);
+  assert.equal(result.reason, 'no_candidates_in_pool');
+});

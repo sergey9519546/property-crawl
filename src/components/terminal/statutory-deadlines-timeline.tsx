@@ -198,7 +198,7 @@ export function StatutoryDeadlinesTimeline({
             <div className="flex items-center justify-between">
               <span className="font-bold text-ink">Objection / Upset</span>
               <span className={`px-1.5 py-0.5 rounded text-xs font-bold ${
-                objectionExpired ? "bg-go-wash text-go-fill border border-go-fill/30" :
+                objectionExpired ? "bg-paper text-ink-2 border border-line" :
                 objectionActive ? "bg-catch-wash text-catch-ink border border-catch/30" :
                 "bg-paper text-ink-3 border border-line"
               }`}>
@@ -225,7 +225,7 @@ export function StatutoryDeadlinesTimeline({
             <span className="font-bold text-ink">IRS 120d Right</span>
             <span className={`px-1.5 py-0.5 rounded text-xs font-bold ${
               !irsDays ? "bg-paper text-ink-3 border border-line" :
-              irsExpired ? "bg-go-wash text-go-fill border border-go-fill/30" :
+              irsExpired ? "bg-paper text-ink-2 border border-line" :
               irsActive ? "bg-catch-wash text-catch-ink border border-catch/30" :
               "bg-paper text-ink-3 border border-line"
             }`}>
@@ -247,8 +247,8 @@ export function StatutoryDeadlinesTimeline({
           <div className="flex items-center justify-between">
             <span className="font-bold text-ink">State Redemption</span>
             <span className={`px-1.5 py-0.5 rounded text-xs font-bold ${
-              stateRedemptionDays === 0 ? "bg-go-wash text-go-fill border border-go-fill/30" :
-              stateRedemptionExpired ? "bg-go-wash text-go-fill border border-go-fill/30" :
+              stateRedemptionDays === 0 ? "bg-paper text-ink-2 border border-line" :
+              stateRedemptionExpired ? "bg-paper text-ink-2 border border-line" :
               stateRedemptionActive ? "bg-catch-wash text-catch-ink border border-catch/30" :
               "bg-paper text-ink-3 border border-line"
             }`}>

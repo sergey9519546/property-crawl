@@ -1124,3 +1124,120 @@ test('SheriffSaleScraper emits completedCounties atomically across multi-portal 
   );
 });
 
+test('BK-04 Live AcclaimWeb: GridResults JSON parser, Duval or.duvalclerk.com URL policy, and Clark reCAPTCHA fail-closed guard', async () => {
+  const {
+    parseAcclaimGridResultsJson,
+    queryLiveAcclaimPortal,
+  } = require('../server/scrapers/adapters/acclaimweb');
+  const { TrusteeSaleScraper } = require('../server/scrapers/trustee');
+  const os = require('node:os');
+  const fs = require('node:fs');
+  const path = require('node:path');
+
+  // 1. Live Duval GridResults JSON without situs address/APN must stay evidenceOnly: true and never fabricate prices
+  const duvalPayload = {
+    total: 2,
+    data: [
+      {
+        TransactionItemId: 21623511,
+        InstrumentNumber: '2026091234',
+        DirectName: 'WELLS FARGO BANK NA',
+        IndirectName: 'SMITH, JOHN',
+        RecordDate: '/Date(1794614400000)/',
+        DocTypeDescription: 'LIS PENDENS (LP)',
+        BookPage: 'OR 21200 / 1450',
+        DocLegalDescription: 'LOT 14 BLK 2 SAN JOSE MANOR',
+        CaseNumber: '16-2026-CA-001122',
+        Comments: null,
+      },
+      {
+        TransactionItemId: 21623512,
+        InstrumentNumber: '2026091235',
+        DirectName: 'DUVAL TAX COLLECTOR',
+        IndirectName: 'DOE, JANE',
+        RecordDate: '2026/11/10',
+        DocTypeDescription: 'NOTICE OF TAX DEED SALE (NTD)',
+        BookPage: 'OR 21200 / 1499',
+        DocLegalDescription: 'Parcel ID: 123456-0010 Lot 5',
+        CaseNumber: null,
+        Comments: 'Property Address: 4512 Riverside Ave, Jacksonville, FL',
+      },
+    ],
+  };
+
+  const parsed = parseAcclaimGridResultsJson(duvalPayload, 'duval');
+  assert.equal(parsed.length, 2);
+  assert.equal(parsed[0].evidenceOnly, true);
+  assert.equal(parsed[0].apn, null);
+  assert.equal(parsed[0].situsAddress, null);
+  assert.equal(parsed[0].openingBid, null);
+  assert.equal(parsed[0].estLow, null);
+  assert.equal(parsed[0].estHigh, null);
+  assert.equal(parsed[0].sourceUrl, 'https://or.duvalclerk.com/Details?id=21623511');
+  assert.equal(inspectSourceRecordUrl('trustee', parsed[0].sourceUrl).isValid, true);
+  assert.equal(parsed[0].recordedDate, '2026-11-14');
+
+  assert.equal(parsed[1].evidenceOnly, false);
+  assert.equal(parsed[1].apn, '123456-0010');
+  assert.equal(parsed[1].situsAddress, '4512 Riverside Ave, Jacksonville, FL');
+  assert.equal(parsed[1].recordedDate, '2026-11-10');
+
+  // 2. Clark County live portal fails closed with UPSTREAM_BOT_CHALLENGE on grecaptcha.execute
+  await assert.rejects(
+    queryLiveAcclaimPortal('clark', 'NOTICE OF TRUSTEE SALE', {
+      fetchImpl: async (url) => {
+        if (url.includes('/search/Disclaimer')) {
+          return { status: 302, headers: new Headers({ 'set-cookie': 'ASP.NET_SessionId=abc123; path=/' }), text: async () => '' };
+        }
+        return {
+          status: 200,
+          headers: new Headers(),
+          text: async () => '<html><input id="captcha" type="hidden" name="captcha" /><script>function submit(){ grecaptcha.execute(); }</script></html>',
+        };
+      },
+    }),
+    (err) => err && err.code === 'UPSTREAM_BOT_CHALLENGE' && err.challengeType === 'recaptcha',
+  );
+
+  // 3. Brevard 3-step live session flow posts numeric DocTypes ID '99' and fetches GridResults JSON
+  const requests = [];
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'brevard-acclaim-'));
+  try {
+    const liveBrevardResult = await queryLiveAcclaimPortal('brevard', 'LIS PENDENS', {
+      fetchImpl: async (url, init) => {
+        requests.push({ url, method: init?.method || 'GET', body: init?.body || '' });
+        if (url.includes('/search/Disclaimer')) {
+          return { status: 302, headers: new Headers({ 'set-cookie': 'ASP.NET_SessionId=brv99; path=/' }), text: async () => '' };
+        }
+        if (url.includes('/search/SearchTypeDocType?Length=6')) {
+          return { status: 200, headers: new Headers(), text: async () => 'ok' };
+        }
+        if (url.includes('/Search/GridResults')) {
+          return {
+            status: 200,
+            headers: new Headers({ 'content-type': 'application/json' }),
+            text: async () => JSON.stringify({
+              total: 1,
+              data: [duvalPayload.data[0]],
+            }),
+          };
+        }
+        return { status: 200, headers: new Headers(), text: async () => '<html><body>Search</body></html>' };
+      },
+    });
+    assert.equal(liveBrevardResult.parsedRows.length, 1);
+    assert.equal(liveBrevardResult.parsedRows[0].county, 'Brevard');
+    assert.equal(liveBrevardResult.parsedRows[0].evidenceOnly, true);
+    const postSearch = requests.find((r) => r.url.includes('SearchTypeDocType?Length=6'));
+    assert.ok(postSearch);
+    assert.equal(new URLSearchParams(postSearch.body).get('DocTypes'), '99');
+
+    // Also verify TrusteeSaleScraper with live mode route does not admit evidenceOnly row to listings
+    const scraper = new TrusteeSaleScraper({ fixtureOnly: false });
+    assert.equal(typeof scraper.getAcclaimSearchUrl('duval', 'LIS PENDENS', { useLivePortal: true }), 'string');
+    assert.ok(scraper.getAcclaimSearchUrl('duval', 'LIS PENDENS', { useLivePortal: true }).startsWith('https://or.duvalclerk.com/'));
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+

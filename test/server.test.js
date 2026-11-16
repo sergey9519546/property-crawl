@@ -326,6 +326,16 @@ async function run() {
     assert.strictEqual(res.body.error, 'Choose registered live source collectors');
   });
 
+  await test('POST /api/scrapers/run x-async also rejects invalid sourceIds with 400', async () => {
+    const res = await operatorRequest('/api/scrapers/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-async': 'true' },
+      body: JSON.stringify({ sourceIds: ['nonexistent_collector_xyz'] })
+    });
+    assert.strictEqual(res.status, 400);
+    assert.strictEqual(res.body.error, 'Choose registered live source collectors');
+  });
+
   await test('POST /api/parse requires the private operator credential', async () => {
     const res = await request('/api/parse', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: { noticeText: 'Test notice' }

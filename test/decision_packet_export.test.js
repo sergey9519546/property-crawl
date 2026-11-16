@@ -195,7 +195,7 @@ test('Decision Packet Export Page: gates research case lookup on authenticated w
   );
   assert.match(exportPageSrc, /readWorkspaceSession/);
   assert.match(exportPageSrc, /workspaceSessionConfiguration/);
-  assert.match(exportPageSrc, /'x-operator-token':\s*configuration\.credential/);
+  assert.match(exportPageSrc, /'x-scraper-token':\s*configuration\.credential/);
 });
 
 test('Decision Packet: propagates IRS 120-day tax lien redemption and recorded instrument priority into JSON and Markdown', () => {
@@ -307,4 +307,120 @@ test('Decision Packet: 50-state tax and insurance tables match src/lib/underwrit
     const insRate = INSURANCE_BASE_RATE_PER_1000[st];
     assert.match(underwritingSrc, new RegExp(`${st}:\\s*${insRate.toFixed(2)}`));
   }
+});
+
+test('Decision Packet: annualCostOfCapitalPct ignores null/empty strings and preserves explicit 0', () => {
+  const { computeStatutoryDeadlinesAndCarry } = require('../server/export/decision-packet');
+
+  const withNull = computeStatutoryDeadlinesAndCarry({
+    saleDate: '2026-11-01',
+    state: 'OH',
+    purchasePrice: 100000,
+    annualCostOfCapitalPct: null,
+  });
+  assert.equal(withNull.annualCostOfCapitalPct, 10);
+
+  const withEmpty = computeStatutoryDeadlinesAndCarry({
+    saleDate: '2026-11-01',
+    state: 'OH',
+    purchasePrice: 100000,
+    annualCostOfCapitalPct: '   ',
+  });
+  assert.equal(withEmpty.annualCostOfCapitalPct, 10);
+
+  const withZero = computeStatutoryDeadlinesAndCarry({
+    saleDate: '2026-11-01',
+    state: 'OH',
+    purchasePrice: 100000,
+    annualCostOfCapitalPct: 0,
+  });
+  assert.equal(withZero.annualCostOfCapitalPct, 0);
+  assert.equal(withZero.estimatedCarryCost, 0);
+});
+
+test('Decision Packet: fhfaHpiTrend credits PUBLIC_COUNTY_BENCHMARKS when county benchmarks are present', (t) => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const macro = require('../server/enrichment/macro-valuation-data');
+
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dp-macro-'));
+  const benchPath = path.join(tmpDir, 'county-market-benchmarks.json');
+  fs.writeFileSync(benchPath, JSON.stringify({
+    version: 1,
+    provenance: {
+      status: 'observed',
+      inputSha256: 'a'.repeat(64),
+      retrievedAt: '2026-10-01T00:00:00.000Z',
+    },
+    benchmarks: {
+      'OH-CUYAHOGA': {
+        county: 'Cuyahoga',
+        medianSalePrice: 165000,
+        yoyPriceChangePct: 5.4,
+        marketTemperature: 'hot',
+        trendLabel: 'Cuyahoga County observed benchmark (+5.4% YoY)',
+      },
+    },
+  }));
+
+  const prevPath = process.env.COUNTY_BENCHMARKS_PATH;
+  process.env.COUNTY_BENCHMARKS_PATH = benchPath;
+  macro.invalidateDynamicBenchmarksCache();
+  t.after(() => {
+    if (prevPath === undefined) delete process.env.COUNTY_BENCHMARKS_PATH;
+    else process.env.COUNTY_BENCHMARKS_PATH = prevPath;
+    macro.invalidateDynamicBenchmarksCache();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  const packet = buildDecisionPacket({
+    id: 'BENCH-OH-1',
+    address: '100 Public Sq',
+    city: 'Cleveland',
+    state: 'OH',
+    county: 'Cuyahoga',
+    openingBid: 50000,
+    source: 'sheriff',
+  });
+  assert.ok(packet.underwriting.fhfaHpiTrend);
+  assert.notEqual(packet.underwriting.fhfaHpiTrend.source, 'FHFA_STATE_HPI_SUMMARY');
+  assert.match(packet.underwriting.fhfaHpiTrend.source, /PUBLIC_COUNTY_BENCHMARKS/);
+  assert.equal(packet.underwriting.fhfaHpiTrend.marketTrendsSource, 'PUBLIC_COUNTY_BENCHMARKS');
+  assert.equal(packet.underwriting.fhfaHpiTrend.marketTemperature, 'hot');
+});
+
+test('Decision Packet: honors listing.isHomestead and auctionProgram tax_deed without explicit operator overrides', () => {
+  const txTaxDeed = buildDecisionPacket({
+    id: 'TX-DEED-HS-1',
+    address: '900 Congress Ave',
+    city: 'Austin',
+    state: 'TX',
+    county: 'Travis',
+    openingBid: 100000,
+    source: 'sheriff',
+    auctionProgram: 'tax_deed',
+    isHomestead: true,
+  });
+  assert.equal(txTaxDeed.property.auctionProgram, 'tax_deed');
+  assert.equal(txTaxDeed.property.isTaxSale, true);
+  assert.equal(txTaxDeed.underwritingAssumptions.isHomestead, true);
+  assert.equal(txTaxDeed.underwriting.statutoryDeadlinesAndCarry.stateRedemptionDays, 730);
+
+  const txTaxDeedOverrideFalse = buildDecisionPacket(
+    {
+      id: 'TX-DEED-OV-2',
+      address: '900 Congress Ave',
+      city: 'Austin',
+      state: 'TX',
+      county: 'Travis',
+      openingBid: 100000,
+      source: 'sheriff',
+      auctionProgram: 'tax_deed',
+      isHomestead: true,
+    },
+    { isHomestead: false, isTaxSale: false }
+  );
+  assert.equal(txTaxDeedOverrideFalse.underwritingAssumptions.isHomestead, false);
+  assert.equal(txTaxDeedOverrideFalse.underwriting.statutoryDeadlinesAndCarry.stateRedemptionDays, 0);
 });

@@ -310,3 +310,22 @@ test('every derived facet and its filter name the same expression', () => {
     );
   }
 });
+
+test('county filter strips optional trailing County/Parish/Borough suffix across memory and SQL', () => {
+  const filterWithSuffix = queryFromUrl(new URL('http://localhost/api/listings?county=Maricopa%20County'));
+  const whereSuffix = pgWhere(filterWithSuffix);
+  assert.deepEqual(whereSuffix.params, ['maricopa']);
+  assert.match(whereSuffix.sql, /lower\(county\)=\$\d+/);
+
+  const rowPlain = {
+    id: 'C1', source: 'hud', state: 'AZ', county: 'Maricopa', address: '1 Main St',
+    status: 'active', provenance: { origin: 'live' },
+  };
+  const rowWithSuffix = { ...rowPlain, id: 'C2', county: 'Maricopa County' };
+  const filterPlain = queryFromUrl(new URL('http://localhost/api/listings?county=Maricopa'));
+
+  assert.equal(matches(rowPlain, filterWithSuffix), true);
+  assert.equal(matches(rowWithSuffix, filterWithSuffix), true);
+  assert.equal(matches(rowPlain, filterPlain), true);
+  assert.equal(matches(rowWithSuffix, filterPlain), true);
+});

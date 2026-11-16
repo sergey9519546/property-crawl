@@ -36,7 +36,7 @@ function sameDocuments(left, right) {
 function buildDocumentEvidence(listing, { capturedEvidence, observedAt = null, sourceUrl = null, now = Date.now() } = {}) {
   const timestamp = observedAt || listing?.sourceObservedAt || listing?.provenance?.observedAt;
   if (capturedEvidence === undefined) {
-    const live = listing?.provenance?.origin === 'live' && validateListingForIngestion(listing).isValid;
+    const live = (listing?.provenance?.origin === 'live' || listing?.provenance?.origin === 'email_notice') && validateListingForIngestion(listing).isValid;
     const archive = listing?.provenance?.origin === 'archive' && listing?.provenance?.observed === true
       && /^[a-f0-9]{64}$/i.test(listing?.provenance?.datasetSha256 || '') && listing?.provenance?.recordId;
     capturedEvidence = Boolean((live || archive) && Number.isFinite(Date.parse(timestamp)) && Date.parse(timestamp) <= now + 300_000);

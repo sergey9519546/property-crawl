@@ -628,3 +628,24 @@ test('Surplus Waterfall: exhausts surplus with partial satisfaction of junior li
   assert.equal(ownerEntry.paidAmount, 0);
   assert.equal(ownerEntry.status, 'UNPAID');
 });
+
+
+test('Escrow Optimizer: handles invalid saleDate gracefully and detects concurrent zero-lockup same-day conflicts', () => {
+  // 1. Invalid saleDate strings must not throw RangeError
+  const badDatePlan = optimizeEscrowAllocation([
+    { id: 'bad_date_1', platform: 'realauction', openingBid: 50000, saleDate: 'TBD - Continued' },
+    { id: 'bad_date_2', platform: 'realauction', openingBid: 60000, saleDate: 'not-a-valid-date' },
+  ], 15000);
+  assert.equal(badDatePlan.allocatedAuctions.length, 2);
+  assert.equal(badDatePlan.allocatedAuctions[0].saleDate, null);
+
+  // 2. Zero-lockup same-day Texas Tax auctions ([t, t] interval) must count concurrent capital at gavel t
+  const sameDayTx = optimizeEscrowAllocation([
+    { id: 'tx_gavel_1', platform: 'texas_tax', state: 'TX', source: 'texas_tax', openingBid: 50000, saleDate: '2026-11-10T10:00:00Z', dealScore: 90 },
+    { id: 'tx_gavel_2', platform: 'texas_tax', state: 'TX', source: 'texas_tax', openingBid: 50000, saleDate: '2026-11-10T10:00:00Z', dealScore: 85 },
+  ], 60000);
+  assert.equal(sameDayTx.fundedAuctionCount, 1);
+  assert.equal(sameDayTx.excludedAuctionCount, 1);
+  assert.equal(sameDayTx.dateConflicts.length, 1);
+  assert.equal(sameDayTx.totalCommittedCapital, 50000);
+});

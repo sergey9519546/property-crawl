@@ -43,7 +43,7 @@ function isKnown(value) {
 
 function hasPublisherEvidence(listing, observedAt) {
   const provenance = listing.provenance || {};
-  return provenance.origin === 'live'
+  return (provenance.origin === 'live' || provenance.origin === 'email_notice')
     && provenance.observed === true
     && Boolean(String(listing.sourceUrl || '').trim())
     && Boolean(String(provenance.publisher || '').trim())

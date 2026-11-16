@@ -74,7 +74,7 @@ function neutralizePromptInjection(text = '') {
 function splitMultiParcelNotice(rawNotice = '', options = {}) {
   const normalized = normalizeOcrText(rawNotice);
   const parcelHeaderRegex = /(?:PARCEL|TRACT|ITEM)\s+(?:[0-9]+|[A-Z]|I|II|III|IV|V)\s*[:\-\.]/i;
-  const parcelSplitter = /(?:^|\n|\.\s+)\s*(?=(?:PARCEL|TRACT|ITEM)\s+(?:[0-9]+|[A-Z]|I|II|III|IV|V)\s*[:\-\\.])/i;
+  const parcelSplitter = /(?:^|\n|\.\s+)\s*(?=(?:PARCEL|TRACT|ITEM)\s+(?:[0-9]+|[A-Z]|I|II|III|IV|V)\s*[:\-.])/i;
 
   const rawParts = normalized.split(parcelSplitter).map(p => p.trim()).filter(Boolean);
   const firstParcelIdx = rawParts.findIndex(part => parcelHeaderRegex.test(part));
@@ -140,8 +140,14 @@ function deterministicParse(rawNotice = '', options = {}) {
   // Extract Deposit Terms: e.g. "10% deposit required at sale" or "Deposit: $5,000 in certified funds"
   const depositMatch = clean.match(/(?:deposit\s*(?:terms|required)?[:\s]*)?(\d{1,2}\s?%|\btwenty\s+percent\b|\bten\s+percent\b|\$[0-9,]+)[^.]{0,80}?(?:deposit|down\s*payment|certified\s+funds)/i);
 
+  const explicitlyOhio = /\bOhio\b|\bOhio\s+Rev\.?\s*Code\b|\bO\.?R\.?C\.?\s*§?\s*2329\b|\bR\.?C\.?\s*2329\b/i.test(clean);
+  const explicitStateValue = options.state ? String(options.state).trim().toUpperCase() : null;
   const fallbackState = options.defaultState !== undefined ? options.defaultState : 'OH';
-  const state = addressMatch ? addressMatch[3].toUpperCase() : (options.hintState ? options.hintState.toUpperCase() : fallbackState);
+  const state = addressMatch
+    ? addressMatch[3].toUpperCase()
+    : (options.hintState
+      ? String(options.hintState).trim().toUpperCase()
+      : (explicitStateValue || (explicitlyOhio ? 'OH' : fallbackState)));
   const toTitleCase = (s) => s ? s.toLowerCase().split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') : '';
   const county = countyMatch ? toTitleCase(countyMatch[1].trim()) : (options.hintCounty ? toTitleCase(options.hintCounty.trim()) : '');
   const judgmentNum = judgmentMatch ? parseFloat(judgmentMatch[1].replace(/,/g, '')) : 0;
@@ -230,8 +236,12 @@ function deterministicParse(rawNotice = '', options = {}) {
  * @returns {Array<object>} Parsed parcel records
  */
 function parseLegalNotice(rawNotice = '', options = {}) {
-  const parcels = splitMultiParcelNotice(rawNotice, options);
-  return parcels.map(parcelText => deterministicParse(parcelText, options));
+  const explicitState = options.defaultState !== undefined
+    ? options.defaultState
+    : (options.state ? String(options.state).trim().toUpperCase() : null);
+  const parseOptions = { ...options, defaultState: explicitState };
+  const parcels = splitMultiParcelNotice(rawNotice, parseOptions);
+  return parcels.map(parcelText => deterministicParse(parcelText, parseOptions));
 }
 
 module.exports = {

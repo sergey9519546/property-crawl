@@ -172,57 +172,57 @@ type Network = {
 const STATUS: Record<string, { label: string; color: string }> = {
   lookup_available: {
     label: "Property lookup",
-    color: "bg-slate-100 text-slate-900",
+    color: "bg-paper text-ink-2",
   },
   collected: {
     label: "Recently collected",
-    color: "bg-emerald-100 text-emerald-900",
+    color: "bg-go-wash text-go",
   },
   awaiting_run: {
     label: "Collector registered · not run",
-    color: "bg-slate-100 text-slate-900",
+    color: "bg-paper text-ink-2",
   },
   import_available: {
     label: "Evidence import",
-    color: "bg-stone-100 text-stone-600",
+    color: "bg-paper text-ink-3",
   },
   attention: {
     label: "Collection needs attention",
-    color: "bg-amber-100 text-amber-900",
+    color: "bg-catch-wash text-catch-ink",
   },
-  stale: { label: "Refresh due", color: "bg-amber-100 text-amber-900" },
-  empty: { label: "No records returned", color: "bg-stone-100 text-stone-600" },
+  stale: { label: "Refresh due", color: "bg-catch-wash text-catch-ink" },
+  empty: { label: "No records returned", color: "bg-paper text-ink-3" },
   evidence_queued: {
     label: "Notices in review queue",
-    color: "bg-slate-100 text-slate-900",
+    color: "bg-paper text-ink-2",
   },
   history_unavailable: {
     label: "History unavailable",
-    color: "bg-amber-100 text-amber-900",
+    color: "bg-catch-wash text-catch-ink",
   },
   manual: {
     label: "Manual lookup only",
-    color: "bg-stone-100 text-stone-700",
+    color: "bg-paper text-ink-2",
   },
   blocked: {
     label: "Access blocked",
-    color: "bg-amber-100 text-amber-900",
+    color: "bg-catch-wash text-catch-ink",
   },
   operational: {
     label: "Recent collection succeeded",
-    color: "bg-emerald-100 text-emerald-900",
+    color: "bg-go-wash text-go",
   },
   collecting: {
     label: "Collection in progress",
-    color: "bg-sky-100 text-sky-900",
+    color: "bg-yours-wash text-yours",
   },
   partial: {
     label: "Partial collection",
-    color: "bg-amber-100 text-amber-900",
+    color: "bg-catch-wash text-catch-ink",
   },
   archived: {
     label: "Archive only",
-    color: "bg-stone-100 text-stone-700",
+    color: "bg-paper text-ink-2",
   },
 };
 
@@ -258,6 +258,20 @@ const COVERAGE_DIMENSION_LABELS: Record<CoverageDimension, string> = {
   taxSale: "Tax sale",
   parcelMap: "Parcel map",
   documentImages: "Document images",
+};
+
+type LiveCoveragePayload = {
+  catalog?: { total?: number; statesCovered?: number };
+  states?: string[] | Array<{ state: string; catalogCount?: number; liveCount?: number }>;
+  liveByState?: {
+    byStateSource?: Record<string, Record<string, { count?: number; observed?: string | null }>>;
+    byStateTotal?: Record<string, number>;
+    byCounty?: Record<string, Array<{ county: string; count: number; sources: string[] }>>;
+    totalRecords?: number;
+    countedRecords?: number;
+    storeStatus?: string;
+    readError?: string | null;
+  };
 };
 
 type CoveragePreset = {
@@ -346,6 +360,63 @@ function coveragePresetFor(source: Source): CoveragePreset | null {
     null
   );
 }
+
+function serverDerivedCoverage(
+  source: Source,
+  preset: CoveragePreset | null,
+  liveStats: ReturnType<typeof liveCoverageForSource>,
+): { hasMapping: boolean; label: string; dimensions: Partial<Record<CoverageDimension, boolean>> } {
+  const dims: Partial<Record<CoverageDimension, boolean>> = { ...(preset?.dimensions || {}) };
+  const text = `${source.category} ${source.role} ${source.label} ${source.notes} ${source.workflow?.primary || ""} ${(source.requiredEvidence || []).join(" ")}`.toLowerCase();
+
+  if (/tax|deed|treasurer|tax_sale/.test(text)) dims.taxSale = true;
+  if (/foreclosure|sheriff|trustee|distress|auction|hud|usda|treasury|irs|gsa|fannie|freddie|fdic|marshal|va/.test(text)) {
+    dims.foreclosure = true;
+  }
+  if (/assessor|cadastral|valuation|appraisal/.test(text)) dims.assessor = true;
+  if (/recorder|clerk|instrument|deed|lien|docket/.test(text)) dims.recorder = true;
+  if (/parcel|gis|shapefile|boundary|map/.test(text) || source.propertyLookup) dims.parcelMap = true;
+  if (/document|pdf|image|notice|filings|exhibits/.test(text) || source.requiredEvidence?.length > 0) {
+    dims.documentImages = true;
+  }
+
+  const hasDims = Object.values(dims).some(Boolean);
+  const hasMapping = Boolean(preset || hasDims || (liveStats && liveStats.recordCount > 0) || source.observedRecords > 0 || source.automated);
+  const label = preset?.countyLabel || coverageDescription(source.coverage) || (source.observedStates?.length ? `${source.observedStates.length} observed states` : source.category);
+  return { hasMapping, label, dimensions: dims };
+}
+function liveCoverageForSource(
+  source: Source,
+  liveCoverage: LiveCoveragePayload | null,
+) {
+  const liveByState = liveCoverage?.liveByState;
+  if (!liveByState?.byStateSource) return null;
+  const candidateKeys = new Set(
+    [source.id, source.adapterKey].filter((v): v is string => typeof v === "string" && v.length > 0),
+  );
+  let recordCount = 0;
+  let stateCount = 0;
+  const counties = new Set<string>();
+  for (const [st, sourceMap] of Object.entries(liveByState.byStateSource)) {
+    let stateHits = 0;
+    for (const [srcKey, stats] of Object.entries(sourceMap || {})) {
+      if (candidateKeys.has(srcKey) && Number.isFinite(stats?.count)) {
+        stateHits += Number(stats.count);
+      }
+    }
+    if (stateHits > 0) {
+      stateCount += 1;
+      recordCount += stateHits;
+      const countyRows = liveByState.byCounty?.[st] || [];
+      for (const row of countyRows) {
+        if (Array.isArray(row.sources) && row.sources.some((s) => candidateKeys.has(s))) {
+          counties.add(`${st}:${row.county}`);
+        }
+      }
+    }
+  }
+  return { recordCount, stateCount, countyCount: counties.size };
+}
 const label = (value: string) =>
   value.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase());
 const date = (value: string | null) =>
@@ -421,19 +492,19 @@ function sourceStatus(source: Source) {
   if (gateMessage) {
     return {
       label: source.releaseGate?.scopeMatchesLatest === false ? "Approval blocked" : "Approval pending",
-      color: "bg-amber-100 text-amber-900",
+      color: "bg-catch-wash text-catch-ink",
     };
   }
   // Approved collection gate is stronger than publisher catalog status alone.
   if (gate && gate.approved === true) {
     return {
       label: "Collection approved",
-      color: "bg-emerald-100 text-emerald-900",
+      color: "bg-go-wash text-go",
     };
   }
   return STATUS[source.discoveryStatus || source.status] || {
     label: label(source.discoveryStatus || source.status),
-    color: "bg-stone-100 text-stone-600",
+    color: "bg-paper text-ink-3",
   };
 }
 
@@ -489,7 +560,7 @@ export function SourceNetwork() {
   const [showCoverageMatrix, setShowCoverageMatrix] = useState(false);
   const [liveCoverage, setLiveCoverage] = useState<{
     catalog?: { total?: number; statesCovered?: number };
-    states?: Array<{ state: string; catalogCount?: number; liveCount?: number }>;
+    states?: string[] | Array<{ state: string; catalogCount?: number; liveCount?: number }>; liveByState?: LiveCoveragePayload["liveByState"];
   } | null>(null);
   const [onboardingItems, setOnboardingItems] = useState<Array<{ key?: string; id?: string; status?: string }> | null>(null);
   const [unbrowseStatus, setUnbrowseStatus] = useState<{
@@ -498,6 +569,20 @@ export function SourceNetwork() {
     status?: string;
   } | null>(null);
   const [runningOnboarding, setRunningOnboarding] = useState(false);
+  const [activeJob, setActiveJob] = useState<{
+    id: string;
+    sourceId?: string;
+    status?: string;
+    acceptedCount?: number;
+    error?: string | null;
+  } | null>(null);
+  const [collectingSourceId, setCollectingSourceId] = useState<string | null>(null);
+  const [showUnbrowseIntake, setShowUnbrowseIntake] = useState(false);
+  const [unbrowseSourceId, setUnbrowseSourceId] = useState("");
+  const [unbrowseSourceUrl, setUnbrowseSourceUrl] = useState("");
+  const [unbrowseEndpointUrl, setUnbrowseEndpointUrl] = useState("");
+  const [unbrowseVersion, setUnbrowseVersion] = useState("1.0.0");
+  const [unbrowseNotes, setUnbrowseNotes] = useState("");
   const [reviewItems, setReviewItems] = useState<
     | {
         id: string;
@@ -512,7 +597,6 @@ export function SourceNetwork() {
   >(null);
 
   useEffect(() => {
-    if (!showCoverageMatrix) return;
     let cancelled = false;
     fetch("/api/coverage", { cache: "no-store" })
       .then((res) => (res.ok ? res.json() : null))
@@ -520,24 +604,170 @@ export function SourceNetwork() {
         if (!cancelled && body) setLiveCoverage(body);
       })
       .catch(() => {});
-    if (session.authenticated) {
-      fetch("/api/source-network/onboarding", { cache: "no-store" })
-        .then((res) => (res.ok ? res.json() : null))
-        .then((body) => {
-          if (!cancelled && body && Array.isArray(body.items)) setOnboardingItems(body.items);
-        })
-        .catch(() => {});
-      fetch("/api/source-network/unbrowse/status", { cache: "no-store" })
-        .then((res) => (res.ok ? res.json() : null))
-        .then((body) => {
-          if (!cancelled && body) setUnbrowseStatus(body);
-        })
-        .catch(() => {});
-    }
     return () => {
       cancelled = true;
     };
-  }, [showCoverageMatrix, session.authenticated]);
+  }, [showCoverageMatrix]);
+
+  useEffect(() => {
+    if (!session.authenticated) return;
+    let cancelled = false;
+    fetch("/api/source-network/onboarding", { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((body) => {
+        if (!cancelled && body && Array.isArray(body.items)) setOnboardingItems(body.items);
+      })
+      .catch(() => {});
+    fetch("/api/source-network/unbrowse/status", { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((body) => {
+        if (!cancelled && body) setUnbrowseStatus(body);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [session.authenticated]);
+
+  useEffect(() => {
+    if (!activeJob?.id) return;
+    if (["completed", "succeeded", "failed", "error", "cancelled"].includes(String(activeJob.status || "").toLowerCase())) {
+      return;
+    }
+    let cancelled = false;
+    let polls = 0;
+    const pollJob = async () => {
+      polls += 1;
+      try {
+        const res = await fetch(`/api/source-network/jobs/${encodeURIComponent(activeJob.id)}`, { cache: "no-store" });
+        const body = await res.json().catch(() => null);
+        if (!cancelled && res.ok && body?.job) {
+          const nextStatus = String(body.job.status || activeJob.status || "running");
+          setActiveJob({
+            id: activeJob.id,
+            sourceId: body.job.sourceId || activeJob.sourceId,
+            status: nextStatus,
+            acceptedCount: body.job.acceptedCount,
+            error: body.job.error || null,
+          });
+          if (["completed", "succeeded", "failed", "error", "cancelled"].includes(nextStatus.toLowerCase())) {
+            setMessage(
+              body.job.error
+                ? `Collection job ${activeJob.id} failed: ${body.job.error}`
+                : `Collection job ${activeJob.id} finished (${nextStatus}${typeof body.job.acceptedCount === "number" ? ` · ${body.job.acceptedCount} accepted` : ""}).`,
+            );
+            void refresh();
+            return;
+          }
+        }
+      } catch {
+        // Keep polling on transient network blip up to max polls
+      }
+      if (!cancelled && polls < 20) {
+        timer = setTimeout(pollJob, 1500);
+      }
+    };
+    let timer = setTimeout(pollJob, 1200);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [activeJob?.id, activeJob?.status]);
+
+  async function collectSource(sourceId: string) {
+    if (!session.authenticated) {
+      session.requestUnlock();
+      setMessage("Unlock the private workspace to collect a source.");
+      return;
+    }
+    setCollectingSourceId(sourceId);
+    setBusy(true);
+    setMessage("");
+    try {
+      const response = await fetch(`/api/sources/${encodeURIComponent(sourceId)}/collect`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idempotencyKey: `${sourceId}-${Date.now()}` }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(result.error || `Collection request failed (HTTP ${response.status})`);
+      }
+      if (result.job?.id && /^job_[a-f0-9]{24}$/.test(result.job.id)) {
+        setActiveJob({
+          id: result.job.id,
+          sourceId,
+          status: result.job.status || "queued",
+        });
+        setMessage(`Collection job ${result.job.id} queued for ${sourceId}. Monitoring job status…`);
+      } else {
+        setMessage(
+          `Source ${sourceId} collection ${result.status || "complete"}${typeof result.acceptedCount === "number" ? ` (${result.acceptedCount} accepted)` : ""}.`,
+        );
+        await refresh();
+      }
+    } catch (caught) {
+      setMessage(caught instanceof Error ? caught.message : "Could not collect this source.");
+    } finally {
+      setCollectingSourceId(null);
+      setBusy(false);
+    }
+  }
+
+  async function submitUnbrowseCandidate(event: React.FormEvent) {
+    event.preventDefault();
+    if (!session.authenticated) {
+      session.requestUnlock();
+      setMessage("Unlock the private workspace to submit Unbrowse route candidates.");
+      return;
+    }
+    const sourceKey = (unbrowseSourceId || selected?.id || "").trim().toLowerCase();
+    const targetSourceUrl = (unbrowseSourceUrl || selected?.discoveryUrl || "").trim();
+    const targetEndpointUrl = unbrowseEndpointUrl.trim();
+    if (!sourceKey || !targetSourceUrl || !targetEndpointUrl) {
+      setMessage("Source ID, publisher URL, and observed endpoint URL are required.");
+      return;
+    }
+    const nowIso = new Date().toISOString();
+    setBusy(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/source-network/unbrowse/intake", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          schemaVersion: "property-crawl.unbrowse-route-candidate/v1",
+          source: sourceKey,
+          sourceUrl: targetSourceUrl,
+          method: "GET",
+          reviewStatus: "pending",
+          generatedAt: nowIso,
+          evidence: {
+            provider: "unbrowse",
+            version: (unbrowseVersion || "1.0.0").trim().slice(0, 40),
+            endpointUrl: targetEndpointUrl,
+            observedAt: nowIso,
+            ...(unbrowseNotes.trim() ? { notes: unbrowseNotes.trim().slice(0, 500) } : {}),
+          },
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(result.error || `Unbrowse intake failed (HTTP ${response.status})`);
+      }
+      setUnbrowseEndpointUrl("");
+      setUnbrowseNotes("");
+      setShowUnbrowseIntake(false);
+      setMessage(`Unbrowse route candidate accepted for ${sourceKey} (${result.candidateSchema || "pending review"}).`);
+      await Promise.all([refresh(), loadReviewQueue()]);
+    } catch (caught) {
+      setMessage(caught instanceof Error ? caught.message : "Unbrowse candidate intake failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function runOnboardingPass() {
     setRunningOnboarding(true);
@@ -569,9 +799,9 @@ export function SourceNetwork() {
       const response = await fetch("/api/source-network", {
         cache: "no-store",
       });
-      const result = await response.json();
+      const result = await response.json().catch(() => ({}));
       if (!response.ok)
-        throw new Error(result.error || "Could not load source coverage");
+        throw new Error(result.error || `Could not load source coverage (HTTP ${response.status})`);
       setData(result);
       setError("");
     } catch (caught) {
@@ -716,18 +946,18 @@ export function SourceNetwork() {
   }
 
   return (
-    <main id="main-content" tabIndex={-1} className="min-h-screen bg-[#F5F6F7] text-slate-950 outline-none">
+    <main id="main-content" tabIndex={-1} className="min-h-screen bg-paper text-ink outline-none">
       <div className="mx-auto max-w-[1440px] px-5 py-7 sm:px-10">
         <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr] lg:items-center">
           <div>
             <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
               Source coverage
             </h1>
-            <p className="mt-2 max-w-xl text-sm leading-6 text-slate-600">
+            <p className="mt-2 max-w-xl text-sm leading-6 text-ink-2">
               Review collection results, recent changes, and sources that still need a manual check.
             </p>
           </div>
-          <div className="rounded-2xl border border-slate-200 bg-white p-4">
+          <div className="rounded-card border border-line bg-card p-4">
             <div className="grid grid-cols-3 gap-3">
               {[
                 [data?.summary.catalogSources, "Source workflows"],
@@ -743,33 +973,33 @@ export function SourceNetwork() {
                   <p className="text-2xl font-semibold tabular-nums">
                     {typeof value === "number" ? value.toLocaleString() : "—"}
                   </p>
-                  <p className="mt-1 text-xs leading-5 text-slate-600">
+                  <p className="mt-1 text-xs leading-5 text-ink-2">
                     {text}
                   </p>
                 </div>
               ))}
             </div>
-            <div className="mt-3 border-t border-slate-100 pt-3" role="status" aria-label="Collection worker status">
-              <p className={`text-xs font-semibold ${data?.collectionHealth?.degraded ? "text-amber-800" : "text-slate-700"}`}>
+            <div className="mt-3 border-t border-line pt-3" role="status" aria-label="Collection worker status">
+              <p className={`text-xs font-semibold ${data?.collectionHealth?.degraded ? "text-catch-ink" : "text-ink-2"}`}>
                 Collection worker: {data?.collectionHealth?.status === "healthy" ? "Healthy" : data?.collectionHealth?.status === "stale" ? "Needs attention" : data?.collectionHealth?.status === "disabled" ? "Disabled" : "Not started"}
               </p>
-              <p className="mt-1 text-xs leading-5 text-slate-500">
+              <p className="mt-1 text-xs leading-5 text-ink-3">
                 {data?.collectionHealth?.status === "healthy" ? `Last check ${date(data.collectionHealth.lastSeenAt)}${data.collectionHealth.backlog.queued ? ` · ${data.collectionHealth.backlog.queued} queued` : ""}` : data?.collectionHealth?.status === "stale" ? `Automation has not checked in recently. ${data.collectionHealth.backlog.queued} queued job${data.collectionHealth.backlog.queued === 1 ? "" : "s"}.` : "Database availability is reported separately from collection automation."}
               </p>
             </div>
-            <p className="mt-3 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-500">
+            <p className="mt-3 border-t border-line pt-3 text-xs leading-5 text-ink-3">
               A registered collector is not proof of complete coverage. Review each source’s latest result below.
             </p>
           </div>
         </div>
 
         <section
-          className="mt-6 rounded-2xl border border-[#E5E7EB] bg-white p-5 sm:p-7"
+          className="mt-6 rounded-card border border-line bg-card p-5 sm:p-7"
           aria-labelledby="changes-heading"
         >
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-xs font-bold uppercase tracking-widest text-emerald-700">
+              <p className="text-xs font-bold uppercase tracking-widest text-ink-2">
                 Source collection changes
               </p>
               <h2 id="changes-heading" className="mt-1 text-xl font-semibold">
@@ -779,7 +1009,7 @@ export function SourceNetwork() {
             <button
               onClick={() => void refresh()}
               disabled={loading}
-              className="flex items-center gap-2 rounded-lg border border-[#E5E7EB] px-4 py-2 text-sm disabled:opacity-50"
+              className="flex items-center gap-2 rounded-control border border-line px-4 py-2 text-sm disabled:opacity-50"
             >
               <RefreshCw size={15} className={loading ? "animate-spin" : ""} />{" "}
               Refresh
@@ -788,7 +1018,7 @@ export function SourceNetwork() {
           {data?.historyUnavailable ? (
             <p
               role="alert"
-              className="mt-5 rounded-lg bg-amber-100 p-4 text-sm"
+              className="mt-5 rounded-control bg-catch-wash text-catch-ink p-4 text-sm"
             >
               Collection history could not be read. Source workflows remain
               available; an operator needs to restore the observation store.
@@ -798,9 +1028,9 @@ export function SourceNetwork() {
               {data.signals.slice(0, 6).map((signal) => (
                 <article
                   key={signal.id}
-                  className="rounded-xl bg-[#F1F5F9] p-5"
+                  className="rounded-control bg-paper p-5"
                 >
-                  <div className="flex items-center gap-2 text-sm font-semibold text-emerald-700">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-ink-2">
                     <ArrowDownRight size={18} />
                     {signal.title}
                   </div>
@@ -811,13 +1041,13 @@ export function SourceNetwork() {
                     {signal.address}
                   </Link>
                   <p className="mt-3 text-sm">
-                    <span className="text-[#5B6472]">
+                    <span className="text-ink-2">
                       {moneyOrText(signal, signal.before)}
                     </span>
                     <span className="mx-2">→</span>
                     <strong>{moneyOrText(signal, signal.after)}</strong>
                   </p>
-                  <p className="mt-2 text-xs text-[#5B6472]">
+                  <p className="mt-2 text-xs text-ink-2">
                     Observed {date(signal.observedAt)}
                   </p>
                   <a
@@ -843,11 +1073,11 @@ export function SourceNetwork() {
                 Reserving a viewport on the pre-data state keeps everything
                 below the fold for the whole load. The loaded state keeps its
                 natural height, so nothing moves that a user could see. */
-            <div className="mt-5 flex min-h-screen items-start gap-4 rounded-xl bg-[#F5F6F7] p-5">
-              <Radar className="mt-1 shrink-0 text-slate-900" size={25} />
+            <div className="mt-5 flex min-h-screen items-start gap-4 rounded-control bg-paper p-5">
+              <Radar className="mt-1 shrink-0 text-ink" size={25} />
               <div>
                 <p className="font-medium">Building the observation history</p>
-                <p className="mt-1 max-w-3xl text-sm leading-6 text-[#5B6472]">
+                <p className="mt-1 max-w-3xl text-sm leading-6 text-ink-2">
                   Collect a source twice to compare published bids, sale dates,
                   payment terms, and status. The first collection establishes a
                   baseline. Changes will appear here with their before-and-after
@@ -866,28 +1096,137 @@ export function SourceNetwork() {
               <h2 id="coverage-matrix-heading" className="text-xl font-semibold">
                 Per-county coverage matrix
               </h2>
-              <p className="mt-1 text-sm text-slate-600">
+              <p className="mt-1 text-sm text-ink-2">
                 Known record-type coverage per source. A dash means the dimension is not claimed; "Not mapped" means no coverage data exists for that source yet.
               </p>
             </div>
-            <button
-              onClick={() => setShowCoverageMatrix((v) => !v)}
-              aria-expanded={showCoverageMatrix}
-              aria-controls="coverage-matrix-table"
-              className="rounded-lg border border-[#E5E7EB] bg-white px-4 py-2 text-sm font-semibold"
-            >
-              {showCoverageMatrix ? "Hide coverage matrix" : "Show coverage matrix"}
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              {session.authenticated && (
+                <>
+                  <span className="rounded-control border border-line bg-card px-3 py-2 text-xs text-ink-2">
+                    Onboarding: <strong>{onboardingItems ? `${onboardingItems.length} probed` : "Loading…"}</strong>
+                  </span>
+                  <span className="rounded-control border border-line bg-card px-3 py-2 text-xs text-ink-2">
+                    Unbrowse: <strong>{unbrowseStatus ? (unbrowseStatus.installed ? "Installed" : "Not installed") : "Checking…"}</strong>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (selected) {
+                        if (!unbrowseSourceId) setUnbrowseSourceId(selected.id);
+                        if (!unbrowseSourceUrl) setUnbrowseSourceUrl(selected.discoveryUrl);
+                      }
+                      setShowUnbrowseIntake((v) => !v);
+                    }}
+                    className="rounded-control border border-line bg-card px-3 py-2 text-xs font-semibold text-ink hover:bg-paper"
+                  >
+                    {showUnbrowseIntake ? "Hide Unbrowse intake" : "Unbrowse route intake"}
+                  </button>
+                </>
+              )}
+              <button
+                onClick={() => setShowCoverageMatrix((v) => !v)}
+                aria-expanded={showCoverageMatrix}
+                aria-controls="coverage-matrix-table"
+                className="rounded-control border border-line bg-card px-4 py-2 text-sm font-semibold"
+              >
+                {showCoverageMatrix ? "Hide coverage matrix" : "Show coverage matrix"}
+              </button>
+            </div>
           </div>
+          {activeJob && (
+            <div role="status" className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-control border border-yours/30 bg-yours-wash px-4 py-3 text-xs text-ink">
+              <span>
+                <strong>Collection Job {activeJob.id}</strong> ({activeJob.sourceId || "source"}) — status: <strong>{activeJob.status || "running"}</strong>
+                {typeof activeJob.acceptedCount === "number" ? ` · ${activeJob.acceptedCount} accepted` : ""}
+              </span>
+              {activeJob.error ? <span className="text-catch-ink">{activeJob.error}</span> : null}
+            </div>
+          )}
+          {session.authenticated && showUnbrowseIntake && (
+            <form
+              onSubmit={(event) => void submitUnbrowseCandidate(event)}
+              className="mb-5 grid gap-3 rounded-card border border-line bg-card p-5 sm:grid-cols-2"
+            >
+              <div className="sm:col-span-2 flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-sm font-semibold text-ink">Unbrowse Route Candidate Intake</h3>
+                  <p className="text-xs text-ink-2">
+                    Submit an inspected GET endpoint candidate (`property-crawl.unbrowse-route-candidate/v1`) to the source review queue.
+                  </p>
+                </div>
+              </div>
+              <label className="block text-xs">
+                <span className="font-medium text-ink-2">Source ID</span>
+                <input
+                  required
+                  value={unbrowseSourceId}
+                  onChange={(e) => setUnbrowseSourceId(e.target.value)}
+                  placeholder={selected?.id || "e.g. irs"}
+                  className="mt-1 w-full rounded-control border border-line px-3 py-2 text-xs outline-none"
+                />
+              </label>
+              <label className="block text-xs">
+                <span className="font-medium text-ink-2">Unbrowse Version</span>
+                <input
+                  required
+                  value={unbrowseVersion}
+                  onChange={(e) => setUnbrowseVersion(e.target.value)}
+                  placeholder="1.0.0"
+                  className="mt-1 w-full rounded-control border border-line px-3 py-2 text-xs outline-none"
+                />
+              </label>
+              <label className="block text-xs">
+                <span className="font-medium text-ink-2">Publisher Source URL (HTTPS)</span>
+                <input
+                  required
+                  type="url"
+                  value={unbrowseSourceUrl}
+                  onChange={(e) => setUnbrowseSourceUrl(e.target.value)}
+                  placeholder="https://..."
+                  className="mt-1 w-full rounded-control border border-line px-3 py-2 text-xs outline-none"
+                />
+              </label>
+              <label className="block text-xs">
+                <span className="font-medium text-ink-2">Observed JSON/API Endpoint URL (HTTPS)</span>
+                <input
+                  required
+                  type="url"
+                  value={unbrowseEndpointUrl}
+                  onChange={(e) => setUnbrowseEndpointUrl(e.target.value)}
+                  placeholder="https://..."
+                  className="mt-1 w-full rounded-control border border-line px-3 py-2 text-xs outline-none"
+                />
+              </label>
+              <label className="block text-xs sm:col-span-2">
+                <span className="font-medium text-ink-2">Notes (optional)</span>
+                <input
+                  value={unbrowseNotes}
+                  onChange={(e) => setUnbrowseNotes(e.target.value)}
+                  placeholder="Observed public GET endpoint metadata (no credentials)"
+                  className="mt-1 w-full rounded-control border border-line px-3 py-2 text-xs outline-none"
+                />
+              </label>
+              <div className="sm:col-span-2 flex items-center gap-2">
+                <button
+                  type="submit"
+                  disabled={busy}
+                  className="rounded-control bg-ink px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                >
+                  {busy ? "Submitting…" : "Submit Unbrowse candidate"}
+                </button>
+              </div>
+            </form>
+          )}
           {showCoverageMatrix && (
             <div
               id="coverage-matrix-table"
-              className="overflow-x-auto rounded-2xl border border-[#E5E7EB] bg-white"
+              className="overflow-x-auto rounded-card border border-line bg-card"
             >
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E5E7EB] bg-slate-50/70 px-4 py-3 text-xs text-slate-700">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-paper/70 px-4 py-3 text-xs text-ink-2">
                 <div>
-                  <span className="font-semibold text-slate-900">Live state coverage matrix:</span>{" "}
-                  {liveCoverage?.states
+                  <span className="font-semibold text-ink">Live state coverage matrix:</span>{" "}
+                  {liveCoverage?.liveByState ? `${liveCoverage.liveByState.countedRecords ?? 0} live records across ${Object.keys(liveCoverage.liveByState.byStateTotal || {}).length} active states (${Object.values(liveCoverage.liveByState.byCounty || {}).reduce((acc, rows) => acc + rows.length, 0)} live counties; ${liveCoverage.states?.length ?? 0} schema jurisdictions)${liveCoverage.liveByState.readError ? ` — Store error: ${liveCoverage.liveByState.readError}` : ""}` : liveCoverage?.states
                     ? `${liveCoverage.states.length} states tracked in live/catalog matrix`
                     : "Loading state coverage summary…"}
                 </div>
@@ -909,7 +1248,7 @@ export function SourceNetwork() {
                       type="button"
                       onClick={() => void runOnboardingPass()}
                       disabled={runningOnboarding}
-                      className="rounded-lg border border-slate-300 bg-white px-2.5 py-1 font-semibold text-slate-900 hover:bg-slate-100 disabled:opacity-50"
+                      className="rounded-control border border-line-strong bg-card px-2.5 py-1 font-semibold text-ink hover:bg-paper disabled:opacity-50"
                     >
                       {runningOnboarding ? "Probing…" : "Run onboarding pass"}
                     </button>
@@ -918,12 +1257,12 @@ export function SourceNetwork() {
               </div>
               <table className="w-full min-w-[640px] text-left text-sm">
                 <thead>
-                  <tr className="border-b border-[#E5E7EB] bg-slate-50">
+                  <tr className="border-b border-line bg-paper">
                     <th className="px-4 py-3 font-semibold">Source</th>
                     {COVERAGE_DIMENSIONS.map((dim) => (
                       <th
                         key={dim}
-                        className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wide text-slate-600"
+                        className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wide text-ink-2"
                       >
                         {COVERAGE_DIMENSION_LABELS[dim]}
                       </th>
@@ -933,43 +1272,54 @@ export function SourceNetwork() {
                 <tbody>
                   {(data?.sources || []).map((source) => {
                     const preset = coveragePresetFor(source);
+                    const liveStats = liveCoverageForSource(source, liveCoverage);
+                    const derived = serverDerivedCoverage(source, preset, liveStats);
                     return (
                       <tr
                         key={source.id}
-                        className="border-b border-slate-100 last:border-b-0"
+                        className="border-b border-line last:border-b-0"
                       >
                         <td className="px-4 py-3">
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="font-medium">{source.label}</span>
                             {preset ? (
                               <span
-                                className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-700"
+                                className="rounded-full bg-paper px-2 py-0.5 text-label font-semibold text-ink-2"
                                 title={preset.countyLabel}
                               >
                                 {preset.countyCount > 0
-                                  ? `${preset.countyCount} counties`
-                                  : preset.countyLabel}
+                                  ? `${preset.countyCount} catalog counties${liveStats ? ` · ${liveStats.countyCount > 0 ? `${liveStats.countyCount} live counties` : liveStats.recordCount > 0 ? `${liveStats.stateCount} live states` : "0 live records"} (${liveStats.recordCount.toLocaleString()} records)` : ""}`
+                                  : `${preset.countyLabel}${liveStats ? ` · ${liveStats.recordCount > 0 ? `${liveStats.countyCount > 0 ? `${liveStats.countyCount} live counties · ` : ""}${liveStats.stateCount} live states (${liveStats.recordCount.toLocaleString()} records)` : "0 live records"}` : ""}`}
                               </span>
                             ) : (
-                              <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[10px] font-semibold text-stone-600">
-                                Not mapped
+                              <span
+                                className="rounded-full bg-paper px-2 py-0.5 text-label font-semibold text-ink-3"
+                                title={derived.label}
+                              >
+                                {liveStats && liveStats.recordCount > 0
+                                  ? `${liveStats.countyCount > 0 ? `${liveStats.countyCount} live counties · ` : ""}${liveStats.stateCount} live states (${liveStats.recordCount.toLocaleString()} records)`
+                                  : derived.hasMapping
+                                    ? derived.label
+                                    : liveStats
+                                      ? "Not mapped · 0 live records"
+                                      : "Not mapped"}
                               </span>
                             )}
                           </div>
                         </td>
                         {COVERAGE_DIMENSIONS.map((dim) => {
-                          if (!preset) {
+                          if (!derived.hasMapping) {
                             return (
                               <td
                                 key={dim}
-                                className="px-3 py-3 text-center text-stone-400"
+                                className="px-3 py-3 text-center text-ink-3"
                                 aria-label="Not mapped"
                               >
                                 —
                               </td>
                             );
                           }
-                          const covered = preset.dimensions[dim] === true;
+                          const covered = derived.dimensions[dim] === true;
                           return (
                             <td
                               key={dim}
@@ -983,10 +1333,10 @@ export function SourceNetwork() {
                               {covered ? (
                                 <Check
                                   size={16}
-                                  className="mx-auto text-emerald-600"
+                                  className="mx-auto text-ink-2"
                                 />
                               ) : (
-                                <span className="text-stone-400">—</span>
+                                <span className="text-ink-3">—</span>
                               )}
                             </td>
                           );
@@ -998,7 +1348,7 @@ export function SourceNetwork() {
                     <tr>
                       <td
                         colSpan={COVERAGE_DIMENSIONS.length + 1}
-                        className="px-4 py-6 text-center text-sm text-slate-500"
+                        className="px-4 py-6 text-center text-sm text-ink-3"
                       >
                         No sources loaded.
                       </td>
@@ -1017,7 +1367,7 @@ export function SourceNetwork() {
                 Explore the network
               </h2>
               {data?.sources?.length ? (
-                <p className="mt-1 text-sm text-slate-600" role="status" aria-label="Source status summary">
+                <p className="mt-1 text-sm text-ink-2" role="status" aria-label="Source status summary">
                   {taxonomySummary(data.sources)}
                 </p>
               ) : null}
@@ -1037,14 +1387,14 @@ export function SourceNetwork() {
                     ?.scrollIntoView({ behavior: "smooth", block: "start" }),
                 );
               }}
-              className="inline-flex items-center gap-2 rounded-lg bg-[#0F172A] px-4 py-2.5 text-sm font-semibold text-white"
+              className="inline-flex items-center gap-2 rounded-control bg-ink px-4 py-2.5 text-sm font-semibold text-white"
             >
               <FilePlus2 size={16} /> Add a local source
             </button>
           </div>
           <div className="mb-6 flex flex-col gap-3 md:flex-row">
-            <label className="flex flex-1 items-center gap-3 rounded-lg border border-[#E5E7EB] bg-white px-4">
-              <Search size={17} className="text-[#5B6472]" />
+            <label className="flex flex-1 items-center gap-3 rounded-control border border-line bg-card px-4">
+              <Search size={17} className="text-ink-2" />
               <input
                 aria-label="Search sources"
                 value={query}
@@ -1057,7 +1407,7 @@ export function SourceNetwork() {
               aria-label="Source category"
               value={category}
               onChange={(event) => setCategory(event.target.value)}
-              className="rounded-lg border border-[#E5E7EB] bg-white px-4 py-3 text-sm"
+              className="rounded-control border border-line bg-card px-4 py-3 text-sm"
             >
               <option value="all">All source categories</option>
               {categories.map((item) => (
@@ -1070,7 +1420,7 @@ export function SourceNetwork() {
               aria-label="Source role"
               value={role}
               onChange={(event) => setRole(event.target.value)}
-              className="rounded-lg border border-[#E5E7EB] bg-white px-4 py-3 text-sm"
+              className="rounded-control border border-line bg-card px-4 py-3 text-sm"
             >
               <option value="all">All record types</option>
               <option value="opportunity">Property opportunities</option>
@@ -1081,7 +1431,7 @@ export function SourceNetwork() {
           {error && (
             <p
               role="alert"
-              className="mb-5 rounded-lg bg-amber-100 p-4 text-sm text-amber-950"
+              className="mb-5 rounded-control bg-catch-wash text-catch-ink p-4 text-sm text-catch-ink"
             >
               {error} Use Refresh to retry.
             </p>
@@ -1089,7 +1439,7 @@ export function SourceNetwork() {
           {data?.evidenceQueueError && (
             <p
               role="alert"
-              className="mb-5 rounded-lg bg-amber-100 p-4 text-sm text-amber-950"
+              className="mb-5 rounded-control bg-catch-wash text-catch-ink p-4 text-sm text-catch-ink"
             >
               The evidence queue could not be read. Catalog workflows are
               available; packet counts and enrolled local sources are
@@ -1097,13 +1447,13 @@ export function SourceNetwork() {
             </p>
           )}
           {data?.inventoryTruncated && (
-            <p className="mb-4 text-sm text-amber-800">
+            <p className="mb-4 text-sm text-catch-ink">
               Inventory counts cover the first 10,000 records. Source workflows
               remain fully listed.
             </p>
           )}
           {data?.observationStore && (
-            <p className="mb-4 text-sm text-slate-600">
+            <p className="mb-4 text-sm text-ink-2">
               Observation history: {data.observationStore.rows.toLocaleString()} snapshots
               across {data.observationStore.trackedRecords.toLocaleString()} publisher
               records in Postgres
@@ -1119,7 +1469,7 @@ export function SourceNetwork() {
               const ageDays = (Date.now() - Date.parse(data.observationStore.newestObservedAt)) / 86_400_000;
               if (ageDays <= 3) return null;
               return (
-                <p className={`mb-4 rounded-lg p-3 text-sm ${ageDays > 14 ? "bg-red-100 text-red-950" : "bg-amber-100 text-amber-950"}`}>
+                <p className={`mb-4 rounded-control p-3 text-sm ${ageDays > 14 ? "border border-catch/40 bg-catch-wash text-catch-ink font-semibold" : "bg-catch-wash text-catch-ink text-catch-ink"}`}>
                   No observation has been recorded in {Math.floor(ageDays)} days. Collection may be
                   stopped — the "collected" verdicts below are only as current as that last observation.
                 </p>
@@ -1132,8 +1482,8 @@ export function SourceNetwork() {
               coverage…
             </p>
           ) : (
-            <div className="grid items-start gap-6 xl:grid-cols-[1fr_420px]">
-              <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid min-w-0 items-start gap-6 xl:grid-cols-[1fr_420px]">
+              <div className="grid min-w-0 gap-3 sm:grid-cols-2">
                 {sources.map((source) => {
                   const exactScope = coverageScopeDetails(source.coverage);
                   const status = sourceStatus(source);
@@ -1141,33 +1491,33 @@ export function SourceNetwork() {
                   return (
                     <article
                       key={source.id}
-                      className={`overflow-hidden rounded-xl border transition-colors ${selectedId === source.id ? "border-slate-900 bg-slate-100" : "border-[#E5E7EB] bg-white hover:border-slate-900"}`}
+                      className={`min-w-0 overflow-hidden rounded-control border transition-colors ${selectedId === source.id ? "border-ink bg-paper" : "border-line bg-card hover:border-ink"}`}
                     >
                       <button
                         onClick={() => openSource(source)}
                         aria-pressed={selectedId === source.id}
-                        className="w-full p-4 text-left sm:p-5"
+                        className="w-full min-w-0 p-4 text-left sm:p-5"
                       >
-                        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#5B6472]">
+                        <p className="text-label font-bold uppercase tracking-[0.12em] text-ink-2">
                           {label(source.category)}
                         </p>
-                        <h3 className="mt-2 text-base font-semibold">
+                        <h3 className="mt-2 break-words text-base font-semibold">
                           {source.label}
                         </h3>
-                        <p className="mt-2 line-clamp-2 min-h-10 text-xs leading-5 text-[#5B6472]">
+                        <p className="mt-2 line-clamp-2 min-h-10 text-xs leading-5 text-ink-2">
                           {coverageDescription(source.coverage)}
                         </p>
                         <div className="mt-4 flex items-center justify-between gap-2">
                           <div className="flex flex-wrap items-center gap-1.5">
                             <span
-                              className={`rounded px-2 py-1 text-[10px] font-semibold ${status.color}`}
+                              className={`rounded px-2 py-1 text-label font-semibold ${status.color}`}
                             >
                               {status.label}
                             </span>
                             {taxonomyBadge(source.trustStatus) ? (
                               <span
                                 title={taxonomyBadge(source.trustStatus)!.description}
-                                className={`rounded px-2 py-1 text-[10px] font-semibold ${taxonomyBadge(source.trustStatus)!.color}`}
+                                className={`rounded px-2 py-1 text-label font-semibold ${taxonomyBadge(source.trustStatus)!.color}`}
                               >
                                 {taxonomyBadge(source.trustStatus)!.label}
                               </span>
@@ -1176,20 +1526,20 @@ export function SourceNetwork() {
                           <ArrowRight size={16} />
                         </div>
                         {problem ? (
-                          <p className="mt-3 text-xs leading-5 text-amber-900">
+                          <p className="mt-3 text-xs leading-5 text-catch-ink">
                             {problem}
                           </p>
                         ) : (
-                          <p className="mt-3 text-xs leading-5 text-[#5B6472]">
+                          <p className="mt-3 text-xs leading-5 text-ink-2">
                             {coverageSummary(source)}
                           </p>
                         )}
                       </button>
                       {exactScope && (
-                        <details className="border-t border-[#E5E7EB] px-5 pb-4 text-xs leading-5 text-[#5B6472]">
+                        <details className="border-t border-line px-5 pb-4 text-xs leading-5 text-ink-2">
                           <summary
                             aria-label={`Inspect exact recorded scope for ${source.label}`}
-                            className="cursor-pointer pt-3 font-medium text-slate-900"
+                            className="cursor-pointer pt-3 font-medium text-ink"
                           >
                             Exact recorded scope
                           </summary>
@@ -1200,18 +1550,18 @@ export function SourceNetwork() {
                   );
                 })}
                 {!sources.length && !error && (
-                  <p className="p-5 text-sm text-[#5B6472]">
+                  <p className="p-5 text-sm text-ink-2">
                     No sources match these filters.
                   </p>
                 )}
               </div>
               <aside
                 id="source-playbook"
-                className="scroll-mt-5 rounded-2xl border border-[#E5E7EB] bg-white p-6 xl:sticky xl:top-6"
+                className="min-w-0 scroll-mt-5 rounded-card border border-line bg-card p-6 xl:sticky xl:top-6"
               >
                 {selected || customMode ? (
                   <>
-                    <p className="text-xs font-bold uppercase tracking-widest text-emerald-700">
+                    <p className="text-xs font-bold uppercase tracking-widest text-ink-2">
                       {customMode
                         ? "Extend your coverage"
                         : "The collection playbook"}
@@ -1221,14 +1571,14 @@ export function SourceNetwork() {
                     </h2>
                     {selected && (
                       <>
-                        <p className="mt-3 text-sm leading-6 text-[#5B6472]">
+                        <p className="mt-3 text-sm leading-6 text-ink-2">
                           {selected.workflow.primary}
                         </p>
                         <a
                           href={selected.discoveryUrl}
                           target="_blank"
                           rel="noreferrer"
-                          className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-slate-900 underline hover:text-slate-700"
+                          className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-ink underline hover:text-ink-2"
                         >
                           Open publisher <ExternalLink size={14} />
                         </a>
@@ -1238,14 +1588,14 @@ export function SourceNetwork() {
                               key={step}
                               className="flex gap-3 text-sm leading-6"
                             >
-                              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#F1F5F9] text-xs font-bold">
+                              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-paper text-xs font-bold">
                                 {index + 1}
                               </span>
                               {step}
                             </li>
                           ))}
                         </ol>
-                        <div className="mt-6 border-t border-[#E5E7EB] pt-5">
+                        <div className="mt-6 border-t border-line pt-5">
                           <h3 className="text-xs font-bold uppercase tracking-wider">
                             Evidence to bring back
                           </h3>
@@ -1253,33 +1603,33 @@ export function SourceNetwork() {
                             {selected.requiredEvidence.map((item) => (
                               <li
                                 key={item}
-                                className="flex gap-2 text-xs leading-5 text-[#5B6472]"
+                                className="flex gap-2 text-xs leading-5 text-ink-2"
                               >
                                 <Check
                                   size={14}
-                                  className="mt-0.5 shrink-0 text-emerald-600"
+                                  className="mt-0.5 shrink-0 text-ink-2"
                                 />
                                 {item}
                               </li>
                             ))}
                           </ul>
                         </div>
-                        <div className="mt-5 rounded-lg bg-[#F5F6F7] p-4 text-xs leading-5">
+                        <div className="mt-5 rounded-control bg-paper p-4 text-xs leading-5">
                           <p className="font-semibold">
                             If the collector cannot reach it
                           </p>
-                          <p className="mt-1 text-[#5B6472]">
+                          <p className="mt-1 text-ink-2">
                             {selected.workflow.fallback}
                           </p>
                         </div>
-                        <p className="mt-4 text-xs leading-5 text-[#5B6472]">
+                        <p className="mt-4 text-xs leading-5 text-ink-2">
                           Suggested check: every{" "}
                           {selected.workflow.cadenceHours} hours. Last
                           collection:{" "}
                           {date(selected.lastRun?.lastRunAt || null)}.
                         </p>
                         {collectionProblem(selected) && (
-                          <p role="alert" className="mt-2 rounded-lg bg-amber-50 p-3 text-xs leading-5 text-amber-900">
+                          <p role="alert" className="mt-2 rounded-control bg-catch-wash p-3 text-xs leading-5 text-catch-ink">
                             {collectionProblem(selected)}{releaseGateMessage(selected) ? "" : " Follow the fallback workflow or retry."}
                           </p>
                         )}
@@ -1287,7 +1637,7 @@ export function SourceNetwork() {
                           {selected.propertyLookup && (
                             <Link
                               href="/listings"
-                              className="rounded-lg bg-[#0F172A] px-4 py-2.5 text-xs font-semibold text-white"
+                              className="rounded-control bg-ink px-4 py-2.5 text-xs font-semibold text-white"
                             >
                               Choose a property to investigate
                             </Link>
@@ -1295,10 +1645,10 @@ export function SourceNetwork() {
                           {selected.automated && (
                             <button
                               onClick={() =>
-                                void operate("run", { sourceId: selected.id })
+                                void collectSource(selected.id)
                               }
                               disabled={busy || data?.collectionRunning}
-                              className="rounded-lg bg-[#0F172A] px-4 py-2.5 text-xs font-semibold text-white disabled:opacity-50"
+                              className="rounded-control bg-ink px-4 py-2.5 text-xs font-semibold text-white disabled:opacity-50"
                             >
                               {data?.collectionRunning
                                 ? "Collection running…"
@@ -1310,7 +1660,7 @@ export function SourceNetwork() {
                               setShowImport(!showImport);
                               setCapturedAt(new Date().toISOString());
                             }}
-                            className="rounded-lg border border-[#E5E7EB] px-4 py-2.5 text-xs font-semibold"
+                            className="rounded-control border border-line px-4 py-2.5 text-xs font-semibold"
                           >
                             Import evidence
                           </button>
@@ -1319,7 +1669,7 @@ export function SourceNetwork() {
                     )}
                     {showImport && (
                       <form
-                        className="mt-6 space-y-4 border-t border-[#E5E7EB] pt-5"
+                        className="mt-6 space-y-4 border-t border-line pt-5"
                         onSubmit={(event) => {
                           event.preventDefault();
                           void operate("intake", {
@@ -1350,7 +1700,7 @@ export function SourceNetwork() {
                       >
                         {customMode && (
                           <>
-                            <p className="text-sm leading-6 text-[#5B6472]">
+                            <p className="text-sm leading-6 text-ink-2">
                               Capture a county, land-bank, agency, or local
                               publisher record. It will enter the evidence
                               review queue with its source attached.
@@ -1398,7 +1748,7 @@ export function SourceNetwork() {
                           <select
                             value={kind}
                             onChange={(event) => setKind(event.target.value)}
-                            className="mt-2 w-full rounded-lg border border-[#E5E7EB] bg-white p-2.5 font-normal"
+                            className="mt-2 w-full rounded-control border border-line bg-card p-2.5 font-normal"
                           >
                             <option value="text">Notice text</option>
                             <option value="csv">CSV export</option>
@@ -1424,27 +1774,27 @@ export function SourceNetwork() {
                             onChange={(event) => setBody(event.target.value)}
                             rows={6}
                             placeholder="Paste the source notice or exported records."
-                            className="mt-2 w-full rounded-lg border border-[#E5E7EB] p-3 font-normal"
+                            className="mt-2 w-full rounded-control border border-line p-3 font-normal"
                           />
                         </label>
                         <button
                           disabled={busy}
-                          className="w-full rounded-lg bg-[#0F172A] px-4 py-3 text-sm font-semibold text-white disabled:opacity-50"
+                          className="w-full rounded-control bg-ink px-4 py-3 text-sm font-semibold text-white disabled:opacity-50"
                         >
                           {busy ? "Saving…" : "Save for evidence review"}
                         </button>
-                        <p className="text-xs leading-5 text-[#5B6472]">
+                        <p className="text-xs leading-5 text-ink-2">
                           Imported records are kept as evidence until reviewed.
                           This does not establish title, value, or sale
                           availability.
                         </p>
                       </form>
                     )}
-                    <div className="mt-6 border-t border-[#E5E7EB] pt-4">
+                    <div className="mt-6 border-t border-line pt-4">
                       <p className="text-xs font-semibold">
                         Private operator access
                       </p>
-                      <p className="mt-2 text-xs leading-5 text-[#5B6472]">
+                      <p className="mt-2 text-xs leading-5 text-ink-2">
                         The shared eight-hour workspace session protects
                         collection and reviewed evidence. Credentials are
                         forwarded only between the application servers.
@@ -1454,21 +1804,21 @@ export function SourceNetwork() {
                           <button
                             onClick={() => void loadReviewQueue()}
                             disabled={busy}
-                            className="rounded-lg border border-[#E5E7EB] px-3 py-2 text-xs font-semibold disabled:opacity-50"
+                            className="rounded-control border border-line px-3 py-2 text-xs font-semibold disabled:opacity-50"
                           >
                             Open evidence review queue
                           </button>
                         ) : (
                           <button
                             onClick={session.requestUnlock}
-                            className="rounded-lg bg-[#0F172A] px-3 py-2 text-xs font-semibold text-white"
+                            className="rounded-control bg-ink px-3 py-2 text-xs font-semibold text-white"
                           >
                             Unlock workspace
                           </button>
                         )}
                         <Link
                           href="/activity"
-                          className="rounded-lg border border-[#E5E7EB] px-3 py-2 text-xs font-semibold"
+                          className="rounded-control border border-line px-3 py-2 text-xs font-semibold"
                         >
                           View activity
                         </Link>
@@ -1480,14 +1830,14 @@ export function SourceNetwork() {
                           Evidence review queue
                         </h3>
                         {!reviewItems.length && (
-                          <p className="text-xs text-[#5B6472]">
+                          <p className="text-xs text-ink-2">
                             No evidence packets submitted yet.
                           </p>
                         )}
                         {reviewItems.map((item) => (
                           <article
                             key={item.id}
-                            className="rounded-lg border border-[#E5E7EB] p-3"
+                            className="rounded-control border border-line p-3"
                           >
                             <p className="break-all text-xs font-semibold">
                               {sourceDisplayText(item.sourceId)} ·{" "}
@@ -1498,19 +1848,19 @@ export function SourceNetwork() {
                               href={item.sourceUrl}
                               target="_blank"
                               rel="noreferrer"
-                              className="mt-2 block text-xs text-slate-900 underline hover:text-slate-700"
+                              className="mt-2 block text-xs text-ink underline hover:text-ink-2"
                             >
                               Open source record
                             </a>
                             ) : null}
-                            <p className="mt-2 text-xs text-[#5B6472]">
+                            <p className="mt-2 text-xs text-ink-2">
                               Captured {date(item.capturedAt)}
                             </p>
                             <details className="mt-3">
                               <summary className="cursor-pointer text-xs">
                                 Inspect submitted evidence
                               </summary>
-                              <pre className="mt-2 max-h-60 overflow-auto whitespace-pre-wrap break-all rounded bg-[#F5F6F7] p-2 text-[10px]">
+                              <pre className="mt-2 max-h-60 overflow-auto whitespace-pre-wrap break-all rounded bg-paper p-2 text-label">
                                 {sourceDisplayText(
                                   JSON.stringify(item.original, null, 2),
                                 )}
@@ -1527,7 +1877,7 @@ export function SourceNetwork() {
                                       note: "Evidence packet reviewed in Source Radar; listing and title facts require separate verification.",
                                     })
                                   }
-                                  className="rounded border border-[#E5E7EB] px-2 py-1 text-xs"
+                                  className="rounded border border-line px-2 py-1 text-xs"
                                 >
                                   Accept evidence
                                 </button>
@@ -1539,7 +1889,7 @@ export function SourceNetwork() {
                                       decision: "reject",
                                     })
                                   }
-                                  className="rounded border border-[#E5E7EB] px-2 py-1 text-xs"
+                                  className="rounded border border-line px-2 py-1 text-xs"
                                 >
                                   Reject
                                 </button>
@@ -1552,7 +1902,7 @@ export function SourceNetwork() {
                     {message && (
                       <p
                         role="status"
-                        className="mt-4 rounded-lg bg-[#F1F5F9] p-4 text-xs leading-6"
+                        className="mt-4 rounded-control bg-paper p-4 text-xs leading-6"
                       >
                         {message}
                       </p>
@@ -1560,16 +1910,16 @@ export function SourceNetwork() {
                   </>
                 ) : (
                   <div className="py-8">
-                    <ShieldCheck size={32} className="text-slate-900" />
+                    <ShieldCheck size={32} className="text-ink" />
                     <h3 className="mt-5 text-xl font-semibold">
                       Every find needs a trail.
                     </h3>
-                    <p className="mt-3 text-sm leading-7 text-[#5B6472]">
+                    <p className="mt-3 text-sm leading-7 text-ink-2">
                       Choose a source to see its workflow, publisher link,
                       collection status, and the evidence you need to bring
                       back.
                     </p>
-                    <p className="mt-5 border-t border-[#E5E7EB] pt-5 text-xs leading-6 text-[#5B6472]">
+                    <p className="mt-5 border-t border-line pt-5 text-xs leading-6 text-ink-2">
                       A registered collector indicates a collection path. Review
                       its observed records and latest run to assess actual
                       coverage.
@@ -1580,12 +1930,12 @@ export function SourceNetwork() {
             </div>
           )}
         </section>
-        <footer className="mt-10 border-t border-[#E5E7EB] py-6 text-xs leading-6 text-[#5B6472]">
+        <footer className="mt-10 border-t border-line py-6 text-xs leading-6 text-ink-2">
           Source Radar · Publisher evidence, observed changes, and a next step
           for every source.{" "}
           <Link
             href="/listings"
-            className="ml-2 font-semibold text-slate-900 underline hover:text-slate-700"
+            className="ml-2 font-semibold text-ink underline hover:text-ink-2"
           >
             Return to properties
           </Link>
@@ -1614,7 +1964,7 @@ function Field({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
-        className="mt-2 w-full rounded-lg border border-[#E5E7EB] p-2.5 font-normal"
+        className="mt-2 w-full rounded-control border border-line p-2.5 font-normal"
       />
     </label>
   );

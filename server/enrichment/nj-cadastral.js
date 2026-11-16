@@ -398,7 +398,11 @@ async function enrichNjListing(listing, options = {}) {
     && Number.isFinite(lat) && Number.isFinite(lng) && !(lat === 0 && lng === 0);
 
   if (!hasCoords) {
-    candidate = await queryNjGeocode(listing, { fetchFn });
+    try {
+      candidate = await queryNjGeocode(listing, { fetchFn });
+    } catch {
+      return { found: false, reason: 'geocode_error' };
+    }
     if (!candidate) return { found: false, reason: 'geocode_miss' };
     lat = Number(Number(candidate.location.y).toFixed(6));
     lng = Number(Number(candidate.location.x).toFixed(6));

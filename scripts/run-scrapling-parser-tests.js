@@ -44,7 +44,10 @@ function main() {
     console.error('[scrapling-parser] Production resolves it via defaultPython(): SCRAPLING_PYTHON,');
     console.error('[scrapling-parser] else .cache/crawler-tools/venv. Create it with:');
     console.error('[scrapling-parser]   python -m venv .cache/crawler-tools/venv');
-    console.error('[scrapling-parser]   .cache/crawler-tools/venv/bin/pip install -r scripts/crawlers/requirements.txt');
+    const pipCmd = process.platform === 'win32'
+      ? '.cache\\crawler-tools\\venv\\Scripts\\pip install -r scripts/crawlers/requirements.txt'
+      : '.cache/crawler-tools/venv/bin/pip install -r scripts/crawlers/requirements.txt';
+    console.error(`[scrapling-parser]   ${pipCmd}`);
     console.error('[scrapling-parser] The parser was NOT checked. This is not a pass.');
     process.exit(1);
   }

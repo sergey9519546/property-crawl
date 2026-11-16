@@ -457,3 +457,285 @@ test('missing configuration, cross-origin requests, and non-image responses fail
   assert.equal(nonImage.body.error, 'upstream_non_image');
   assert.ok(!serializedResponse(nonImage).includes(TEST_KEY));
 });
+
+test('Google Street View fallbacks execute only on Google miss/unconfigured and never overwrite a valid Google panorama', async () => {
+  const panoramaxFeatureCollection = {
+    type: 'FeatureCollection',
+    features: [{
+      type: 'Feature',
+      id: 'pnx-pic-1',
+      collection: 'pnx-seq-1',
+      geometry: { type: 'Point', coordinates: [-74.0301, 40.9501] },
+      properties: {
+        datetime: '2025-11-01T12:00:00Z',
+        producer: 'OpenMapper',
+        license: 'CC-BY-SA-4.0',
+        'Xmp.GPano.ProjectionType': 'equirectangular',
+      },
+      links: [
+        { rel: 'via', href: 'https://panoramax.openstreetmap.fr/api/items/pnx-pic-1' },
+        { rel: 'license', href: 'https://spdx.org/licenses/CC-BY-SA-4.0.html' },
+      ],
+    }],
+  };
+  const mapillaryPayload = {
+    data: [{
+      id: 'mly-pic-1',
+      captured_at: '2025-09-12T12:00:00.000Z',
+      thumb_1024_url: 'https://images.mapillary.com/fallback-1024.jpg',
+      sequence: 'mly-seq-1',
+      compass_angle: 88,
+      creator: { id: 42, username: 'mly-user' },
+      geometry: { type: 'Point', coordinates: [-74.0301, 40.9501] },
+      image_type: 'flat',
+    }],
+  };
+
+  // 1. Google OK + fallback flag enabled must preserve Google Street View.
+  const googleFirst = serviceFor({
+    env: { PROPERTY_IMAGE_GOOGLE_PANORAMAX_FALLBACK: '1' },
+    fetchImpl: async (url) => {
+      if (String(url).includes('maps.googleapis.com')) return metadataResponse();
+      throw new Error('Panoramax fallback must not be called when Google returned a valid panorama');
+    },
+  });
+  const googleRes = await googleFirst.resolve(request('listingId=CIV-NJ-7-53&mode=metadata'));
+  assert.equal(googleRes.status, 200);
+  assert.equal(googleRes.body.provider, 'Google Maps');
+
+  // 2. Google ZERO_RESULTS + Panoramax fallback flag returns 200 panoramax_fallback.
+  const pnxFallback = serviceFor({
+    env: { PROPERTY_IMAGE_GOOGLE_PANORAMAX_FALLBACK: '1' },
+    fetchImpl: async (url) => {
+      if (String(url).includes('maps.googleapis.com')) {
+        return metadataResponse({ status: 'ZERO_RESULTS', pano_id: undefined, location: undefined });
+      }
+      if (String(url).includes('api.panoramax.xyz')) {
+        return new Response(JSON.stringify(panoramaxFeatureCollection), {
+          status: 200,
+          headers: { 'content-type': 'application/geo+json' },
+        });
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+  const pnxRes = await pnxFallback.resolve(request('listingId=CIV-NJ-7-53&mode=metadata'));
+  assert.equal(pnxRes.status, 200);
+  assert.equal(pnxRes.body.available, true);
+  assert.equal(pnxRes.body.provider, 'panoramax_fallback');
+  assert.equal(pnxRes.body.primaryUnavailableReason, 'street_view_unavailable');
+  assert.equal(pnxRes.body.candidate?.pictureId, 'pnx-pic-1');
+
+  // 3. Google ZERO_RESULTS + Mapillary fallback flag + MAPILLARY_RADIUS_METERS=200 clamps cleanly to 100m.
+  const mlyFallback = serviceFor({
+    env: {
+      PROPERTY_IMAGE_GOOGLE_MAPILLARY_FALLBACK: '1',
+      MAPILLARY_ACCESS_TOKEN: 'MLY|test|token',
+      MAPILLARY_RADIUS_METERS: '200',
+    },
+    fetchImpl: async (url) => {
+      if (String(url).includes('maps.googleapis.com')) {
+        return metadataResponse({ status: 'ZERO_RESULTS', pano_id: undefined, location: undefined });
+      }
+      if (String(url).includes('graph.mapillary.com')) {
+        return new Response(JSON.stringify(mapillaryPayload), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+  const mlyRes = await mlyFallback.resolve(request('listingId=CIV-NJ-7-53&mode=metadata'));
+  assert.equal(mlyRes.status, 200);
+  assert.equal(mlyRes.body.available, true);
+  assert.equal(mlyRes.body.provider, 'mapillary_fallback');
+  assert.equal(mlyRes.body.queriedRadiusMeters, 100);
+  assert.equal(mlyRes.body.candidate?.thumbUrl, 'https://images.mapillary.com/fallback-1024.jpg');
+
+  // 4. Unconfigured Google key + opt-in Panoramax fallback serves current-source-record coords cleanly.
+  const unconfiguredWithFallback = serviceFor({
+    env: { GOOGLE_MAPS_API_KEY: '', PROPERTY_IMAGE_GOOGLE_PANORAMAX_FALLBACK: '1' },
+    fetchImpl: async (url) => {
+      assert.match(String(url), /api\.panoramax\.xyz/);
+      return new Response(JSON.stringify(panoramaxFeatureCollection), {
+        status: 200,
+        headers: { 'content-type': 'application/geo+json' },
+      });
+    },
+  });
+  const unconfRes = await unconfiguredWithFallback.resolve(request('listingId=CIV-NJ-7-53&mode=metadata'));
+  assert.equal(unconfRes.status, 200);
+  assert.equal(unconfRes.body.available, true);
+  assert.equal(unconfRes.body.provider, 'panoramax_fallback');
+  assert.equal(unconfRes.body.primaryUnavailableReason, 'not_configured');
+
+  // 5. Unconfigured Google key + opt-in fallback serves archived_source_record with sourceCoordinates cleanly,
+  // and fails closed with 503 not_configured if fallback returns nothing.
+  const archiveWithCoords = liveListing({
+    provenance: {
+      origin: 'archive',
+      observed: true,
+      observedAt: '2026-09-03T10:00:00.000Z',
+      publisher: 'Bergen County Sheriff',
+      recordId: '12345',
+    },
+  });
+  const unconfiguredArchiveFallback = serviceFor({
+    listing: archiveWithCoords,
+    env: { GOOGLE_MAPS_API_KEY: '', PROPERTY_IMAGE_GOOGLE_PANORAMAX_FALLBACK: '1' },
+    fetchImpl: async (url) => {
+      assert.match(String(url), /api\.panoramax\.xyz/);
+      return new Response(JSON.stringify(panoramaxFeatureCollection), {
+        status: 200,
+        headers: { 'content-type': 'application/geo+json' },
+      });
+    },
+  });
+  const archiveFallbackRes = await unconfiguredArchiveFallback.resolve(request('listingId=CIV-NJ-7-53&mode=metadata'));
+  assert.equal(archiveFallbackRes.status, 200);
+  assert.equal(archiveFallbackRes.body.provider, 'panoramax_fallback');
+  assert.equal(archiveFallbackRes.body.primaryUnavailableReason, 'not_configured');
+
+  const unconfiguredArchiveMiss = serviceFor({
+    listing: archiveWithCoords,
+    env: { GOOGLE_MAPS_API_KEY: '', PROPERTY_IMAGE_GOOGLE_PANORAMAX_FALLBACK: '1' },
+    fetchImpl: async () => new Response(JSON.stringify({ type: 'FeatureCollection', features: [] }), {
+      status: 200,
+      headers: { 'content-type': 'application/geo+json' },
+    }),
+  });
+  const archiveMissRes = await unconfiguredArchiveMiss.resolve(request('listingId=CIV-NJ-7-53&mode=metadata'));
+  assert.equal(archiveMissRes.status, 503);
+  assert.equal(archiveMissRes.body.error, 'not_configured');
+});
+
+test('panoramicMetadata strips unapproved licenses and attaches viewerUrl across fallback and alternatives modes', async () => {
+  const mixedCollection = {
+    type: 'FeatureCollection',
+    features: [
+      {
+        id: 'pnx-approved',
+        collection: 'seq-approved',
+        geometry: { type: 'Point', coordinates: [-74.0301, 40.9501] },
+        properties: { datetime: '2025-08-01T12:00:00.000Z', license: 'CC-BY-SA-4.0', field_of_view: 360 },
+        links: [{ rel: 'license', href: 'https://spdx.org/licenses/CC-BY-SA-4.0.html' }],
+      },
+      {
+        id: 'pnx-proprietary',
+        collection: 'seq-proprietary',
+        geometry: { type: 'Point', coordinates: [-74.03005, 40.95005] },
+        properties: { datetime: '2025-08-02T12:00:00.000Z', license: 'proprietary', field_of_view: 360 },
+      },
+    ],
+  };
+
+  const fetchImpl = async (url) => {
+    if (String(url).includes('maps.googleapis.com')) {
+      return metadataResponse({ status: 'ZERO_RESULTS', pano_id: undefined, location: undefined });
+    }
+    if (String(url).includes('api.panoramax.xyz')) {
+      return new Response(JSON.stringify(mixedCollection), {
+        status: 200,
+        headers: { 'content-type': 'application/geo+json' },
+      });
+    }
+    throw new Error(`Unexpected URL: ${url}`);
+  };
+
+  const fallbackRes = await serviceFor({
+    env: { PROPERTY_IMAGE_GOOGLE_PANORAMAX_FALLBACK: '1' },
+    fetchImpl,
+  }).resolve(request('listingId=CIV-NJ-7-53&mode=metadata'));
+  assert.equal(fallbackRes.status, 200);
+  assert.deepEqual(fallbackRes.body.panoramicMetadata.map((item) => item.pictureId), ['pnx-approved']);
+  assert.match(fallbackRes.body.panoramicMetadata[0].viewerUrl, /^https:\/\/api\.panoramax\.xyz\/\?focus=pic&pic=pnx-approved/);
+
+  const altRes = await serviceFor({
+    listing: publisherPhotoListing(),
+    env: { GOOGLE_MAPS_API_KEY: '' },
+    fetchImpl,
+  }).resolve(request('listingId=CIV-NJ-7-53&mode=alternatives'));
+  assert.equal(altRes.status, 200);
+  assert.deepEqual(altRes.body.panoramicMetadata.map((item) => item.pictureId), ['pnx-approved']);
+  assert.match(altRes.body.panoramicMetadata[0].viewerUrl, /^https:\/\/api\.panoramax\.xyz\/\?focus=pic&pic=pnx-approved/);
+});
+
+test('alternatives mode supports archived_source_record and falls back to rooftop geocoding when source coordinates are absent', async () => {
+  const panoramaxFeatureCollection = {
+    type: 'FeatureCollection',
+    features: [{
+      id: 'pnx-archive-1',
+      collection: 'seq-1',
+      geometry: { type: 'Point', coordinates: [-74.0301, 40.9501] },
+      properties: { datetime: '2025-08-01T12:00:00.000Z', license: 'ETALAB-2.0', field_of_view: 360 },
+      links: [{ rel: 'license', href: 'https://www.etalab.gouv.fr/wp-content/uploads/2017/04/ETALAB-Licence-Ouverte-v2.0.pdf' }],
+    }],
+  };
+
+  const archivedWithCoords = liveListing({
+    provenance: {
+      origin: 'archive',
+      observed: true,
+      observedAt: '2026-09-03T10:00:00.000Z',
+      publisher: 'Bergen County Sheriff',
+      recordId: '12345',
+    },
+  });
+  const archivedLocalRes = await serviceFor({
+    listing: archivedWithCoords,
+    env: { GOOGLE_MAPS_API_KEY: '' },
+    fetchImpl: async (url) => {
+      assert.match(String(url), /api\.panoramax\.xyz/);
+      return new Response(JSON.stringify(panoramaxFeatureCollection), {
+        status: 200,
+        headers: { 'content-type': 'application/geo+json' },
+      });
+    },
+  }).resolve(request('listingId=CIV-NJ-7-53&mode=alternatives'));
+  assert.equal(archivedLocalRes.status, 200);
+  assert.equal(archivedLocalRes.body.available, true);
+  assert.equal(archivedLocalRes.body.coordinateBasis, 'source_coordinates');
+  assert.equal(archivedLocalRes.body.candidate?.pictureId, 'pnx-archive-1');
+
+  const archivedNoCoords = { ...archivedWithCoords, lat: null, lng: null };
+  const geocodedAltRes = await serviceFor({
+    listing: archivedNoCoords,
+    fetchImpl: async (url, init) => {
+      assert.equal(init?.redirect, 'error');
+      if (String(url).includes('/maps/api/geocode/json')) return geocodeResponse();
+      if (String(url).includes('api.panoramax.xyz')) {
+        return new Response(JSON.stringify(panoramaxFeatureCollection), {
+          status: 200,
+          headers: { 'content-type': 'application/geo+json' },
+        });
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  }).resolve(request('listingId=CIV-NJ-7-53&mode=alternatives'));
+  assert.equal(geocodedAltRes.status, 200);
+  assert.equal(geocodedAltRes.body.available, true);
+  assert.equal(geocodedAltRes.body.coordinateBasis, 'source_observed_address_rooftop_geocode');
+
+  // Non-rooftop geocode fails closed with 422 before calling alternative providers.
+  const approxRes = await serviceFor({
+    listing: archivedNoCoords,
+    fetchImpl: async (url) => {
+      if (String(url).includes('/maps/api/geocode/json')) {
+        return geocodeResponse({ geometry: { location_type: 'APPROXIMATE', location: { lat: 40.95, lng: -74.03 } } });
+      }
+      throw new Error('Panoramax must not be fetched when rooftop geocode fails closed');
+    },
+  }).resolve(request('listingId=CIV-NJ-7-53&mode=alternatives'));
+  assert.equal(approxRes.status, 422);
+  assert.equal(approxRes.body.error, 'geocode_mismatch');
+
+  // Missing geocode key fails closed with 503 not_configured without exposing secrets.
+  const noKeyRes = await serviceFor({
+    listing: archivedNoCoords,
+    env: { GOOGLE_MAPS_API_KEY: '', GOOGLE_GEOCODING_API_KEY: '' },
+    fetchImpl: async () => { throw new Error('Should not fetch without key'); },
+  }).resolve(request('listingId=CIV-NJ-7-53&mode=alternatives'));
+  assert.equal(noKeyRes.status, 503);
+  assert.equal(noKeyRes.body.error, 'not_configured');
+});

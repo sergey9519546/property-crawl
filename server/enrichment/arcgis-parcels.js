@@ -1288,8 +1288,9 @@ function normalizeArcgisAttributes(attributes, config) {
     source: 'ARCGIS_REST_PARCEL',
     countyFips: resolveFeatureCountyFips(attributes, config),
     countyName: config.name,
-    rawApn,
-    canonicalApn,
+    rawApn: rawApn.trim(),
+    canonicalApn: normalizeApn(rawApn),
+
     situsAddress: situsAddress || null,
     landUse: String(getAttributeCaseInsensitive(attributes, config.landUseField) || 'UNKNOWN').trim(),
     legalDescription: String(getAttributeCaseInsensitive(attributes, config.legalDescField) || '').trim(),
@@ -1350,6 +1351,7 @@ async function queryArcgisParcel(params = {}, init = {}) {
     const localHit = queryLocalParcelIndex({ apn, countyFips, state, county });
     if (localHit) return localHit;
   }
+  if (options.allowNetwork === false) return null;
   const signal = (options && options.signal) || (init && init.signal) || AbortSignal.timeout(8000);
 
   if (!resolved) {
@@ -1357,6 +1359,9 @@ async function queryArcgisParcel(params = {}, init = {}) {
   }
 
   const config = COUNTY_ARCGIS_REGISTRY[resolved.key] || resolved;
+  if (config.source === 'wparcels') {
+    return queryWparcelsParcel({ apn, state, county, lat, lng, fetchFn, signal, config });
+  }
   let queryParams = new URLSearchParams({
     outFields: '*',
     f: 'json',
@@ -1495,7 +1500,7 @@ async function queryArcgisParcel(params = {}, init = {}) {
  * with recorded sales was found, so this entry rests on the statutory
  * definition: assessment = market value.
  */
-async function queryWparcelsParcel({ apn, state, county, lat, lng, fetchFn = globalThis.fetch, signal }) {
+async function queryWparcelsParcel({ apn, state, county, lat, lng, fetchFn = globalThis.fetch, signal, config }) {
   const REGISTRY_SERVICE_ID = '9a1c60bd-f9f7-4aba-aeb7-af8c3aaa44e5';
   const endpoint = 'https://data.wprdc.org/api/3/action/datastore_search';
 
@@ -1534,7 +1539,8 @@ async function queryWparcelsParcel({ apn, state, county, lat, lng, fetchFn = glo
   const assessedImprv = Number(attrs.COUNTYBUILDING);
 
   return {
-    rawApn,
+    rawApn: rawApn.trim(),
+    canonicalApn: normalizeApn(rawApn),
     assessedValue: {
       total: Number.isFinite(fmvTotal) && fmvTotal > 0 ? fmvTotal : null,
       land: Number.isFinite(fmvLand) && fmvLand > 0 ? fmvLand : null,
@@ -1543,7 +1549,9 @@ async function queryWparcelsParcel({ apn, state, county, lat, lng, fetchFn = glo
     landUse: attrs.CLASS || null,
     situsAddress: attrs.PROPERTYADDRESS || null,
     legalDescription: attrs.LEGAL1 || null,
-    countyFips: '42003',
+    countyFips: config?.fips || '42003',
+    source: config?.name || 'Allegheny County Office of Property Assessment (OPA)',
+    observedAt: new Date().toISOString(),
     rawAttributes: attrs,
   };
 }
@@ -1564,6 +1572,9 @@ async function resolveCadastralParcelIdentity(rawListing = {}, options = {}) {
     apn: existingApn,
     state: listing.state,
     county: listing.county,
+    countyFips: listing.countyFips || listing.provenance?.countyFips || null,
+    allowNetwork: options.allowNetwork,
+    signal: options.signal,
     fetchFn: options.fetchFn,
   });
   if (!parcel || !parcel.canonicalApn) return null;

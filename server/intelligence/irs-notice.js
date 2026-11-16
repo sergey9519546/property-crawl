@@ -56,7 +56,7 @@ function detectIrsNoticeSignals(text = '') {
   const explicitFailure = /(?:no\s*notice\s*(?:given|provided|sent|served)\s*to\s*(?:the\s*)?(?:irs|internal\s*revenue|district\s*director)|irs\s*not\s*served|25-?day\s*notice\s*not\s*(?:given|provided|served)|failure\s*to\s*notify\s*irs|without\s*(?:statutory\s*)?notice\s*to\s*(?:the\s*)?irs)/i.test(str);
 
   // Check for affirmative notice provided to IRS
-  const noticeServed = /(?:notice\s*(?:of\s*sale\s*)?(?:given|provided|sent|served|mailed)\s*to\s*(?:the\s*)?(?:irs|internal\s*revenue|district\s*director|united\s*states)|(?:irs|internal\s*revenue\s*service|united\s*states)\s*(?:was\s*)?(?:served|notified|given\s*notice)|certified\s*mail\s*(?:to\s*)?(?:irs|internal\s*revenue)|proof\s*of\s*service\s*(?:on|to)\s*(?:the\s*)?(?:irs|internal\s*revenue)|25-?day\s*(?:statutory\s*)?(?:irs\s*)?notice\s*(?:satisfied|served|given|provided)|served\s*via\s*(?:certified|registered)\s*mail)/i.test(str);
+  const noticeServed = /(?:notice\s*(?:of\s*sale\s*)?(?:given|provided|sent|served|mailed)\s*to\s*(?:the\s*)?(?:irs|internal\s*revenue|district\s*director|united\s*states)|(?:irs|internal\s*revenue\s*service|united\s*states)\s*(?:was\s*)?(?:served|notified|given\s*notice)|certified\s*mail\s*(?:on\s*|to\s*)?(?:the\s*)?(?:irs|internal\s*revenue|district\s*director|united\s*states)|proof\s*of\s*service\s*(?:on|to)\s*(?:the\s*)?(?:irs|internal\s*revenue)|25-?day\s*(?:statutory\s*)?(?:irs\s*)?notice\s*(?:satisfied|served|given|provided)|(?:irs|internal\s*revenue(?:\s*service)?|district\s*director|united\s*states(?:\s*of\s*america)?(?:\s*\([^)]{0,40}\))?|secretary\s*of\s*(?:the\s*)?treasury)\s*(?:was\s*)?(?:duly\s*)?served\s*(?:via|by)\s*(?:certified|registered)\s*mail)/i.test(str);
 
   // Notice method
   let method = null;
@@ -163,12 +163,12 @@ function evaluateIrsNoticeRule(params = {}) {
     };
   }
 
-  // SCENARIO 2: NOTICE GIVEN (>= 25 DAYS) OR DEFAULT RECORDED IRS LIEN
-  // Notice satisfied: Federal tax lien is discharged, but IRS holds statutory 120-day right of redemption.
+  // SCENARIO 2: TIMELY NOTICE (>= 25 DAYS) VS UNVERIFIED RECORDED IRS LIEN
+  // Only verified 25-day notice under 26 U.S.C. § 7425(c) discharges the tax lien (subject to 120-day redemption).
   const isExplicitTimely = (noticeDays !== null && noticeDays >= 25) || params.noticeProvided === true || detected.noticeProvided === true;
   const warning = isExplicitTimely
     ? 'FEDERAL TAX LIEN DISCHARGED SUBJECT TO 120-DAY IRS REDEMPTION: 25-day notice provided under 26 U.S.C. § 7425(c). Federal tax lien is divested from property, but United States retains statutory 120-day right of redemption under 26 U.S.C. § 7425(d).'
-    : 'FEDERAL TAX LIEN ACTIVE: United States holds statutory 120-day right of redemption under 26 U.S.C. § 7425(d).';
+    : 'FEDERAL TAX LIEN — 25-DAY NOTICE UNVERIFIED: Federal tax lien recorded without verified proof of timely 25-day IRS notice under 26 U.S.C. § 7425(b)(1). Unless timely notice is confirmed in the foreclosure file, the lien may survive foreclosure; even if discharged, the United States retains a statutory 120-day right of redemption under 26 U.S.C. § 7425(d).';
 
   return {
     hasFederalTaxLien: true,
@@ -178,15 +178,16 @@ function evaluateIrsNoticeRule(params = {}) {
     noticeTimely: isExplicitTimely ? true : null,
     noticeDaysBeforeSale,
     noticeMethod: noticeMethod || (isExplicitTimely ? 'CERTIFIED_MAIL' : null),
-    lienSurvivesForeclosure: false,
-    taxLienDischarged: true,
+    lienSurvivesForeclosure: isExplicitTimely ? false : null,
+    taxLienDischarged: isExplicitTimely ? true : null,
     irsRedemptionRightApplies: true,
     redemptionDays: 120,
     riskLevel: 'HIGH',
     statutoryCitation: '26 U.S.C. § 7425(d)',
     warning,
-    bidderRecommendation:
-      'PROCEED WITH ESCROW BUFFER. Federal tax lien discharged at sale, but United States retains 120-day right of redemption from sale date under 26 U.S.C. § 7425(d). Avoid capital-intensive renovations until the 120-day redemption window expires.',
+    bidderRecommendation: isExplicitTimely
+      ? 'PROCEED WITH ESCROW BUFFER. Federal tax lien discharged at sale, but United States retains 120-day right of redemption from sale date under 26 U.S.C. § 7425(d). Avoid capital-intensive renovations until the 120-day redemption window expires.'
+      : 'VERIFY IRS NOTICE BEFORE BIDDING. Confirm proof of timely 25-day certified-mail notice to the IRS District Director under 26 U.S.C. § 7425(b)(1) in the foreclosure file; otherwise the federal tax lien survives foreclosure, and a 120-day IRS redemption window applies under 26 U.S.C. § 7425(d).',
   };
 }
 

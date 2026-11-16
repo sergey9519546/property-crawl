@@ -25,6 +25,14 @@ function createSourceNetworkHandler(dependencies = {}) {
   // stale local file.
   const readStore = dependencies.loadObservationsFromPg || loadObservationsFromPg;
   const recordRun = dependencies.recordSourceRun || recordSourceRun;
+  async function recordRunSafely(sourceId, payload) {
+    if (!database || database.pool === null) return; if (!database.pool && typeof dependencies.recordSourceRun !== 'function') return;
+    try {
+      await recordRun(database.pool ?? null, sourceId, payload);
+    } catch (storeError) {
+      console.error('[Source Network] Run metadata was not recorded:', storeError.message);
+    }
+  }
   // The production scheduler owns this singleton. Tests and alternative
   // schedulers may inject a coordinator explicitly.
   const coordinator = dependencies.coordinator || collector.collectionCoordinator || null;
@@ -117,7 +125,7 @@ function createSourceNetworkHandler(dependencies = {}) {
         const onboarding = dependencies.onboarding || require('../discovery/onboarding-pass');
         const summary = await onboarding.runOnboardingPass({
           sources: Array.isArray(body.sources) ? body.sources : null,
-          env: process.env
+          env
         });
         return res.json(summary);
       }
@@ -176,10 +184,17 @@ function createSourceNetworkHandler(dependencies = {}) {
         if (!source) return res.status(400).json({ error: 'This source uses the evidence import workflow', workflow: null });
 
         if (source.id === 'press-association-email' || source.adapterKey === 'public-notices-email') {
-          const defaultCorpusDir = path.join(__dirname, '../../test/fixtures/email-notices');
-          const configuredCorpus = (env && env.IMAP_CORPUS_DIR !== undefined) ? env.IMAP_CORPUS_DIR : (process.env.IMAP_CORPUS_DIR || defaultCorpusDir);
-          const corpusDir = (configuredCorpus && fs.existsSync(configuredCorpus)) ? configuredCorpus : null;
           const imapEnv = env || process.env;
+          const effectiveNodeEnv = (env && env.NODE_ENV !== undefined) ? env.NODE_ENV : process.env.NODE_ENV;
+          const allowFixtureFallback =
+            effectiveNodeEnv === 'test' || imapEnv.ALLOW_EMAIL_FIXTURE_FALLBACK === '1';
+          const defaultCorpusDir = allowFixtureFallback
+            ? path.join(__dirname, '../../test/fixtures/email-notices')
+            : null;
+          const configuredCorpus = (imapEnv.IMAP_CORPUS_DIR !== undefined && imapEnv.IMAP_CORPUS_DIR !== null)
+            ? imapEnv.IMAP_CORPUS_DIR
+            : defaultCorpusDir;
+          const corpusDir = (configuredCorpus && fs.existsSync(configuredCorpus)) ? configuredCorpus : null;
           const hasImap = Boolean(imapEnv.IMAP_HOST && imapEnv.IMAP_USER && (imapEnv.IMAP_PASSWORD || imapEnv.IMAP_PASS));
 
           if (!corpusDir && !hasImap) {
@@ -199,19 +214,13 @@ function createSourceNetworkHandler(dependencies = {}) {
               env: imapEnv,
             });
 
-            if (database && database.pool) {
-              try {
-                await recordRun(database.pool, source.id, {
-                  listings: [],
-                  evidenceCount: result.evidencePackets || result.accepted || 0,
-                  acceptedCount: result.accepted || 0,
-                  durationMs: Date.now() - startedAt,
-                  error: null,
-                });
-              } catch (storeError) {
-                console.error('[Source Network] Run metadata was not recorded:', storeError.message);
-              }
-            }
+            await recordRunSafely(source.id, {
+              listings: [],
+              evidenceCount: result.evidencePackets || result.accepted || 0,
+              acceptedCount: result.accepted || 0,
+              durationMs: Date.now() - startedAt,
+              error: null,
+            });
 
             return res.status(200).json({
               status: 'collected',
@@ -237,15 +246,29 @@ function createSourceNetworkHandler(dependencies = {}) {
           if (evidenceJobs.has(source.id)) return res.status(409).json({ error: 'This evidence collection is already running' });
           evidenceJobs.add(source.id);
           const startedAt = Date.now();
-          Promise.resolve().then(() => evidenceCollectors[source.id]({ perPage: 10, daysBack: 30 }))
-            .then((result) => recordRun(database.pool, source.id, { listings: [], evidenceCount: result.submitted, error: null, durationMs: Date.now() - startedAt }))
-            .catch((error) => {
+          (async () => {
+            try {
+              const result = await evidenceCollectors[source.id]({ perPage: 10, daysBack: 30 });
+              await recordRunSafely(source.id, {
+                listings: [],
+                evidenceCount: result?.submitted || 0,
+                error: null,
+                durationMs: Date.now() - startedAt,
+              });
+            } catch (error) {
               // recordSourceRun is Postgres-only now: a dead or missing
               // database cannot record the failure anywhere, and the audit
-              // trail for this run is the response + log line below.
-              Promise.resolve().then(() => recordRun(database.pool, source.id, { listings: [], error: error.message, durationMs: Date.now() - startedAt }))
-                .catch((storeError) => console.error('[Source Network] Run metadata was not recorded:', storeError.message));
-            }).finally(() => evidenceJobs.delete(source.id));
+              // trail for this run is the response + log line.
+              console.error(`[Source Network] Evidence collection failed for ${source.id}:`, error.message);
+              await recordRunSafely(source.id, {
+                listings: [],
+                error: error.message,
+                durationMs: Date.now() - startedAt,
+              });
+            } finally {
+              evidenceJobs.delete(source.id);
+            }
+          })();
           return res.status(202).json({ status: 'collecting', sourceId: source.id, message: 'Collecting official notices into the evidence review queue.' });
         }
         if (!source?.adapterKey || !collector.realScraperKeys.has(source.adapterKey)) return res.status(400).json({ error: 'This source uses the evidence import workflow', workflow: source?.workflow || null });

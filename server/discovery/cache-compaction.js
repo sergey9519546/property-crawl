@@ -16,6 +16,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const { replaceFileWithRetry } = require('../intelligence/research-store');
 
 const DEFAULT_CACHE_DIR = path.resolve(process.cwd(), '.cache');
 
@@ -23,7 +24,7 @@ const DEFAULT_KNOWN_CACHE_FILES = [
   'fema-flood-cache.json',
   'epa-hazard-cache.json',
   'usgs-terrain-cache.json',
-  'discovery-snapshots.json'
+  'discovery-snapshots'
 ];
 
 /**
@@ -247,14 +248,14 @@ function compactCacheFile(filePath, options = {}) {
   const tmpPath = path.join(dir, `.${path.basename(resolvedPath)}.${process.pid}.${Date.now()}.${randomSuffix}.tmp`);
 
   try {
-    fs.writeFileSync(tmpPath, outputString, 'utf8');
+    fs.writeFileSync(tmpPath, outputString, { encoding: 'utf8', flag: 'wx', mode: 0o600 });
 
     // Verify temp file parse integrity
     const verifyContent = fs.readFileSync(tmpPath, 'utf8');
     JSON.parse(verifyContent);
 
-    // Atomically replace destination
-    fs.renameSync(tmpPath, resolvedPath);
+    // Atomically replace destination with Windows retry
+    replaceFileWithRetry(tmpPath, resolvedPath, options.replaceOptions);
   } catch (err) {
     try {
       if (fs.existsSync(tmpPath)) {
@@ -281,6 +282,124 @@ function compactCacheFile(filePath, options = {}) {
     entriesRemoved,
     entriesRetained,
     status: 'compacted'
+  };
+}
+
+function compactCacheDirectory(dirPath, options = {}) {
+  const resolvedDir = path.resolve(dirPath);
+  const dryRun = Boolean(options.dryRun);
+  const maxAgeMs = typeof options.maxAgeMs === 'number' && options.maxAgeMs > 0 ? options.maxAgeMs : null;
+  const refTime = options.referenceTime ? new Date(options.referenceTime).getTime() : Date.now();
+  const staleTmpAgeMs = typeof options.staleTmpAgeMs === 'number' && options.staleTmpAgeMs >= 0
+    ? options.staleTmpAgeMs
+    : 30 * 60 * 1000;
+  const maxFiles = Number.isInteger(options.maxFilesPerDir) && options.maxFilesPerDir > 0
+    ? options.maxFilesPerDir
+    : 1000;
+  const cutoff = maxAgeMs !== null ? refTime - maxAgeMs : null;
+
+  if (!fs.existsSync(resolvedDir)) {
+    return {
+      path: resolvedDir,
+      originalBytes: 0,
+      compactedBytes: 0,
+      entriesRemoved: 0,
+      entriesRetained: 0,
+      status: 'missing_file'
+    };
+  }
+
+  let originalBytes = 0;
+  let compactedBytes = 0;
+  let entriesRemoved = 0;
+  let entriesRetained = 0;
+  let scanned = 0;
+
+  const skipDirs = new Set([
+    '.git',
+    'node_modules',
+    'pgdata',
+    'document-vault',
+    ...(Array.isArray(options.skipDirs) ? options.skipDirs : [])
+  ]);
+  const stack = [resolvedDir];
+  while (stack.length > 0 && scanned < maxFiles) {
+    const current = stack.pop();
+    let entries;
+    try {
+      entries = fs.readdirSync(current, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+
+    for (const entry of entries) {
+      if (scanned >= maxFiles) break;
+      const fullPath = path.join(current, entry.name);
+
+      if (entry.isDirectory()) {
+        if (!skipDirs.has(entry.name)) {
+          stack.push(fullPath);
+        }
+        continue;
+      }
+      if (!entry.isFile()) continue;
+
+      // Never modify or delete active hash-chained evidence ledgers or lock files.
+      if (entry.name.startsWith('evidence-ledger') || entry.name.endsWith('.lock')) {
+        continue;
+      }
+
+      scanned++;
+      let stat;
+      try {
+        stat = fs.statSync(fullPath);
+      } catch {
+        continue;
+      }
+      originalBytes += stat.size;
+
+      if (entry.name.endsWith('.tmp')) {
+        if (refTime - stat.mtimeMs >= staleTmpAgeMs) {
+          entriesRemoved++;
+          if (!dryRun) {
+            try { fs.unlinkSync(fullPath); } catch { /* ignore */ }
+          }
+        } else {
+          entriesRetained++;
+          compactedBytes += stat.size;
+        }
+        continue;
+      }
+
+      if (cutoff !== null && entry.name.endsWith('.json')) {
+        let entryTs = null;
+        try {
+          const parsed = JSON.parse(fs.readFileSync(fullPath, 'utf8'));
+          entryTs = extractEntryTimestamp(parsed);
+        } catch {
+          entryTs = null;
+        }
+        if (entryTs !== null && entryTs < cutoff) {
+          entriesRemoved++;
+          if (!dryRun) {
+            try { fs.unlinkSync(fullPath); } catch { /* ignore */ }
+          }
+          continue;
+        }
+      }
+
+      entriesRetained++;
+      compactedBytes += stat.size;
+    }
+  }
+
+  return {
+    path: resolvedDir,
+    originalBytes,
+    compactedBytes,
+    entriesRemoved,
+    entriesRetained,
+    status: dryRun ? 'dry_run' : (entriesRemoved > 0 ? 'compacted' : 'unchanged')
   };
 }
 
@@ -327,7 +446,18 @@ function runFullCacheCompaction(cacheDir = DEFAULT_CACHE_DIR, options = {}) {
 
   for (const fileName of targetFiles) {
     const fullPath = path.isAbsolute(fileName) ? fileName : path.resolve(resolvedCacheDir, fileName);
-    const summary = compactCacheFile(fullPath, options);
+    let summary;
+    let isDir = false;
+    try {
+      isDir = fs.existsSync(fullPath) && fs.statSync(fullPath).isDirectory();
+    } catch {
+      isDir = false;
+    }
+    if (isDir) {
+      summary = compactCacheDirectory(fullPath, options);
+    } else {
+      summary = compactCacheFile(fullPath, options);
+    }
 
     fileSummaries.push(summary);
     filesProcessed++;
@@ -355,5 +485,6 @@ module.exports = {
   DEFAULT_KNOWN_CACHE_FILES,
   extractEntryTimestamp,
   compactCacheFile,
+  compactCacheDirectory,
   runFullCacheCompaction
 };

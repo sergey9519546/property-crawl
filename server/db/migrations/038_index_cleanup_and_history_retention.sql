@@ -11,8 +11,8 @@
 --
 -- All DDL is wrapped in SKIP LOCKED / lock_timeout guards so a contended rolling
 -- deploy never blocks startup migrations past the platform health deadline.
+-- Runs inside discovery-migrate's per-migration BEGIN/COMMIT transaction.
 
-BEGIN;
 SET LOCAL lock_timeout    = '5000';
 SET LOCAL statement_timeout = '30000';
 
@@ -76,5 +76,3 @@ BEGIN
     WHEN lock_not_available OR query_canceled THEN NULL;
   END;
 END $$;
-
-COMMIT;

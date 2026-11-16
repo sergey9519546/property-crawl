@@ -109,7 +109,7 @@ const SOURCE_HOSTS = Object.freeze({
     'recording.cookcountyclerkil.gov',
     'onrecords.miamidadeclerk.gov',
     'publicsearch.us',
-    'oncore.duvalclerk.com',
+    'oncore.duvalclerk.com', 'or.duvalclerk.com',
     'vaclmweb1.brevardclerk.us',
     'clerk.arapahoegov.com',
   ],

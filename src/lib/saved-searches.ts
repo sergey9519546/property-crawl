@@ -14,7 +14,11 @@ export type ServerSavedSearch = {
 };
 
 export function matchesSavedSearch(listing: { state?: string; dealScore?: number | null; openingBid?: number | null }, search: SavedSearch) {
-  if (search.state !== "All" && listing.state !== search.state) return false;
+  if (search.state !== "All") {
+    const wantedStates = search.state.split(",").map((s) => s.trim().toUpperCase()).filter(Boolean);
+    const gotState = typeof listing.state === "string" ? listing.state.trim().toUpperCase() : "";
+    if (wantedStates.length > 0 && (!gotState || !wantedStates.includes(gotState))) return false;
+  }
   if (search.minScore > 0 && (typeof listing.dealScore !== "number" || !Number.isFinite(listing.dealScore) || listing.dealScore < search.minScore)) return false;
   if (search.maxBid > 0 && (typeof listing.openingBid !== "number" || !Number.isFinite(listing.openingBid) || listing.openingBid > search.maxBid)) return false;
   return true;
@@ -24,12 +28,13 @@ export function matchesSavedSearch(listing: { state?: string; dealScore?: number
 export function toClientSavedSearch(s: ServerSavedSearch): SavedSearch {
   const f = (s.filters || {}) as any;
   const states: string[] = Array.isArray(f.states) ? f.states : [];
-  const state = states.length > 0 ? String(states[0]).toUpperCase() : "All";
+  const cleanStates = [...new Set(states.map((st) => String(st).trim().toUpperCase()).filter((st) => st && st !== "ALL"))];
+  const state = cleanStates.length > 0 ? cleanStates.join(",") : "All";
   const minScore = Number.isFinite(f.minScore) ? Number(f.minScore) : 0;
   const maxBid = Number.isFinite(f.maxBid) ? Number(f.maxBid) : 0;
   return {
     id: s.id,
-    name: s.label || (state === "All" ? "All-market search" : `${state} opportunities`),
+    name: s.label || (state === "All" ? "All-market search" : `${state.replace(/,/g, "/")} opportunities`),
     state,
     minScore: Math.max(0, Math.min(100, minScore)),
     maxBid: Math.max(0, maxBid),
@@ -44,7 +49,7 @@ export function parseSavedSearches(raw: string | null): SavedSearch[] {
     if (!Array.isArray(value)) return [];
     return value.filter((item) => item && typeof item.id === "string" && item.id.length <= 100
       && typeof item.name === "string" && item.name.length <= 80
-      && typeof item.state === "string" && /^(All|[A-Z]{2})$/.test(item.state)
+      && typeof item.state === "string" && /^(All|[A-Z]{2}(?:,[A-Z]{2})*)$/.test(item.state)
       && Number.isFinite(item.minScore) && item.minScore >= 0 && item.minScore <= 100
       && Number.isFinite(item.maxBid) && item.maxBid >= 0 && item.maxBid <= 50_000_000
       && typeof item.createdAt === "string").slice(0, 50);
@@ -75,6 +80,19 @@ export function buildHuntFromSavedSearch(search: SavedSearch, server?: ServerSav
   }
   if (search.minScore > 0) discoveryFilters.minScore = String(search.minScore);
   if (search.maxBid > 0) discoveryFilters.maxBid = String(search.maxBid);
+  for (const [filterKey, paramKey] of [["counties", "county"], ["sources", "source"], ["propTypes", "type"]] as const) {
+    const arr = f[filterKey];
+    if (Array.isArray(arr) && arr.length > 0) {
+      const cleaned = arr.map((item) => String(item).trim()).filter((item) => item && item.toLowerCase() !== "all");
+      if (cleaned.length > 0) discoveryFilters[paramKey] = cleaned.join(",").slice(0, 256);
+    }
+  }
+  if (Array.isArray(f.keywords) && f.keywords.length > 0) {
+    const cleanKeywords = f.keywords.map((k) => String(k).trim()).filter(Boolean);
+    if (cleanKeywords.length > 0) discoveryFilters.q = cleanKeywords.join(" ").slice(0, 256);
+  } else if (typeof f.keywords === "string" && f.keywords.trim()) {
+    discoveryFilters.q = f.keywords.trim().slice(0, 256);
+  }
   if (typeof f.minEquity === "number" && Number.isFinite(f.minEquity) && f.minEquity > 0) {
     discoveryFilters.minEquity = String(f.minEquity);
   }

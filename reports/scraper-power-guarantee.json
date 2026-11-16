@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-06T14:05:02.449Z",
+  "generatedAt": "2026-11-15T07:50:28.486Z",
   "guarantee": {
     "catalogSources": 288,
     "scheduledAdapters": 22,
@@ -24,9 +24,10 @@
   },
   "tiers": {
     "P0_CATALOG_ONLY": 227,
-    "P4_LIVE_STRONG": 5,
+    "P4_LIVE_STRONG": 4,
     "P3_SCOPE_LIMITED": 3,
     "P2_DISCOVERY_ADAPTER": 12,
+    "P3_LIVE_ADAPTER": 1,
     "P2_BLOCKED_PUBLISHER": 2,
     "P2_LOCAL_ROUTE": 38,
     "P0_NO_LIVE_ADAPTER": 1
@@ -55,7 +56,7 @@
     "government_seizure": {
       "total": 5,
       "scheduled": 3,
-      "strong": 2
+      "strong": 1
     },
     "government_surplus": {
       "total": 54,
@@ -145,7 +146,7 @@
       "required": true,
       "catalogEntries": 5,
       "scheduledAdapters": 3,
-      "strongAdapters": 2,
+      "strongAdapters": 1,
       "opportunityScheduled": 3,
       "coveredByCode": true,
       "honestGap": null,
@@ -864,8 +865,8 @@
       "access": "public",
       "discoveryUrl": "https://www.irsauctions.gov/",
       "power": {
-        "tier": "P4_LIVE_STRONG",
-        "score": 5,
+        "tier": "P3_LIVE_ADAPTER",
+        "score": 4,
         "inScheduler": true,
         "scrapling": [
           "irs-detail"
@@ -873,10 +874,11 @@
         "flags": [
           "scheduled",
           "scrapling:irs-detail",
-          "lastRunReport"
+          "lastRunReport",
+          "limitation"
         ]
       },
-      "weakness": null,
+      "weakness": "Real-estate cards sparse/0 on recent live canaries (canary held NOT_CLEAN); fail-closed",
       "seedListings": 1
     },
     {
@@ -1907,7 +1909,7 @@
       "role": "evidence",
       "status": "DISCOVERY_ONLY",
       "adapterKey": null,
-      "access": "account",
+      "access": "public",
       "discoveryUrl": "https://www.fhfa.gov/data/hpi",
       "power": {
         "tier": "P0_CATALOG_ONLY",

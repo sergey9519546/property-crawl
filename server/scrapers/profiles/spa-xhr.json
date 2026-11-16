@@ -10,12 +10,10 @@
     "docketNumber"
   ],
   "presentationFields": [
-    "openingBid",
-    "currentBid",
-    "saleDateText",
-    "addressText",
-    "occupancyStatus",
-    "judgmentAmount"
+    "beds",
+    "baths",
+    "sqft",
+    "propertyType"
   ],
   "sources": {
     "fannie": {

@@ -9,6 +9,8 @@ export type StreetViewMetadata = {
   mapsLaunchUrl: string | null;
   coverage: string | null;
   targetLabel: string | null;
+  fallbackProvider?: 'panoramax' | 'mapillary' | null;
+  alternativeCandidate?: unknown;
 };
 
 export type StreetViewMetadataResult =
@@ -27,14 +29,35 @@ function safePanoramaId(value: unknown) {
 export function parseStreetViewMetadata(payload: unknown): StreetViewMetadataResult {
   if (!payload || typeof payload !== "object") throw new Error("Invalid Street View metadata response");
   const record = payload as Record<string, unknown>;
-  if (record.available !== true) return { available: false, reason: safeText(record.reason, "No verified Street View panorama is available for this listing.") };
+  const isAlternativeFallback = record.provider === "panoramax_fallback" || record.provider === "mapillary_fallback";
+  const candidate = isAlternativeFallback && record.candidate && typeof record.candidate === "object"
+    ? (record.candidate as Record<string, unknown>)
+    : null;
+  if (record.available !== true && !candidate) return { available: false, reason: safeText(record.reason, "No verified Street View panorama is available for this listing.") };
+  const candidateAttribution = candidate?.attribution && typeof candidate.attribution === "object"
+    ? (candidate.attribution as Record<string, unknown>)
+    : null;
+  const fallbackProviderName = candidateAttribution ? safeText(candidateAttribution.provider, "Community imagery") : "Community imagery";
+  const fallbackProducer = candidateAttribution ? safeText(candidateAttribution.producer, "") : "";
+  const rawCaptureDate = typeof record.captureDate === "string"
+    ? record.captureDate
+    : typeof candidate?.capturedAt === "string"
+      ? candidate.capturedAt.slice(0, 7)
+      : null;
+  const rawDistance = typeof record.distanceMeters === "number"
+    ? record.distanceMeters
+    : typeof candidate?.distanceMeters === "number"
+      ? candidate.distanceMeters
+      : null;
   return {
     available: true,
     metadata: {
-      provider: safeText(record.provider, "Google Maps"),
-      attribution: safeText(record.attribution, "Google Maps"),
-      captureDate: typeof record.captureDate === "string" ? record.captureDate.trim().slice(0, 40) || null : null,
-      distanceMeters: typeof record.distanceMeters === "number" && Number.isFinite(record.distanceMeters) && record.distanceMeters >= 0 ? record.distanceMeters : null,
+      provider: candidate ? fallbackProviderName : safeText(record.provider, "Google Maps"),
+      attribution: candidate
+        ? (fallbackProducer ? `${fallbackProviderName} · ${fallbackProducer}` : fallbackProviderName)
+        : safeText(record.attribution, "Google Maps"),
+      captureDate: typeof rawCaptureDate === "string" ? rawCaptureDate.trim().slice(0, 40) || null : null,
+      distanceMeters: typeof rawDistance === "number" && Number.isFinite(rawDistance) && rawDistance >= 0 ? rawDistance : null,
       panoramaId: safePanoramaId(record.panoramaId),
       panoramaLocation: record.panoramaLocation && typeof record.panoramaLocation === "object"
         && (record.panoramaLocation as Record<string, unknown>).lat !== null && (record.panoramaLocation as Record<string, unknown>).lat !== ''
@@ -46,10 +69,15 @@ export function parseStreetViewMetadata(payload: unknown): StreetViewMetadataRes
       mapsLaunchUrl: safeLaunchUrl(record.mapsLaunchUrl),
       coverage: safeText(record.coverage, '') || null,
       targetLabel: safeText(record.targetLabel, '') || null,
+      ...(isAlternativeFallback && candidate
+        ? {
+            fallbackProvider: record.provider === "panoramax_fallback" ? "panoramax" : "mapillary",
+            alternativeCandidate: record.candidate,
+          }
+        : {}),
     },
   };
 }
-
 function safeLaunchUrl(value: unknown) {
   if (typeof value !== "string") return null;
   try {

@@ -83,3 +83,55 @@ test('enrichment is a deterministic evidence-gap summary with no synthetic claim
     assert.ok(!summary.includes(forbidden), `summary must not emit synthetic claim: ${forbidden}`);
   }
 });
+
+
+test('enrichment AI narrative is opt-in, routes to configured provider, and falls back deterministically', async () => {
+  const listing = await db.createListing({
+    id: `ENRICH-AI-${Date.now().toString(36)}`,
+    source: 'sheriff',
+    state: 'OH',
+    county: 'Cuyahoga',
+    city: 'Cleveland',
+    zip: '44102',
+    address: '2100 West Boulevard',
+    openingBid: 55000,
+    status: 'scheduled',
+  });
+
+  // 1. Offline / missing API key falls back cleanly without breaking deterministic summary
+  let resPayload = null;
+  await handleEnrich(
+    { method: 'POST', body: { listingId: listing.id, includeAiNarrative: true } },
+    { status() { return this; }, json(p) { resPayload = p; } },
+    { env: {}, fetchFn: async () => { throw new Error('must not call fetch without keys'); } }
+  );
+  assert.equal(resPayload.model, 'evidence-summary-v1');
+  assert.equal(resPayload.costUsd, 0);
+  assert.equal(resPayload.verified, false);
+  assert.equal(resPayload.aiNarrative, null);
+  assert.equal(resPayload.narrativeFallback, true);
+  assert.equal(resPayload.narrativeReason, 'api_key_missing');
+  assert.match(resPayload.analysis, /2100 West Boulevard/);
+
+  // 2. Configured OpenAI key produces grounded aiNarrative alongside deterministic analysis
+  let aiPayload = null;
+  await handleEnrich(
+    { method: 'POST', body: { listingId: listing.id, includeAiNarrative: true } },
+    { status() { return this; }, json(p) { aiPayload = p; } },
+    {
+      env: { OPENAI_API_KEY: 'sk-test-enrich' },
+      fetchFn: async () => ({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: 'Observed opening bid is $55,000; title and condition remain unverified.' } }],
+          usage: { prompt_tokens: 100, completion_tokens: 20 },
+        }),
+      }),
+    }
+  );
+  assert.equal(aiPayload.narrativeFallback, false);
+  assert.equal(aiPayload.narrativeProvider, 'openai');
+  assert.equal(aiPayload.verified, false);
+  assert.match(aiPayload.aiNarrative, /\$55,000/);
+  assert.match(aiPayload.analysis, /Evidence summary — unverified/);
+});

@@ -19,3 +19,30 @@ test('embed URL stays off the client even when an embed key is set',()=>{
 });
 
 test('null panorama coordinates stay unavailable and address fallback opens Maps search',()=>{const parsed=parseStreetViewMetadata({available:true,panoramaLocation:{lat:null,lng:null}});assert.equal(parsed.available,true);if(!parsed.available)return;assert.equal(parsed.metadata.panoramaLocation,null);const launch=streetViewLaunchUrl('10 Main Street, Los Angeles, CA',parsed.metadata);assert.match(launch,/\/maps\/search\/\?api=1&query=/);assert.doesNotMatch(launch,/map_action=pano/);});
+
+test('fallback responses from Panoramax and Mapillary populate metadata cleanly', () => {
+  const mly = parseStreetViewMetadata({
+    available: true,
+    provider: 'mapillary_fallback',
+    candidate: {
+      provider: 'mapillary',
+      pictureId: 'mly-1',
+      collectionId: 'seq-1',
+      mediaType: 'directional_sequence',
+      capturedAt: '2025-09-12T12:00:00.000Z',
+      distanceMeters: 18.4,
+      viewerUrl: 'https://www.mapillary.com/app/?focus=photo&photoId=mly-1',
+      thumbUrl: 'https://images.mapillary.com/abc.jpg',
+      license: { id: 'CC-BY-SA-4.0', url: 'https://creativecommons.org/licenses/by-sa/4.0/', displayApproved: true },
+      attribution: { provider: 'Mapillary', producer: 'contributor' },
+    },
+  });
+  assert.equal(mly.available, true);
+  if (!mly.available) return;
+  assert.equal(mly.metadata.provider, 'Mapillary');
+  assert.equal(mly.metadata.attribution, 'Mapillary · contributor');
+  assert.equal(mly.metadata.captureDate, '2025-09');
+  assert.equal(mly.metadata.distanceMeters, 18.4);
+  assert.equal(mly.metadata.fallbackProvider, 'mapillary');
+  assert.ok(mly.metadata.alternativeCandidate);
+});

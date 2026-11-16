@@ -15,6 +15,7 @@ import { AiComparison } from "@/components/site/ai-comparison";
 import { Faq } from "@/components/site/faq";
 import { FinalCta } from "@/components/site/final-cta";
 import { SiteFooter } from "@/components/site/site-footer";
+import { WorkspaceSessionProvider } from "@/components/workspace/workspace-shell";
 
 /**
  * The page reads as one story:
@@ -24,6 +25,7 @@ import { SiteFooter } from "@/components/site/site-footer";
  */
 export default function PerfectPropertyPage() {
   return (
+    <WorkspaceSessionProvider>
     <main id="main-content" tabIndex={-1} className="relative min-h-screen max-w-full overflow-x-hidden bg-paper text-ink outline-none">
       <GrainOverlay />
       <SiteHeader />
@@ -61,5 +63,6 @@ export default function PerfectPropertyPage() {
       <SiteFooter />
       <BottomBlur />
     </main>
+    </WorkspaceSessionProvider>
   );
 }

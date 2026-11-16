@@ -120,3 +120,26 @@ test('Deduplication: merges multi-source docket notices into unified master doss
   assert.equal(master.docketNotices.length, 3);
   assert.deepEqual(master.provenanceAuditTrail.sort(), ['bid4assets', 'civilview', 'email_legal_notice'].sort());
 });
+
+
+test('Deduplication: enforces county equality on APN match and respects photo alias in mergeClusterGroup', () => {
+  const { mergeClusterGroup } = require('../server/intelligence/deduplication');
+
+  const diffCountySameApn = evaluateDuplicateMatch(
+    { apn: '001-01-001', state: 'OH', county: 'Cuyahoga', address: '100 First Ave' },
+    { apn: '001-01-001', state: 'OH', county: 'Franklin', address: '200 Second St' }
+  );
+  assert.equal(diffCountySameApn.isMatch, false);
+
+  const sameCountySameApn = evaluateDuplicateMatch(
+    { apn: '001-01-001', state: 'OH', county: 'Cuyahoga' },
+    { parcelId: '00101001', state: 'OH', county: 'CUYAHOGA' }
+  );
+  assert.equal(sameCountySameApn.isMatch, true);
+
+  const merged = mergeClusterGroup([
+    { id: 'A', source: 'sheriff', state: 'OH', county: 'Cuyahoga', apn: '101', openingBid: 50000 },
+    { id: 'B', source: 'civilview', state: 'OH', county: 'Cuyahoga', apn: '101', photo: 'https://img.test/p.jpg' }
+  ]);
+  assert.equal(merged.id, 'B', 'Record with photo must receive completeness weight in mergeClusterGroup');
+});

@@ -232,6 +232,42 @@ def record_journey(artifact_dir, credential, restart_api) -> None:
                     and item.get("provenance", {}).get("observed") is True
                 ]
             if not candidates:
+                facet_sources = [
+                    str(entry.get("key") or entry.get("value") or "").strip().lower()
+                    for entry in inventory.get("facets", {}).get("source", [])
+                    if isinstance(entry, dict)
+                ]
+                probe_sources = [
+                    src for src in (facet_sources + ["civilview", "hud", "treasury", "usda", "irs", "gsa"])
+                    if src and src != "servicelink" and src in known_sources
+                ]
+                seen_probe = set()
+                for src in probe_sources:
+                    if src in seen_probe:
+                        continue
+                    seen_probe.add(src)
+                    src_inventory = expect_ok(
+                        context.request.get(f"{BASE_URL}/api/listings?limit=200&source={src}"),
+                        f"listing inventory ({src})",
+                    )
+                    src_rows = src_inventory.get("listings", [])
+                    candidates = [
+                        item for item in src_rows
+                        if item.get("id") not in used_aliases
+                        and item.get("source") != "servicelink"
+                        and item.get("source") in known_sources
+                        and item.get("provenance", {}).get("origin") == "live"
+                        and item.get("provenance", {}).get("observed") is True
+                    ] or [
+                        item for item in src_rows
+                        if item.get("source") != "servicelink"
+                        and item.get("source") in known_sources
+                        and item.get("provenance", {}).get("origin") == "live"
+                        and item.get("provenance", {}).get("observed") is True
+                    ]
+                    if candidates:
+                        break
+            if not candidates:
                 raise RuntimeError("No source-observed listing is available for the browser journey")
             listing = candidates[0]
             catalog_source_id = source_aliases.get(listing["source"], listing["source"])

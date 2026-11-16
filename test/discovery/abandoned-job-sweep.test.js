@@ -208,7 +208,7 @@ test('the readiness report surfaces the wedge without taking the API out of serv
     storageProbe: () => ({ ready: true, freeBytes: 10 * 1024 * 1024 * 1024, minimumFreeBytes: 1024 * 1024 * 1024, scope: 'collector_local_volume' }),
     databaseProbe: async () => ({
       postgis: true,
-      tables: ['listings', 'discovery_source_runs', 'discovery_snapshots', 'discovery_checkpoints', 'discovery_jobs', 'discovery_leases'],
+      tables: ['listings', 'discovery_source_runs', 'discovery_snapshots', 'discovery_observations', 'discovery_checkpoints', 'discovery_jobs', 'discovery_leases'],
       collectionHealth: wedged,
     }),
   });

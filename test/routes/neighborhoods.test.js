@@ -254,3 +254,99 @@ test('createNeighborhoodsHandler: reports the full store for a small pool too', 
   assert.equal(res.body.scanned, POOL.length);
   assert.equal(res.body.truncated, false);
 });
+
+// --- colon + two-segment Next proxy key formats -------------------------
+
+test('parseKey: supports colon county forms and two-segment proxy paths while rejecting malformed keys', () => {
+  assert.deepEqual(parseKey('county:FL:Miami-Dade'), { kind: 'county', key: 'FL-Miami-Dade' });
+  assert.deepEqual(parseKey('county:FL-Miami-Dade'), { kind: 'county', key: 'FL-Miami-Dade' });
+  assert.deepEqual(parseKey('county/FL-Miami-Dade'), { kind: 'county', key: 'FL-Miami-Dade' });
+  assert.deepEqual(parseKey('zip/33101'), { kind: 'zip', key: '33101' });
+  assert.deepEqual(parseKey('city/FL-Miami'), { kind: 'city', key: 'FL::miami' });
+
+  for (const bad of [
+    'county/..',
+    'county/FL',
+    'county/FL-',
+    'county/FL-Miami-Dade/extra',
+    'zip/abc',
+    'zip/33101/extra',
+    'city/Miami',
+    'city/FL-',
+    'city/FL-Miami/extra',
+  ]) {
+    assert.equal(parseKey(bad), null, `expected invalid proxy/colon key rejected: ${bad}`);
+  }
+});
+
+const PROXY_POOL = [
+  { id: 'F1', source: 'hud', state: 'FL', county: 'Miami-Dade', city: 'Miami', zip: '33101', openingBid: 120000, sourceObservedAt: OBSERVED },
+  { id: 'F2', source: 'treasury', state: 'FL', county: 'Miami-Dade', city: 'Miami', openingBid: 180000, sourceObservedAt: OBSERVED },
+];
+
+test('createNeighborhoodsHandler: resolves /county/FL-Miami-Dade, /zip/33101, and /city/FL-Miami proxy paths', async () => {
+  const handler = createNeighborhoodsHandler({ database: stubDb(PROXY_POOL), now: FIXED_NOW });
+
+  const countyRes = makeRes();
+  await handler(
+    makeReq('GET', '/api/neighborhoods/county/FL-Miami-Dade'),
+    countyRes,
+    new URL('http://localhost/api/neighborhoods/county/FL-Miami-Dade')
+  );
+  assert.equal(countyRes.statusCode, 200);
+  assert.equal(countyRes.body.neighborhood.kind, 'county');
+  assert.equal(countyRes.body.neighborhood.key, 'FL-Miami-Dade');
+  assert.equal(countyRes.body.neighborhood.count, 2);
+
+  const zipRes = makeRes();
+  await handler(
+    makeReq('GET', '/api/neighborhoods/zip/33101'),
+    zipRes,
+    new URL('http://localhost/api/neighborhoods/zip/33101')
+  );
+  assert.equal(zipRes.statusCode, 200);
+  assert.equal(zipRes.body.neighborhood.kind, 'zip');
+  assert.equal(zipRes.body.neighborhood.key, '33101');
+  assert.equal(zipRes.body.neighborhood.count, 1);
+
+  const cityRes = makeRes();
+  await handler(
+    makeReq('GET', '/api/neighborhoods/city/FL-Miami'),
+    cityRes,
+    new URL('http://localhost/api/neighborhoods/city/FL-Miami')
+  );
+  assert.equal(cityRes.statusCode, 200);
+  assert.equal(cityRes.body.neighborhood.kind, 'city');
+  assert.equal(cityRes.body.neighborhood.key, 'FL::miami');
+  assert.equal(cityRes.body.neighborhood.count, 1);
+
+  for (const badPath of ['/api/neighborhoods/county/..', '/api/neighborhoods/county/FL-Miami-Dade/extra', '/api/neighborhoods/zip/abc']) {
+    const badRes = makeRes();
+    await handler(makeReq('GET', badPath), badRes, new URL(`http://localhost${badPath}`));
+    assert.equal(badRes.statusCode, 400);
+    assert.equal(badRes.body.error, 'invalid_neighborhood_key');
+  }
+});
+
+test('createNeighborhoodsHandler: county lookup bypasses PG single-bucket null path and aggregates county rows', async () => {
+  const pgDatabase = {
+    isPg: true,
+    async getSingleNeighborhoodStatsNative() {
+      throw new Error('county must not rely on getSingleNeighborhoodStatsNative');
+    },
+    async getListings() {
+      return { total: PROXY_POOL.length, listings: PROXY_POOL };
+    }
+  };
+  const handler = createNeighborhoodsHandler({ database: pgDatabase, now: FIXED_NOW });
+  const res = makeRes();
+  await handler(
+    makeReq('GET', '/api/neighborhoods/county/FL-Miami-Dade'),
+    res,
+    new URL('http://localhost/api/neighborhoods/county/FL-Miami-Dade')
+  );
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.neighborhood.kind, 'county');
+  assert.equal(res.body.neighborhood.key, 'FL-Miami-Dade');
+  assert.equal(res.body.neighborhood.count, 2);
+});

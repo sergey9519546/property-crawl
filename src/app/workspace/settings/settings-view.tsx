@@ -1,8 +1,50 @@
 "use client";
 
 import * as React from "react";
-import { KeyRound, ShieldCheck, Database, Server, RefreshCw } from "lucide-react";
+import { KeyRound, ShieldCheck, Database, Activity, Server, Camera, Play } from "lucide-react";
 import { useWorkspaceSession } from "@/components/workspace/workspace-shell";
+
+type ReadyData = {
+  ready?: boolean;
+  mode?: string;
+  failedChecks?: string[];
+  checks?: Record<string, { ok?: boolean; detail?: string }>;
+};
+
+type ScraperHealthData = {
+  systemStatus?: string;
+  scrapersInFault?: number;
+  scrapersWithDrift?: number;
+  totalScrapers?: number;
+  scrapers?: Array<{ name?: string; key?: string; status?: string; driftDetected?: boolean }>;
+};
+
+type ImageProviderEntry = {
+  id: string;
+  label?: string;
+  role?: string;
+  keyEnvVar?: string | null;
+  requiresKey?: boolean;
+  keyConfigured?: boolean;
+  circuit?: {
+    available?: boolean;
+    failures?: number;
+    openedUntil?: string | null;
+    retryAfterSeconds?: number | null;
+  };
+  cache?: { entries?: number; hits?: number; misses?: number } | null;
+};
+
+type ImageProvidersResponse = {
+  schema?: string;
+  summary?: {
+    total?: number;
+    available?: number;
+    missingKey?: number;
+    circuitOpen?: number;
+  };
+  providers?: ImageProviderEntry[];
+};
 
 export function WorkspaceSettingsView() {
   const session = useWorkspaceSession();
@@ -10,137 +52,399 @@ export function WorkspaceSettingsView() {
     status?: string;
     dataMode?: string;
     postgresReachable?: boolean;
-    inventoryFreshness?: string;
+    inventoryFreshness?: { stale?: boolean };
   } | null>(null);
+  const [readyData, setReadyData] = React.useState<ReadyData | null>(null);
+  const [readyStatusCode, setReadyStatusCode] = React.useState<number | null>(null);
+  const [scraperHealth, setScraperHealth] = React.useState<ScraperHealthData | null>(null);
+  const [scraperStatusCode, setScraperStatusCode] = React.useState<number | null>(null);
+  const [scraperTelemetry, setScraperTelemetry] = React.useState<ScraperHealthData | null>(null);
+  const [scraperTelemetryStatus, setScraperTelemetryStatus] = React.useState<number | null>(null);
+  const [triggerBusy, setTriggerBusy] = React.useState(false);
+  const [triggerMessage, setTriggerMessage] = React.useState<string | null>(null);
+  const [imageProviders, setImageProviders] = React.useState<ImageProvidersResponse | null>(null);
+  const [imageProvidersStatus, setImageProvidersStatus] = React.useState<number | null>(null);
   const [loading, setLoading] = React.useState(true);
+
+  const loadAll = React.useCallback(async (isActive: () => boolean = () => true) => {
+    const [healthRes, readyRes, scraperRes, scrapersSummaryRes, providersRes] = await Promise.allSettled([
+      fetch("/api/health", { cache: "no-store" }),
+      fetch("/api/health/ready", { cache: "no-store" }),
+      fetch("/api/scrapers/health", { cache: "no-store" }),
+      fetch("/api/scrapers", { cache: "no-store" }),
+      fetch("/api/property-image/providers", { cache: "no-store" }),
+    ]);
+    if (!isActive()) return;
+
+    if (healthRes.status === "fulfilled") {
+      const data = await healthRes.value.json().catch(() => null);
+      if (isActive() && data) setHealthData(data);
+    }
+
+    if (readyRes.status === "fulfilled") {
+      setReadyStatusCode(readyRes.value.status);
+      const data = await readyRes.value.json().catch(() => null);
+      if (isActive() && data) setReadyData(data);
+    }
+
+    if (scraperRes.status === "fulfilled") {
+      setScraperStatusCode(scraperRes.value.status);
+      if (scraperRes.value.ok) {
+        const data = await scraperRes.value.json().catch(() => null);
+        if (isActive() && data) setScraperHealth(data);
+      }
+    }
+
+    if (scrapersSummaryRes.status === "fulfilled") {
+      setScraperTelemetryStatus(scrapersSummaryRes.value.status);
+      if (scrapersSummaryRes.value.ok) {
+        const data = await scrapersSummaryRes.value.json().catch(() => null);
+        if (isActive() && data) setScraperTelemetry(data);
+      }
+    }
+
+    if (providersRes.status === "fulfilled") {
+      setImageProvidersStatus(providersRes.value.status);
+      if (providersRes.value.ok) {
+        const data = await providersRes.value.json().catch(() => null);
+        if (isActive() && data) setImageProviders(data);
+      }
+    }
+
+    if (isActive()) setLoading(false);
+  }, []);
 
   React.useEffect(() => {
     let active = true;
-    void fetch("/api/health", { cache: "no-store" })
-      .then((res) => res.json())
-      .then((data) => {
-        if (active) {
-          setHealthData(data);
-          setLoading(false);
-        }
-      })
-      .catch(() => {
-        if (active) setLoading(false);
-      });
+    void loadAll(() => active);
     return () => {
       active = false;
     };
-  }, []);
+  }, [session.authenticated, loadAll]);
+
+  const handleRunScrapers = React.useCallback(async () => {
+    if (!session.authenticated) {
+      session.requestUnlock();
+      return;
+    }
+    setTriggerBusy(true);
+    setTriggerMessage(null);
+    try {
+      const res = await fetch("/api/scrapers", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ trigger: "workspace-settings" }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setTriggerMessage(data?.error || `Scraper run rejected (HTTP ${res.status})`);
+      } else {
+        setTriggerMessage(
+          `Scraper run accepted${typeof data?.ran === "number" ? ` (${data.ran} executed)` : ""}.`
+        );
+        await loadAll();
+      }
+    } catch (err) {
+      setTriggerMessage(err instanceof Error ? err.message : "Failed to trigger scrapers.");
+    } finally {
+      setTriggerBusy(false);
+    }
+  }, [session, loadAll]);
+
+  const scraperSummaryList = React.useMemo(() => {
+    const source = Array.isArray(scraperHealth?.scrapers)
+      ? scraperHealth.scrapers
+      : Array.isArray(scraperTelemetry?.scrapers)
+        ? scraperTelemetry.scrapers
+        : [];
+    return source.slice(0, 8);
+  }, [scraperHealth, scraperTelemetry]);
+
+  const activeScraperStats = scraperHealth || scraperTelemetry;
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
       <div className="mb-8">
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+        <h1 className="text-2xl font-bold tracking-tight text-ink">
           Operator Workspace Settings
         </h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Runtime configuration, session security parameters, and persistence mode.
+        <p className="mt-1 text-sm text-ink-3">
+          Runtime configuration, readiness probes, scraper fleet status, and persistence mode.
         </p>
       </div>
 
       <div className="space-y-6">
         {/* Session Card */}
-        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="rounded-card border border-line bg-card p-6 shadow-sm">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">
+            <div className="flex h-10 w-10 items-center justify-center rounded-control bg-go-wash text-go">
               <KeyRound className="h-5 w-5" aria-hidden />
             </div>
             <div>
-              <h2 className="text-base font-semibold text-slate-900">Operator Session</h2>
-              <p className="text-xs text-slate-500">8-hour HttpOnly session cookie boundary</p>
+              <h2 className="text-base font-semibold text-ink">Operator Session</h2>
+              <p className="text-xs text-ink-3">Current session authentication and role authorization</p>
             </div>
           </div>
 
-          <dl className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 text-sm">
-            <div className="rounded-lg bg-slate-50 p-4">
-              <dt className="text-xs font-medium text-slate-500 uppercase tracking-wider">Authentication Status</dt>
-              <dd className="mt-1 font-semibold text-slate-900">
-                {session.authenticated ? (
-                  <span className="inline-flex items-center gap-1.5 text-emerald-700">
-                    <span className="h-2 w-2 rounded-full bg-emerald-600" />
-                    Unlocked (Operator Verified)
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1.5 text-slate-500">
-                    <span className="h-2 w-2 rounded-full bg-slate-400" />
-                    Locked
-                  </span>
-                )}
+          <dl className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3 text-sm">
+            <div className="rounded-control bg-paper p-4">
+              <dt className="text-xs font-medium text-ink-3 uppercase tracking-wider">Status</dt>
+              <dd className="mt-1 font-semibold text-ink">
+                {session.authenticated ? "Authenticated" : session.configured ? "Locked" : "Unconfigured"}
               </dd>
             </div>
-
-            <div className="rounded-lg bg-slate-50 p-4">
-              <dt className="text-xs font-medium text-slate-500 uppercase tracking-wider">Session Expiry</dt>
-              <dd className="mt-1 text-slate-700 font-mono text-xs">
-                {session.expiresAt ? new Date(session.expiresAt).toLocaleString() : "Not active"}
+            <div className="rounded-control bg-paper p-4">
+              <dt className="text-xs font-medium text-ink-3 uppercase tracking-wider">Role</dt>
+              <dd className="mt-1 font-semibold text-ink">
+                {session.authenticated
+                  ? (session.role === "analyst" ? "Analyst" : session.role === "viewer" ? "Viewer" : "Operator")
+                  : session.member?.entitled
+                    ? "Member (Entitled)"
+                    : session.member
+                      ? "Member"
+                      : "Viewer"}
+              </dd>
+            </div>
+            <div className="rounded-control bg-paper p-4">
+              <dt className="text-xs font-medium text-ink-3 uppercase tracking-wider">Permissions</dt>
+              <dd className="mt-1 font-semibold text-ink">
+                {session.authenticated
+                  ? (session.role === "operator"
+                      ? "Full Workspace Controls"
+                      : session.role === "analyst"
+                        ? "Analyst Controls (No Scrapers)"
+                        : "Read-only Workspace")
+                  : "Read-only Discovery"}
               </dd>
             </div>
           </dl>
         </div>
 
-        {/* Persistence & Health Card */}
-        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        {/* Persistence & Readiness Card */}
+        <div className="rounded-card border border-line bg-card p-6 shadow-sm">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 text-blue-700">
+            <div className="flex h-10 w-10 items-center justify-center rounded-control bg-yours-wash text-yours">
               <Database className="h-5 w-5" aria-hidden />
             </div>
             <div>
-              <h2 className="text-base font-semibold text-slate-900">Persistence Engine</h2>
-              <p className="text-xs text-slate-500">Underlying catalog and observation storage</p>
+              <h2 className="text-base font-semibold text-ink">Persistence &amp; Discovery Readiness</h2>
+              <p className="text-xs text-ink-3">Live telemetry from /api/health and /api/health/ready</p>
             </div>
           </div>
 
-          <dl className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 text-sm">
-            <div className="rounded-lg bg-slate-50 p-4">
-              <dt className="text-xs font-medium text-slate-500 uppercase tracking-wider">Storage Mode</dt>
-              <dd className="mt-1 font-semibold text-slate-900">
-                {loading ? "Checking..." : healthData?.dataMode || "unavailable"}
+          <dl className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3 text-sm">
+            <div className="rounded-control bg-paper p-4">
+              <dt className="text-xs font-medium text-ink-3 uppercase tracking-wider">Inventory Mode</dt>
+              <dd className="mt-1 font-semibold text-ink">
+                {loading ? "Checking..." : healthData?.dataMode || "Unknown"}
               </dd>
             </div>
-
-            <div className="rounded-lg bg-slate-50 p-4">
-              <dt className="text-xs font-medium text-slate-500 uppercase tracking-wider">PostgreSQL Status</dt>
-              <dd className="mt-1 text-slate-700">
-                {loading ? (
-                  "Checking..."
-                ) : healthData?.postgresReachable ? (
-                  <span className="text-emerald-700 font-medium">Connected & Verified</span>
-                ) : (
-                  <span className="text-amber-700 font-medium">Embedded / Standalone</span>
-                )}
+            <div className="rounded-control bg-paper p-4">
+              <dt className="text-xs font-medium text-ink-3 uppercase tracking-wider">Postgres Reachable</dt>
+              <dd className="mt-1 font-semibold text-ink">
+                {loading ? "Checking..." : healthData?.postgresReachable ? "Yes" : "No"}
+              </dd>
+            </div>
+            <div className="rounded-control bg-paper p-4">
+              <dt className="text-xs font-medium text-ink-3 uppercase tracking-wider">Readiness Probe</dt>
+              <dd className="mt-1 font-semibold text-ink">
+                {loading
+                  ? "Checking..."
+                  : readyData?.ready
+                    ? `Ready (${readyStatusCode ?? 200})`
+                    : readyStatusCode === 401
+                      ? "Locked (Unlock operator)"
+                      : `Not Ready (${readyStatusCode ?? "N/A"})`}
               </dd>
             </div>
           </dl>
+
+          {readyData?.failedChecks && readyData.failedChecks.length > 0 ? (
+            <div className="mt-4 rounded-control border border-catch/30 bg-catch-wash p-3 text-xs text-catch-ink">
+              <strong>Failed checks:</strong> {readyData.failedChecks.join(", ")}
+            </div>
+          ) : null}
         </div>
 
-        {/* Security Invariants Card */}
-        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-purple-50 text-purple-700">
-              <ShieldCheck className="h-5 w-5" aria-hidden />
+        {/* Scraper Fleet Health & Trigger Card */}
+        <div className="rounded-card border border-line bg-card p-6 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-control bg-paper text-ink-2">
+                <Activity className="h-5 w-5" aria-hidden />
+              </div>
+              <div>
+                <h2 className="text-base font-semibold text-ink">Scraper Fleet &amp; Drift Health</h2>
+                <p className="text-xs text-ink-3">Live diagnostics from /api/scrapers/health and /api/scrapers</p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-base font-semibold text-slate-900">Security Invariants</h2>
-              <p className="text-xs text-slate-500">Active protection boundaries</p>
+            <div className="flex flex-wrap items-center gap-2">
+              {scraperStatusCode === 401 && !session.authenticated ? (
+                <button
+                  type="button"
+                  onClick={() => session.requestUnlock()}
+                  className="rounded-control border border-line-strong bg-card px-3 py-1.5 text-xs font-semibold text-ink hover:bg-paper"
+                >
+                  Unlock to view diagnostics
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => void handleRunScrapers()}
+                disabled={triggerBusy}
+                className="inline-flex items-center gap-1.5 rounded-control bg-ink px-3 py-1.5 text-xs font-semibold text-white hover:bg-ink-2 disabled:opacity-60"
+              >
+                <Play className="h-3.5 w-3.5" aria-hidden />
+                {triggerBusy
+                  ? "Running..."
+                  : session.authenticated
+                    ? "Run Scrapers"
+                    : "Unlock to Run Scrapers"}
+              </button>
             </div>
           </div>
 
-          <ul className="mt-4 space-y-2 text-xs text-slate-600">
+          {triggerMessage ? (
+            <p className="mt-3 rounded-control border border-line bg-paper px-3 py-2 text-xs text-ink-2">
+              {triggerMessage}
+            </p>
+          ) : null}
+
+          <dl className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-4 text-sm">
+            <div className="rounded-control bg-paper p-4">
+              <dt className="text-xs font-medium text-ink-3 uppercase tracking-wider">Fleet Status</dt>
+              <dd className="mt-1 font-semibold text-ink">
+                {loading
+                  ? "Checking..."
+                  : activeScraperStats?.systemStatus || (scraperStatusCode ? `Gated (HTTP ${scraperStatusCode})` : scraperTelemetryStatus ? `HTTP ${scraperTelemetryStatus}` : "Unavailable")}
+              </dd>
+            </div>
+            <div className="rounded-control bg-paper p-4">
+              <dt className="text-xs font-medium text-ink-3 uppercase tracking-wider">Total Scrapers</dt>
+              <dd className="mt-1 font-semibold text-ink tabular-nums">
+                {activeScraperStats?.totalScrapers !== undefined ? String(activeScraperStats.totalScrapers) : "—"}
+              </dd>
+            </div>
+            <div className="rounded-control bg-paper p-4">
+              <dt className="text-xs font-medium text-ink-3 uppercase tracking-wider">Scrapers in Fault</dt>
+              <dd className="mt-1 font-semibold text-ink tabular-nums">
+                {activeScraperStats ? String(activeScraperStats.scrapersInFault ?? 0) : "—"}
+              </dd>
+            </div>
+            <div className="rounded-control bg-paper p-4">
+              <dt className="text-xs font-medium text-ink-3 uppercase tracking-wider">Selector Drift Alarms</dt>
+              <dd className="mt-1 font-semibold text-ink tabular-nums">
+                {activeScraperStats ? String(activeScraperStats.scrapersWithDrift ?? 0) : "—"}
+              </dd>
+            </div>
+          </dl>
+
+          {scraperSummaryList.length > 0 ? (
+            <ul className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 text-xs text-ink-2">
+              {scraperSummaryList.map((item, idx) => (
+                <li key={item.key || item.name || idx} className="flex items-center justify-between rounded-control border border-line bg-paper/70 px-3 py-2">
+                  <span className="inline-flex items-center gap-1.5 font-medium text-ink">
+                    <Server className="h-3.5 w-3.5 text-ink-3" aria-hidden />
+                    {item.name || item.key}
+                  </span>
+                  <span className="font-mono text-ink-2">
+                    {item.status || "idle"}{item.driftDetected ? " · drift" : ""}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+
+        {/* Imagery Provider & Cache Health Card */}
+        <div className="rounded-card border border-line bg-card p-6 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-control bg-paper text-ink-2">
+              <Camera className="h-5 w-5" aria-hidden />
+            </div>
+            <div>
+              <h2 className="text-base font-semibold text-ink">Property Imagery Providers &amp; Cache Health</h2>
+              <p className="text-xs text-ink-3">Live provider status from /api/property-image/providers</p>
+            </div>
+          </div>
+
+          <dl className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4 text-sm">
+            <div className="rounded-control bg-paper p-4">
+              <dt className="text-xs font-medium text-ink-3 uppercase tracking-wider">Configured Total</dt>
+              <dd className="mt-1 font-semibold text-ink tabular-nums">
+                {loading ? "Checking..." : imageProviders?.summary?.total ?? (imageProvidersStatus ? `HTTP ${imageProvidersStatus}` : "—")}
+              </dd>
+            </div>
+            <div className="rounded-control bg-paper p-4">
+              <dt className="text-xs font-medium text-ink-3 uppercase tracking-wider">Available</dt>
+              <dd className="mt-1 font-semibold text-ink tabular-nums">
+                {imageProviders?.summary ? String(imageProviders.summary.available ?? 0) : "—"}
+              </dd>
+            </div>
+            <div className="rounded-control bg-paper p-4">
+              <dt className="text-xs font-medium text-ink-3 uppercase tracking-wider">Missing Keys</dt>
+              <dd className="mt-1 font-semibold text-catch-ink tabular-nums">
+                {imageProviders?.summary ? String(imageProviders.summary.missingKey ?? 0) : "—"}
+              </dd>
+            </div>
+            <div className="rounded-control bg-paper p-4">
+              <dt className="text-xs font-medium text-ink-3 uppercase tracking-wider">Open Circuits</dt>
+              <dd className="mt-1 font-semibold text-catch-ink tabular-nums">
+                {imageProviders?.summary ? String(imageProviders.summary.circuitOpen ?? 0) : "—"}
+              </dd>
+            </div>
+          </dl>
+
+          {Array.isArray(imageProviders?.providers) && imageProviders.providers.length > 0 ? (
+            <ul className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3 text-xs text-ink-2">
+              {imageProviders.providers.map((provider) => {
+                const available = provider.circuit?.available !== false && (!provider.requiresKey || provider.keyConfigured);
+                return (
+                  <li key={provider.id} className="rounded-control border border-line bg-paper/70 p-3 space-y-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-semibold text-ink">{provider.label || provider.id}</span>
+                      <span className={`rounded-full px-2 py-0.5 text-label font-bold uppercase ${available ? "bg-go-wash text-go" : "bg-catch-wash text-catch-ink"}`}>
+                        {available ? "Healthy" : !provider.keyConfigured && provider.requiresKey ? "Missing key" : "Circuit open"}
+                      </span>
+                    </div>
+                    {provider.role ? <p className="text-xs text-ink-3">{provider.role}</p> : null}
+                    <div className="flex items-center justify-between text-xs font-mono text-ink-3">
+                      <span>{provider.requiresKey ? (provider.keyConfigured ? "Key set" : `${provider.keyEnvVar || "Key"} unset`) : "Public / keyless"}</span>
+                      {provider.cache && typeof provider.cache.entries === "number" ? (
+                        <span>{provider.cache.entries} cached</span>
+                      ) : null}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : null}
+        </div>
+
+        {/* Security Invariants Card */}
+        <div className="rounded-card border border-line bg-card p-6 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-control bg-paper text-ink">
+              <ShieldCheck className="h-5 w-5" aria-hidden />
+            </div>
+            <div>
+              <h2 className="text-base font-semibold text-ink">Security Invariants</h2>
+              <p className="text-xs text-ink-3">Active protection boundaries</p>
+            </div>
+          </div>
+
+          <ul className="mt-4 space-y-2 text-xs text-ink-2">
             <li className="flex items-center gap-2">
-              <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+              <span className="h-1.5 w-1.5 rounded-full bg-ink-3" />
               Content-Security-Policy: Cryptographic per-request dynamic nonce (strict-dynamic)
             </li>
             <li className="flex items-center gap-2">
-              <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+              <span className="h-1.5 w-1.5 rounded-full bg-ink-3" />
               SSRF Defenses: Loopback/Private IP filtering on webhooks and crawler lanes
             </li>
             <li className="flex items-center gap-2">
-              <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+              <span className="h-1.5 w-1.5 rounded-full bg-ink-3" />
               Operational Truth: Closed does not equal sold; bidsPlaced does not drive velocity
             </li>
           </ul>

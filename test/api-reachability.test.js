@@ -27,19 +27,9 @@
 //   KNOWN_PROXYABLE_NO_UI_CALLER    served + proxyable + rendered by nothing
 //   KNOWN_BROWSER_UNREACHABLE       served, but the proxy will not admit it
 //
-// The two-unreachable routes are:
-//
-//   /api/coverage              server.js:185
-//   /api/portfolio/dashboard   server.js:206 + routes/portfolio-dashboard.js
-//
-// They are not removed - a CLI or external consumer may use them, and
-// deleting working code is not this test's call. Every list here is pinned so
-// the state is deliberate: if a route gains a caller, or is dropped, a test
-// fails and the entry is updated on purpose rather than drifting.
-//
-// Until this test checked (3), the "reachable" list claimed routes had UI
-// callers while verifying nothing of the sort. Four did not have any, and
-// /api/neighborhoods was described by neither list at all.
+// Every list here is pinned so the state is deliberate: if a route gains a
+// caller, or is dropped, a test fails and the entry is updated on purpose
+// rather than drifting.
 
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -72,6 +62,7 @@ const KNOWN_BROWSER_REACHABLE = [
   { route: '/api/listings', callers: ['src/components/listings/discovery-map.tsx', 'src/lib/listing-inventory.ts'] },
   { route: '/api/listings/compare', callers: ['src/components/listings/listing-compare.tsx'] },
   { route: '/api/listings/abc/assessor', callers: ['src/components/listings/assessor-reading.tsx'] },
+  { route: '/api/listings/abc/packet', callers: ['src/components/terminal/bidding-simulator.tsx', 'src/components/research/decision-packet-view.tsx'] },
   { route: '/api/hunts/h1/evaluate', callers: ['src/components/hunts/saved-hunts.tsx'] },
   { route: '/api/saved-searches/s1', callers: ['src/lib/saved-searches.ts'] },
   { route: '/api/saved-searches/s1/run', callers: ['src/lib/saved-searches.ts'] },
@@ -80,10 +71,18 @@ const KNOWN_BROWSER_REACHABLE = [
   { route: '/api/watchlist/w1/comps', callers: ['src/lib/intelligence-client.ts', 'src/components/terminal/property-drawer.tsx'] },
   { route: '/api/auction-calendar', callers: ['src/lib/intelligence-client.ts', 'src/components/listings/discovery-workbench.tsx'] },
   { route: '/api/neighborhoods', callers: ['src/lib/intelligence-client.ts', 'src/components/listings/discovery-workbench.tsx'] },
+  { route: '/api/neighborhoods/county/FL-Miami-Dade', callers: ['src/lib/intelligence-client.ts', 'src/components/listings/discovery-workbench.tsx'] },
+  { route: '/api/neighborhoods/zip:77001', callers: ['src/lib/intelligence-client.ts', 'src/components/listings/discovery-workbench.tsx'] },
   { route: '/api/portfolio/dashboard', callers: ['src/components/terminal/watchlist-modal.tsx'] },
   { route: '/api/coverage', callers: ['src/components/sources/source-network.tsx'] },
+  { route: '/api/sources/s1/collect', callers: ['src/components/sources/source-network.tsx'] },
   { route: '/api/source-network/onboarding', callers: ['src/components/sources/source-network.tsx'] },
   { route: '/api/source-network/unbrowse/status', callers: ['src/components/sources/source-network.tsx'] },
+  { route: '/api/source-network/unbrowse/intake', callers: ['src/components/sources/source-network.tsx'] },
+  { route: '/api/source-network/jobs/job_000000000000000000000001', callers: ['src/components/sources/source-network.tsx'] },
+  { route: '/api/enrichment', callers: ['src/lib/enrichment-api.ts', 'src/components/listings/enrichment-view.tsx'] },
+  { route: '/api/property-image/providers', callers: ['src/app/workspace/settings/settings-view.tsx'] },
+  { route: '/api/scrapers', callers: ['src/app/workspace/settings/settings-view.tsx'] },
   { route: '/api/federal-hazards', callers: ['src/components/listings/property-intelligence.tsx'] },
 ];
 
@@ -331,4 +330,3 @@ function callersFor(route, files, reach) {
 }
 
 const SRC_FILES = collectSrcFiles(path.join(ROOT, 'src'));
-

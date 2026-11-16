@@ -21,14 +21,11 @@ function defaultIdentity(req, res) {
 }
 
 async function loadHistoryLookup(database, listingIds, options = { prior: true }) {
-  // Returns a Map<listingId, mostRecentSnapshot> for the requested ids.
-  // The history is global (not per-user); if the DB doesn't implement
-  // getListingHistory, the route returns dropped=false for every saved
-  // listing — fail-closed, not "you have no drops" claim.
-  if (!database || typeof database.getListingHistory !== 'function') return new Map();
+  // Returns { lookup: Map<listingId, mostRecentSnapshot>, unavailable: boolean }.
+  if (!database || typeof database.getListingHistory !== 'function') return { lookup: new Map(), unavailable: true };
   try {
     const history = await database.getListingHistory(listingIds, options);
-    if (history instanceof Map) return history;
+    if (history instanceof Map) return { lookup: history, unavailable: false };
     // Backward-compat: some test stubs return a plain array.
     const map = new Map();
     if (Array.isArray(history)) {
@@ -37,9 +34,10 @@ async function loadHistoryLookup(database, listingIds, options = { prior: true }
         map.set(entry.listingId, entry);
       }
     }
-    return map;
-  } catch (_) {
-    return new Map();
+    return { lookup: map, unavailable: false };
+  } catch (err) {
+    console.warn('[PriceDrops] getListingHistory lookup failed:', err?.message || err);
+    return { lookup: new Map(), unavailable: true };
   }
 }
 
@@ -68,7 +66,7 @@ function createPriceDropHandler(dependencies = {}) {
     const saved = await database.getSavedDeals(userId);
     const savedListings = Array.isArray(saved) ? saved : [];
     const listingIds = savedListings.map((l) => l && l.id).filter(Boolean);
-    const historyLookup = await loadHistoryLookup(database, listingIds, { prior: true });
+    const { lookup: historyLookup, unavailable: historyUnavailable } = await loadHistoryLookup(database, listingIds, { prior: true });
 
     const drops = [];
     for (const listing of savedListings) {
@@ -83,6 +81,7 @@ function createPriceDropHandler(dependencies = {}) {
     return res.json({
       schema: 'property-crawl.price-drops/v1',
       userId,
+      historyUnavailable,
       ...summary,
       drops: drops.map((d) => ({
         listingId: d.listingId,

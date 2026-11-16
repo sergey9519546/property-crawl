@@ -173,3 +173,27 @@ test('webhook events are deduplicated via idempotency ledger', async () => {
   assert.equal((await call('GET', '/api/accounts/webhook-event/evt_test_123')).body.recorded, false);
   assert.equal((await call('POST', '/api/accounts/webhook-event', { body: { id: 'evt_test_123', type: 'customer.subscription.updated' } })).body.duplicate, false, 'a released event can be claimed again');
 });
+
+test('billing portal fails closed 503 when unconfigured and Stripe webhook handles invoice.payment_failed', () => {
+  const portalSrc = fs.readFileSync(path.resolve(__dirname, '../src/app/api/account/portal/route.ts'), 'utf8');
+  assert.match(portalSrc, /status:\s*503/);
+  assert.match(portalSrc, /Stripe billing portal is not configured/);
+
+  const webhookSrc = fs.readFileSync(path.resolve(__dirname, '../src/app/api/webhooks/stripe/route.ts'), 'utf8');
+  assert.match(webhookSrc, /invoice\.payment_failed/);
+  assert.match(webhookSrc, /status:\s*"past_due"/);
+
+  const showcaseSrc = fs.readFileSync(path.resolve(__dirname, '../src/components/site/second-look-showcase.tsx'), 'utf8');
+  assert.match(showcaseSrc, /useResolvedWorkspaceSession/);
+  assert.doesNotMatch(showcaseSrc, /\buseWorkspaceSession\s*\(/);
+
+  const portfolioSrc = fs.readFileSync(path.resolve(__dirname, '../src/components/portfolio/portfolio-view.tsx'), 'utf8');
+  assert.match(portfolioSrc, /dropsData\.drops/);
+  assert.match(portfolioSrc, /Member Access Required/);
+  assert.match(portfolioSrc, /href="\/sign-in"/);
+
+  const intelligenceSrc = fs.readFileSync(path.resolve(__dirname, '../src/components/listings/property-intelligence.tsx'), 'utf8');
+  assert.match(intelligenceSrc, /Benchmark Evidence &(?:amp;)? Assessor Coverage/);
+  assert.match(intelligenceSrc, /forfeitureRiskTerms/);
+  assert.match(intelligenceSrc, /constitutionalBasis/);
+});

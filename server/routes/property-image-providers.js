@@ -25,7 +25,27 @@ function snapshotCircuit(circuit, now = Date.now) {
   };
 }
 
-function buildProviderSnapshot({ provider, env = process.env, circuits = {}, cache = null, now = Date.now }) {
+function resolveProviderCache(provider, cache = null, providerCaches = null) {
+  if (!provider?.cacheable) return null;
+  const hasScopedCache = Boolean(
+    providerCaches
+    && typeof providerCaches === 'object'
+    && Object.prototype.hasOwnProperty.call(providerCaches, provider.id)
+    && providerCaches[provider.id] !== undefined
+  );
+  const selected = hasScopedCache ? providerCaches[provider.id] : cache;
+  if (!selected || typeof selected.stats !== 'function') return null;
+  return selected.stats();
+}
+
+function buildProviderSnapshot({
+  provider,
+  env = process.env,
+  circuits = {},
+  cache = null,
+  providerCaches = null,
+  now = Date.now
+}) {
   const keyEnvVar = provider.keyEnvVar || null;
   const requiresKey = Boolean(keyEnvVar);
   const keyLength = requiresKey && typeof env[keyEnvVar] === 'string' ? env[keyEnvVar].trim().length : 0;
@@ -44,7 +64,7 @@ function buildProviderSnapshot({ provider, env = process.env, circuits = {}, cac
     requiresKey,
     keyConfigured,
     circuit: status,
-    cache: cache && provider.cacheable ? cache.stats() : null,
+    cache: resolveProviderCache(provider, cache, providerCaches),
     lastCheckedAt: new Date(now()).toISOString()
   };
 }
@@ -61,6 +81,7 @@ function createProviderStatusHandler({
   env = process.env,
   circuits = {},
   cache = null,
+  providerCaches = null,
   now = () => Date.now(),
   providers = DEFAULT_PROVIDERS
 } = {}) {
@@ -71,7 +92,7 @@ function createProviderStatusHandler({
       return res.json({ error: 'method_not_allowed' });
     }
     res.setHeader('Cache-Control', 'no-store');
-    const snapshot = providers.map((provider) => buildProviderSnapshot({ provider, env, circuits, cache, now }));
+    const snapshot = providers.map((provider) => buildProviderSnapshot({ provider, env, circuits, cache, providerCaches, now }));
     const availableCount = snapshot.filter((entry) => entry.keyConfigured && entry.circuit.available !== false).length;
     const summary = {
       total: snapshot.length,

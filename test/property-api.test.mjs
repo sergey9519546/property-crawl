@@ -102,3 +102,16 @@ test('opportunity signals route proxies through to canonical backend', async () 
   const data = await response.json();
   assert.equal(data.triagePriority, 85);
 });
+
+test('property-image providers route is proxied cleanly to canonical backend', async () => {
+  let calledUrl = '';
+  const response = await proxyPropertyApi(new Request('https://app.example/api/property-image/providers'), {
+    apiUrl: 'http://127.0.0.1:3102',
+    fetchImpl: async (url) => {
+      calledUrl = url;
+      return Response.json({ schema: 'property-crawl.property-image-providers/v1', providers: [] });
+    },
+  });
+  assert.equal(calledUrl, 'http://127.0.0.1:3102/api/property-image/providers');
+  assert.equal(response.status, 200);
+});

@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 process.env.PROPERTY_WORKSPACE_ID = process.env.PROPERTY_WORKSPACE_ID || 'operator';
-process.env.SCRAPER_ADMIN_TOKEN = process.env.SCRAPER_ADMIN_TOKEN || 'test-secret';
+process.env.SCRAPER_ADMIN_TOKEN = process.env.SCRAPER_ADMIN_TOKEN || 'test-secret'; process.env.PROPERTY_INVENTORY_BACKEND = process.env.PROPERTY_INVENTORY_BACKEND || 'memory';
 
 const { validateFilters } = require('../server/routes/saved-searches');
 const {

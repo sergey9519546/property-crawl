@@ -65,9 +65,32 @@ function isPrivateIpv4(hostname) {
 }
 
 function isPrivateIpv6(hostname) {
-  const normalized = hostname.toLowerCase();
-  return normalized === '::' || normalized === '::1' || /^f[cd]/.test(normalized)
-    || /^fe[89ab]/.test(normalized) || normalized.startsWith('::ffff:');
+  const normalized = hostname.split('%')[0].toLowerCase();
+  if (
+    normalized === '::'
+    || normalized === '::1'
+    || /^0*:0*:0*:0*:0*:0*:0*:0*$/.test(normalized)
+    || /^0*:0*:0*:0*:0*:0*:0*:0*1$/.test(normalized)
+    || /^f[cd][0-9a-f]*:/.test(normalized)
+    || /^fe[89ab][0-9a-f]*:/.test(normalized)
+    || /^ff[0-9a-f]*:/.test(normalized)
+  ) {
+    return true;
+  }
+  const mappedMatch = normalized.match(/^(?:::ffff:|(?:0+:){5}ffff:)(.+)$/i);
+  if (mappedMatch) {
+    const tail = mappedMatch[1];
+    if (net.isIP(tail) === 4) return isPrivateIpv4(tail);
+    const hexMatch = tail.match(/^([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i);
+    if (hexMatch) {
+      const hi = parseInt(hexMatch[1], 16);
+      const lo = parseInt(hexMatch[2], 16);
+      const v4 = `${(hi >> 8) & 0xff}.${hi & 0xff}.${(lo >> 8) & 0xff}.${lo & 0xff}`;
+      return isPrivateIpv4(v4);
+    }
+    return true;
+  }
+  return false;
 }
 
 function safeHttpsUrl(value, field, errors) {
@@ -295,7 +318,7 @@ function submitEvidence(input, options = {}) {
     original: value.original,
     review: null,
   };
-  const stored = putRecord(record, { filePath: options.storePath });
+  const stored = putRecord(record, { filePath: options.storePath, staleLockMs: options.staleLockMs });
   return { record: getSummary(stored.record), deduplicated: stored.deduplicated };
 }
 
@@ -351,7 +374,7 @@ function reviewEvidence(id, review, options = {}) {
     status: 'reviewed',
     updatedAt: reviewedAt,
     review: { decision: review.decision === 'approve' ? 'approved' : 'rejected', reviewer, note, reviewedAt },
-  }), { filePath: options.storePath });
+  }), { filePath: options.storePath, staleLockMs: options.staleLockMs });
   return getSummary(updated);
 }
 

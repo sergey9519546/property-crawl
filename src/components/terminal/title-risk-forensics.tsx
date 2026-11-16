@@ -58,10 +58,12 @@ export function TitleRiskForensics({
   source = "",
 }: TitleRiskForensicsProps) {
   const seniorDebtInputId = useId();
+  const assumedBidInputId = useId();
   const [foreclosingType, setForeclosingType] = useState<ForeclosingLienType>(() =>
     inferInitialLienType(plaintiff, seniorLienWarning, source)
   );
   const [assumedSeniorDebt, setAssumedSeniorDebt] = useState<string>("");
+  const [assumedBidInput, setAssumedBidInput] = useState<string>("");
   const [hasIrsLienOverride, setHasIrsLienOverride] = useState<boolean>(() => {
     const combined = `${seniorLienWarning || ""} ${source || ""}`.toLowerCase();
     return /(?:internal\s*revenue|\birs\b|federal\s*tax\s*lien|26\s*u\.?s\.?c\.?\s*§?\s*7425)/i.test(combined) || source === "irs";
@@ -72,16 +74,23 @@ export function TitleRiskForensics({
     ? parsedSeniorDebt
     : null;
 
-  const currentBid = typeof openingBid === "number" && Number.isFinite(openingBid) && openingBid > 0 ? openingBid : 100_000;
+  const publishedOpeningBid = typeof openingBid === "number" && Number.isFinite(openingBid) && openingBid > 0 ? openingBid : null;
+  const parsedAssumedBid = assumedBidInput.trim() ? Number(assumedBidInput) : null;
+  const validAssumedBid = typeof parsedAssumedBid === "number" && Number.isFinite(parsedAssumedBid) && parsedAssumedBid > 0
+    ? parsedAssumedBid
+    : null;
+  const currentBid = publishedOpeningBid ?? validAssumedBid;
   const currentJudgment = typeof judgment === "number" && Number.isFinite(judgment) && judgment > 0 ? judgment : currentBid;
 
-  const waterfall: LienWaterfallResult = computeLienWaterfall({
-    winningBid: currentBid,
-    foreclosingLienType: foreclosingType,
-    foreclosingLienAmount: currentJudgment,
-    seniorMortgageAmount: validSeniorDebt,
-    state,
-  });
+  const waterfall: LienWaterfallResult | null = currentBid !== null
+    ? computeLienWaterfall({
+        winningBid: currentBid,
+        foreclosingLienType: foreclosingType,
+        foreclosingLienAmount: currentJudgment ?? 0,
+        seniorMortgageAmount: validSeniorDebt,
+        state,
+      })
+    : null;
 
   const isJunior = foreclosingType === "second_mortgage" || foreclosingType === "mechanic_lien" || foreclosingType === "hoa_assessment";
   const isSuperPriorityState = HOA_SUPER_PRIORITY_STATES.has(state.toUpperCase());
@@ -117,7 +126,7 @@ export function TitleRiskForensics({
                 ? "bg-catch-wash text-catch-ink border-catch/40"
                 : calculatedRisk === "HIGH"
                 ? "bg-catch-wash text-catch-ink border-catch/30"
-                : "bg-go-wash text-go-fill border-go-fill/30"
+                : "bg-paper text-ink-2 border-line"
             }`}
           >
             {calculatedRisk === "CRITICAL" ? "Critical Title Defect" : calculatedRisk === "HIGH" ? "Elevated Title Risk" : "Standard Senior Position"}
@@ -215,7 +224,7 @@ export function TitleRiskForensics({
       )}
 
       {/* Waterfall & Effective Acquisition Cost Card */}
-      {waterfall.criticalAlert && (
+      {waterfall?.criticalAlert && (
         <div className="rounded-lg border border-catch/30 bg-catch-wash p-3 text-xs text-catch-ink space-y-1">
           <div className="flex items-center gap-1.5 font-bold">
             <AlertOctagon className="h-4 w-4 shrink-0" />
@@ -225,26 +234,61 @@ export function TitleRiskForensics({
         </div>
       )}
 
+      {/* Buyer-Assumed Winning Bid when published opening bid is absent */}
+      {publishedOpeningBid === null && (
+        <div className="rounded-lg border border-line bg-paper p-3 space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <label htmlFor={assumedBidInputId} className="font-bold text-ink text-xs">
+              Assumed Auction Winning Bid (Opening Bid Not Published):
+            </label>
+            <span className="text-xs text-ink-3">Zero-Fabrication: No synthetic bid assumed</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-bold text-ink-2">$</span>
+            <input
+              id={assumedBidInputId}
+              type="number"
+              min="1"
+              step="1000"
+              placeholder="Enter assumed winning bid ($)"
+              value={assumedBidInput}
+              onChange={(e) => setAssumedBidInput(e.target.value)}
+              className="w-full rounded-md border border-line bg-card px-3 py-1.5 text-xs text-ink font-semibold focus:outline-hidden focus:ring-1 focus:ring-ink"
+            />
+          </div>
+        </div>
+      )}
+
       {/* True Effective Acquisition Cost Callout */}
       <div className="rounded-lg border border-line bg-paper p-3 space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="font-bold text-ink text-xs">Total Effective Acquisition Capital:</span>
           <span className="text-sm font-bold text-ink">
-            {waterfall.totalEffectiveAcquisitionCost !== null
+            {currentBid === null
+              ? "Not published — supply winning bid assumption"
+              : waterfall?.totalEffectiveAcquisitionCost !== null && waterfall?.totalEffectiveAcquisitionCost !== undefined
               ? displayMoney(waterfall.totalEffectiveAcquisitionCost)
               : `${displayMoney(currentBid)} (Plus Unknown Surviving Debt)`}
           </span>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t border-line text-xs">
           <div>
-            <span className="text-ink-3 block">Auction Winning Bid Baseline:</span>
-            <span className="font-semibold text-ink">{displayMoney(currentBid)}</span>
+            <span className="text-ink-3 block">
+              {publishedOpeningBid !== null ? "Auction Winning Bid Baseline:" : "Buyer-Assumed Winning Bid:"}
+            </span>
+            <span className="font-semibold text-ink">
+              {currentBid !== null ? displayMoney(currentBid) : "Not published"}
+            </span>
           </div>
           <div>
             <span className="text-ink-3 block">Surviving Senior Liens to Satisfy:</span>
             <span className="font-semibold text-ink">
-              {waterfall.totalSurvivingDebtOnProperty !== null
+              {waterfall && waterfall.totalSurvivingDebtOnProperty !== null
                 ? displayMoney(waterfall.totalSurvivingDebtOnProperty)
+                : isJunior
+                ? (validSeniorDebt !== null ? displayMoney(validSeniorDebt) : "Unknown (Title Search Required)")
+                : currentBid === null
+                ? "$0 (Subordinate junior liens wiped)"
                 : "Unknown (Title Search Required)"}
             </span>
           </div>
@@ -273,7 +317,7 @@ export function TitleRiskForensics({
             </div>
             <p className="text-xs text-ink-3 leading-tight">
               {hasIrsLienOverride
-                ? "25-day formal IRS notice required. IRS retains a 120-day statutory right of redemption under 26 U.S.C. § 7425(d) to reimburse buyer at bid price plus interest."
+                ? "Verify proof of timely 25-day IRS certified-mail notice under 26 U.S.C. § 7425(b)(1) — lien survives foreclosure unless timely notice is confirmed. Even when discharged, IRS retains a 120-day redemption right under 26 U.S.C. § 7425(d)."
                 : "No IRS notice phrase detected; 120-day statutory redemption right does not apply."}
             </p>
           </div>
@@ -301,7 +345,7 @@ export function TitleRiskForensics({
 
       {/* Statutory Due Diligence Footer */}
       <div className="flex items-start gap-2 pt-1 text-xs text-ink-3 leading-tight">
-        <ShieldCheck className="h-4 w-4 shrink-0 text-go-fill mt-0.5" />
+        <ShieldCheck className="h-4 w-4 shrink-0 text-ink-2 mt-0.5" />
         <p>
           <strong>Zero-Fabrication Underwriting Standard:</strong> Priority determinations are statutory estimates based on petitioner naming conventions. Certified 40-year title examination by a licensed title insurer is required before bidding at any distressed judicial or non-judicial auction.
         </p>

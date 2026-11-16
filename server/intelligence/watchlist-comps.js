@@ -121,8 +121,9 @@ const WEIGHT_TYPE = 0.10;
 function scoreCandidate(target, candidate, distanceKm) {
   const prox = proximityScore(distanceKm);
   const size = sizeScore(target.sqft, candidate.sqft);
-  const price = safeBandPct(target.openingBid, PRICE_BAND_TOLERANCE)
-    * safeBandPct(candidate.openingBid, PRICE_BAND_TOLERANCE);
+  const price = (Number.isFinite(target.openingBid) && target.openingBid > 0 && Number.isFinite(candidate.openingBid) && candidate.openingBid > 0)
+    ? safeBandPct(candidate.openingBid / target.openingBid, PRICE_BAND_TOLERANCE)
+    : 0.5;
   const type = target.propType && candidate.propType && target.propType === candidate.propType ? 1 : 0;
   return prox * WEIGHT_PROXIMITY
     + size * WEIGHT_SIZE
@@ -152,6 +153,7 @@ function findWatchlistComps(target, pool, options = {}) {
   const targetLat = finiteOrNull(target.lat);
   const targetLng = finiteOrNull(target.lng);
   const targetZip = normalizedZip(target.zip);
+  const targetCity = typeof target.city === 'string' ? target.city.trim().toLowerCase() : '';
   const targetState = typeof target.state === 'string' ? target.state.trim().toUpperCase() : '';
   const sqftBand = Number.isFinite(options.sqftBand) ? Math.max(0.05, Math.min(1, options.sqftBand)) : DEFAULT_SQFT_BAND;
   const radiusKm = Number.isFinite(options.radiusKm) ? Math.max(0.5, options.radiusKm) : DEFAULT_RADIUS_KM;
@@ -159,6 +161,7 @@ function findWatchlistComps(target, pool, options = {}) {
   const limit = Number.isFinite(options.limit) ? Math.max(1, Math.min(50, options.limit)) : 8;
   const nowMs = Number.isFinite(options.nowMs) ? options.nowMs : Date.now();
 
+  let cityFallbackMatched = false;
   const candidates = [];
   for (const candidate of pool) {
     if (!candidate || candidate.id === target.id) continue;
@@ -183,9 +186,9 @@ function findWatchlistComps(target, pool, options = {}) {
     } else {
       // Neither side has usable geo. Same state + matching city is a weak
       // proxy; otherwise skip rather than fabricate proximity.
-      const targetCity = typeof target.city === 'string' ? target.city.trim().toLowerCase() : '';
       const candidateCity = typeof candidate.city === 'string' ? candidate.city.trim().toLowerCase() : '';
       passesGeo = Boolean(targetCity) && targetCity === candidateCity;
+      if (passesGeo) cityFallbackMatched = true;
     }
     if (!passesGeo) continue;
 
@@ -206,7 +209,9 @@ function findWatchlistComps(target, pool, options = {}) {
 
   if (comps.length === 0) {
     let reason = 'no_candidates_in_pool';
-    if (targetLat === null && !targetZip) reason = 'target_geocode_missing';
+    if ((targetLat === null || targetLng === null) && !targetZip && !cityFallbackMatched) {
+      reason = 'target_geocode_missing';
+    }
     return { target, comps, stats, reason };
   }
   return { target, comps, stats };

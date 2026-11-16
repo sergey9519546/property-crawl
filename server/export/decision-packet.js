@@ -1,11 +1,14 @@
-const { verifiedSnapshotReceipt } = require('../scrapers/discovery-snapshots');
 'use strict';
+
+const { verifiedSnapshotReceipt } = require('../scrapers/discovery-snapshots');
 
 const crypto = require('crypto');
 const { arbitrateTitleRisk } = require('../intelligence/title-risk-engine');
 const { computeCashToClose } = require('../ai/legal-rules');
 const { analyzeMunicipalViolations } = require('../intelligence/municipal-liens');
 const { getHudSafmrBenchmark } = require('../enrichment/hud-safmr');
+const { getStateHpiContext } = require('../enrichment/fhfa-state-hpi');
+const { getCountyMarketTrends } = require('../enrichment/macro-valuation-data');
 
 const CASH_FIELDS = [
   'registrationFunds',
@@ -43,6 +46,20 @@ function addDaysIso(baseDateStr, days) {
   const time = Date.parse(String(baseDateStr).slice(0, 10));
   if (!Number.isFinite(time)) return null;
   return new Date(time + days * 86400000).toISOString().slice(0, 10);
+}
+
+function isTaxSaleContext(params = {}) {
+  if (!params || typeof params !== 'object') return false;
+  if (params.isTaxSale === false) return false;
+  return Boolean(
+    params.isTaxSale ||
+    params.distressType === 'tax_sale' ||
+    params.auctionProgram === 'tax_deed' ||
+    params.auctionProgram === 'tax_sale' ||
+    (typeof params.source === 'string' && params.source.toLowerCase().includes('tax')) ||
+    (typeof params.program === 'string' && params.program.toLowerCase().includes('tax')) ||
+    (typeof params.notes === 'string' && /\btax\s*(?:deed|sale|lien|foreclosure)\b/i.test(params.notes))
+  );
 }
 
 function computeStatutoryDeadlinesAndCarry(params = {}) {
@@ -109,10 +126,36 @@ function computeStatutoryDeadlinesAndCarry(params = {}) {
     objectionLabel = 'AL 180-day residential homestead redemption (Ala. Code § 6-5-248)';
   }
 
+  const isTax = isTaxSaleContext(params);
   const irsRedemptionDays = params.hasIrsLien ? 120 : 0;
-  const stateRedemptionDays = Math.max(0, Math.round(Number(params.redemptionDays) || 0));
+  let stateRedemptionDays = Math.max(0, Math.round(Number(params.redemptionDays) || 0));
+  const redemptionUnset = params.redemptionDays === null || params.redemptionDays === undefined || params.redemptionDays === '';
+  if (stateRedemptionDays === 0 && redemptionUnset) {
+    if (st === 'AL' && params.isHomestead === false) {
+      stateRedemptionDays = 365;
+    } else if (isTax) {
+      if (st === 'TX') {
+        stateRedemptionDays = params.isHomestead ? 730 : 180;
+      } else if (['GA', 'TN', 'SC', 'IN', 'MO'].includes(st)) {
+        stateRedemptionDays = 365;
+      } else if (st === 'MD') {
+        stateRedemptionDays = 180;
+      } else if (st === 'AZ') {
+        stateRedemptionDays = 1095;
+      }
+    }
+  }
   const effectiveLockupDays = Math.max(objectionOrConfirmationDays, irsRedemptionDays, stateRedemptionDays);
-  const annualCostOfCapitalPct = Number.isFinite(Number(params.annualCostOfCapitalPct)) ? Number(params.annualCostOfCapitalPct) : 10;
+  const rawCostOfCapital = params.annualCostOfCapitalPct;
+  const hasCostOfCapital =
+    rawCostOfCapital !== null &&
+    rawCostOfCapital !== undefined &&
+    typeof rawCostOfCapital !== 'boolean' &&
+    (typeof rawCostOfCapital !== 'string' || rawCostOfCapital.trim() !== '');
+  const parsedCostOfCapital = hasCostOfCapital ? Number(rawCostOfCapital) : NaN;
+  const annualCostOfCapitalPct = Number.isFinite(parsedCostOfCapital) && parsedCostOfCapital >= 0
+    ? parsedCostOfCapital
+    : 10;
   const candidatePrice = params.purchasePrice !== undefined && params.purchasePrice !== null && params.purchasePrice !== ''
     ? params.purchasePrice
     : (params.maxAllowableOffer !== undefined && params.maxAllowableOffer !== null && params.maxAllowableOffer !== ''
@@ -144,6 +187,18 @@ function computeStatutoryDeadlinesAndCarry(params = {}) {
     ? Math.round(price * (annualCostOfCapitalPct / 100 / 12) + price * (effTaxRate / 12) + price * (insRatePer1000 / 1000 / 12))
     : null;
 
+  const rawHoldingMonths = params.holdingMonths;
+  const hasHoldingMonths =
+    rawHoldingMonths !== null &&
+    rawHoldingMonths !== undefined &&
+    typeof rawHoldingMonths !== 'boolean' &&
+    (typeof rawHoldingMonths !== 'string' || rawHoldingMonths.trim() !== '');
+  const parsedHoldingMonths = hasHoldingMonths ? Number(rawHoldingMonths) : NaN;
+  const holdingMonths = Number.isFinite(parsedHoldingMonths) && parsedHoldingMonths >= 0 ? parsedHoldingMonths : null;
+  const estimatedPlannedHoldingCost = monthlyHoldingCost !== null && holdingMonths !== null
+    ? Math.round(monthlyHoldingCost * holdingMonths)
+    : null;
+
   return {
     saleDateIso,
     objectionOrConfirmationDays,
@@ -162,6 +217,8 @@ function computeStatutoryDeadlinesAndCarry(params = {}) {
     totalHoldingCostCarry,
     monthlyHoldingCost,
     annualCostOfCapitalPct,
+    ...(typeof params.isHomestead === 'boolean' ? { isHomestead: params.isHomestead } : {}),
+    ...(holdingMonths !== null ? { holdingMonths, estimatedPlannedHoldingCost } : {}),
     ...(params.computedAt ? { computedAt: params.computedAt } : {})
   };
 }
@@ -187,9 +244,11 @@ function explicitNonNegative(value) {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
-function packetCash(listing, operatorInput) {
+function packetCash(listing, operatorInput = {}) {
   const openingBid = explicitPositive(listing.openingBid);
-  const input = { openingBid, purchasePrice: openingBid };
+  const customOpeningBid = explicitPositive(operatorInput.customOpeningBid);
+  const effectiveBid = customOpeningBid ?? openingBid;
+  const input = { openingBid: effectiveBid, purchasePrice: effectiveBid };
   for (const field of CASH_FIELDS) {
     if (!Object.prototype.hasOwnProperty.call(operatorInput, field)) continue;
     const amount = explicitNonNegative(operatorInput[field]);
@@ -231,16 +290,32 @@ function publishedRedemptionDays(listing) {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
-function municipalSurvivability(listing) {
-  if (!Array.isArray(listing.municipalViolations)) {
-    if (listing.codeEnforcement && typeof listing.codeEnforcement === 'object') {
-      const ce = listing.codeEnforcement;
+function resolveCodeEnforcementContext(listing = {}, operatorInput = {}) {
+  if (listing.codeEnforcement && typeof listing.codeEnforcement === 'object') return listing.codeEnforcement;
+  if (listing.dossier?.codeEnforcement && typeof listing.dossier.codeEnforcement === 'object') return listing.dossier.codeEnforcement;
+  if (operatorInput?.dossier?.codeEnforcement && typeof operatorInput.dossier.codeEnforcement === 'object') return operatorInput.dossier.codeEnforcement;
+  return null;
+}
+
+function resolveMunicipalViolations(listing = {}, operatorInput = {}) {
+  if (Array.isArray(listing.municipalViolations)) return listing.municipalViolations;
+  if (Array.isArray(listing.codeViolations)) return listing.codeViolations;
+  if (Array.isArray(listing.codeEnforcement?.violations)) return listing.codeEnforcement.violations;
+  if (Array.isArray(listing.dossier?.codeEnforcement?.violations)) return listing.dossier.codeEnforcement.violations;
+  if (Array.isArray(operatorInput?.dossier?.codeEnforcement?.violations)) return operatorInput.dossier.codeEnforcement.violations;
+  return null;
+}
+
+function municipalSurvivability(listing = {}, operatorInput = {}) {
+  const ce = resolveCodeEnforcementContext(listing, operatorInput);
+  const violations = resolveMunicipalViolations(listing, operatorInput);
+
+  if (!Array.isArray(violations)) {
+    if (ce) {
       return {
         hasCondemnationOrder: Boolean(ce.vacantBuildingNotice),
         estimatedSurvivingLiability: null,
-        activeViolationsCount: typeof ce.openViolationsCount === 'number'
-          ? ce.openViolationsCount
-          : (Array.isArray(ce.violations) ? ce.violations.length : 0),
+        activeViolationsCount: typeof ce.openViolationsCount === 'number' ? ce.openViolationsCount : 0,
         lastInspectionDate: ce.lastInspectionDate || null,
         criticalAlerts: ce.vacantBuildingNotice ? ['VACANT_BUILDING_NOTICE_ON_RECORD'] : [],
         source: ce.source || 'MUNICIPAL_OPEN_DATA'
@@ -253,12 +328,23 @@ function municipalSurvivability(listing) {
       criticalAlerts: []
     };
   }
-  const municipalRisk = analyzeMunicipalViolations(listing, listing.municipalViolations);
+
+  const municipalRisk = analyzeMunicipalViolations(listing, violations);
+  const alerts = Array.isArray(municipalRisk.municipalWarnings) ? [...municipalRisk.municipalWarnings] : [];
+  if (ce?.vacantBuildingNotice && !alerts.includes('VACANT_BUILDING_NOTICE_ON_RECORD')) {
+    alerts.push('VACANT_BUILDING_NOTICE_ON_RECORD');
+  }
+  const activeCount = violations.length === 0 && typeof ce?.openViolationsCount === 'number'
+    ? ce.openViolationsCount
+    : municipalRisk.activeViolationCount;
+
   return {
-    hasCondemnationOrder: municipalRisk.isCondemnedOrDemolitionRisk,
+    hasCondemnationOrder: Boolean(municipalRisk.isCondemnedOrDemolitionRisk || ce?.vacantBuildingNotice),
     estimatedSurvivingLiability: municipalRisk.estimatedSurvivingLienLiability,
-    activeViolationsCount: municipalRisk.activeViolationCount,
-    criticalAlerts: municipalRisk.municipalWarnings
+    activeViolationsCount: activeCount,
+    ...(ce?.lastInspectionDate ? { lastInspectionDate: ce.lastInspectionDate } : {}),
+    ...(ce?.source ? { source: ce.source } : {}),
+    criticalAlerts: alerts
   };
 }
 
@@ -288,8 +374,12 @@ function buildDecisionPacket(listing = {}, operatorInput = {}) {
   const county = listing.county || 'Unspecified County';
   const openingBid = explicitPositive(listing.openingBid);
 
-  // 1. Title Risk Arbitration
-  const titleRisk = arbitrateTitleRisk(listing);
+  // 1. Title Risk Arbitration (forward resolved dossier/codeEnforcement violations uniformly)
+  const resolvedViolations = resolveMunicipalViolations(listing, operatorInput);
+  const listingForTitle = (resolvedViolations && !Array.isArray(listing.municipalViolations))
+    ? { ...listing, municipalViolations: resolvedViolations }
+    : listing;
+  const titleRisk = arbitrateTitleRisk(listingForTitle);
 
   // 2. Cash requirement. State, source, and a published deposit never become fees.
   const cashToClose = packetCash(listing, operatorInput);
@@ -298,8 +388,52 @@ function buildDecisionPacket(listing = {}, operatorInput = {}) {
   // A missing list is not an empty docket, and the state code is not a violation.
 
   // 4. Valuation stays empty unless a caller attached a non-index, non-bid basis.
-  // The in-repo HPI table is not an official FHFA release and must not fill this slot.
+  // Observed statewide FHFA HPI appreciation context is exposed separately as
+  // non-dollar area trend telemetry (never imputed into property dollar bands).
   const macroValuation = attachedValuation(listing.macroValuation);
+  const hpiContext = state && state !== 'US' ? getStateHpiContext(state) : null;
+  const marketTrends = state && state !== 'US' ? getCountyMarketTrends(state, county) : null;
+  const hasCountyBenchmark = marketTrends?.source === 'PUBLIC_COUNTY_BENCHMARKS' && Boolean(marketTrends?.observed);
+  const fhfaHpiTrend = hpiContext ? {
+    valuationMethod: 'FHFA_HPI_TREND',
+    isAvmAppraisal: false,
+    basisType: 'AREA_HPI_TREND_ONLY',
+    state: hpiContext.state,
+    yoyPct: hpiContext.yoyPct,
+    quarterPct: hpiContext.quarterPct,
+    fiveYearPct: hpiContext.fiveYearPct,
+    since1991Pct: hpiContext.since1991Pct,
+    rank: hpiContext.rank,
+    marketTemperature: marketTrends?.marketTemperature ?? null,
+    trendLabel: marketTrends?.trendLabel ?? null,
+    marketTrendsSource: marketTrends?.source ?? null,
+    source: hasCountyBenchmark ? 'FHFA_STATE_HPI_SUMMARY + PUBLIC_COUNTY_BENCHMARKS' : 'FHFA_STATE_HPI_SUMMARY',
+    sourceUrl: hpiContext.sourceUrl,
+    retrievedAt: hpiContext.retrievedAt,
+    indexType: hpiContext.indexType,
+    disclaimer: hasCountyBenchmark
+      ? 'Observed statewide FHFA HPI appreciation and county benchmark trend context only. Not a per-property valuation or AVM.'
+      : 'Observed statewide FHFA HPI percent appreciation context only. Not a per-property valuation or AVM.'
+  } : hasCountyBenchmark ? {
+    valuationMethod: 'PUBLIC_COUNTY_BENCHMARKS',
+    isAvmAppraisal: false,
+    basisType: 'AREA_HPI_TREND_ONLY',
+    state: marketTrends.state,
+    county: marketTrends.county,
+    yoyPct: marketTrends.yoyPriceChangePct ?? null,
+    quarterPct: null,
+    fiveYearPct: null,
+    since1991Pct: null,
+    rank: null,
+    marketTemperature: marketTrends.marketTemperature ?? null,
+    trendLabel: marketTrends.trendLabel ?? null,
+    marketTrendsSource: 'PUBLIC_COUNTY_BENCHMARKS',
+    source: 'PUBLIC_COUNTY_BENCHMARKS',
+    sourceUrl: null,
+    retrievedAt: marketTrends.retrievedAt ?? null,
+    indexType: 'County Market Benchmark',
+    disclaimer: marketTrends.disclaimer || 'Observed county market trend context only. Not a per-property valuation or AVM.'
+  } : null;
 
   // 5. Source Provenance & Integrity Hash
   const rawProvenance = listing.provenance || {};
@@ -320,15 +454,48 @@ function buildDecisionPacket(listing = {}, operatorInput = {}) {
     ? operatorInput.disposition.trim().toUpperCase()
     : null;
   const maxAllowableOffer = explicitPositive(operatorInput.maxAllowableOffer);
+  const customValuation = explicitPositive(operatorInput.customValuation);
+  const customOpeningBid = explicitPositive(operatorInput.customOpeningBid);
+  const rawHoldingMonths = operatorInput.holdingMonths;
+  const hasHoldingMonths =
+    rawHoldingMonths !== null &&
+    rawHoldingMonths !== undefined &&
+    typeof rawHoldingMonths !== 'boolean' &&
+    (typeof rawHoldingMonths !== 'string' || rawHoldingMonths.trim() !== '');
+  const parsedHoldingMonths = hasHoldingMonths ? Number(rawHoldingMonths) : NaN;
+  const holdingMonths = Number.isFinite(parsedHoldingMonths) && parsedHoldingMonths >= 0 ? parsedHoldingMonths : null;
+  const isHomestead = typeof operatorInput.isHomestead === 'boolean'
+    ? operatorInput.isHomestead
+    : (typeof listing.isHomestead === 'boolean' ? listing.isHomestead : null);
+  const resolvedAuctionProgram = listing.auctionProgram || listing.provenance?.sourceFacts?.auctionProgram || null;
+  const resolvedIsTaxSale = typeof operatorInput.isTaxSale === 'boolean'
+    ? operatorInput.isTaxSale
+    : isTaxSaleContext({
+        isTaxSale: listing.isTaxSale,
+        distressType: listing.distressType,
+        auctionProgram: resolvedAuctionProgram,
+        program: listing.program,
+        source: listing.source,
+        notes: listing.notes,
+      });
   const packetTimestamp = new Date().toISOString();
   const hudSafmr = listing.hudSafmr || (listing.zip ? getHudSafmrBenchmark({ zip: listing.zip, bedrooms: listing.beds ?? 2 }) : null);
 
   const statutoryDeadlinesAndCarry = computeStatutoryDeadlinesAndCarry({
     saleDate: listing.saleDate || null,
     state,
-    purchasePrice: maxAllowableOffer || openingBid || null,
+    source: listing.source || null,
+    distressType: listing.distressType || null,
+    auctionProgram: resolvedAuctionProgram,
+    program: listing.program || null,
+    notes: listing.notes || null,
+    isTaxSale: resolvedIsTaxSale,
+    purchasePrice: maxAllowableOffer || customOpeningBid || openingBid || null,
     redemptionDays: publishedRedemptionDays(listing),
-    hasIrsLien: Boolean(titleRisk.irsTaxLienRedemption?.hasIrsLien || titleRisk.irsTaxLienRedemption?.hasLien)
+    hasIrsLien: Boolean(titleRisk.irsTaxLienRedemption?.hasIrsLien || titleRisk.irsTaxLienRedemption?.hasLien),
+    annualCostOfCapitalPct: operatorInput.annualCostOfCapitalPct,
+    ...(isHomestead !== null ? { isHomestead } : {}),
+    ...(holdingMonths !== null ? { holdingMonths } : {})
   });
 
   const packet = {
@@ -342,6 +509,10 @@ function buildDecisionPacket(listing = {}, operatorInput = {}) {
       address,
       city: listing.city || '',
       state,
+      source: listing.source || null,
+      ...(listing.distressType ? { distressType: listing.distressType } : {}),
+      ...(resolvedAuctionProgram ? { auctionProgram: resolvedAuctionProgram } : {}),
+      ...(resolvedIsTaxSale ? { isTaxSale: true } : {}),
       county,
       zip: listing.zip || '',
       propType: listing.propType || 'Unknown',
@@ -361,6 +532,10 @@ function buildDecisionPacket(listing = {}, operatorInput = {}) {
       targetMarginPct: Number(operatorInput.targetMargin) || 30,
       maxAllowableOffer: maxAllowableOffer || null,
       disposition: disposition || null,
+      customValuation: customValuation || null,
+      customOpeningBid: customOpeningBid || null,
+      holdingMonths,
+      isHomestead,
     },
     underwriting: {
       evidenceReceipt: verifiedSnapshotReceipt(listing),
@@ -382,7 +557,8 @@ function buildDecisionPacket(listing = {}, operatorInput = {}) {
       },
       statutoryDeadlinesAndCarry,
       cashToClose,
-      municipalSurvivability: municipalSurvivability(listing),
+      municipalSurvivability: municipalSurvivability(listing, operatorInput),
+      fhfaHpiTrend,
       macroValuation: macroValuation ? {
         estimatedMacroValue: macroValuation.estimatedMacroValue,
         estLow: macroValuation.estLow,
@@ -451,6 +627,16 @@ function formatDecisionPacketMarkdown(packet) {
     ? `\n- **Recorded Instrument Reference**: ${instrumentParts.join(' · ')}`
     : '';
   const openingLine = Number.isFinite(p.openingBid) ? `$${p.openingBid.toLocaleString()} (published opening amount)` : 'Not published';
+  const hpiSummaryLine = u.fhfaHpiTrend
+    ? `\n- **Observed ${u.fhfaHpiTrend.source === 'PUBLIC_COUNTY_BENCHMARKS' ? 'County Benchmark' : 'State FHFA HPI'} Trend (${u.fhfaHpiTrend.state})**: ${Number.isFinite(u.fhfaHpiTrend.yoyPct) ? `${u.fhfaHpiTrend.yoyPct >= 0 ? '+' : ''}${u.fhfaHpiTrend.yoyPct}% YoY` : 'YoY n/a'}${Number.isFinite(u.fhfaHpiTrend.fiveYearPct) ? ` (${u.fhfaHpiTrend.fiveYearPct >= 0 ? '+' : ''}${u.fhfaHpiTrend.fiveYearPct}% 5Y, ` : ' ('}\`${u.fhfaHpiTrend.source || u.fhfaHpiTrend.valuationMethod}\` — area trend context only, not a property appraisal)`
+    : '';
+  const extraAssumptionsLines = [
+    Number.isFinite(ua?.customValuation) ? `- **Buyer-Supplied Valuation Assumption**: $${Number(ua.customValuation).toLocaleString()} (unverified buyer assumption)` : null,
+    Number.isFinite(ua?.customOpeningBid) ? `- **Buyer-Supplied Opening Bid Assumption**: $${Number(ua.customOpeningBid).toLocaleString()}` : null,
+    Number.isFinite(ua?.holdingMonths) ? `- **Planned Holding Period**: ${ua.holdingMonths} months` : null,
+    typeof ua?.isHomestead === 'boolean' ? `- **Homestead Classification Assumption**: ${ua.isHomestead ? 'Homestead' : 'Non-Homestead'}` : null,
+  ].filter(Boolean).join('\n');
+  const extraAssumptionsBlock = extraAssumptionsLines ? `\n${extraAssumptionsLines}` : '';
 
   return `# FORECLOSURE DUE DILIGENCE DECISION PACKET
 **Packet ID**: \`${packet.packetId}\`  
@@ -511,12 +697,12 @@ ${ua ? `## 4. Underwriting Assumptions & Strategy
 - **Target Purchase Ceiling (MAO)**: ${Number.isFinite(ua.maxAllowableOffer) ? `$${ua.maxAllowableOffer.toLocaleString()}` : 'Not recorded'}
 - **Estimated Rehab Budget**: $${Number(ua.rehabBudget || 0).toLocaleString()}
 - **Target Profit Margin**: ${ua.targetMarginPct}%
-- **Disposition Recommendation**: \`${ua.disposition || 'Not recorded'}\`
+- **Disposition Recommendation**: \`${ua.disposition || 'Not recorded'}\`${extraAssumptionsBlock}
 
 ### Valuation Band
 ${u.macroValuation ? `- **Estimated Macro Range**: $${u.macroValuation.estLow.toLocaleString()} – $${u.macroValuation.estHigh.toLocaleString()} (Midpoint: $${u.macroValuation.estimatedMacroValue.toLocaleString()})
 - **Historical Basis**: ${u.macroValuation.basis.type} ($${u.macroValuation.basis.historicalValue.toLocaleString()})
-- *Honest Disclosure*: ${u.macroValuation.disclaimer}` : '- Valuation estimate band currently unavailable.'}
+- *Honest Disclosure*: ${u.macroValuation.disclaimer}` : '- Valuation estimate band currently unavailable.'}${hpiSummaryLine}
 ${packet.hudSafmr ? `
 ### HUD Fair Market Rent (SAFMR) Benchmark
 - **ZIP Code**: ${packet.hudSafmr.zip} (FY2025 Revised Section 8 FMR)
@@ -533,7 +719,7 @@ ${packet.hudSafmr ? `
 - *Statutory Citation*: 42 U.S.C. § 1437f(o)(1)(B); official HUD Small Area Fair Market Rent schedule.` : ''}` : `## 4. Valuation band
 ${u.macroValuation ? `- **Estimated Macro Range**: $${u.macroValuation.estLow.toLocaleString()} – $${u.macroValuation.estHigh.toLocaleString()} (Midpoint: $${u.macroValuation.estimatedMacroValue.toLocaleString()})
 - **Historical Basis**: ${u.macroValuation.basis.type} ($${u.macroValuation.basis.historicalValue.toLocaleString()})
-- *Honest Disclosure*: ${u.macroValuation.disclaimer}` : '- Valuation estimate band currently unavailable.'}
+- *Honest Disclosure*: ${u.macroValuation.disclaimer}` : '- Valuation estimate band currently unavailable.'}${hpiSummaryLine}
 ${packet.hudSafmr ? `
 ### HUD Fair Market Rent (SAFMR) Benchmark
 - **ZIP Code**: ${packet.hudSafmr.zip} (FY2025 Revised Section 8 FMR)

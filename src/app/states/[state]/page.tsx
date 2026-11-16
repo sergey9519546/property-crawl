@@ -1,5 +1,8 @@
 import Link from "next/link";
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
+import { cache } from "react";
+import { STATE_NAMES } from "@/lib/hero-market-suggestions";
 import {
   countyToSlug,
   getStatutoryRedemption,
@@ -10,15 +13,35 @@ import { serializeJsonLd } from "@/lib/json-ld";
 import { CountyRow, loadStateCounties as loadStateCountiesImpl } from "@/lib/state-coverage";
 import { Gavel, Scale, Calculator, AlertTriangle, ArrowLeft } from "lucide-react";
 
+const VALID_STATE_CODES = new Set(Object.keys(STATE_NAMES));
+
+function parseValidStateCode(raw?: string): string | null {
+  const code = typeof raw === "string" ? raw.trim().toUpperCase() : "";
+  return /^[A-Z]{2}$/.test(code) && VALID_STATE_CODES.has(code) ? code : null;
+}
+
+const getCachedStateCounties = cache(async (state: string) => loadStateCountiesImpl(state));
+
 export async function generateMetadata({ params }: { params: Promise<{ state: string }> }): Promise<Metadata> {
   const { state: raw } = await params;
-  const state = /^[A-Za-z]{2}$/.test(raw || "") ? raw.toUpperCase() : "US";
+  const state = parseValidStateCode(raw);
+  if (!state) {
+    return {
+      title: "State Not Found | PerfectProperty",
+      description: "Browse foreclosure and sheriff sale listings by recognized two-letter US state code.",
+      robots: { index: false, follow: false },
+    };
+  }
+  const { total, counties, error } = await loadStateCounties(state);
+  const stateName = STATE_NAMES[state] || state;
+  const isEmptyKnownState = total === 0 && counties.length === 0 && !error;
   const title = `${state} Foreclosure & Sheriff Sales | PerfectProperty`;
-  const description = `Browse ${state} sheriff sales, foreclosure auctions, and tax deed listings by county. Check statutory redemption rules and opening bids before you bid.`;
+  const description = `Browse ${stateName} (${state}) sheriff sales, foreclosure auctions, and tax deed listings by county. Check statutory redemption rules and opening bids before you bid.`;
   const canonicalUrl = `/states/${state}`;
   return {
     title,
     description,
+    ...(isEmptyKnownState ? { robots: { index: false, follow: false } } : {}),
     alternates: {
       canonical: canonicalUrl,
     },
@@ -49,31 +72,44 @@ export async function generateMetadata({ params }: { params: Promise<{ state: st
 export const dynamic = "force-dynamic";
 
 export async function loadStateCounties(state: string): Promise<{ total: number; counties: CountyRow[]; error: string | null }> {
-  return loadStateCountiesImpl(state);
+  return getCachedStateCounties(state);
 }
 
 export default async function StateCountiesPage({ params }: { params: Promise<{ state: string }> }) {
   const { state: raw } = await params;
-  const state = /^[A-Za-z]{2}$/.test(raw || "") ? raw.toUpperCase() : null;
+  const state = parseValidStateCode(raw);
 
   if (!state) {
-    return (
-      <main className="mx-auto max-w-3xl px-6 py-16">
-        <p className="text-label font-bold uppercase tracking-[0.14em] text-ink-3">Browse by state</p>
-        <h1 className="mt-2 text-3xl font-bold tracking-tight text-ink">We don&apos;t recognize that state</h1>
-        <p className="mt-4 text-sm leading-6 text-ink-3">Use a two-letter state code, like OH or FL.</p>
-        <Link href="/states" className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-ink underline">
-          <ArrowLeft className="h-4 w-4" /> All states
-        </Link>
-      </main>
-    );
+    notFound();
   }
 
   const { total, counties, error } = await loadStateCounties(state);
+  if (total === 0 && counties.length === 0 && !error) {
+    return (
+      <main className="mx-auto max-w-3xl px-6 py-16 text-ink">
+        <p className="text-label font-bold uppercase tracking-[0.14em] text-ink-3">Browse by state</p>
+        <h1 className="mt-2 text-3xl font-bold tracking-tight text-ink">
+          No active {STATE_NAMES[state] || state} ({state}) auctions indexed yet
+        </h1>
+        <p className="mt-4 text-sm leading-6 text-ink-3">
+          No live auction or distressed property inventory is currently active for {STATE_NAMES[state] || state}. Return to the state directory or search active markets.
+        </p>
+        <div className="mt-6 flex flex-wrap gap-4">
+          <Link href="/states" className="inline-flex items-center gap-2 text-sm font-semibold text-ink underline">
+            <ArrowLeft className="h-4 w-4" /> All states
+          </Link>
+          <Link href="/listings" className="text-sm font-semibold text-ink underline">
+            Browse all active listings
+          </Link>
+        </div>
+      </main>
+    );
+  }
   const redemption = getStatutoryRedemption(state);
   const hasRule = !redemption.label.startsWith("Statutory redemption details require");
   const feeSchedule = getStatutoryFeeSchedule(state);
 
+  const siteBaseUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.PUBLIC_APP_ORIGIN || "https://property-crawl.onrender.com").replace(/\/+$/, "");
   const breadcrumbsSchema = {
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
@@ -82,19 +118,19 @@ export default async function StateCountiesPage({ params }: { params: Promise<{ 
         "@type": "ListItem",
         position: 1,
         name: "Home",
-        item: "https://perfectproperty.org",
+        item: siteBaseUrl,
       },
       {
         "@type": "ListItem",
         position: 2,
         name: "States",
-        item: "https://perfectproperty.org/states",
+        item: `${siteBaseUrl}/states`,
       },
       {
         "@type": "ListItem",
         position: 3,
         name: state,
-        item: `https://perfectproperty.org/states/${state}`,
+        item: `${siteBaseUrl}/states/${state}`,
       },
     ],
   };

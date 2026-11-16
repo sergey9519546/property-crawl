@@ -638,11 +638,33 @@ function UnderwritePanel() {
           <DecisionLine icon={AlertTriangle} label="Deposit" value={<Fact value={listing?.deposit} />} />
           <DecisionLine icon={Calendar} label="Sale date" value={<Fact value={listing?.saleDate} format="date" />} />
         </div>
-        <div className="mt-auto rounded-control border border-catch/30 bg-catch/10 p-4">
-          <p className="text-label font-bold text-catch-ink">Occupancy</p>
-          <p className="mt-1 text-label leading-[1.5] text-white/75">
-            {factText(listing?.occupancy) ? `Occupancy: ${factText(listing?.occupancy)}.` : "The listing does not say if anyone lives there."}
-          </p>
+        <div className="mt-auto space-y-3">
+          <div className="rounded-control border border-catch/30 bg-catch/10 p-4">
+            <p className="text-label font-bold text-catch-ink">Occupancy</p>
+            <p className="mt-1 text-label leading-[1.5] text-white/75">
+              {factText(listing?.occupancy) ? `Occupancy: ${factText(listing?.occupancy)}.` : "The listing does not say if anyone lives there."}
+            </p>
+          </div>
+          <a
+            href={(() => {
+              const params = new URLSearchParams();
+              if (listing?.state && /^[A-Z]{2}$/i.test(listing.state.trim())) {
+                params.set("state", listing.state.trim().toUpperCase());
+              }
+              if (ceiling !== null && ceiling > 0) {
+                params.set("maxBid", String(Math.round(ceiling)));
+              }
+              if (assumed > 0) params.set("assumedValue", String(Math.round(assumed)));
+              if (repairs > 0) params.set("rehab", String(Math.round(repairs)));
+              if (carry > 0) params.set("carry", String(Math.round(carry)));
+              if (profit > 0) params.set("profit", String(Math.round(profit)));
+              const qs = params.toString();
+              return qs ? `/listings?${qs}` : "/listings";
+            })()}
+            className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-control bg-card px-4 text-label font-bold text-ink transition hover:bg-card/90"
+          >
+            Find matching deals in Workbench <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+          </a>
         </div>
       </article>
     </div>

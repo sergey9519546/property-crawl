@@ -161,6 +161,8 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
   const [dossier, setDossier] = useState<Dossier | null>(null);
   const [hazards, setHazards] = useState<any | null>(null);
   const [busy, setBusy] = useState(false);
+  const [showAllSignals, setShowAllSignals] = useState(false);
+  const [showAllFactors, setShowAllFactors] = useState(false);
   const [error, setError] = useState('');
   const generation = useRef(0);
   const publicRequest = useRef<AbortController | null>(null);
@@ -202,7 +204,8 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
 
   function exportDossier() {
     if (!dossier) return;
-    const url = URL.createObjectURL(new Blob([JSON.stringify(dossier, null, 2)], { type: 'application/json' }));
+    const payload = hazards ? { ...dossier, federalHazards: hazards } : dossier;
+    const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }));
     const anchor = document.createElement('a'); anchor.href = url; anchor.download = `property-dossier-${dossier.address.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 100)}.json`; anchor.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
@@ -241,7 +244,16 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
             </div>
           )}
           {dossier.signals.length || dossier.contradictions.length ? <div className="mt-3 space-y-4">
-            {dossier.signals.slice(0, 3).map((signal) => <div key={signal.id}><p className="text-sm font-semibold">{signal.title}</p><p className="mt-1 text-sm text-ink-3">{valueLabel(signal.before, signal.field)} <ArrowRight className="mx-1 inline" size={13} /> {valueLabel(signal.after, signal.field)}</p><p className="mt-1 text-xs text-ink-3">Observed {date(signal.observedAt)}. Confirm the current offering.</p></div>)}
+            {(showAllSignals ? dossier.signals : dossier.signals.slice(0, 3)).map((signal) => <div key={signal.id}><p className="text-sm font-semibold">{signal.title}</p><p className="mt-1 text-sm text-ink-3">{valueLabel(signal.before, signal.field)} <ArrowRight className="mx-1 inline" size={13} /> {valueLabel(signal.after, signal.field)}</p><p className="mt-1 text-xs text-ink-3">Observed {date(signal.observedAt)}. Confirm the current offering.</p></div>)}
+            {dossier.signals.length > 3 && (
+              <button
+                type="button"
+                onClick={() => setShowAllSignals((prev) => !prev)}
+                className="text-xs font-semibold text-ink underline underline-offset-2 hover:text-ink-2"
+              >
+                {showAllSignals ? "Show fewer changes" : `Show all ${dossier.signals.length} changes`}
+              </button>
+            )}
             {dossier.contradictions.map((item) => <div key={item.id}><p className="text-sm font-semibold">{item.title}</p><p className="mt-1 text-sm">Listing: {item.listingValue.toLocaleString()} {item.unit} · Parcel record: {item.publicRecordValue.toLocaleString()} {item.unit}</p><p className="mt-2 text-xs leading-6 text-ink-3">{item.explanation}</p><p className="mt-1 text-xs font-semibold">Next: {item.nextAction}</p></div>)}
           </div> : <p className="mt-2 text-sm leading-6 text-ink-3">{dossier.historyUnavailable ? 'Observation history is temporarily unavailable.' : dossier.history ? `${dossier.history.observations} source ${dossier.history.observations === 1 ? 'observation' : 'observations'} since ${date(dossier.history.firstObservedAt)}. No recorded changes or discrepancies found.` : 'No comparison history yet. Future source captures will show changes here.'}</p>}
         </div>
@@ -253,6 +265,59 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
           <div className="flex flex-wrap gap-3">{dossier.publicRecords.sources.map((source) => <a key={`${source.id}:${source.url}`} href={source.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-meta font-semibold text-ink underline hover:text-ink-2">{sourceDisplayText(source.label)}<ExternalLink size={11} /></a>)}</div>
         </div></details>}
         <DiscoveryEvidence evidence={dossier} documentsShown={documentsShown} />
+        {dossier.publicBenchmarks && (dossier.publicBenchmarks.assessorRoll || dossier.publicBenchmarks.impliedGrm != null || dossier.publicBenchmarks.evidenceAvailabilityRatio !== undefined) && (
+          <div className="rounded-control border border-line bg-paper p-4" data-testid="public-benchmarks-summary-card">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-bold text-ink">Benchmark Evidence &amp; Assessor Coverage</h3>
+              <span className="rounded-full border border-line bg-card px-2.5 py-0.5 text-xs font-semibold text-ink-2">
+                {Math.round((dossier.publicBenchmarks.evidenceAvailabilityRatio ?? 0) * 100)}% observed ({dossier.publicBenchmarks.availableSourceCount} sources)
+              </span>
+            </div>
+            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <div className="rounded-control border border-line bg-card p-2.5">
+                <span className="text-label font-bold uppercase text-ink-3">County Assessor Roll</span>
+                <p className="mt-1 text-sm font-bold text-ink">
+                  {dossier.publicBenchmarks.assessorRoll?.assessedValue != null
+                    ? `$${Math.round(dossier.publicBenchmarks.assessorRoll.assessedValue).toLocaleString()}`
+                    : 'Not observed'}
+                </p>
+                <p className="mt-0.5 text-xs text-ink-3">
+                  {dossier.publicBenchmarks.assessorRoll?.apn
+                    ? `APN ${dossier.publicBenchmarks.assessorRoll.apn}${dossier.publicBenchmarks.assessorRoll.county ? ` · ${dossier.publicBenchmarks.assessorRoll.county}` : ''}`
+                    : (dossier.publicBenchmarks.assessorRoll?.citation || 'Assessor valuation absent')}
+                </p>
+              </div>
+              <div className="rounded-control border border-line bg-card p-2.5">
+                <span className="text-label font-bold uppercase text-ink-3">Land / Improvements</span>
+                <p className="mt-1 text-sm font-bold text-ink">
+                  {dossier.publicBenchmarks.assessorRoll?.landValue != null || dossier.publicBenchmarks.assessorRoll?.improvementValue != null
+                    ? `${dossier.publicBenchmarks.assessorRoll?.landValue != null ? `$${Math.round(dossier.publicBenchmarks.assessorRoll.landValue).toLocaleString()}` : '—'} / ${dossier.publicBenchmarks.assessorRoll?.improvementValue != null ? `$${Math.round(dossier.publicBenchmarks.assessorRoll.improvementValue).toLocaleString()}` : '—'}`
+                    : 'Not itemized'}
+                </p>
+                <p className="mt-0.5 text-xs text-ink-3">
+                  {dossier.publicBenchmarks.benchmarkType || 'Public benchmark rollup'}
+                </p>
+              </div>
+              <div className="rounded-control border border-line bg-card p-2.5">
+                <span className="text-label font-bold uppercase text-ink-3">Implied GRM</span>
+                <p className="mt-1 text-sm font-bold text-ink">
+                  {dossier.publicBenchmarks.impliedGrm != null ? `${dossier.publicBenchmarks.impliedGrm}x` : 'N/A'}
+                </p>
+                <p className="mt-0.5 text-xs text-ink-3">
+                  Opening bid ÷ annualized SAFMR rent
+                </p>
+              </div>
+            </div>
+            {Array.isArray(dossier.publicBenchmarks.unobservedReasons) && dossier.publicBenchmarks.unobservedReasons.length > 0 && (
+              <details className="mt-2.5 text-xs text-ink-3">
+                <summary className="cursor-pointer font-semibold">Unobserved benchmark checks ({dossier.publicBenchmarks.unobservedReasons.length})</summary>
+                <ul className="mt-1.5 list-disc pl-4 space-y-0.5">
+                  {dossier.publicBenchmarks.unobservedReasons.map((reason) => <li key={reason}>{reason}</li>)}
+                </ul>
+              </details>
+            )}
+          </div>
+        )}
         {dossier.publicBenchmarks?.assessedTrajectory && (
           <div className="rounded-control border border-line bg-paper p-4" data-testid="hpi-trajectory-card">
             <div className="flex items-center justify-between">
@@ -268,7 +333,7 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
             </p>
             <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
               <div className="rounded-control border border-line bg-card p-2.5">
-                <span className="text-meta font-bold uppercase text-ink-3">Baseline HPI</span>
+                <span className="text-label font-bold uppercase text-ink-3">Baseline HPI</span>
                 <p className="mt-1 text-sm font-bold text-ink">
                   {dossier.publicBenchmarks.assessedTrajectory.baselineHpi}
                 </p>
@@ -277,7 +342,7 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
                 </p>
               </div>
               <div className="rounded-control border border-line bg-card p-2.5">
-                <span className="text-meta font-bold uppercase text-ink-3">Current Observed HPI</span>
+                <span className="text-label font-bold uppercase text-ink-3">Current Observed HPI</span>
                 <p className="mt-1 text-sm font-bold text-ink">
                   {dossier.publicBenchmarks.assessedTrajectory.currentHpi}
                 </p>
@@ -286,7 +351,7 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
                 </p>
               </div>
               <div className="rounded-control border border-line bg-card p-2.5">
-                <span className="text-meta font-bold uppercase text-ink-3">HPI-Indexed Assessed Value</span>
+                <span className="text-label font-bold uppercase text-ink-3">HPI-Indexed Assessed Value</span>
                 <p className="mt-1 text-sm font-bold text-yours">
                   ${Math.round(dossier.publicBenchmarks.assessedTrajectory.hpiAdjustedAssessedValue).toLocaleString()}
                 </p>
@@ -306,7 +371,7 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
               <h3 className="text-sm font-bold text-ink">
                 FHFA Statewide Macro HPI Context · {dossier.publicBenchmarks.stateMacroHpi.state}
               </h3>
-              <span className="rounded-full border border-line bg-surface px-2 py-0.5 text-xs font-semibold text-ink-2">
+              <span className="rounded-full border border-line bg-card px-2 py-0.5 text-xs font-semibold text-ink-2">
                 Official Summary
               </span>
             </div>
@@ -328,7 +393,7 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
               </div>
               <div className="rounded-control border border-line bg-card p-2 text-center">
                 <span className="text-xs font-bold uppercase text-ink-3">Since 1991</span>
-                <p className="mt-0.5 text-sm font-bold text-yours">+{dossier.publicBenchmarks.stateMacroHpi.since1991Pct}%</p>
+                <p className="mt-0.5 text-sm font-bold text-ink">+{dossier.publicBenchmarks.stateMacroHpi.since1991Pct}%</p>
               </div>
             </div>
           </div>
@@ -337,7 +402,7 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
           <div className="rounded-control border border-line bg-paper p-4">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-ink">HUD Historical Rent Benchmark · ZIP {dossier.hudSafmr.zip}</h3>
-              <span className="rounded-full border border-line bg-surface px-2 py-0.5 text-xs font-semibold text-ink-2">
+              <span className="rounded-full border border-line bg-card px-2 py-0.5 text-xs font-semibold text-ink-2">
                 FY2025 SAFMR
               </span>
             </div>
@@ -346,7 +411,7 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
             </p>
             <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
               {(['0br', '1br', '2br', '3br', '4br'] as const).map((br) => (
-                <div key={br} className="rounded-control border border-line/60 bg-surface/50 p-2 text-center">
+                <div key={br} className="rounded-control border border-line bg-card p-2 text-center">
                   <span className="text-xs font-bold uppercase text-ink-3">{br.toUpperCase()}</span>
                   <p className="mt-0.5 text-sm font-bold text-ink">
                     ${(dossier.hudSafmr?.rents?.[br] ?? 0).toLocaleString()}
@@ -377,7 +442,7 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
             </p>
             <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
               <div className="rounded-control border border-line bg-card p-2.5">
-                <span className="text-meta font-bold uppercase text-ink-3">FEMA Flood Zone</span>
+                <span className="text-label font-bold uppercase text-ink-3">FEMA Flood Zone</span>
                 <p className="mt-1 text-sm font-bold text-ink">
                   {hazards.layers?.femaFlood?.floodRisk?.zone || (hazards.layers?.femaFlood?.status === 'unavailable' ? 'Unavailable' : 'Zone X')}
                 </p>
@@ -386,7 +451,7 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
                 </p>
               </div>
               <div className="rounded-control border border-line bg-card p-2.5">
-                <span className="text-meta font-bold uppercase text-ink-3">EPA Environmental</span>
+                <span className="text-label font-bold uppercase text-ink-3">EPA Environmental</span>
                 <p className="mt-1 text-sm font-bold text-ink capitalize">
                   {hazards.layers?.epaHazard?.environmentalLiability?.liabilityTier || (hazards.layers?.epaHazard?.status === 'unavailable' ? 'Unavailable' : 'Clean')}
                 </p>
@@ -395,7 +460,7 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
                 </p>
               </div>
               <div className="rounded-control border border-line bg-card p-2.5">
-                <span className="text-meta font-bold uppercase text-ink-3">USGS Terrain Slope</span>
+                <span className="text-label font-bold uppercase text-ink-3">USGS Terrain Slope</span>
                 <p className="mt-1 text-sm font-bold text-ink">
                   {hazards.layers?.usgsTerrain?.status === 'unavailable' ? 'N/A' : `${hazards.layers?.usgsTerrain?.slopeAnalysis?.slopePct ?? 0}% Grade`}
                 </p>
@@ -412,7 +477,7 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
               <h3 className="text-sm font-bold text-ink">
                 Auction Escrow &amp; Deposit · {humanize(dossier.auctionDepositTerms.rules.platform || 'Judicial Sheriff')}
               </h3>
-              <span className="rounded-full border border-line bg-surface px-2 py-0.5 text-xs font-semibold text-ink-2">
+              <span className="rounded-full border border-line bg-card px-2 py-0.5 text-xs font-semibold text-ink-2">
                 {dossier.auctionDepositTerms.requiredDeposit?.depositPercent
                   ? `${Math.round(dossier.auctionDepositTerms.requiredDeposit.depositPercent * 100)}% Deposit`
                   : 'Statutory Floor'}
@@ -423,7 +488,7 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
             </p>
             <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
               <div className="rounded-control border border-line bg-card p-2.5">
-                <span className="text-meta font-bold uppercase text-ink-3">Required Deposit</span>
+                <span className="text-label font-bold uppercase text-ink-3">Required Deposit</span>
                 <p className="mt-1 text-sm font-bold text-ink">
                   {dossier.auctionDepositTerms.requiredDeposit?.requiredDeposit != null
                     ? `$${dossier.auctionDepositTerms.requiredDeposit.requiredDeposit.toLocaleString()}`
@@ -434,7 +499,7 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
                 </p>
               </div>
               <div className="rounded-control border border-line bg-card p-2.5">
-                <span className="text-meta font-bold uppercase text-ink-3">Payment Method</span>
+                <span className="text-label font-bold uppercase text-ink-3">Payment Method</span>
                 <p className="mt-1 text-sm font-bold text-ink capitalize">
                   {(dossier.auctionDepositTerms.requiredDeposit?.paymentMethod || dossier.auctionDepositTerms.rules.paymentMethod || 'cashier_check').replace(/_/g, ' ')}
                 </p>
@@ -443,7 +508,7 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
                 </p>
               </div>
               <div className="rounded-control border border-line bg-card p-2.5">
-                <span className="text-meta font-bold uppercase text-ink-3">Settlement &amp; Refund</span>
+                <span className="text-label font-bold uppercase text-ink-3">Settlement &amp; Refund</span>
                 <p className="mt-1 text-sm font-bold text-ink">
                   {dossier.auctionDepositTerms.rules.settlementWindowDays ?? 30}-day window
                 </p>
@@ -452,6 +517,11 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
                 </p>
               </div>
             </div>
+            {dossier.auctionDepositTerms.rules.forfeitureRiskTerms && (
+              <p className="mt-2 rounded border border-catch/30 bg-catch-wash px-2.5 py-1.5 text-xs text-catch-ink">
+                <strong>Forfeiture &amp; default terms:</strong> {dossier.auctionDepositTerms.rules.forfeitureRiskTerms}
+              </p>
+            )}
             {dossier.auctionDepositTerms.rules.statutoryCitation && (
               <p className="mt-2 text-label text-ink-3">
                 Citation: {dossier.auctionDepositTerms.rules.statutoryCitation}
@@ -465,7 +535,7 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
               <h3 className="text-sm font-bold text-ink">
                 Post-Sale Possession &amp; Title Timelines
               </h3>
-              <span className="rounded-full border border-line bg-surface px-2 py-0.5 text-xs font-semibold text-ink-2">
+              <span className="rounded-full border border-line bg-card px-2 py-0.5 text-xs font-semibold text-ink-2">
                 {dossier.possessionTimeline.state || 'Statutory'} Jurisdiction
               </span>
             </div>
@@ -474,7 +544,7 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
             </p>
             <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
               <div className="rounded-control border border-line bg-card p-2.5">
-                <span className="text-meta font-bold uppercase text-ink-3">Quiet Title Action</span>
+                <span className="text-label font-bold uppercase text-ink-3">Quiet Title Action</span>
                 <p className="mt-1 text-sm font-bold text-ink">
                   {dossier.possessionTimeline.quietTitle?.minDays != null
                     ? `${dossier.possessionTimeline.quietTitle.minDays}–${dossier.possessionTimeline.quietTitle.maxDays} days`
@@ -485,7 +555,7 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
                 </p>
               </div>
               <div className="rounded-control border border-line bg-card p-2.5">
-                <span className="text-meta font-bold uppercase text-ink-3">Writ of Possession</span>
+                <span className="text-label font-bold uppercase text-ink-3">Writ of Possession</span>
                 <p className="mt-1 text-sm font-bold text-ink">
                   {dossier.possessionTimeline.writOfPossession?.minDays != null
                     ? `${dossier.possessionTimeline.writOfPossession.minDays}–${dossier.possessionTimeline.writOfPossession.maxDays} days`
@@ -496,7 +566,7 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
                 </p>
               </div>
               <div className="rounded-control border border-line bg-card p-2.5">
-                <span className="text-meta font-bold uppercase text-ink-3">Holding Carry Cost</span>
+                <span className="text-label font-bold uppercase text-ink-3">Holding Carry Cost</span>
                 <p className="mt-1 text-sm font-bold text-ink">
                   {dossier.possessionTimeline.carryCost?.totalEstimatedCost != null
                     ? `$${dossier.possessionTimeline.carryCost.totalEstimatedCost.toLocaleString()}`
@@ -517,7 +587,7 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
               <h3 className="text-sm font-bold text-ink">Auction Proceed Probability &amp; Microstructure</h3>
               <span className={cn(
                 "rounded-full border px-2 py-0.5 text-xs font-semibold",
-                dossier.auctionMicrostructure.probability != null && dossier.auctionMicrostructure.probability >= 0.7 ? "border-go/40 bg-go-wash text-go" :
+                dossier.auctionMicrostructure.probability != null && dossier.auctionMicrostructure.probability >= 0.7 ? "border-line-strong bg-card text-ink-2" :
                 dossier.auctionMicrostructure.probability != null && dossier.auctionMicrostructure.probability <= 0.4 ? "border-catch/40 bg-catch-wash text-catch-ink" :
                 "border-line bg-card text-ink-2"
               )}>
@@ -534,13 +604,26 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
                 Statutory Context ({dossier.auctionMicrostructure.statutoryContext.state}): {dossier.auctionMicrostructure.statutoryContext.rule}
               </p>
             )}
+            {dossier.auctionMicrostructure.factors && dossier.auctionMicrostructure.factors.length > 3 && (
+              <div className="mt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAllFactors((prev) => !prev)}
+                  className="text-xs font-semibold text-ink underline underline-offset-2 hover:text-ink-2"
+                >
+                  {showAllFactors
+                    ? "Show top 3 factors"
+                    : `Show all ${dossier.auctionMicrostructure.factors.length} factors`}
+                </button>
+              </div>
+            )}
             {dossier.auctionMicrostructure.factors && dossier.auctionMicrostructure.factors.length > 0 && (
               <div className="mt-2 space-y-1">
-                {dossier.auctionMicrostructure.factors.slice(0, 3).map((f, i) => (
+                {(showAllFactors ? dossier.auctionMicrostructure.factors : dossier.auctionMicrostructure.factors.slice(0, 3)).map((f, i) => (
                   <div key={i} className="flex items-center gap-2 text-xs text-ink-3">
                     <span className={cn(
                       "font-semibold",
-                      f.impact === 'positive' ? "text-go" : "text-catch-ink"
+                      f.impact === 'positive' ? "text-ink" : "text-catch-ink"
                     )}>
                       {f.impact === 'positive' ? '▲' : '▼'} {f.weight > 0 ? `+${(f.weight * 100).toFixed(0)}%` : `${(f.weight * 100).toFixed(0)}%`}
                     </span>
@@ -555,7 +638,7 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
           <div className="rounded-control border border-line bg-paper p-4" data-testid="surplus-waterfall-card">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-ink">Excess Proceeds Waterfall</h3>
-              <span className="rounded-full border border-line bg-surface px-2 py-0.5 text-xs font-semibold text-ink-2">
+              <span className="rounded-full border border-line bg-card px-2 py-0.5 text-xs font-semibold text-ink-2">
                 Tyler v. Hennepin County (2023)
               </span>
             </div>
@@ -564,7 +647,7 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
             </p>
             <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
               <div className="rounded-control border border-line bg-card p-2.5">
-                <span className="text-meta font-bold uppercase text-ink-3">Adjudged Debt</span>
+                <span className="text-label font-bold uppercase text-ink-3">Adjudged Debt</span>
                 <p className="mt-1 text-sm font-bold text-ink">
                   {dossier.surplusWaterfall.adjudgedDebtSatisfied != null
                     ? `$${Math.round(dossier.surplusWaterfall.adjudgedDebtSatisfied).toLocaleString()}`
@@ -577,7 +660,7 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
                 </p>
               </div>
               <div className="rounded-control border border-line bg-card p-2.5">
-                <span className="text-meta font-bold uppercase text-ink-3">Junior Lien Claims</span>
+                <span className="text-label font-bold uppercase text-ink-3">Junior Lien Claims</span>
                 <p className="mt-1 text-sm font-bold text-ink">
                   {dossier.surplusWaterfall.allocatedJuniorClaims != null
                     ? `$${Math.round(dossier.surplusWaterfall.allocatedJuniorClaims).toLocaleString()}`
@@ -590,17 +673,22 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
                 </p>
               </div>
               <div className="rounded-control border border-line bg-card p-2.5">
-                <span className="text-meta font-bold uppercase text-ink-3">Former Owner Equity</span>
+                <span className="text-label font-bold uppercase text-ink-3">Former Owner Equity</span>
                 <p className="mt-1 text-sm font-bold text-ink">
                   {dossier.surplusWaterfall.formerOwnerEquity != null
                     ? `$${Math.round(dossier.surplusWaterfall.formerOwnerEquity).toLocaleString()}`
                     : '$0'}
                 </p>
                 <p className="mt-0.5 text-xs text-ink-3">
-                  Protected surplus equity
+                  Protected surplus equity{dossier.surplusWaterfall.grossSurplus != null ? ` (gross surplus $${Math.round(dossier.surplusWaterfall.grossSurplus).toLocaleString()})` : ''}
                 </p>
               </div>
             </div>
+            {dossier.surplusWaterfall.constitutionalBasis && (
+              <p className="mt-2.5 text-xs text-ink-3">
+                <strong className="text-ink-2">{dossier.surplusWaterfall.constitutionalBasis.landmarkCase}</strong> ({dossier.surplusWaterfall.constitutionalBasis.constitutionalClause}): {dossier.surplusWaterfall.constitutionalBasis.holding}
+              </p>
+            )}
           </div>
         )}
         {dossier.opportunitySignals && dossier.opportunitySignals.length > 0 && (
@@ -628,12 +716,12 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
                 <div className="flex flex-wrap items-center gap-2">
                   <h4 className="text-sm font-semibold">{gap.title}</h4>
                   {gap.priorityTier === 'critical_risk' && (
-                    <span className="rounded-full border border-catch/30 bg-catch-wash px-2 py-0.5 text-meta font-bold uppercase tracking-wide text-catch-ink">
+                    <span className="rounded-full border border-catch/30 bg-catch-wash px-2 py-0.5 text-label font-bold uppercase tracking-wide text-catch-ink">
                       Critical Risk
                     </span>
                   )}
                   {gap.priorityTier === 'high_leverage' && (
-                    <span className="rounded-full border border-line-strong bg-paper px-2 py-0.5 text-meta font-bold uppercase tracking-wide text-ink-2">
+                    <span className="rounded-full border border-line-strong bg-paper px-2 py-0.5 text-label font-bold uppercase tracking-wide text-ink-2">
                       High Leverage
                     </span>
                   )}

@@ -241,3 +241,27 @@ test('validateSubmission: happy path for a minimal text submission', () => {
   assert.deepEqual(r.errors, []);
   assert.ok(r.value.capturedAt);
 });
+
+
+test('validateSubmission: rejects private, loopback, ULA, link-local, multicast, and zone-scoped IPv6 URLs', () => {
+  const blockedUrls = [
+    'https://[::1]/x',
+    'https://[0:0:0:0:0:0:0:1]/x',
+    'https://[::ffff:127.0.0.1]/x',
+    'https://[::ffff:7f00:1]/x',
+    'https://[fc00::1]/x',
+    'https://[fd12:3456::1]/x',
+    'https://[fe80::1]/x',
+    'https://[fe80::1%25eth0]/x',
+    'https://[ff02::1]/x',
+  ];
+  for (const sourceUrl of blockedUrls) {
+    const r = validateSubmission({
+      sourceId: 'civilview',
+      kind: 'text',
+      body: 'plain text',
+      sourceUrl,
+    });
+    assert.equal(r.isValid, false, `Expected private/local URL to be rejected: ${sourceUrl}`);
+  }
+});

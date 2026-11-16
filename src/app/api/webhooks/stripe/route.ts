@@ -96,6 +96,19 @@ export async function POST(request: Request) {
   } else if (typeof event?.type === "string" && event.type.startsWith("customer.subscription.")) {
     // Events can arrive out of order; the live subscription is the truth.
     state = subscriptionState((await getSubscription(object.id)) || object);
+  } else if (event?.type === "invoice.payment_failed") {
+    const subscriptionId = typeof object.subscription === "string" ? object.subscription : object.subscription?.id;
+    const liveSub = subscriptionId ? await getSubscription(subscriptionId) : null;
+    state = subscriptionState(liveSub);
+    if (!state && typeof object.customer === "string" && object.customer) {
+      state = {
+        customerId: object.customer,
+        subscriptionId: subscriptionId || null,
+        status: "past_due",
+        currentPeriodEnd: null,
+        accountId: object.subscription_details?.metadata?.account_id || object.metadata?.account_id || null,
+      };
+    }
   }
 
   if (!state) {

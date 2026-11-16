@@ -75,7 +75,7 @@ function evaluateDuplicateMatch(a, b) {
   const countyA = String(a.county || '').toUpperCase();
   const countyB = String(b.county || '').toUpperCase();
 
-  if (apnA && apnB && apnA === apnB && stateA === stateB) {
+  if (apnA && apnB && apnA === apnB && stateA === stateB && countyA === countyB) {
     return {
       isMatch: true,
       confidence: 1.0,
@@ -203,8 +203,8 @@ function extractDocketNotice(listing) {
 function mergeClusterGroup(group) {
   // Sort by completeness and observation recency
   const sorted = [...group].sort((a, b) => {
-    const scoreA = (a.imageUrl ? 2 : 0) + (a.openingBid ? 1 : 0) + (a.sqft ? 1 : 0);
-    const scoreB = (b.imageUrl ? 2 : 0) + (b.openingBid ? 1 : 0) + (b.sqft ? 1 : 0);
+    const scoreA = ((a.photo || a.imageUrl) ? 2 : 0) + (a.openingBid ? 1 : 0) + (a.sqft ? 1 : 0);
+    const scoreB = ((b.photo || b.imageUrl) ? 2 : 0) + (b.openingBid ? 1 : 0) + (b.sqft ? 1 : 0);
     return scoreB - scoreA;
   });
 

@@ -586,6 +586,11 @@ class CivilViewScraper extends BaseScraper {
             : `No CivilView counties found for ${this.targetState}`);
       }
 
+      if (ordered.length === 1 && (this.countyId || this.extraCountyIds.length === 1 || rotationTotal === 1)) {
+        report.county = ordered[0].name || null;
+        report.state = ordered[0].state || this.targetState || null;
+      }
+
       const emitted = [];
       const seenPropertyIds = new Set();
       let remainingDetailBudget = this.maxDetailPages;
@@ -664,7 +669,7 @@ class CivilViewScraper extends BaseScraper {
           });
         }
 
-        if (report.failures.length === failuresBefore && discoveredCounty && Array.isArray(discoveredCounty.summaries) && discoveredCounty.summaries.length > 0) {
+        if (report.failures.length === failuresBefore && discoveredCounty && Array.isArray(discoveredCounty.summaries)) {
           report.completedCounties.push({
             state: county.state,
             county: county.name,
@@ -704,9 +709,14 @@ class CivilViewScraper extends BaseScraper {
       // cursor and feeds it to setCheckpoint before the next scrapeFeed. A null
       // token means the window already covered every county, so the rotation
       // restarts from the priority list rather than staying wedged.
-      report.nextContinuationToken = rotationTotal > this.maxCounties
-        ? String((this.countyRotationOffset + this.maxCounties) % rotationTotal)
-        : null;
+      if (rotationTotal > this.maxCounties) {
+        const nextOffset = (this.countyRotationOffset + this.maxCounties) % rotationTotal;
+        this.countyRotationOffset = nextOffset;
+        report.nextContinuationToken = String(nextOffset);
+      } else {
+        if (rotationTotal > 0) this.countyRotationOffset = 0;
+        report.nextContinuationToken = null;
+      }
       const stoppedAtCountyCap = rotationTotal > this.maxCounties;
       const stoppedAtDetailCap = report.unattemptedSummaries > 0;
       report.partialSweep = Boolean(stoppedAtCountyCap || stoppedAtDetailCap);
@@ -935,13 +945,16 @@ class CivilViewScraper extends BaseScraper {
         : null;
     const judgment = parseExecutionAmount(description);
     let occupancy = this.parseOccupancy(propertyNote) || this.parseOccupancy(description);
-    if (!occupancy && typeof this.extractWithAdaptiveFallback === 'function') {
-      const adaptive = this.extractWithAdaptiveFallback(html, {
-        caseNumber: { selector: '.sale-detail-value', extractor: (h) => (h.match(/Sheriff\s*#:[^<]*<span[^>]*class="sale-detail-value"[^>]*>([^<]+)<\/span>/i)?.[1]?.trim() || sheriffNumber || null) },
-        occupancyStatus: { selector: '.occupancy', extractor: (h) => (h.match(/(?:occupancy|status)[\s:]*(occupied|vacant|unknown)/i)?.[1] || null) },
-      }, { persistSelectors: false });
-      if (adaptive && adaptive.identityPassed && adaptive.fields.occupancyStatus) {
-        occupancy = adaptive.fields.occupancyStatus.toUpperCase();
+    if (!occupancy) {
+      const htmlStr = String(html || '');
+      const occElMatch =
+        htmlStr.match(/class=["'][^"']*\boccupancy\b[^"']*["'][^>]*>\s*([^<]+)/i) ||
+        htmlStr.match(/occupancy(?:\s+status)?\s*[:<][^A-Za-z0-9]*(owner[ -]?occupied|tenant[ -]?occupied|unoccupied|vacant|occupied|unknown)/i);
+      if (occElMatch?.[1]) {
+        const directToken = occElMatch[1].match(/\b(OWNER[ -]?OCCUPIED|TENANT[ -]?OCCUPIED|UNOCCUPIED|VACANT|OCCUPIED|UNKNOWN)\b/i);
+        if (directToken) {
+          occupancy = directToken[1].toUpperCase().replace('-', ' ');
+        }
       }
     }
     const statusHistory = parseStatusHistory(html);

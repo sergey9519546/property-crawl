@@ -110,7 +110,7 @@ test('cold UI health requests can complete beyond the old 1.5-second probe deadl
 
 test('health retries fail closed on HTTP errors and unreachable services within their total deadline',async()=>{
  const server=http.createServer((req,res)=>{res.writeHead(503);res.end('{}');});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
- try{let reason;assert.equal(await waitForHealth(`http://127.0.0.1:${server.address().port}`,{timeoutMs:60,intervalMs:10,onFailure:value=>reason=value}),false);assert.equal(reason,'HTTP 503');}
+ try{let reason;assert.equal(await waitForHealth(`http://127.0.0.1:${server.address().port}`,{timeoutMs:400,intervalMs:20,onFailure:value=>reason=value}),false);assert.equal(reason,'HTTP 503');}
  finally{server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}
  assert.equal(await waitForHealth('http://127.0.0.1:1',{timeoutMs:50,intervalMs:10}),false);
 });

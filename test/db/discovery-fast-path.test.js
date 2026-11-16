@@ -769,3 +769,96 @@ test('pgSearch caches facet counts by (revision, filter) and invalidates when re
     fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
   }
 });
+
+test('email_notice origin counts as observed freshness and top-level transaction_outcome counts as terminal across memory, accelerated PG, and non-accelerated SQL', { timeout: BOOT_TIMEOUT_MS }, async () => {
+  const emailNoticeListing = {
+    id: 'fast:email-notice-observed',
+    source: 'sheriff',
+    state: 'OH',
+    county: 'Cuyahoga',
+    city: 'Cleveland',
+    zip: '44114',
+    address: '101 Notice Way, Cleveland, OH 44114',
+    openingBid: 85000,
+    dealScore: 72,
+    status: 'active',
+    provenance: { origin: 'email_notice', observed: true, recordId: 'EMAIL-101' },
+  };
+  const outcomeTerminalListing = {
+    id: 'fast:tx-outcome-terminal',
+    source: 'sheriff',
+    state: 'OH',
+    county: 'Cuyahoga',
+    city: 'Cleveland',
+    zip: '44114',
+    address: '202 Outcome Ave, Cleveland, OH 44114',
+    openingBid: 80000,
+    dealScore: 95,
+    status: 'active',
+    transactionOutcome: 'Sold to plaintiff at sheriff sale',
+    provenance: { origin: 'live', observed: true, recordId: 'TX-202' },
+  };
+  const activeHighScoreListing = {
+    id: 'fast:active-for-outcome-sort',
+    source: 'hud',
+    state: 'OH',
+    county: 'Cuyahoga',
+    city: 'Cleveland',
+    zip: '44114',
+    address: '303 Active Rd, Cleveland, OH 44114',
+    openingBid: 90000,
+    dealScore: 80,
+    status: 'active',
+    provenance: { origin: 'live', observed: true, recordId: 'ACT-303' },
+  };
+
+  // 1. In-memory derived() freshness & matches parity
+  const mem = new DatabaseClient({ inMemory: true, liveCachePath: null, workspaceStorePath: null });
+  mem.inMemoryData.listings = [emailNoticeListing, outcomeTerminalListing, activeHighScoreListing];
+  const memObserved = await discovery.search(mem, discovery.queryFromUrl(new URL('http://localhost/api/listings?freshness=observed&facets=freshness')));
+  assert.ok(memObserved.listings.some((r) => r.id === emailNoticeListing.id), 'in-memory freshness=observed must include email_notice');
+  const nonAccelSql = discovery.pgWhere(discovery.queryFromUrl(new URL('http://localhost/api/listings?freshness=observed')), { accelerated: false });
+  assert.match(nonAccelSql.sql, /IN \('live', 'email_notice'\)/, 'non-accelerated pgWhere must include email_notice for observed');
+
+  // 2. Accelerated & non-accelerated PostgreSQL parity on real engine
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pc-email-notice-parity-'));
+  try {
+    const embedded = await startEmbeddedPostgres({ dataDir });
+    await migrate(embedded.pool);
+    const pg = new DatabaseClient({ pool: embedded.pool, liveCachePath: null, workspaceStorePath: null });
+    assert.equal(await pg.verifyConnection(), true);
+    for (const item of [emailNoticeListing, outcomeTerminalListing, activeHighScoreListing]) {
+      await pg.createListing(item);
+    }
+
+    const pgObserved = await discovery.search(pg, discovery.queryFromUrl(new URL('http://localhost/api/listings?freshness=observed&facets=freshness&sort=score')));
+    assert.ok(pgObserved.listings.some((r) => r.id === emailNoticeListing.id), 'PG freshness=observed must include email_notice');
+    assert.equal(pgObserved.facets.freshness.find((b) => b.value === 'observed')?.count, 3, 'all 3 observed listings belong in observed facet');
+    assert.equal(pgObserved.listings.map((r) => r.id).indexOf(activeHighScoreListing.id) < pgObserved.listings.map((r) => r.id).indexOf(outcomeTerminalListing.id), true, 'top-level transactionOutcome must demote terminal record below active 80-score listing');
+
+    // Force non-accelerated SQL fallback by hiding discovery_is_live metadata check from information_schema probe
+    const origQuery = embedded.pool.query.bind(embedded.pool);
+    const nonAccelPool = {
+      ...embedded.pool,
+      query: async (sql, params) => {
+        if (String(sql).includes("column_name = ANY(ARRAY['discovery_search_text'")) {
+          return { rows: [{ cols: 0 }] };
+        }
+        return origQuery(sql, params);
+      },
+      connect: (...args) => embedded.pool.connect(...args),
+      end: (...args) => embedded.pool.end(...args),
+    };
+    const pgFallback = new DatabaseClient({ pool: nonAccelPool, liveCachePath: null, workspaceStorePath: null });
+    pgFallback.isPg = true;
+    pgFallback.postgresReachable = true;
+    const fallbackObserved = await discovery.search(pgFallback, discovery.queryFromUrl(new URL('http://localhost/api/listings?freshness=observed&facets=freshness&sort=score')));
+    assert.equal(fallbackObserved.total, pgObserved.total, 'non-accelerated SQL total must match accelerated PG');
+    assert.deepEqual(fallbackObserved.facets.freshness, pgObserved.facets.freshness, 'non-accelerated SQL freshness facet must match accelerated PG');
+    assert.deepEqual(fallbackObserved.listings.map((r) => r.id), pgObserved.listings.map((r) => r.id), 'non-accelerated sort order must demote top-level transaction_outcome just like discovery_terminal');
+
+    await embedded.pool.end().catch(() => {});
+  } finally {
+    fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  }
+});

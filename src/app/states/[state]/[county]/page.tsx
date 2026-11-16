@@ -1,4 +1,6 @@
+import { cache } from "react";
 import { loadCountyInventory } from "@/lib/county-inventory";
+import { STATE_NAMES } from "@/lib/hero-market-suggestions";
 import { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -42,7 +44,14 @@ type ListingSummary = {
   status?: string | null;
 };
 
-async function loadCountyData(stateCode: string, countyParam: string): Promise<ListingSummary[]> {
+const VALID_STATE_CODES = new Set(Object.keys(STATE_NAMES));
+
+function parseValidStateCode(raw?: string): string | null {
+  const code = typeof raw === "string" ? raw.trim().toUpperCase() : "";
+  return /^[A-Z]{2}$/.test(code) && VALID_STATE_CODES.has(code) ? code : null;
+}
+
+const loadCountyData = cache(async function loadCountyData(stateCode: string, countyParam: string): Promise<ListingSummary[]> {
   return loadCountyInventory<ListingSummary>({
     stateCode,
     county: normalizeCountySlug(countyParam).toLowerCase(),
@@ -57,11 +66,18 @@ async function loadCountyData(stateCode: string, countyParam: string): Promise<L
       }
     },
   });
-}
+});
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { state: rawState, county: rawCounty } = await params;
-  const state = /^[A-Za-z]{2}$/.test(rawState || "") ? rawState.toUpperCase() : "US";
+  const state = parseValidStateCode(rawState);
+  if (!state) {
+    return {
+      title: "Jurisdiction Not Found | PerfectProperty",
+      description: "Recognized two-letter US state jurisdiction required.",
+      robots: { index: false, follow: false },
+    };
+  }
   const countyName = normalizeCountySlug(rawCounty);
   const listings = await loadCountyData(state, rawCounty);
   const stats = computeCountyStats(listings);
@@ -76,6 +92,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   return {
     title: meta.title,
     description: meta.description,
+    ...(stats.totalCount === 0 ? { robots: { index: false, follow: false } } : {}),
     alternates: meta.alternates,
     openGraph: {
       ...meta.openGraph,
@@ -99,21 +116,10 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
 export default async function CountyDocketPage({ params }: PageProps) {
   const { state: rawState, county: rawCounty } = await params;
-  const state = /^[A-Za-z]{2}$/.test(rawState || "") ? rawState.toUpperCase() : null;
+  const state = parseValidStateCode(rawState);
 
   if (!state) {
-    return (
-      <main className="mx-auto max-w-4xl px-6 py-16">
-        <p className="text-label font-bold uppercase tracking-[0.14em] text-ink-3">Browse by state</p>
-        <h1 className="mt-2 text-3xl font-bold tracking-tight text-ink">We don&apos;t recognize that state</h1>
-        <p className="mt-4 text-sm leading-6 text-ink-3">
-          Use a two-letter state code, like OH or FL.
-        </p>
-        <Link href="/states" className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-ink underline">
-          <ArrowLeft className="h-4 w-4" /> All states
-        </Link>
-      </main>
-    );
+    notFound();
   }
 
   const countyName = normalizeCountySlug(rawCounty);
@@ -137,7 +143,7 @@ export default async function CountyDocketPage({ params }: PageProps) {
   const stats = computeCountyStats(listings);
   const redemption = getStatutoryRedemption(state);
   const gisLink = getCountyCadastralGisLink(state, countyName);
-  const feeSchedule = getStatutoryFeeSchedule(state, stats.medianOpeningBid || 150000);
+  const feeSchedule = getStatutoryFeeSchedule(state, stats.medianOpeningBid ?? undefined);
 
   // Fee math only runs on a published median bid; no stand-in price.
   const baselinePrice = stats.medianOpeningBid || 0;
@@ -280,10 +286,10 @@ export default async function CountyDocketPage({ params }: PageProps) {
             <div className="rounded-control border border-line bg-paper p-4">
               <div className="text-xs font-semibold uppercase tracking-wider text-ink-3">Estimated deposit when you win</div>
               <div className="mt-1 text-lg font-bold text-ink">
-                {feePreset ? `$${Math.round(feePreset.creditedDeposit).toLocaleString("en-US")}` : `$${Math.round(feeSchedule.estimatedFees.estimatedDeposit).toLocaleString("en-US")}`}
+                {feePreset ? `$${Math.round(feePreset.creditedDeposit).toLocaleString("en-US")}` : "Per winning bid"}
               </div>
               <div className="mt-1 text-label text-ink-3">
-                {feeSchedule.depositRequirement}
+                {feePreset ? feeSchedule.depositRequirement : `${feeSchedule.depositRequirement} (Dollar estimate withheld until a median opening bid is published.)`}
               </div>
             </div>
 
@@ -292,10 +298,12 @@ export default async function CountyDocketPage({ params }: PageProps) {
               <div className="mt-1 text-lg font-bold text-ink">
                 {feePreset
                   ? `$${Math.round(feePreset.transferTax + feePreset.sheriffPoundage).toLocaleString("en-US")}`
-                  : `$${Math.round(feeSchedule.estimatedFees.transferTax + feeSchedule.estimatedFees.sheriffPoundage).toLocaleString("en-US")}`}
+                  : feeSchedule.transferTaxRatePerThousand === 0 && feeSchedule.sheriffPoundageRatePercent === 0
+                    ? "$0 statutory tax & poundage"
+                    : `$${Number(feeSchedule.transferTaxRatePerThousand || 0).toFixed(2)}/$1k + ${(Number(feeSchedule.sheriffPoundageRatePercent || 0) * 100).toFixed(1)}%`}
               </div>
               <div className="mt-1 text-label text-ink-3">
-                {feeSchedule.transferTaxCitation}
+                {feePreset ? feeSchedule.transferTaxCitation : `${feeSchedule.transferTaxCitation} ${feeSchedule.sheriffPoundageCitation}`}
               </div>
             </div>
 
@@ -383,7 +391,7 @@ export default async function CountyDocketPage({ params }: PageProps) {
               <p className="mt-1.5 text-xs leading-relaxed text-ink-2">
                 In {state}, {redemption.label}.
                 {redemption.upsetBid && redemption.upsetBid.hasUpsetBid
-                  ? ` North Carolina law (${redemption.upsetBid.statute}) provides a ${redemption.upsetBid.windowDays}-day upset bid period. Each qualifying upset bid (minimum 5% increase or $750 floor deposited with Clerk of Superior Court) reopens a new 10-day window.`
+                  ? ` ${STATE_NAMES[state] || state} law (${redemption.upsetBid.statute}) provides a ${redemption.upsetBid.windowDays}-day upset bid period. Each qualifying upset bid (minimum 5% increase or $750 floor deposited with Clerk of Superior Court) reopens a new 10-day window.`
                   : ""}
                 {redemption.homesteadDistinction && redemption.homesteadDistinction.hasDistinction
                   ? ` ${redemption.homesteadDistinction.description}`

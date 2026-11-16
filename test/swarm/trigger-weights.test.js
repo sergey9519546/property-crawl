@@ -87,19 +87,46 @@ describe('TriggerWeightManager (Tier 3.4 Self-Tuning Weights)', () => {
     assert.ok(calibrated < 0.9);
   });
 
-  test('exports, resets, and imports weight state', () => {
+  test('exports, resets, and imports weight state preserving lastLatencyMs and avgYieldRatio', () => {
     const manager = new TriggerWeightManager();
-    manager.recordExecutionOutcome('cap_a', { success: false });
-    manager.recordExecutionOutcome('cap_b', { success: true, nonNullYieldRatio: 0.8 });
+    manager.recordExecutionOutcome('cap_a', { success: false, latencyMs: 1450 });
+    manager.recordExecutionOutcome('cap_b', { success: true, latencyMs: 220, nonNullYieldRatio: 0.8 });
 
     const exported = manager.exportWeights();
     assert.ok(exported.cap_a);
     assert.ok(exported.cap_b);
+    assert.equal(exported.cap_a.lastLatencyMs, 1450);
+    assert.equal(exported.cap_b.lastLatencyMs, 220);
+    assert.equal(exported.cap_b.avgYieldRatio, 0.8);
 
     manager.reset();
     assert.equal(manager.getWeight('cap_a'), 1.0);
 
     manager.importWeights(exported);
     assert.equal(manager.getWeight('cap_a'), exported.cap_a.weight);
+    assert.equal(manager.getStats('cap_a').lastLatencyMs, 1450);
+    assert.equal(manager.getStats('cap_b').lastLatencyMs, 220);
+    assert.equal(manager.getStats('cap_b').avgYieldRatio, 0.8);
+  });
+
+  test('configures defaultTriggerWeightManager on .cache/trigger-weights.json and fails soft on unwritable paths', (t) => {
+    const fs = require('node:fs');
+    const os = require('node:os');
+    const path = require('node:path');
+    const { triggerWeightManager } = require('../../server/swarm/trigger-weights');
+
+    assert.match(String(triggerWeightManager.filePath), /trigger-weights\.json$/);
+    assert.equal(triggerWeightManager.saveToDisk(path.join(os.tmpdir(), `missing-${Date.now()}`, '\0bad')), false);
+
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tw-persist-'));
+    t.after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
+    const filePath = path.join(tmpDir, 'weights.json');
+
+    const writer = new TriggerWeightManager({ filePath, learningRate: 0.4 });
+    writer.recordExecutionOutcome('geocode', { success: true, latencyMs: 310, nonNullYieldRatio: 0.75 });
+
+    const reader = new TriggerWeightManager({ filePath });
+    assert.equal(reader.getStats('geocode').lastLatencyMs, 310);
+    assert.equal(reader.getStats('geocode').avgYieldRatio, 0.75);
   });
 });

@@ -44,3 +44,38 @@ test('once mode and nontransient program errors reject without retry',async()=>{
   await assert.rejects(()=>require('../scripts/discovery-worker').main(['--once'],{signalTarget:signals,runIteration:async()=>{throw transient;},logger:{log(){},error(){}}}),/temporary/);
   let waits=0;await assert.rejects(()=>require('../scripts/discovery-worker').main([],{signalTarget:signals,runIteration:async()=>{throw new Error('bad configuration');},wait:async()=>waits++,logger:{log(){},error(){}}}),/bad configuration/);assert.equal(waits,0);
 });
+
+test('recurring worker refreshes mv_neighborhood_stats non-fatally after executing a job',async()=>{
+  let mvCalls=0;
+  const {collectionScope}=require('../server/scrapers/collection-scope');
+  const {hash}=require('../server/discovery/store');
+  const scraper={sourceKey:'treasury'};
+  const scope=collectionScope(scraper);
+  const scopeHash=hash(scope);
+  const job={id:'job_0123456789abcdef01234568',sourceIds:['treasury'],trigger:'discovery_worker'};
+  const store={
+    pool:{async query(){return {rows:[{id:job.id}]};}},
+    async promotedSourceScopes(){return [{sourceKey:'treasury',scope,scopeHash}];},
+    async getCheckpoint(){return {scopeHash};},
+    async failAbandonedRuns(){},
+    async failAbandonedJobs(){},
+    async claimJob(){return job;},
+    async renewJobClaim(){return true;},
+    async recordWorkerHealth(){},
+  };
+  const coordinator={async execute(){return {result:{sourceResults:[{sourceId:'treasury',accepted:2}]}};}};
+  const database={
+    isPg:true,
+    async refreshNeighborhoodStatsMaterializedView(opts){mvCalls+=1;assert.equal(opts.concurrent,true);throw new Error('non-fatal mv refresh failure');},
+  };
+  const collector={realScrapers:[scraper],collectionCoordinator:coordinator};
+  const storageProbe=()=>({ready:true,freeBytes:10*1024*1024*1024,minimumFreeBytes:1024*1024*1024,scope:'collector_local_volume'});
+  const prior=process.env.DISCOVERY_MODE;process.env.DISCOVERY_MODE='advanced';
+  try{
+    const res=await run({wave:'wave1',database,collector,discoveryStore:store,storageProbe});
+    assert.ok(res);
+  }finally{
+    if(prior===undefined)delete process.env.DISCOVERY_MODE;else process.env.DISCOVERY_MODE=prior;
+  }
+  assert.equal(mvCalls,1);
+});

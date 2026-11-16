@@ -27,8 +27,8 @@ function nextId() { return ++_idCounter; }
 
 class ZillowMcpClient {
   constructor(options = {}) {
-    this.apiKey  = options.apiKey  || process.env.ZILLOW_MCP_API_KEY || process.env.API_MARKET_KEY;
-    if (!this.apiKey) throw new Error('ZILLOW_MCP_API_KEY is required');
+    this.apiKey  = options.apiKey !== undefined ? (options.apiKey || null) : (process.env.ZILLOW_MCP_API_KEY || process.env.API_MARKET_KEY || null);
+    // Key check happens in _rpc()/_callTool() so construction and offline input validation stay non-throwing.
     this.baseUrl = (options.baseUrl || process.env.ZILLOW_MCP_BASE_URL || DEFAULT_BASE_URL).replace(/\/$/, '');
     this.timeout = options.timeout || DEFAULT_TIMEOUT;
   }
@@ -40,6 +40,12 @@ class ZillowMcpClient {
    * Returns { ok, id, result?, error? }
    */
   async _rpc(method, params = {}) {
+    const apiKey = this.apiKey !== undefined && this.apiKey !== null
+      ? this.apiKey
+      : (process.env.ZILLOW_MCP_API_KEY || process.env.API_MARKET_KEY || null);
+    if (!apiKey) {
+      return { ok: false, error: 'ZILLOW_MCP_API_KEY is required', code: 401 };
+    }
     const id      = nextId();
     const payload = JSON.stringify({ jsonrpc: '2.0', id, method, params });
 
@@ -47,7 +53,7 @@ class ZillowMcpClient {
     const headers = {
       'Content-Type':    'application/json',
       'Accept':          'application/json, text/event-stream',
-      'x-api-market-key': this.apiKey,
+      'x-api-market-key': apiKey,
       'Content-Length':  Buffer.byteLength(payload)
     };
 
@@ -225,13 +231,13 @@ class ZillowMcpClient {
 
   /**
    * Resolve a Zillow search URL to canonical form.
-   * Tool name on server: post_resolve_url
+   * Tool name on server: post_resolve_zillow_url
    */
   async resolveZillowUrl(url) {
     if (!url || typeof url !== 'string') {
       return { ok: false, error: 'url must be a non-empty string', code: 400 };
     }
-    return this._callTool('post_resolve_url', { body: { url } });
+    return this._callTool('post_resolve_zillow_url', { body: { url } });
   }
 
   /**
@@ -292,5 +298,7 @@ module.exports = {
   getPropertyDetails:    (params)         => defaultClient.getPropertyDetails(params),
   resolveZillowUrl:      (url)            => defaultClient.resolveZillowUrl(url),
   getSchoolDistrictDetails: (ids)         => defaultClient.getSchoolDistrictDetails(ids),
+  getZestimate:          (params)         => defaultClient.getZestimate(params),
+  getWalkScore:          (params)         => defaultClient.getWalkScore(params),
   listTools:             ()               => defaultClient.listTools()
 };

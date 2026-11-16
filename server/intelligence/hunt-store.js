@@ -69,26 +69,13 @@ function loadStore(filePath) {
 
 function mutateStore(filePath, mutate, options = {}) {
   if (typeof mutate !== 'function') throw new TypeError('Saved-hunt mutation must be a function');
+  const { acquireOwnedLock, releaseOwnedLock, replaceFileWithRetry } = require('./research-store');
   const resolved = resolveStorePath(filePath);
   fs.mkdirSync(path.dirname(resolved), { recursive: true });
   const lockPath = `${resolved}.lock`;
-  let lock;
+  let lockHandle;
   try {
-    const acquireLock = () => fs.openSync(lockPath, 'wx', 0o600);
-    try {
-      lock = acquireLock();
-    } catch (lockErr) {
-      if (lockErr.code === 'EEXIST') {
-        const staleLockMs = typeof options.staleLockMs === 'number' ? options.staleLockMs : 30_000;
-        let stale = false;
-        try { stale = Date.now() - fs.statSync(lockPath).mtimeMs > staleLockMs; } catch (_) {}
-        if (stale) {
-          try { fs.unlinkSync(lockPath); } catch (_) {}
-          try { lock = acquireLock(); } catch (_) {}
-        }
-      }
-      if (!lock) throw lockErr;
-    }
+    lockHandle = acquireOwnedLock(lockPath, { staleLockMs: options.staleLockMs });
   } catch (error) {
     if (error.code === 'EEXIST') throw new Error('Saved-hunt store is locked by another writer; retry after it finishes');
     throw error;
@@ -104,12 +91,11 @@ function mutateStore(filePath, mutate, options = {}) {
     const body = JSON.stringify(store);
     if (Buffer.byteLength(body, 'utf8') > MAX_STORE_BYTES) throw new Error('Saved-hunt store exceeds its safe size limit');
     fs.writeFileSync(temporary, body, { flag: 'wx', mode: 0o600 });
-    fs.renameSync(temporary, resolved);
+    replaceFileWithRetry(temporary, resolved, options.replaceOptions);
     return result?.value;
   } finally {
-    if (fs.existsSync(temporary)) fs.unlinkSync(temporary);
-    if (lock !== undefined) fs.closeSync(lock);
-    if (fs.existsSync(lockPath)) fs.unlinkSync(lockPath);
+    try { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); } catch (_) {}
+    releaseOwnedLock(lockHandle);
   }
 }
 

@@ -1,6 +1,7 @@
 import { listingFactOrigin } from "@/lib/evidence";
 import { Metadata } from "next";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { cache } from "react";
 import { ArrowLeft, CalendarDays, ExternalLink, Gavel, MapPin, TrendingUp, AlertTriangle, Clock, FileText, Download, FileCheck2 } from "lucide-react";
 import { Listing, SOURCES } from "@/data/listings";
@@ -82,7 +83,7 @@ function isObservedSourceRecord(listing: Listing) {
   const observedAt = listing.sourceObservedAt ?? provenance.observedAt;
   const timestamp = typeof observedAt === "string" ? Date.parse(observedAt) : Number.NaN;
   const exactSourceUrl = getExactSourceListingUrl(listing, SOURCES[listing.source]?.websiteUrl);
-  return provenance.origin === "live"
+  return (provenance.origin === "live" || provenance.origin === "email_notice")
     && provenance.observed === true
     && provenance.recordKind === "source_record"
     && typeof provenance.publisher === "string"
@@ -109,28 +110,42 @@ function verifiedPublisherPhoto(listing: Listing) {
 }
 
 // Share one bounded lookup between metadata and content in this render only.
-const getListing = cache(async (id: string): Promise<Listing | null> => {
-  const listingId = decodeURIComponent(id);
+type ListingFetchResult =
+  | { status: "ok"; listing: Listing }
+  | { status: "not_found" }
+  | { status: "unavailable"; statusCode?: number };
+
+const getListing = cache(async (id: string): Promise<ListingFetchResult> => {
+  let listingId = id;
+  try { listingId = decodeURIComponent(id); } catch { return { status: "not_found" }; }
   try {
     const apiUrl = process.env.PROPERTY_API_URL || "http://localhost:3000";
     const res = await fetch(`${apiUrl}/api/listings/${encodeURIComponent(listingId)}`, {
       cache: "no-store", signal: AbortSignal.timeout(5_000)
     });
     if (res.ok) {
-      return (await res.json()) as Listing;
+      return { status: "ok", listing: (await res.json()) as Listing };
     }
+    if (res.status === 404) {
+      return { status: "not_found" };
+    }
+    return { status: "unavailable", statusCode: res.status };
   } catch (_) {}
-  return null;
+  return { status: "unavailable" };
 });
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
-  const listing = await getListing(id);
+  const listingResult = await getListing(id);
+  const listing = listingResult.status === "ok" ? listingResult.listing : null;
 
   if (!listing) {
     return {
-      title: "Listing Unavailable | PerfectProperty",
-      description: "This property record is currently unavailable from the listing service."
+      title: listingResult.status === "not_found" ? "Listing Not Found | PerfectProperty" : "Listing Unavailable | PerfectProperty",
+      description: listingResult.status === "not_found"
+        ? "This property record was not found in the listing service."
+        : "This property record is currently unavailable from the listing service.",
+      robots: { index: false, follow: false },
     };
   }
 
@@ -187,7 +202,11 @@ export default async function ListingPage({ params, searchParams }: Props) {
   const query = await searchParams;
   const requestedReturn = typeof query.returnTo === "string" ? query.returnTo : "";
   const returnTo = requestedReturn.startsWith("/") && !requestedReturn.startsWith("//") ? requestedReturn : "/listings";
-  const listing = await getListing(id);
+  if ((await getListing(id)).status === "not_found") {
+    notFound();
+  }
+  const listingResult = await getListing(id);
+  const listing = listingResult.status === "ok" ? listingResult.listing : null;
 
   if (!listing) {
     return (
@@ -195,7 +214,7 @@ export default async function ListingPage({ params, searchParams }: Props) {
       <main className="grid min-h-screen place-items-center bg-paper px-6 text-center">
         <div>
           <h1 className="text-3xl font-bold text-ink">Listing unavailable</h1>
-          <p className="mt-3 text-ink-3">The listing service could not provide this record. Try again or return to results.</p>
+          <p className="mt-3 text-ink-3">The listing service could not provide this record{listingResult.status === "unavailable" && listingResult.statusCode ? ` (HTTP ${listingResult.statusCode})` : ""}. Try again or return to results.</p>
           <Link href={returnTo} className="mt-6 inline-flex items-center gap-2 rounded-control bg-ink px-4 py-3 text-sm font-bold text-white">
             <ArrowLeft className="h-4 w-4" /> Back to results
           </Link>
@@ -619,7 +638,7 @@ export default async function ListingPage({ params, searchParams }: Props) {
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="space-y-1">
                     <div className="inline-flex items-center gap-1.5 rounded-full border border-line bg-paper px-2.5 py-0.5 text-label font-bold uppercase tracking-wider text-ink-2">
-                      <MapPin className="h-3 w-3 text-go" />
+                      <MapPin className="h-3 w-3 text-ink-2" />
                       {gisLink.authorityType === "county_assessor_gis" ? "Official County Assessor GIS" : "Statewide Cadastral GIS"}
                     </div>
                     <h3 className="text-sm font-bold text-ink">

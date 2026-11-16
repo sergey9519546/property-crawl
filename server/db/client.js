@@ -905,14 +905,14 @@ class DatabaseClient {
         bySource = Object.keys(cadences).map((source) => {
           const rows = this.inMemoryData.listings.filter((listing) => listing.source === source);
           const cutoff = now - cadenceHoursFor(source) * 3_600_000;
+          const sortedTimes = rows.map((row) => row.sourceObservedAt).filter(isFiniteTime).sort();
           return {
             source,
             listings: rows.length,
             freshListings: rows.filter((row) => (isFiniteTime(row.sourceObservedAt) && Date.parse(row.sourceObservedAt) >= cutoff) || (isFiniteTime(row.provenance?.publisherAbsence?.at) && Date.parse(row.provenance.publisherAbsence.at) >= cutoff)).length,
 
             cadenceHours: cadenceHoursFor(source),
-            newestObservation: rows.map((row) => row.sourceObservedAt).filter(isFiniteTime)
-              .sort()[rows.length - 1] || null,
+            newestObservation: sortedTimes[sortedTimes.length - 1] || null,
             stale: rows.some((row) => (!isFiniteTime(row.sourceObservedAt) || Date.parse(row.sourceObservedAt) < cutoff) && (!isFiniteTime(row.provenance?.publisherAbsence?.at) || Date.parse(row.provenance.publisherAbsence.at) < cutoff)),
 
           };
@@ -1080,7 +1080,6 @@ class DatabaseClient {
       try {
         const mvRes = await pool.query(`
           SELECT * FROM mv_neighborhood_stats
-          WHERE kind = 'zip'
           ORDER BY count DESC, label ASC
           LIMIT $1
         `, [limit]);
@@ -1589,7 +1588,7 @@ class DatabaseClient {
         MAX(source_observed_at)::text AS "latestObservation"
       FROM listings
       WHERE (status = 'active' OR status IS NULL)
-        AND (provenance IS NULL OR provenance->>'origin' = 'live')
+        AND (provenance IS NULL OR provenance->>'origin' IN ('live', 'email_notice'))
       GROUP BY source_key;
     `;
     const res = await this.getReadPool().query(sql);
@@ -1724,11 +1723,6 @@ class DatabaseClient {
       ORDER BY id ASC;
     `;
     const res = await this.getReadPool().query(sql, [parcelKey]);
-    if (res.rows.length === 0) {
-      const { scanAllListings } = require('./listings-scan');
-      const { pool } = await scanAllListings(this, { summary: true }, { pageSize: 100000 });
-      return pool.filter((listing) => listing && listing.parcelKey === parcelKey);
-    }
     return res.rows.map(mapPgListingRow);
   }
 
@@ -2135,7 +2129,7 @@ class DatabaseClient {
       // Admission gate: a record whose declared source is DISCOVERY_ONLY or
       // unknown to the catalog is discovery evidence, not a sale listing.
       if (typeof l.source === 'string' && l.source !== '' && !servesListings(l.source)) return false;
-      if (state !== 'all' && l.state !== state) return false;
+      if (state !== 'all' && String(l.state || '').toUpperCase() !== state.toUpperCase()) return false;
       if (source !== 'all' && l.source !== source) return false;
       if (type !== 'all' && l.propType !== type) return false;
       if (status !== 'all' && (l.status || 'active') !== status) return false;
@@ -2617,7 +2611,9 @@ class DatabaseClient {
                   });
                 }
               }
-            } catch (_) {}
+            } catch (readBackErr) {
+              console.warn('[DB] createListingsBulk persistedById readback warning:', readBackErr?.message || readBackErr);
+            }
           }
         }
       } catch (err) {
@@ -2627,7 +2623,9 @@ class DatabaseClient {
             const persisted = await this.createListing(l, options);
             total += 1;
             if (persistedById && persisted?.id) persistedById.set(persisted.id, persisted);
-          } catch (_) {}
+          } catch (seqErr) {
+            console.warn('[DB] createListingsBulk fallback sequential createListing failed for', l?.id, seqErr?.message || seqErr);
+          }
         }
       }
 
@@ -3435,7 +3433,9 @@ class DatabaseClient {
         [serviceLinkFreshWindowDays],
       );
       hasFreshServiceLinkLive = freshCheck.rows.length > 0;
-    } catch (_) {}
+    } catch (freshErr) {
+      console.warn('[DB] purgeStaleListings fresh ServiceLink check failed:', freshErr?.message || freshErr);
+    }
 
     let deleted = 0;
     // Pass A: fast indexed purge of non-live, terminal, or stale ServiceLink bulk
@@ -3469,7 +3469,9 @@ class DatabaseClient {
           await new Promise((resolve) => setTimeout(resolve, batchPauseMs));
         }
       }
-    } catch (_) {}
+    } catch (purgeAErr) {
+      console.warn('[DB] purgeStaleListings Pass A failed:', purgeAErr?.message || purgeAErr);
+    }
 
     // Pass A2: remove non-listing DISCOVERY_ONLY sources (e.g. courtlistener, fl-dor-cadastral)
     try {
@@ -3492,7 +3494,9 @@ class DatabaseClient {
           await new Promise((resolve) => setTimeout(resolve, batchPauseMs));
         }
       }
-    } catch (_) {}
+    } catch (passA2Err) {
+      console.warn('[DB] purgeStaleListings Pass A2 failed:', passA2Err?.message || passA2Err);
+    }
 
     // Pass B: purge terminal, non-live, past-sale, and 30d stale rows without scanning TOAST provenance JSONB
     try {
@@ -3552,7 +3556,9 @@ class DatabaseClient {
           await new Promise((resolve) => setTimeout(resolve, batchPauseMs));
         }
       }
-    } catch (_) {}
+    } catch (passBErr) {
+      console.warn('[DB] purgeStaleListings Pass B failed:', passBErr?.message || passBErr);
+    }
 
     let observationsDeleted = 0;
     const obsBatchSize = Math.min(500, Math.max(50, batchSize * 2));
@@ -3647,7 +3653,9 @@ class DatabaseClient {
           await new Promise((resolve) => setTimeout(resolve, batchPauseMs));
         }
       }
-    } catch (_) {}
+    } catch (obsErr) {
+      console.warn('[DB] purgeStaleListings observation cleanup failed:', obsErr?.message || obsErr);
+    }
 
     let snapshotsDeleted = 0;
     try {
@@ -3700,7 +3708,9 @@ class DatabaseClient {
           WHERE source_key = 'servicelink'
             AND updated_at < NOW() - INTERVAL '2 days'`,
       );
-    } catch (_) {}
+    } catch (snapErr) {
+      console.warn('[DB] purgeStaleListings snapshot/checkpoint cleanup failed:', snapErr?.message || snapErr);
+    }
 
     if (deleted > 0) {
       await this.pool.query("SELECT nextval('discovery_listing_revision_seq')").catch(() => {});

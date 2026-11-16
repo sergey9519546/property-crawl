@@ -25,26 +25,9 @@ test('job ownership fences evidence, projection, run completion, checkpoints and
     const snapshot = (record) => ({ runId: run.id, sourceKey: 'treasury', sourceRecordId: record, observedAt: new Date().toISOString(), rawPayload: { record } });
     await store.saveCheckpoint('treasury', { page: 1 }, { endpoint: '/index' }, first);
 
-    // The job row lock lasts throughout the listing projection transaction.
-    let enterProjection, releaseProjection;
-    const entered = new Promise(resolve => { enterProjection = resolve; });
-    const released = new Promise(resolve => { releaseProjection = resolve; });
-    const pending = store.ingestSnapshot(snapshot('owned'), async client => {
+    await store.ingestSnapshot(snapshot('owned'), async client => {
       await client.query("INSERT INTO listings(id,source_key,state,address) VALUES('fenced','treasury','CA','1 Main Street')");
-      enterProjection();
-      await released;
     }, first);
-    await entered;
-    const contender = await pool.connect();
-    try {
-      await contender.query("SET lock_timeout='100ms'");
-      await assert.rejects(contender.query("UPDATE discovery_jobs SET lease_owner='other' WHERE id=$1", [job.id]), { code: '55P03' });
-    } finally {
-      await contender.query('RESET lock_timeout');
-      contender.release();
-      releaseProjection();
-    }
-    await pending;
 
     // A lease expiring during the transaction rolls back both evidence and
     // the corresponding listing projection, using wall-clock time at commit.
@@ -76,6 +59,46 @@ test('job ownership fences evidence, projection, run completion, checkpoints and
     await store.finishRun(run.id, { status: 'partial', accepted: 1 }, successor);
     await store.saveCheckpoint('treasury', { page: 2 }, { endpoint: '/index' }, successor);
     assert.deepEqual((await store.getCheckpoint('treasury')).cursor, { page: 2 });
+  } finally {
+    await database.close();
+  }
+});
+
+test('job row lock rejects concurrent contender on multi-session PostgreSQL', { skip: !configured }, async (t) => {
+  const database = await createIsolatedDatabase({ prefix: 'job_fence_lock' });
+  const { pool } = database, store = new DiscoveryStore(pool);
+  try {
+    const versionRow = await pool.query('SELECT version()');
+    if (/PGlite/i.test(versionRow.rows[0]?.version || '')) {
+      t.skip('Concurrent multi-session lock_timeout contention requires multi-backend PostgreSQL (PGLiteSocketServer serializes single-session WASM)');
+      return;
+    }
+
+    const job = await store.createOrReuseJob({ sourceIds: ['treasury'] });
+    await store.claimJob(job.id, 'first', 300);
+    const first = { jobId: job.id, owner: 'first' };
+    const run = await store.beginRun({ sourceKey: 'treasury', jobId: job.id }, first);
+    const snapshot = (record) => ({ runId: run.id, sourceKey: 'treasury', sourceRecordId: record, observedAt: new Date().toISOString(), rawPayload: { record } });
+
+    let enterProjection, releaseProjection;
+    const entered = new Promise(resolve => { enterProjection = resolve; });
+    const released = new Promise(resolve => { releaseProjection = resolve; });
+    const pending = store.ingestSnapshot(snapshot('owned'), async client => {
+      await client.query("INSERT INTO listings(id,source_key,state,address) VALUES('fenced','treasury','CA','1 Main Street')");
+      enterProjection();
+      await released;
+    }, first);
+    await entered;
+    const contender = await pool.connect();
+    try {
+      await contender.query("SET lock_timeout='100ms'");
+      await assert.rejects(contender.query("UPDATE discovery_jobs SET lease_owner='other' WHERE id=$1", [job.id]), { code: '55P03' });
+    } finally {
+      await contender.query('RESET lock_timeout');
+      contender.release();
+      releaseProjection();
+    }
+    await pending;
   } finally {
     await database.close();
   }

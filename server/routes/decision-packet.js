@@ -81,9 +81,20 @@ function resolveRequestAuth(req, env = process.env) {
 }
 
 function parseNumber(value) {
-  if (value === null || value === undefined || value === '') return null;
+  if (value === null || value === undefined || value === '' || typeof value === 'boolean') return null;
+  if (typeof value === 'string' && value.trim() === '') return null;
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
+}
+
+function parseOptionalBoolean(value) {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    const clean = value.trim().toLowerCase();
+    if (clean === 'true' || clean === '1' || clean === 'yes') return true;
+    if (clean === 'false' || clean === '0' || clean === 'no') return false;
+  }
+  return undefined;
 }
 
 const CASH_OVERRIDE_FIELDS = [
@@ -161,7 +172,7 @@ async function handleDecisionPacket(req, res, url, dependencies = {}) {
   const body = req.body && typeof req.body === 'object' ? req.body : {};
   const operatorInput = {};
 
-  const disposition = body.disposition || url.searchParams.get('disposition');
+  const disposition = body.disposition ?? url.searchParams.get('disposition');
   if (typeof disposition === 'string' && disposition.trim()) {
     operatorInput.disposition = disposition.trim();
   }
@@ -175,12 +186,32 @@ async function handleDecisionPacket(req, res, url, dependencies = {}) {
   const targetMargin = parseNumber(body.targetMargin ?? url.searchParams.get('targetMargin'));
   if (targetMargin !== null) operatorInput.targetMargin = targetMargin;
 
-  const notes = body.operatorNotes || url.searchParams.get('operatorNotes');
+  const customValuation = parseNumber(body.customValuation ?? url.searchParams.get('customValuation'));
+  if (customValuation !== null && customValuation >= 0) operatorInput.customValuation = customValuation;
+
+  const customOpeningBid = parseNumber(body.customOpeningBid ?? url.searchParams.get('customOpeningBid'));
+  if (customOpeningBid !== null && customOpeningBid >= 0) operatorInput.customOpeningBid = customOpeningBid;
+
+  const holdingMonths = parseNumber(body.holdingMonths ?? url.searchParams.get('holdingMonths'));
+  if (holdingMonths !== null && holdingMonths >= 0) operatorInput.holdingMonths = holdingMonths;
+
+  const isHomestead = parseOptionalBoolean(body.isHomestead ?? url.searchParams.get('isHomestead'));
+  if (isHomestead !== undefined) operatorInput.isHomestead = isHomestead;
+
+  const isTaxSale = parseOptionalBoolean(body.isTaxSale ?? url.searchParams.get('isTaxSale'));
+  if (isTaxSale !== undefined) operatorInput.isTaxSale = isTaxSale;
+
+  const annualCostOfCapitalPct = parseNumber(body.annualCostOfCapitalPct ?? url.searchParams.get('annualCostOfCapitalPct'));
+  if (annualCostOfCapitalPct !== null && annualCostOfCapitalPct >= 0) {
+    operatorInput.annualCostOfCapitalPct = annualCostOfCapitalPct;
+  }
+
+  const notes = body.operatorNotes ?? url.searchParams.get('operatorNotes');
   if (typeof notes === 'string' && notes.trim()) {
     operatorInput.operatorNotes = notes.trim();
   }
 
-  const operatorId = body.operatorId || url.searchParams.get('operatorId');
+  const operatorId = body.operatorId ?? url.searchParams.get('operatorId');
   if (typeof operatorId === 'string' && operatorId.trim()) {
     operatorInput.operatorId = operatorId.trim();
   }

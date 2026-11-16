@@ -396,7 +396,14 @@ function compileSavedSearchToHuntCriteria(search = {}) {
     discoveryFilters.redemption = rawRedemption.trim();
   }
 
-  for (const extraKey of ['county', 'program', 'lifecycle', 'freshness', 'hasDocuments', 'saleFrom', 'saleTo']) {
+  const rawCounties = getVal('counties');
+  const rawCounty = getVal('county');
+  const counties = Array.isArray(rawCounties)
+    ? rawCounties.filter((c) => typeof c === 'string' && c.trim() && c.trim().toLowerCase() !== 'all').map((c) => c.trim())
+    : (typeof rawCounty === 'string' && rawCounty.trim() && rawCounty.trim().toLowerCase() !== 'all' ? [rawCounty.trim()] : []);
+  if (counties.length > 0) discoveryFilters.county = counties.join(',');
+
+  for (const extraKey of ['program', 'lifecycle', 'freshness', 'hasDocuments', 'saleFrom', 'saleTo']) {
     const val = getVal(extraKey);
     if (typeof val === 'string' && val.trim() && val.trim().toLowerCase() !== 'all') {
       discoveryFilters[extraKey] = val.trim();

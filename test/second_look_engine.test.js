@@ -384,3 +384,112 @@ test('research-cases engine evaluates titleRisk reconsideration conditions for j
   const md = cases.packetToMarkdown(packet);
   assert.match(md, /IRS_REDEMPTION_WINDOW_ACTIVE/);
 });
+
+test('second-look supports dropped_by_pct, bid_to_assessed_lte, within_days, gte, and sqft rules', () => {
+  const dropCase = {
+    id: 'case_018f9e20a1bc724090123510',
+    state: 'pass',
+    listingSnapshot: {
+      openingBid: 100000,
+      assessedValue: 200000,
+      sqft: 1800,
+      lifecycleStage: DISTRESS_STAGES.SCHEDULED_AUCTION,
+    },
+    reconsideration: {
+      openingBid: { operator: 'dropped_by_pct', value: 15 },
+    },
+  };
+  const shallowDrop = evaluateSecondLookTriggers(dropCase, {
+    openingBid: 92000,
+    assessedValue: 200000,
+    sqft: 1800,
+    lifecycleStage: DISTRESS_STAGES.SCHEDULED_AUCTION,
+  });
+  assert.equal(shallowDrop.shouldTrigger, false);
+
+  const deepDrop = evaluateSecondLookTriggers(dropCase, {
+    openingBid: 80000,
+    assessedValue: 200000,
+    sqft: 1800,
+    lifecycleStage: DISTRESS_STAGES.SCHEDULED_AUCTION,
+  });
+  assert.equal(deepDrop.shouldTrigger, true);
+
+  const ratioCase = {
+    id: 'case_018f9e20a1bc724090123511',
+    state: 'pass',
+    listingSnapshot: {
+      openingBid: 150000,
+      assessedValue: 200000,
+      lifecycleStage: DISTRESS_STAGES.SCHEDULED_AUCTION,
+    },
+    reconsideration: {
+      openingBid: { operator: 'bid_to_assessed_lte', value: 50 },
+    },
+  };
+  const ratioPass = evaluateSecondLookTriggers(ratioCase, {
+    openingBid: 95000,
+    assessedValue: 200000,
+    lifecycleStage: DISTRESS_STAGES.SCHEDULED_AUCTION,
+  });
+  assert.equal(ratioPass.shouldTrigger, true);
+
+  const windowAndSqftCase = {
+    id: 'case_018f9e20a1bc724090123512',
+    state: 'pass',
+    listingSnapshot: {
+      sqft: 1600,
+      saleDate: '2026-12-20',
+      lifecycleStage: DISTRESS_STAGES.SCHEDULED_AUCTION,
+    },
+    reconsideration: {
+      mode: 'all',
+      conditions: [
+        { field: 'saleDate', operator: 'within_days', value: 14 },
+        { field: 'sqft', operator: 'gte', value: 1500 },
+      ],
+    },
+  };
+  const windowEval = evaluateSecondLookTriggers(windowAndSqftCase, {
+    sqft: 1650,
+    saleDate: '2026-11-25',
+    lifecycleStage: DISTRESS_STAGES.SCHEDULED_AUCTION,
+  }, { now: '2026-11-15T00:00:00.000Z' });
+  assert.equal(windowEval.shouldTrigger, true);
+
+  const gteBidCase = {
+    id: 'case_018f9e20a1bc724090123513',
+    state: 'pass',
+    listingSnapshot: { openingBid: 40000, lifecycleStage: DISTRESS_STAGES.SCHEDULED_AUCTION },
+    reconsideration: { openingBid: { operator: 'gte', value: 60000 } },
+  };
+  assert.equal(
+    evaluateSecondLookTriggers(gteBidCase, { openingBid: 65000, lifecycleStage: DISTRESS_STAGES.SCHEDULED_AUCTION }).shouldTrigger,
+    true
+  );
+});
+
+test('second-look prevents isJuniorLien inside priceChange from bypassing failing openingBid criteria', () => {
+  const gatedCase = {
+    id: 'case_018f9e20a1bc724090123514',
+    state: 'pass',
+    listingSnapshot: {
+      openingBid: 120000,
+      lifecycleStage: DISTRESS_STAGES.SCHEDULED_AUCTION,
+    },
+    reconsideration: {
+      openingBid: { mode: 'lte', threshold: 40000 },
+    },
+  };
+
+  const freshAboveThreshold = {
+    openingBid: 80000,
+    plaintiff: 'Discover Home Equity Line of Credit HELOC',
+    state: 'OH',
+    lifecycleStage: DISTRESS_STAGES.SCHEDULED_AUCTION,
+  };
+
+  const evalResult = evaluateSecondLookTriggers(gatedCase, freshAboveThreshold);
+  assert.equal(evalResult.shouldTrigger, false);
+  assert.ok(evalResult.alerts.includes('JUNIOR_LIEN_SURVIVING_MORTGAGE'));
+});

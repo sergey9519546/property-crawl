@@ -322,7 +322,7 @@ test('ScraperScheduler queries and saves PostgreSQL checkpoint when discoverySto
     concurrency: 1,
   });
 
-  const runRes = await scheduler.runAll({ sourceIds: ['civilview'] });
+  const runRes = await scheduler.runAll({ sourceIds: ['civilview'], allowNetwork: true });
   assert.equal(runRes.totalIngested, 1);
   assert.equal(loadedCheckpoints.length, 1);
   assert.equal(loadedCheckpoints[0]?.cursor, 'saved-pg-cursor');
@@ -368,6 +368,7 @@ test('ScraperScheduler safely unpacks JSONB object cursors from discovery_checkp
     database: mockDb,
     discoveryStore: null,
     telemetry: { recordRun() {} },
+    networkEnabled: true,
     concurrency: 1,
   });
 
@@ -384,7 +385,7 @@ test('ScraperScheduler safely unpacks JSONB object cursors from discovery_checkp
 
 test('a stalled scraper times out instead of wedging the cycle, and the next run proceeds', async () => {
   const stalled = { name: 'Stalled', sourceKey: 'treasury', scrapeFeed: () => new Promise(() => {}), getRawPublisherRecord: () => null };
-  const scheduler = new IngestionScheduler({ realScrapers: [stalled], scraperTimeoutMs: 50, concurrency: 1 });
+  const scheduler = new IngestionScheduler({ realScrapers: [stalled], scraperTimeoutMs: 50, networkEnabled: true, concurrency: 1 });
   scheduler.telemetry = telemetry;
   const first = await scheduler.runAll();
   assert.equal(first.skipped, false);
@@ -514,4 +515,123 @@ test('runAll merges persisted coordinates, assessed value, and derivedFields.ass
   assert.equal(seenListings[0].lng, -74.928191);
   assert.equal(seenListings[0].assessed, 181200);
   assert.equal(seenListings[0].provenance?.derivedFields?.assessorRoll?.basis, 'NJGIN_MODIV_CADASTRAL');
+});
+
+test('runAll includes createListingsBulk latency and awaits async PG checkpoints when discoveryStore is null', async () => {
+  let pgInsertResolved = false;
+  let observedDurationMs = 0;
+  const mockDb = {
+    isPg: true,
+    pool: {
+      async query(sql) {
+        if (sql.includes('INSERT INTO discovery_checkpoints')) {
+          await new Promise((r) => setTimeout(r, 25));
+          pgInsertResolved = true;
+        }
+        return { rows: [], rowCount: 1 };
+      },
+    },
+    async createListingsBulk(items) {
+      await new Promise((r) => setTimeout(r, 35));
+      return {
+        count: items.length,
+        persistedById: new Map(items.map((l) => [l.id, { derivedFields: { assessorRoll: { basis: 'TEST' } } }])),
+      };
+    },
+  };
+  const scraper = {
+    name: 'BulkLatencyFixture',
+    sourceKey: 'civilview',
+    setCheckpoint() {},
+    async scrapeFeed() {
+      this.lastRunReport = { outcome: 'success', complete: false, partialSweep: true, nextContinuationToken: 'cursor-next' };
+      const out = [civilviewListing('bulk-lat-1')];
+      out.partialSweep = true;
+      out.complete = false;
+      out.nextContinuationToken = 'cursor-next';
+      return out;
+    },
+    getRawPublisherRecord() { return { raw: '1' }; },
+  };
+  const sched = new IngestionScheduler({
+    realScrapers: [scraper],
+    discoveryStore: null,
+    database: mockDb,
+    telemetry,
+    networkEnabled: true,
+    concurrency: 1,
+    onSourceRun: async (_k, info) => { observedDurationMs = info.durationMs; },
+  });
+  await sched.runAll({ sourceIds: ['civilview'] });
+  assert.equal(pgInsertResolved, true, 'PostgreSQL checkpoint write must be awaited before runAll resolves');
+  assert.ok(observedDurationMs >= 25, `expected durationMs (${observedDurationMs}) to include bulk flush`);
+});
+
+test('absence reconciliation refuses whole-source wipe when run report has failures and reconciles only non-failed completedCounties', async () => {
+  const reconciled = [];
+  const mockDb = {
+    isPg: false,
+    async createListing(l) { return l; },
+    async reconcileDuplicateDockets() {},
+    async reconcilePublisherAbsence(sourceId, seenIds, options) {
+      reconciled.push({ sourceId, seenIds, options });
+      return { retired: 0, restored: 0 };
+    },
+  };
+  const scraper = {
+    name: 'PartialSheriffFixture',
+    sourceKey: 'sheriff',
+    async scrapeFeed() {
+      this.lastRunReport = {
+        outcome: 'partial_failure',
+        complete: true, // buggy adapter setting complete:true despite failure
+        failures: [{ unit: 'Tarrant,TX', error: 'timeout' }],
+        statesFailed: ['Tarrant,TX'],
+        completedCounties: [
+          { county: 'Cuyahoga', state: 'OH', seenIds: ['SHERIFF-OH-1'] },
+          { county: 'Tarrant', state: 'TX', seenIds: ['SHERIFF-TX-1'] },
+        ],
+      };
+      return [{
+        id: 'SHERIFF-OH-1',
+        source: 'sheriff',
+        state: 'OH',
+        county: 'Cuyahoga',
+        address: '100 Public Sq, Cleveland, OH 44114',
+        sourceUrl: 'https://cuyahoga.sheriffsaleauction.ohio.gov/index.cfm?zaction=AUCTION&zmethod=PREVIEW&aid=1',
+        sourceObservedAt: '2026-11-12T00:00:00.000Z',
+        raw: JSON.stringify({ id: '1', address: '100 Public Sq, Cleveland, OH 44114' }),
+        provenance: { origin: 'live', observed: true, observedAt: '2026-11-12T00:00:00.000Z', publisher: 'Cuyahoga County Sheriff', recordId: '1', sourceFacts: {} },
+      }];
+    },
+  };
+  const os = require('node:os');
+  const path = require('node:path');
+  const tmpCache = path.join(os.tmpdir(), `sched-absence-${Date.now()}.json`);
+  const prevLivePath = process.env.PROPERTY_LIVE_CACHE_PATH;
+  process.env.PROPERTY_LIVE_CACHE_PATH = tmpCache;
+  let emittedReport = null;
+  const defaultScheduler = require('../server/scrapers/scheduler');
+  const sched = new IngestionScheduler({
+    realScrapers: [scraper],
+    database: mockDb,
+    telemetry,
+    networkEnabled: true,
+    concurrency: 1,
+    onSourceRun: async (sourceId, run) => {
+      emittedReport = run.report;
+      await defaultScheduler.onSourceRun.call({ database: mockDb }, sourceId, { ...run, enableAssessorBackfill: false });
+    },
+  });
+  try {
+    await sched.runAll({ sourceIds: ['sheriff'] });
+    assert.equal(emittedReport?.complete, false, 'scheduler must downgrade complete when report has failures');
+    assert.equal(reconciled.length, 1, 'must reconcile only the succeeded non-failed county');
+    assert.equal(reconciled[0].options.county, 'Cuyahoga');
+    assert.deepEqual(reconciled[0].seenIds, ['SHERIFF-OH-1']);
+  } finally {
+    if (prevLivePath === undefined) delete process.env.PROPERTY_LIVE_CACHE_PATH;
+    else process.env.PROPERTY_LIVE_CACHE_PATH = prevLivePath;
+    try { require('node:fs').rmSync(tmpCache, { force: true }); } catch (_) {}
+  }
 });

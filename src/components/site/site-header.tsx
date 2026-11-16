@@ -69,7 +69,7 @@ const GROUPS: MenuGroup[] = [
       [
         { label: "Hunts", desc: "Members get an email when a new listing fits", icon: Radar, href: "/hunts", tint: "#e7f8f0" },
         { label: "Portfolio", desc: "Your tracked properties, price drops and sale dates", icon: PieChart, href: "/portfolio", tint: "#eef1ff" },
-        { label: "Due diligence dossiers", desc: "Adversarial trial dockets and title defect risk", icon: BookOpen, href: "/research", tint: "#fff0e9" },
+        { label: "Research cases", desc: "Case files, title risk, and lien checks", icon: BookOpen, href: "/research", tint: "#fff0e9" },
       ],
     ],
   },
@@ -84,8 +84,10 @@ const GROUPS: MenuGroup[] = [
       ],
       [
         { label: "What's new", desc: "Recent changes to the site", icon: History, href: "/resources#changelog", tint: "#e5e7eb" },
-        { label: "Public Records & Radar", desc: "How we collect, verify and normalize auction notices", icon: BarChart3, href: "/sources", tint: "#e5e7eb" },
-        { label: "Operator sign-in", desc: "Secure portal for authorized reviewers", icon: KeyRound, href: "/sign-in", tint: "#e5e7eb" },
+        { label: "Sources & coverage", desc: "Where listings come from and how fresh they are", icon: BarChart3, href: "/sources", tint: "#e5e7eb" },
+        { label: "Case studies", desc: "How buyers review auctions, step by step", icon: BookOpen, href: "/case-studies", tint: "#e5e7eb" },
+        { label: "For teams", desc: "Individual accounts, access rules and roadmap", icon: Landmark, href: "/enterprise", tint: "#e5e7eb" },
+        { label: "Staff sign-in", desc: "Sign in as a member or staff reviewer", icon: KeyRound, href: "/sign-in", tint: "#e5e7eb" },
       ],
     ],
   },
@@ -130,7 +132,7 @@ function MegaPanel({ group }: { group: MenuGroup }) {
                   <span className="block text-meta font-semibold text-ink">
                     {l.label}
                   </span>
-                  <span className="block text-label leading-snug text-ink-3">
+                  <span className="block text-xs leading-snug text-ink-3">
                     {l.desc}
                   </span>
                 </span>
@@ -321,7 +323,7 @@ export function SiteHeader() {
                                 <span className="block text-meta font-semibold text-ink">
                                   {l.label}
                                 </span>
-                                <span className="block text-label text-ink-3">
+                                <span className="block text-xs text-ink-3">
                                   {l.desc}
                                 </span>
                               </span>

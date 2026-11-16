@@ -18,7 +18,7 @@ on:
         required: true
         default: render
         type: choice
-        options: [render, koyeb, smoke-only]
+        options: [render, smoke-only]
 
 jobs:
   deploy:

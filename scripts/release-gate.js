@@ -40,6 +40,7 @@ const gates = [
   // next's bin directly: `npm` is npm.cmd on Windows and spawnSync without a
   // shell never starts it, which failed in 2ms and read as a broken build.
   { id: 'next-build', desc: 'production bundle', cmd: node, args: ['node_modules/next/dist/bin/next', 'build'], slow: true },
+  { id: 'nft-manifests', desc: 'ensure middleware NFT manifests (matches npm run build)', cmd: node, args: ['scripts/ensure-nft-manifests.js'], slow: true },
   { id: 'production-e2e', desc: 'full stack, 25 checks, isolated embedded database', cmd: node, args: ['scripts/run-production-e2e.js'], env: { ...process.env, DATABASE_URL: '', DISCOVERY_MODE: '', NODE_OPTIONS: process.env.NODE_OPTIONS ? `${process.env.NODE_OPTIONS} --max-old-space-size=4096` : '--max-old-space-size=4096' }, slow: true },
 ];
 

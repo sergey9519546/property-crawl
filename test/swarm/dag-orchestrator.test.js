@@ -143,4 +143,72 @@ describe('DagOrchestrator (Tier 3.3)', () => {
     assert.ok(result.telemetry.failedNodes.includes('cadastral_parcel'));
     assert.ok(result.telemetry.nodeDiagnostics.cadastral_parcel.error.includes('Output validation failed'));
   });
+
+  test('cadastral_parcel consults offline local parcel index when allowNetwork is false', async (t) => {
+    const fs = require('node:fs');
+    const os = require('node:os');
+    const path = require('node:path');
+    const { DatabaseSync } = require('node:sqlite');
+    const { closeLocalParcelDb } = require('../../server/enrichment/local-parcel-index');
+
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dag-local-parcel-'));
+    const dbPath = path.join(tmpDir, 'local-parcels.db');
+    const db = new DatabaseSync(dbPath);
+    db.exec(`
+      CREATE TABLE parcels (county_fips TEXT, clean_apn TEXT, raw_apn TEXT, state TEXT, county TEXT, situs_address TEXT, assessed_total REAL, assessed_land REAL, assessed_imprv REAL, land_use TEXT, legal_description TEXT, tax_year INTEGER);
+      INSERT INTO parcels VALUES ('12095', '292212000000001', '29-22-12-0000-00-001', 'FL', 'ORANGE', '100 N ORANGE AVE', 500000, 100000, 400000, 'COMMERCIAL', 'LOT 1 BLK A', 2026);
+    `);
+    db.close();
+    const prevLocalDb = process.env.PROPERTY_LOCAL_PARCEL_DB;
+    process.env.PROPERTY_LOCAL_PARCEL_DB = dbPath;
+    closeLocalParcelDb();
+    t.after(() => {
+      closeLocalParcelDb();
+      if (prevLocalDb === undefined) delete process.env.PROPERTY_LOCAL_PARCEL_DB;
+      else process.env.PROPERTY_LOCAL_PARCEL_DB = prevLocalDb;
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    });
+
+    const result = await executeDag({
+      address: '100 North Orange Ave, Orlando, FL 32801',
+      state: 'FL',
+      county: 'Orange',
+      countyFips: '12095',
+      lat: 28.543,
+      lng: -81.379,
+      apn: '29-22-12-0000-00-001',
+      zip: '32801',
+    }, {
+      allowNetwork: false,
+    });
+
+    assert.equal(result.success, true);
+    assert.equal(result.context.cadastralIdentity?.canonicalApn, '292212000000001');
+    assert.equal(result.context.cadastralIdentity?.countyFips, '12095');
+    assert.equal(result.context.parcelEvidence?.status, 'source_observed');
+    assert.equal(result.context.parcelEvidence?.source, 'local_cadastral_offline_index');
+  });
+
+  test('code_enforcement and title_risk forward count-only codeEnforcement and vacantBuildingNotice without violations array', async () => {
+    const result = await executeDag({
+      address: '500 Public Sq, Cleveland, OH 44113',
+      state: 'OH',
+      zip: '44113',
+      lat: 41.499,
+      lng: -81.694,
+      codeEnforcement: {
+        source: 'Cleveland Open Data',
+        openViolationsCount: 3,
+        vacantBuildingNotice: true,
+      },
+    }, { allowNetwork: false });
+
+    assert.equal(result.success, true);
+    assert.equal(result.context.openViolations, 3);
+    assert.equal(result.context.superLienFlag, true);
+    assert.equal(result.context.municipalEvidence.status, 'source_observed');
+    assert.ok(result.context.riskScore >= 70);
+    assert.ok(result.context.dossier.codeEnforcement.openViolations === 3);
+    assert.ok(result.context.dossier.codeEnforcement.superLienFlag === true);
+  });
 });

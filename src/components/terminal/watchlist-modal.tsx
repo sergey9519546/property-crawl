@@ -82,6 +82,7 @@ export function WatchlistModal({ isOpen, onClose, savedListings, onRemove, onSel
     try {
       const response = await fetch("/api/portfolio/dashboard?upcomingWindowDays=60&upcomingLimit=5", {
         cache: "no-store",
+        credentials: "same-origin",
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) {

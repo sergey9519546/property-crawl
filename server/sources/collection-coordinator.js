@@ -7,6 +7,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const { notifyHuntWebhook, notifyHuntEmail } = require('../delivery/webhook-notify');
+const { acquireOwnedLock, releaseOwnedLock, replaceFileWithRetry } = require('../intelligence/research-store');
 const DEFAULT_JOB_PATH = path.resolve(__dirname, '../../.cache/collection-jobs.json');
 const MAX_JOBS = 200;
 const ID = /^job_[a-f0-9]{24}$/;
@@ -21,7 +22,7 @@ function jobId() { return `job_${crypto.randomBytes(12).toString('hex')}`; }
 function defaultStore() { return { version: 1, jobs: [] }; }
 
 class CollectionJobStore {
-  constructor(options = {}) { this.filePath = options.filePath || process.env.PROPERTY_COLLECTION_JOBS_PATH || DEFAULT_JOB_PATH; this.now = options.now; }
+  constructor(options = {}) { this.filePath = options.filePath || process.env.PROPERTY_COLLECTION_JOBS_PATH || DEFAULT_JOB_PATH; this.now = options.now; this.staleLockMs = typeof options.staleLockMs === 'number' ? options.staleLockMs : 30_000; }
   load() {
     if (!fs.existsSync(this.filePath)) return defaultStore();
     const data = JSON.parse(fs.readFileSync(this.filePath, 'utf8'));
@@ -31,15 +32,22 @@ class CollectionJobStore {
   write(data) {
     fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
     const temporary = `${this.filePath}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
-    fs.writeFileSync(temporary, JSON.stringify(data, null, 2), 'utf8');
-    fs.renameSync(temporary, this.filePath);
+    try {
+      fs.writeFileSync(temporary, JSON.stringify(data, null, 2), { flag: 'wx', mode: 0o600 });
+      replaceFileWithRetry(temporary, this.filePath);
+    } finally {
+      try { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); } catch (_) {}
+    }
   }
-  mutate(mutator) {
+  mutate(mutator, options = {}) {
     const lockPath = `${this.filePath}.lock`;
-    let lock;
     fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
-    try { lock = fs.openSync(lockPath, 'wx', 0o600); }
-    catch (error) {
+    let lockHandle;
+    try {
+      lockHandle = acquireOwnedLock(lockPath, {
+        staleLockMs: typeof options.staleLockMs === 'number' ? options.staleLockMs : this.staleLockMs,
+      });
+    } catch (error) {
       if (error.code === 'EEXIST') throw new Error('Collection job store is locked by another writer; retry after it finishes');
       throw error;
     }
@@ -50,8 +58,7 @@ class CollectionJobStore {
       this.write(data);
       return clone(value);
     } finally {
-      if (lock !== undefined) fs.closeSync(lock);
-      if (fs.existsSync(lockPath)) fs.unlinkSync(lockPath);
+      releaseOwnedLock(lockHandle);
     }
   }
   createOrReuse(input = {}) {
@@ -207,7 +214,9 @@ class CollectionCoordinator {
     const owner = `coordinator:${process.pid}:${crypto.randomUUID()}`;
     const claimed = this.store.claim ? await this.store.claim(job.id, owner, 300) : job;
     if (!claimed) return this.store.get(job.id);
-    const running = this.execute(job.id, input, { owner }).catch(() => {});
+    const running = this.execute(job.id, input, { owner }).catch((execErr) => {
+      console.warn('[CollectionCoordinator] Background job execution error:', job.id, execErr?.message || execErr);
+    });
     this.inFlight.set(job.id, running);
     running.finally(() => this.inFlight.delete(job.id));
     return this.store.get(job.id);

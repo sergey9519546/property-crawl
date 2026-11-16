@@ -36,13 +36,15 @@ function loadStore(filePath) {
   return parsed;
 }
 
-function writeLocked(filePath, mutate) {
+const { acquireOwnedLock, releaseOwnedLock, replaceFileWithRetry } = require('../intelligence/research-store');
+
+function writeLocked(filePath, mutate, options = {}) {
   const resolved = resolveStorePath(filePath);
   fs.mkdirSync(path.dirname(resolved), { recursive: true });
   const lockPath = `${resolved}.lock`;
-  let lock;
+  let lockHandle;
   try {
-    lock = fs.openSync(lockPath, 'wx', 0o600);
+    lockHandle = acquireOwnedLock(lockPath, { staleLockMs: options.staleLockMs });
   } catch (error) {
     if (error.code === 'EEXIST') throw new Error('Source intake store is locked by another writer; retry after it finishes');
     throw error;
@@ -59,14 +61,13 @@ function writeLocked(filePath, mutate) {
     const temporary = `${resolved}.${crypto.randomUUID()}.tmp`;
     try {
       fs.writeFileSync(temporary, body, { flag: 'wx', mode: 0o600 });
-      fs.renameSync(temporary, resolved);
+      replaceFileWithRetry(temporary, resolved, options.replaceOptions);
     } finally {
-      if (fs.existsSync(temporary)) fs.unlinkSync(temporary);
+      try { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); } catch (_) {}
     }
     return result?.value;
   } finally {
-    fs.closeSync(lock);
-    fs.unlinkSync(lockPath);
+    releaseOwnedLock(lockHandle);
   }
 }
 
@@ -77,7 +78,7 @@ function putRecord(record, options = {}) {
     if (existing) return { changed: false, value: { record: existing, deduplicated: true } };
     store.records.push(record);
     return { changed: true, value: { record, deduplicated: false } };
-  });
+  }, options);
 }
 
 function queryRecords(filters = {}, options = {}) {
@@ -102,7 +103,7 @@ function updateRecord(id, updater, options = {}) {
     if (!updated || updated.id !== id) throw new Error('Source intake updater cannot remove or change a record id');
     store.records[index] = updated;
     return { changed: true, value: updated };
-  });
+  }, options);
 }
 
 module.exports = {

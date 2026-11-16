@@ -81,7 +81,7 @@ export function findGaps(listing: GapListing): Gap[] {
 
 export function listingFactOrigin(listing: { provenance?: { origin?: string; observed?: boolean; derivedFields?: Record<string, unknown> } | null }, field: string): FactOrigin {
   const p = listing.provenance;
-  return p?.observed === true && p.origin === "live" && !p.derivedFields?.[field] ? "printed" : "unverified";
+  return p?.observed === true && (p.origin === "live" || p.origin === "email_notice") && !p.derivedFields?.[field] ? "printed" : "unverified";
 }
 
 export type ChecklistStatus = "verified" | "flagged" | "pending";

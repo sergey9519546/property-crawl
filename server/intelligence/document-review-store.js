@@ -10,24 +10,14 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
+const {
+  acquireOwnedLock,
+  releaseOwnedLock,
+  replaceFileWithRetry,
+} = require('./research-store');
 
 const DEFAULT_STORE_PATH = path.resolve(__dirname, '../../.cache/document-review-store.json');
 const STORE_VERSION = 1;
-
-function replaceFileWithRetry(temporary, resolved, options = {}) {
-  const attempts = Math.max(1, Math.min(10, Number(options.attempts) || 9));
-  const wait = typeof options.wait === 'function' ? options.wait : (milliseconds) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
-    try {
-      fs.renameSync(temporary, resolved);
-      return;
-    } catch (error) {
-      const retryable = (options.platform || process.platform) === 'win32' && ['EPERM', 'EACCES', 'EBUSY'].includes(error.code);
-      if (!retryable || attempt === attempts - 1) throw error;
-      wait(Math.min(250, 10 * (2 ** attempt)));
-    }
-  }
-}
 
 function defaultStorePath(env = process.env) {
   const explicit = env.PROPERTY_DOCUMENT_REVIEW_STORE_PATH;
@@ -48,11 +38,26 @@ function createDocumentReviewStore(options = {}) {
   // disk and not loaded" instead of leaving the caller to read an empty store
   // as "you have no reviews". Exposed through createDocumentReviewStore().
   let lastLoadError = null;
+  let lastPersistError = null;
   // Set when an unreadable store could not be moved aside, so persist must
   // refuse rather than overwrite the only copy.
   let persistBlocked = false;
   let quarantinedPath = null;
   let pgReady = false;
+  let pendingPgOp = Promise.resolve();
+
+  function queuePgOp(fn) {
+    const run = pendingPgOp.then(() => fn(), () => fn());
+    pendingPgOp = run.catch(() => false);
+    return run;
+  }
+
+  function recordPgFailure(action, err) {
+    const message = err && err.message ? err.message : String(err);
+    lastPersistError = message;
+    console.warn(`[document-review] PostgreSQL ${action} failed:`, message);
+    return false;
+  }
 
   async function ensurePgTable() {
     if (!pool || pgReady) return;
@@ -77,8 +82,9 @@ function createDocumentReviewStore(options = {}) {
       )`);
       await pool.query('ALTER TABLE IF EXISTS document_reviews ADD COLUMN IF NOT EXISTS content_hash TEXT;');
       pgReady = true;
-    } catch {
+    } catch (err) {
       pgReady = false;
+      throw err;
     }
   }
 
@@ -141,7 +147,7 @@ function createDocumentReviewStore(options = {}) {
     try {
       if (!fs.existsSync(storePath)) return null;
       const quarantined = `${storePath}.corrupt-${Date.now()}`;
-      fs.renameSync(storePath, quarantined);
+      replaceFileWithRetry(storePath, quarantined, options.replaceOptions);
       quarantinedPath = quarantined;
       console.warn(`[document-review] Unreadable store moved aside to ${quarantined}; nothing was overwritten.`);
       return quarantined;
@@ -156,22 +162,27 @@ function createDocumentReviewStore(options = {}) {
 
   async function loadPg() {
     if (!pool) return reviews;
-    await ensurePgTable();
-    try {
-      const result = await pool.query('SELECT id, payload, content_hash FROM document_reviews');
-      reviews.clear();
-      for (const row of result.rows || []) {
-        const payload = typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload;
-        if (payload && typeof payload === 'object') {
-          if (row.content_hash && !payload.contentHash) payload.contentHash = row.content_hash;
-          reviews.set(row.id, payload);
+    return queuePgOp(async () => {
+      try {
+        await ensurePgTable();
+        const result = await pool.query('SELECT id, payload, content_hash FROM document_reviews');
+        reviews.clear();
+        for (const row of result.rows || []) {
+          const payload = typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload;
+          if (payload && typeof payload === 'object') {
+            if (row.content_hash && !payload.contentHash) payload.contentHash = row.content_hash;
+            reviews.set(row.id, payload);
+          }
         }
+        lastLoadError = null;
+        return reviews;
+      } catch (err) {
+        const message = err && err.message ? err.message : String(err);
+        lastLoadError = message;
+        console.warn('[document-review] PostgreSQL load failed; keeping in-memory/file state:', message);
+        return reviews;
       }
-      return reviews;
-    } catch (err) {
-      console.warn('[document-review] PostgreSQL load failed; keeping in-memory/file state:', err.message);
-      return reviews;
-    }
+    });
   }
 
   function persistFile() {
@@ -190,23 +201,9 @@ function createDocumentReviewStore(options = {}) {
         reviews: Object.fromEntries(reviews),
       });
       const lockPath = `${storePath}.lock`;
-      let lock;
+      let lockHandle;
       try {
-        const acquireLock = () => fs.openSync(lockPath, 'wx', 0o600);
-        try {
-          lock = acquireLock();
-        } catch (lockErr) {
-          if (lockErr.code === 'EEXIST') {
-            const staleLockMs = typeof options.staleLockMs === 'number' ? options.staleLockMs : 30_000;
-            let stale = false;
-            try { stale = Date.now() - fs.statSync(lockPath).mtimeMs > staleLockMs; } catch (_) {}
-            if (stale) {
-              try { fs.unlinkSync(lockPath); } catch (_) {}
-              try { lock = acquireLock(); } catch (_) {}
-            }
-          }
-          if (!lock) throw lockErr;
-        }
+        lockHandle = acquireOwnedLock(lockPath, { staleLockMs: options.staleLockMs });
       } catch (error) {
         if (error.code === 'EEXIST') {
           console.warn('[document-review] Store is locked by another writer; persist refused.');
@@ -217,64 +214,116 @@ function createDocumentReviewStore(options = {}) {
       const tempPath = `${storePath}.${randomUUID()}.tmp`;
       try {
         fs.writeFileSync(tempPath, body, { flag: 'wx', mode: 0o600 });
-        replaceFileWithRetry(tempPath, storePath);
+        replaceFileWithRetry(tempPath, storePath, options.replaceOptions);
+        lastPersistError = null;
         return true;
       } finally {
         try { if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath); } catch { /* ignore */ }
-        try { fs.closeSync(lock); } catch { /* ignore */ }
-        try { fs.unlinkSync(lockPath); } catch { /* ignore */ }
+        releaseOwnedLock(lockHandle);
       }
     } catch (err) {
-      console.warn('[document-review] Failed to persist store:', err.message);
+      lastPersistError = err && err.message ? err.message : String(err);
+      console.warn('[document-review] Failed to persist store:', lastPersistError);
       return false;
     }
   }
 
   async function persistPg() {
     if (!pool) return false;
-    await ensurePgTable();
     try {
-      for (const [id, record] of reviews.entries()) {
-        await pool.query(
-          `INSERT INTO document_reviews
-            (id, listing_id, document_index, document_url, status, notes, reviewer,
-             reviewed_at, revision, prior_status, extracted_at, content_hash, payload, updated_at)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW())
-           ON CONFLICT (id) DO UPDATE SET
-             listing_id = EXCLUDED.listing_id,
-             document_index = EXCLUDED.document_index,
-             document_url = EXCLUDED.document_url,
-             status = EXCLUDED.status,
-             notes = EXCLUDED.notes,
-             reviewer = EXCLUDED.reviewer,
-             reviewed_at = EXCLUDED.reviewed_at,
-             revision = EXCLUDED.revision,
-             prior_status = EXCLUDED.prior_status,
-             extracted_at = EXCLUDED.extracted_at,
-             content_hash = EXCLUDED.content_hash,
-             payload = EXCLUDED.payload,
-             updated_at = NOW()`,
-          [
-            id,
-            record.listingId || id.split('~')[0],
-            Number.isInteger(record.documentIndex) ? record.documentIndex : null,
-            record.documentUrl || null,
-            record.status || 'pending',
-            record.notes || null,
-            record.reviewer || null,
-            record.reviewedAt || null,
-            record.revision || 1,
-            record.priorStatus || null,
-            record.extractedAt || null,
-            record.contentHash || null,
-            JSON.stringify(record),
-          ]
-        );
+      await ensurePgTable();
+      const entries = Array.from(reviews.entries());
+      if (entries.length === 0) {
+        lastPersistError = null;
+        return true;
       }
+
+      const ids = [];
+      const listingIds = [];
+      const docIndices = [];
+      const docUrls = [];
+      const statuses = [];
+      const notesList = [];
+      const reviewers = [];
+      const reviewedAts = [];
+      const revisions = [];
+      const priorStatuses = [];
+      const extractedAts = [];
+      const contentHashes = [];
+      const payloads = [];
+
+      for (const [id, record] of entries) {
+        ids.push(id);
+        listingIds.push(record.listingId || id.split('~')[0]);
+        docIndices.push(Number.isInteger(record.documentIndex) ? record.documentIndex : null);
+        docUrls.push(record.documentUrl || null);
+        statuses.push(record.status || 'pending');
+        notesList.push(record.notes || null);
+        reviewers.push(record.reviewer || null);
+        reviewedAts.push(record.reviewedAt || null);
+        revisions.push(Number.isInteger(record.revision) ? record.revision : 1);
+        priorStatuses.push(record.priorStatus || null);
+        extractedAts.push(record.extractedAt || null);
+        contentHashes.push(record.contentHash || null);
+        payloads.push(JSON.stringify(record));
+      }
+
+      await pool.query(
+        `INSERT INTO document_reviews
+          (id, listing_id, document_index, document_url, status, notes, reviewer,
+           reviewed_at, revision, prior_status, extracted_at, content_hash, payload, updated_at)
+         SELECT u.*, NOW()
+         FROM UNNEST(
+           $1::text[], $2::text[], $3::int4[], $4::text[], $5::text[], $6::text[], $7::text[],
+           $8::timestamptz[], $9::int4[], $10::text[], $11::timestamptz[], $12::text[], $13::jsonb[]
+         ) AS u(id, listing_id, document_index, document_url, status, notes, reviewer,
+                reviewed_at, revision, prior_status, extracted_at, content_hash, payload)
+         ON CONFLICT (id) DO UPDATE SET
+           listing_id = EXCLUDED.listing_id,
+           document_index = EXCLUDED.document_index,
+           document_url = EXCLUDED.document_url,
+           status = EXCLUDED.status,
+           notes = EXCLUDED.notes,
+           reviewer = EXCLUDED.reviewer,
+           reviewed_at = EXCLUDED.reviewed_at,
+           revision = EXCLUDED.revision,
+           prior_status = EXCLUDED.prior_status,
+           extracted_at = EXCLUDED.extracted_at,
+           content_hash = EXCLUDED.content_hash,
+           payload = EXCLUDED.payload,
+           updated_at = NOW()`,
+        [
+          ids,
+          listingIds,
+          docIndices,
+          docUrls,
+          statuses,
+          notesList,
+          reviewers,
+          reviewedAts,
+          revisions,
+          priorStatuses,
+          extractedAts,
+          contentHashes,
+          payloads,
+        ]
+      );
+      lastPersistError = null;
       return true;
     } catch (err) {
-      console.warn('[document-review] PostgreSQL persist failed:', err.message);
-      return false;
+      return recordPgFailure('persist', err);
+    }
+  }
+
+  async function resetPg() {
+    if (!pool) return false;
+    try {
+      await ensurePgTable();
+      await pool.query('DELETE FROM document_reviews');
+      lastPersistError = null;
+      return true;
+    } catch (err) {
+      return recordPgFailure('reset', err);
     }
   }
 
@@ -285,6 +334,7 @@ function createDocumentReviewStore(options = {}) {
     get map() { return reviews; },
     get backend() { return pool ? 'postgres' : (storePath ? 'file' : 'none'); },
     get loadError() { return lastLoadError; },
+    get persistError() { return lastPersistError; },
     get quarantined() { return quarantinedPath; },
     get writesBlocked() { return persistBlocked; },
     get pool() { return pool; },
@@ -292,22 +342,43 @@ function createDocumentReviewStore(options = {}) {
     loadPg,
     persist() {
       if (pool) {
-        // Fire-and-forget PG write is unsafe for fail-closed 503 contract;
-        // expose sync file fallback when PG write cannot be awaited here.
-        // Callers that need PG should use persistAsync.
-        persistPg().catch(() => {});
-        return true;
+        // Callers needing synchronous confirmation against PG should use persistAsync.
+        // Never drop PG write errors silently; track them on persistError for diagnostics.
+        queuePgOp(persistPg).then((ok) => {
+          if (!ok && !lastPersistError) {
+            lastPersistError = 'PostgreSQL persist failed';
+          }
+        }, (err) => {
+          recordPgFailure('persist', err);
+        });
+        return lastPersistError === null;
       }
       return persistFile();
     },
     persistAsync: async () => {
-      if (pool) return persistPg();
+      if (pool) return queuePgOp(persistPg);
       return persistFile();
     },
     reset() {
       reviews.clear();
-      return pool ? true : persistFile();
+      if (pool) {
+        queuePgOp(resetPg).then((ok) => {
+          if (!ok && !lastPersistError) {
+            lastPersistError = 'PostgreSQL reset failed';
+          }
+        }, (err) => {
+          recordPgFailure('reset', err);
+        });
+        return lastPersistError === null;
+      }
+      return persistFile();
     },
+    resetAsync: async () => {
+      reviews.clear();
+      if (pool) return queuePgOp(resetPg);
+      return persistFile();
+    },
+    flushPg: () => pendingPgOp,
   };
 }
 

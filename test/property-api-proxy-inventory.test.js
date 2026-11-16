@@ -143,4 +143,24 @@ test('allowlist covers operator document-review, unbrowse, jobs list, workspace 
     assert.ok(API_PATH.test(p), `API_PATH must accept ${p}`);
   }
   assert.equal(API_PATH.test('/api/listings/USDA-TN-6237/unauthorized-action'), false, 'API_PATH must fail closed for unknown listing subactions');
+  for (const p of [
+    '/api/neighborhoods',
+    '/api/neighborhoods/county',
+    '/api/neighborhoods/county/FL-Miami-Dade',
+    '/api/sources',
+    '/api/sources/fannie/collect',
+  ]) {
+    assert.ok(API_PATH.test(p), `API_PATH must accept ${p}`);
+    assert.equal(nextRouteExists(p), true, `Next route must exist for ${p}`);
+  }
+  for (const p of [
+    '/api/neighborhoods/county/FL-Miami-Dade/extra',
+    '/api/neighborhoods/../secret',
+    '/api/neighborhoods/county/..',
+    '/api/sources/../collect',
+    '/api/sources/collect',
+    '/api/sources/fannie/other',
+  ]) {
+    assert.equal(API_PATH.test(p), false, `API_PATH must fail closed for ${p}`);
+  }
 });

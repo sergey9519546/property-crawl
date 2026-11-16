@@ -358,3 +358,187 @@ test('getCostTracker & resetCostTracker: expose and reset the runtime AI budget 
   assert.equal(tracker.isOverBudget, false);
   parseRoute.resetCostTracker(5.00);
 });
+
+test('callLlmWithRouting: falls through to alternate provider on primary HTTP error or thrown error', async () => {
+  const parseRoute = require('../../server/routes/parse');
+  const notice = 'Sheriff sale Case No. 2026-CV-77 for parcel in Cuyahoga.';
+
+  // 1. Gemini primary throws -> OpenAI alternate succeeds
+  const calls1 = [];
+  const res1 = await parseRoute.callLlmWithRouting(
+    notice,
+    'gemini-2.0-flash-lite',
+    { GEMINI_API_KEY: 'gem-key', OPENAI_API_KEY: 'oa-key' },
+    async (url) => {
+      calls1.push(url);
+      if (String(url).includes('generativelanguage.googleapis.com')) {
+        throw new Error('gemini outage');
+      }
+      return {
+        ok: true,
+        json: async () => ({
+          choices: [{
+            message: {
+              content: JSON.stringify({
+                candidates: {
+                  case_number: { value: '2026-CV-77', evidence: 'Case No. 2026-CV-77' }
+                }
+              })
+            }
+          }],
+          usage: { prompt_tokens: 40, completion_tokens: 20 }
+        })
+      };
+    }
+  );
+  assert.equal(calls1.length, 2);
+  assert.equal(res1?.provider, 'openai');
+  assert.equal(res1?.model, 'gpt-4o-mini');
+  assert.equal(res1?.data?.candidates?.case_number?.value, '2026-CV-77');
+
+  // 2. OpenAI primary returns HTTP 503 -> Gemini alternate succeeds
+  const calls2 = [];
+  const res2 = await parseRoute.callLlmWithRouting(
+    notice,
+    'gpt-4o-mini',
+    { GEMINI_API_KEY: 'gem-key', OPENAI_API_KEY: 'oa-key' },
+    async (url) => {
+      calls2.push(url);
+      if (String(url).includes('api.openai.com')) {
+        return { ok: false, status: 503 };
+      }
+      return {
+        ok: true,
+        json: async () => ({
+          candidates: [{
+            content: {
+              parts: [{
+                text: JSON.stringify({
+                  candidates: {
+                    case_number: { value: '2026-CV-77', evidence: 'Case No. 2026-CV-77' }
+                  }
+                })
+              }]
+            }
+          }],
+          usageMetadata: { promptTokenCount: 35, candidatesTokenCount: 18 }
+        })
+      };
+    }
+  );
+  assert.equal(calls2.length, 2);
+  assert.equal(res2?.provider, 'gemini');
+  assert.equal(res2?.model, 'gemini-2.0-flash-lite');
+});
+
+test('handleParse: forwards env/fetchFn into fallback routing and keeps AiCache key on requestedModel', async () => {
+  const handleParse = require('../../server/routes/parse');
+  handleParse.resetCostTracker(5.00);
+  const store = new Map();
+  const mockCache = {
+    async get(prompt, model) {
+      return store.get(`${model}::${prompt}`) || null;
+    },
+    async set(prompt, model, value) {
+      store.set(`${model}::${prompt}`, value);
+    }
+  };
+  let fetchCount = 0;
+  const noticeText = 'Sheriff auction notice unique-cache-key-2026 Case No. 26-CV-9911.';
+  const deps = {
+    env: {
+      SCRAPER_ADMIN_TOKEN: 'secret-token',
+      GEMINI_API_KEY: 'gem-key',
+      OPENAI_API_KEY: 'oa-key',
+    },
+    cache: mockCache,
+    fetchFn: async (url) => {
+      fetchCount++;
+      if (String(url).includes('generativelanguage.googleapis.com')) {
+        return { ok: false, status: 500 };
+      }
+      return {
+        ok: true,
+        json: async () => ({
+          choices: [{
+            message: {
+              content: JSON.stringify({
+                candidates: {
+                  case_number: { value: '26-CV-9911', evidence: 'Case No. 26-CV-9911' }
+                }
+              })
+            }
+          }],
+          usage: { prompt_tokens: 30, completion_tokens: 15 }
+        })
+      };
+    }
+  };
+
+  function makeRes() {
+    return {
+      statusCode: 200,
+      body: null,
+      status(code) { this.statusCode = code; return this; },
+      json(payload) { this.body = payload; return this; }
+    };
+  }
+  const req1 = {
+    method: 'POST',
+    headers: { authorization: 'Bearer secret-token' },
+    body: { noticeText, forceLlm: true }
+  };
+  const res1 = makeRes();
+  await handleParse(req1, res1, deps);
+  assert.equal(res1.statusCode, 200);
+  assert.equal(res1.body.cached, false);
+  assert.equal(res1.body.requestedModel, 'gemini-2.0-flash-lite');
+  assert.equal(res1.body.model, 'gpt-4o-mini');
+  assert.equal(res1.body.provider, 'openai');
+  assert.equal(res1.body.unverifiedCandidates.case_number.value, '26-CV-9911');
+  assert.equal(fetchCount, 2);
+
+  // Second identical call must hit cache keyed by requestedModel (no extra fetch calls)
+  const res2 = makeRes();
+  await handleParse(req1, res2, deps);
+  assert.equal(res2.statusCode, 200);
+  assert.equal(res2.body.cached, true);
+  assert.equal(res2.body.requestedModel, 'gemini-2.0-flash-lite');
+  assert.equal(res2.body.model, 'gpt-4o-mini');
+  assert.equal(fetchCount, 2);
+});
+
+test('extractTextFromPdf: decompresses FlateDecode streams, decodes TJ arrays, and unescapes literals', () => {
+  const zlib = require('node:zlib');
+  const contentStream = [
+    'BT',
+    '/F1 12 Tf',
+    '[(Case [A] ) -12 (\\(Verified\\)) -10 ( No. 26-CV-7788)] TJ',
+    '(Property Address: 410 Oak Ave, Cleveland, OH 44113) Tj',
+    'ET'
+  ].join('\n');
+  const compressed = zlib.deflateSync(Buffer.from(contentStream, 'latin1')).toString('latin1');
+  const pdf = [
+    '%PDF-1.4',
+    '1 0 obj << /Filter /FlateDecode /Length ' + compressed.length + ' >>',
+    'stream',
+    compressed,
+    'endstream',
+    'endobj'
+  ].join('\n');
+
+  const dataUri = `data:application/pdf;base64,${Buffer.from(pdf, 'latin1').toString('base64')}`;
+  const extracted = extractTextFromPdf(dataUri);
+  assert.match(extracted, /Case \[A\] \(Verified\) No\. 26-CV-7788/);
+  assert.match(extracted, /410 Oak Ave, Cleveland, OH 44113/);
+
+  const observed = extractObservedNotice(extracted);
+  assert.match(observed.property_address, /410 Oak Ave/);
+  assert.equal(observed.state, 'OH');
+});
+
+test('extractTextFromPdf: degrades safely when compressed PDF stream is corrupt', () => {
+  const corruptPdf = '%PDF-1.4\nstream\n\x78\x9cINVALID_ZLIB_BYTES\nendstream\nplain fallback line';
+  const extracted = extractTextFromPdf(corruptPdf);
+  assert.match(extracted, /plain fallback line/);
+});

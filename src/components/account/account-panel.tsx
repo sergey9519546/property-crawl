@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CheckCircle2, CreditCard, Loader2, LogOut, Mail } from "lucide-react";
+import { useWorkspaceSession } from "@/components/workspace/workspace-shell";
 
 type Account = {
   email: string;
@@ -68,6 +69,7 @@ export function MemberSignInForm() {
 export function VerifySignIn() {
   const params = useSearchParams();
   const router = useRouter();
+  const session = useWorkspaceSession();
   const token = params.get("token") || "";
   const [pending, setPending] = React.useState(false);
   const [error, setError] = React.useState("");
@@ -83,6 +85,7 @@ export function VerifySignIn() {
       });
       const body = await json(response);
       if (!response.ok) throw new Error(typeof body.error === "string" ? body.error : "This sign-in link is invalid or expired");
+      await session.refresh();
       router.replace("/account");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "This sign-in link is invalid or expired");
@@ -103,6 +106,7 @@ export function VerifySignIn() {
 
 export function AccountPanel() {
   const params = useSearchParams();
+  const session = useWorkspaceSession();
   const checkout = params.get("checkout");
   const [account, setAccount] = React.useState<Account | null | undefined>(undefined);
   const [price, setPrice] = React.useState<Price>(null);
@@ -166,7 +170,7 @@ export function AccountPanel() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-ink-3">Signed in as <strong className="text-ink">{account.email}</strong></p>
-        <button type="button" disabled={Boolean(pending)} onClick={async () => { if (await post("/api/account", "logout", "DELETE")) setAccount(null); }} className={`${button} border border-line-strong text-ink-2 hover:bg-paper`}><LogOut className="h-4 w-4" />Sign out</button>
+        <button type="button" disabled={Boolean(pending)} onClick={async () => { if (await post("/api/account", "logout", "DELETE")) { setAccount(null); await session.refresh(); } }} className={`${button} border border-line-strong text-ink-2 hover:bg-paper`}><LogOut className="h-4 w-4" />Sign out</button>
       </div>
 
       {account.entitled ? (

@@ -89,14 +89,17 @@ function loadRuntime() {
  * free from connection pooling.
  */
 function withConnection(storage, exclusive, fn) {
-  if (storage.flow) return Promise.resolve(fn(storage.client));
+  const sameClient = Boolean(exclusive && storage.client === exclusive);
+  const sameFlow = Boolean(storage.flowToken && flowStorage.getStore() === storage.flowToken);
+  if (sameClient || sameFlow) return Promise.resolve(fn(storage.client));
   return storage.waiter.acquire().then(() => {
-    storage.flow = true;
+    const token = Symbol('pglite-flow');
+    storage.flowToken = token;
     storage.client = exclusive;
-    return flowStorage.run(storage, () => Promise.resolve()
+    return flowStorage.run(token, () => Promise.resolve()
       .then(fn)
       .finally(() => {
-        storage.flow = false;
+        storage.flowToken = null;
         storage.client = null;
         storage.waiter.release();
       }));
@@ -174,6 +177,7 @@ class EmbeddedClient {
     this._pool = pool;
     this._storage = storage;
     this._released = false;
+    this._queryChain = Promise.resolve();
     this.on = () => {};        // pg Client emits 'error'; nothing listens here
   }
 
@@ -181,13 +185,16 @@ class EmbeddedClient {
     if (this._released) {
       return Promise.reject(new Error('Cannot run a query on a released embedded PostgreSQL client'));
     }
-    return withConnection(this._storage, this, async () => {
+    const exec = () => withConnection(this._storage, this, async () => {
       try {
         return toPgResult(await runSql(this._pool._db, text, params));
       } catch (err) {
         throw decorate(err);
       }
     });
+    const next = this._queryChain.then(exec, exec);
+    this._queryChain = next.catch(() => {});
+    return next;
   }
 
   /**
@@ -198,8 +205,8 @@ class EmbeddedClient {
   release() {
     if (this._released) return;
     this._released = true;
-    if (this._storage.flow && this._storage.client === this) {
-      this._storage.flow = false;
+    if (this._storage.client === this) {
+      this._storage.flowToken = null;
       this._storage.client = null;
       this._storage.waiter.release();
     }
@@ -210,7 +217,7 @@ class EmbeddedPool {
   constructor(db, options = {}) {
     this._db = db;
     this._waiter = new SingleConnectionGate(options.connectTimeoutMs);
-    this._storage = { flow: false, client: null, waiter: this._waiter };
+    this._storage = { flowToken: null, client: null, waiter: this._waiter };
     this.ended = false;
     this.on = () => {};
   }
@@ -229,15 +236,11 @@ class EmbeddedPool {
   connect() {
     if (this.ended) return Promise.reject(new Error('Embedded PostgreSQL pool has ended'));
     const storage = this._storage;
-    return new Promise((resolve, reject) => {
-      this._waiter.acquire().then(() => {
-        const client = new EmbeddedClient(this, storage);
-        storage.flow = true;
-        storage.client = client;
-        // Hand the connection to the caller's flow. Every later query in that
-        // flow - including plain pool.query() calls - resolves to this client.
-        flowStorage.run(storage, () => resolve(client));
-      }, reject);
+    return this._waiter.acquire().then(() => {
+      const client = new EmbeddedClient(this, storage);
+      storage.flowToken = Symbol('pglite-client');
+      storage.client = client;
+      return client;
     });
   }
 

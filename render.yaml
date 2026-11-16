@@ -26,7 +26,7 @@ services:
       # on schema public, which must be on search_path. It also needs
       # SELECT, INSERT, UPDATE, and DELETE. AUTO_MIGRATE installs postgis,
       # uuid-ossp, pg_trgm, and pgcrypto, then applies schema.sql and
-      # migrations 003-029 into public. Use the Render internal hostname.
+      # migrations 003-038 into public. Use the Render internal hostname.
       # An external hostname also needs ?sslmode=require.
       # sync: false keeps the live value.
       - key: DATABASE_URL
@@ -72,4 +72,20 @@ services:
       - key: RESEND_API_KEY
         sync: false
       - key: RESEND_FROM
+        sync: false
+      # Disk-headroom gate for discovery persistence (50 MiB, matches Dockerfile.production)
+      - key: DISCOVERY_MIN_FREE_BYTES
+        value: "52428800"
+      # Optional durable Document Vault (Cloudflare R2 via SigV4).
+      # Leave REQUIRE_DURABLE_VAULT unset / "0" on $0 free-tier demo deploys;
+      # set REQUIRE_DURABLE_VAULT="1" when R2_* keys are configured in production.
+      - key: REQUIRE_DURABLE_VAULT
+        sync: false
+      - key: R2_BUCKET
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_ENDPOINT
         sync: false

@@ -1,22 +1,11 @@
 import { proxyPropertyApi } from "@/lib/property-api";
 import { proxyPrivatePropertyApi } from "@/lib/workspace-proxy";
-import { readWorkspaceSession, workspaceSessionConfiguration } from "@/lib/workspace-session";
+import { hasPermission, readWorkspaceSession, workspaceSessionConfiguration } from "@/lib/workspace-session";
 import { buildDecisionPacket, formatDecisionPacketMarkdown } from "@server/export/decision-packet";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const session = readWorkspaceSession(request);
-  const configuration = workspaceSessionConfiguration();
-
-  // If the user has an unlocked operator/analyst workspace session, forward
-  // to the canonical Node API with the operator credential.
-  if (session.authenticated && configuration.configured) {
-    return proxyPropertyApi(request, { operatorToken: configuration.credential });
-  }
-
-  // For public visitors on the detail page, build and return the evidentiary
-  // decision packet directly from verified listing data.
   const url = new URL(request.url);
   const match = url.pathname.match(/^\/api\/listings\/(.+?)\/(?:packet|decision-packet)$/);
   if (!match || !match[1]) {
@@ -28,6 +17,20 @@ export async function GET(request: Request) {
     id = decodeURIComponent(match[1]);
   } catch {
     return Response.json({ error: "Invalid listing identifier encoding" }, { status: 400 });
+  }
+
+  if (id.length > 256 || /[\/\\\u0000-\u001f\u007f]/.test(id)) {
+    return Response.json({ error: "Invalid listing identifier" }, { status: 400 });
+  }
+
+  const session = readWorkspaceSession(request);
+  const configuration = workspaceSessionConfiguration();
+
+  // Authorized operator/analyst sessions proxy to the Node API with server
+  // credentials; read-only viewers and anonymous callers stay on the public
+  // read-only fallback below without operator token privileges.
+  if (session.authenticated && hasPermission(session.role, "canExportDossier") && configuration.configured) {
+    return proxyPropertyApi(request, { operatorToken: configuration.credential });
   }
 
   const base = process.env.PROPERTY_API_URL || "http://localhost:3000";
@@ -60,6 +63,20 @@ export async function GET(request: Request) {
     return Response.json({ error: "Listing not found", id }, { status: 404 });
   }
 
+  if (!Array.isArray(listing.observations)) {
+    try {
+      const db = require("@server/db/client");
+      if (typeof db.getListingObservations === "function" && listing.id) {
+        const observations = await db.getListingObservations(listing.id);
+        if (Array.isArray(observations) && observations.length > 0) {
+          listing = { ...listing, observations };
+        }
+      }
+    } catch {
+      // Ignore observation enrichment failure on public read path
+    }
+  }
+
   const parseNum = (val: string | null): number | null => {
     if (val === null || val === undefined || val === "") return null;
     const n = Number(val);
@@ -86,6 +103,36 @@ export async function GET(request: Request) {
   if (operatorNotes && operatorNotes.trim()) {
     operatorInput.operatorNotes = operatorNotes.trim();
   }
+
+  const operatorId = url.searchParams.get("operatorId");
+  if (operatorId && operatorId.trim()) {
+    operatorInput.operatorId = operatorId.trim();
+  } else if (session.authenticated) {
+    operatorInput.operatorId = session.role;
+  }
+
+  const customValuation = parseNum(url.searchParams.get("customValuation"));
+  if (customValuation !== null && customValuation > 0) {
+    operatorInput.customValuation = customValuation;
+  }
+
+  const customOpeningBid = parseNum(url.searchParams.get("customOpeningBid"));
+  if (customOpeningBid !== null && customOpeningBid > 0) {
+    operatorInput.customOpeningBid = customOpeningBid;
+  }
+
+  const holdingMonths = parseNum(url.searchParams.get("holdingMonths"));
+  if (holdingMonths !== null && holdingMonths > 0) {
+    operatorInput.holdingMonths = Math.round(holdingMonths);
+  }
+
+  const homesteadParam = url.searchParams.get("isHomestead");
+  if (homesteadParam === "true") operatorInput.isHomestead = true;
+  else if (homesteadParam === "false") operatorInput.isHomestead = false;
+
+  const taxSaleParam = url.searchParams.get("isTaxSale");
+  if (taxSaleParam === "true") operatorInput.isTaxSale = true;
+  else if (taxSaleParam === "false") operatorInput.isTaxSale = false;
 
   const cashFields = [
     "registrationFunds",
@@ -135,6 +182,62 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  // Overrides and custom underwriting mutations require operator credentials
-  return proxyPrivatePropertyApi(request);
+  const session = readWorkspaceSession(request);
+  if (session.authenticated && !hasPermission(session.role, "canExportDossier")) {
+    return Response.json(
+      {
+        error: "Forbidden: Insufficient permissions to export underwriting decision packets",
+        code: "PERMISSION_DENIED",
+        role: session.role,
+      },
+      { status: 403, headers: { "Cache-Control": "no-store" } }
+    );
+  }
+
+  let forwardedRequest = request;
+  try {
+    const rawBody = await request.clone().json();
+    if (rawBody && typeof rawBody === "object" && !Array.isArray(rawBody)) {
+      const payload: Record<string, unknown> = { ...(rawBody as Record<string, unknown>) };
+      const positiveNum = (val: unknown): number | undefined => {
+        if (val === null || val === undefined || val === "") return undefined;
+        const n = Number(val);
+        return Number.isFinite(n) && n > 0 ? n : undefined;
+      };
+      const customValuation = positiveNum(payload.customValuation);
+      if (customValuation !== undefined) payload.customValuation = customValuation;
+      const customOpeningBid = positiveNum(payload.customOpeningBid);
+      if (customOpeningBid !== undefined) payload.customOpeningBid = customOpeningBid;
+      const holdingMonths = positiveNum(payload.holdingMonths);
+      if (holdingMonths !== undefined) payload.holdingMonths = Math.round(holdingMonths);
+      if (typeof payload.isHomestead === "string") {
+        if (payload.isHomestead === "true") payload.isHomestead = true;
+        else if (payload.isHomestead === "false") payload.isHomestead = false;
+      }
+      if (typeof payload.isTaxSale === "string") {
+        if (payload.isTaxSale === "true") payload.isTaxSale = true;
+        else if (payload.isTaxSale === "false") payload.isTaxSale = false;
+      }
+      if (typeof payload.operatorId !== "string" || !payload.operatorId.trim()) {
+        if (session.authenticated) {
+          payload.operatorId = session.role;
+        }
+      } else {
+        payload.operatorId = payload.operatorId.trim();
+      }
+      const headers = new Headers(request.headers);
+      headers.delete("content-length");
+      headers.set("content-type", "application/json");
+      forwardedRequest = new Request(request.url, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload),
+      });
+    }
+  } catch {
+    // Preserve non-JSON request stream when body cannot be parsed as JSON
+  }
+
+  // Overrides and custom underwriting mutations require operator/analyst credentials
+  return proxyPrivatePropertyApi(forwardedRequest);
 }

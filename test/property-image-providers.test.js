@@ -104,3 +104,30 @@ test('createProviderStatusHandler reports circuitOpen in summary when a circuit 
   const geocoding = res.body.providers.find((p) => p.id === 'google-geocoding');
   assert.equal(geocoding.circuit.available, false);
 });
+
+test('createProviderStatusHandler resolves per-provider providerCaches with fallback to single cache', async () => {
+  const fallbackCache = { stats: () => ({ total: 1, live: 1, expired: 0, maxEntries: 100, ttlMs: 1_000 }) };
+  const panoramaxCache = { stats: () => ({ total: 12, live: 10, expired: 2, maxEntries: 500, ttlMs: 60_000 }) };
+  const mapillaryCache = { stats: () => ({ total: 4, live: 4, expired: 0, maxEntries: 500, ttlMs: 60_000 }) };
+
+  const bothScoped = createProviderStatusHandler({
+    env: {},
+    cache: fallbackCache,
+    providerCaches: { panoramax: panoramaxCache, mapillary: mapillaryCache },
+  });
+  const resBoth = makeRes();
+  await bothScoped({ method: 'GET' }, resBoth);
+  assert.equal(resBoth.body.providers.find((p) => p.id === 'panoramax').cache.total, 12);
+  assert.equal(resBoth.body.providers.find((p) => p.id === 'mapillary').cache.total, 4);
+  assert.equal(resBoth.body.providers.find((p) => p.id === 'google-streetview').cache, null);
+
+  const partialScoped = createProviderStatusHandler({
+    env: {},
+    cache: fallbackCache,
+    providerCaches: { panoramax: panoramaxCache },
+  });
+  const resPartial = makeRes();
+  await partialScoped({ method: 'GET' }, resPartial);
+  assert.equal(resPartial.body.providers.find((p) => p.id === 'panoramax').cache.total, 12);
+  assert.equal(resPartial.body.providers.find((p) => p.id === 'mapillary').cache.total, 1);
+});

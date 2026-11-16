@@ -370,3 +370,193 @@ test('Evidence ledger append scales O(1) per block and health detects external t
     fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
   }
 });
+
+test('syncEvidenceLedgerWithPostgres persists blocks and hydrates wiped local ledger on cold start', async () => {
+  const os = require('node:os');
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const {
+    appendLedgerToFile,
+    loadLedgerFromFile,
+    verifyLedgerChain,
+    attachLedgerAnchorPool,
+    syncEvidenceLedgerWithPostgres,
+  } = require('../../server/discovery/evidence-ledger');
+  const { evidenceStoreHealth, recordSnapshot, verifiedSnapshotReceipt } = require('../../server/scrapers/discovery-snapshots');
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ledger-pg-anchor-'));
+  const ledgerFile = path.join(dir, 'evidence-ledger.jsonl');
+  const rows = [];
+
+  const mockPool = {
+    async query(sql, params = []) {
+      if (/SELECT\s+payload\s+FROM\s+discovery_legacy_imports/i.test(sql)) {
+        return { rows: rows.map((r) => ({ payload: r.payload })) };
+      }
+      if (/INSERT\s+INTO\s+discovery_legacy_imports/i.test(sql)) {
+        const [sha, origPath, payloadJson, importedAt] = params;
+        if (!rows.some((r) => r.content_sha256 === sha)) {
+          rows.push({
+            content_sha256: sha,
+            kind: 'evidence_ledger_block',
+            original_path: origPath,
+            payload: JSON.parse(payloadJson),
+            imported_at: importedAt,
+          });
+        }
+        return { rowCount: 1, rows: [] };
+      }
+      throw new Error(`Unexpected SQL: ${sql}`);
+    },
+  };
+
+  try {
+    // 1. Write 2 blocks locally before attaching Postgres, then sync
+    await appendLedgerToFile(ledgerFile, { source: 'hud', recordId: 'H-1', payloadSha256: '1'.repeat(64) });
+    await appendLedgerToFile(ledgerFile, { source: 'hud', recordId: 'H-2', payloadSha256: '2'.repeat(64) });
+    const firstSync = await syncEvidenceLedgerWithPostgres(mockPool, ledgerFile);
+    assert.equal(firstSync.synced, true);
+    assert.equal(firstSync.uploadedToPostgres, 2);
+    assert.equal(rows.length, 2);
+
+    // 2. Append a 3rd block after anchor is active -> writes through automatically
+    const snap = await recordSnapshot(
+      { sourceKey: 'hud', recordId: 'H-3', html: '<h1>Live Receipt</h1>' },
+      { snapshotDir: dir },
+    );
+    assert.equal(rows.length, 3);
+
+    const health = evidenceStoreHealth(dir);
+    assert.equal(health.externalAnchor, true);
+    assert.equal(health.anchorBackend, 'postgres');
+    assert.equal(health.anchoredEntries, 3);
+    assert.equal(health.backupVerified, true);
+
+    const receipt = verifiedSnapshotReceipt(
+      { source: 'hud', provenance: { recordId: 'H-3', evidenceLedger: { entryHash: snap.ledgerBlock.entryHash } } },
+      { snapshotDir: dir },
+    );
+    assert.equal(receipt.externalAnchor, true);
+    assert.equal(receipt.durable, true);
+    assert.equal(receipt.verification, 'postgres_and_local_chain');
+
+    // 3. Simulate ephemeral Render container wipe (remove JSONL file) and cold-start hydrate
+    fs.unlinkSync(ledgerFile);
+    assert.equal(fs.existsSync(ledgerFile), false);
+    attachLedgerAnchorPool(null);
+
+    const coldSync = await syncEvidenceLedgerWithPostgres(mockPool, ledgerFile);
+    assert.equal(coldSync.synced, true);
+    assert.equal(coldSync.hydratedFromPostgres, 3);
+    assert.equal(coldSync.anchoredEntries, 3);
+    assert.equal(fs.existsSync(ledgerFile), true);
+
+    const restoredChain = loadLedgerFromFile(ledgerFile);
+    assert.equal(restoredChain.length, 3);
+    assert.equal(verifyLedgerChain(restoredChain).valid, true);
+    assert.equal(evidenceStoreHealth(dir).integrity, 'chain_verified');
+    assert.equal(evidenceStoreHealth(dir).externalAnchor, true);
+  } finally {
+    attachLedgerAnchorPool(null);
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  }
+});
+
+test('withLedgerLock verifies token ownership and syncEvidenceLedgerWithPostgres refuses diverged silent overwrite', async () => {
+  const os = require('node:os');
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const {
+    createLedgerBlock,
+    GENESIS_HASH,
+    withLedgerLock,
+    appendLedgerToFile,
+    attachLedgerAnchorPool,
+    syncEvidenceLedgerWithPostgres,
+  } = require('../../server/discovery/evidence-ledger');
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ledger-diverge-'));
+  const ledgerFile = path.join(dir, 'evidence-ledger.jsonl');
+  const lockPath = `${ledgerFile}.lock`;
+  const rows = [];
+
+  const mockPool = {
+    async query(sql, params = []) {
+      if (/SELECT\s+payload\s+FROM\s+discovery_legacy_imports/i.test(sql)) {
+        return { rows: rows.map((r) => ({ payload: r.payload })) };
+      }
+      if (/INSERT\s+INTO\s+discovery_legacy_imports/i.test(sql)) {
+        const [sha, origPath, payloadJson, importedAt] = params;
+        if (!rows.some((r) => r.content_sha256 === sha)) {
+          rows.push({
+            content_sha256: sha,
+            kind: 'evidence_ledger_block',
+            original_path: origPath,
+            payload: JSON.parse(payloadJson),
+            imported_at: importedAt,
+          });
+        }
+        return { rowCount: 1, rows: [] };
+      }
+      throw new Error(`Unexpected SQL: ${sql}`);
+    },
+  };
+
+  try {
+    // 1. Token ownership across async withLedgerLock: foreign lock replacement must not be deleted on exit.
+    await withLedgerLock(ledgerFile, async () => {
+      assert.ok(fs.readFileSync(lockPath, 'utf8').includes(':'));
+      fs.writeFileSync(lockPath, 'foreign-pid:foreign-token', 'utf8');
+      await new Promise((r) => setTimeout(r, 5));
+    });
+    assert.equal(fs.existsSync(lockPath), true);
+    assert.equal(fs.readFileSync(lockPath, 'utf8'), 'foreign-pid:foreign-token');
+    fs.unlinkSync(lockPath);
+
+    // 2. Build shared genesis block, then create conflicting local vs remote block #1.
+    const b0 = createLedgerBlock({
+      index: 0,
+      prevHash: GENESIS_HASH,
+      timestamp: '2026-11-01T00:00:00.000Z',
+      source: 'hud',
+      recordId: 'SHARED-0',
+      payloadSha256: 'a'.repeat(64),
+    });
+    const remoteB1 = createLedgerBlock({
+      index: 1,
+      prevHash: b0.entryHash,
+      timestamp: '2026-11-01T01:00:00.000Z',
+      source: 'hud',
+      recordId: 'REMOTE-1',
+      payloadSha256: 'b'.repeat(64),
+    });
+    rows.push(
+      { content_sha256: b0.entryHash, payload: b0 },
+      { content_sha256: remoteB1.entryHash, payload: remoteB1 }
+    );
+
+    const localFile = path.join(dir, 'forked-ledger.jsonl');
+    await appendLedgerToFile(localFile, {
+      timestamp: '2026-11-01T00:00:00.000Z',
+      source: 'hud',
+      recordId: 'SHARED-0',
+      payloadSha256: 'a'.repeat(64),
+    });
+    await appendLedgerToFile(localFile, {
+      timestamp: '2026-11-01T02:00:00.000Z',
+      source: 'hud',
+      recordId: 'LOCAL-FORK-1',
+      payloadSha256: 'c'.repeat(64),
+    });
+
+    const syncRes = await syncEvidenceLedgerWithPostgres(mockPool, localFile);
+    assert.equal(syncRes.synced, false);
+    assert.equal(syncRes.diverged, true);
+    assert.equal(syncRes.divergenceIndex, 1);
+    assert.equal(syncRes.uploadedToPostgres, 0);
+    assert.equal(rows.length, 2);
+  } finally {
+    attachLedgerAnchorPool(null);
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  }
+});

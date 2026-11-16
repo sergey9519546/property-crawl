@@ -285,7 +285,7 @@ function hasSourceIdentifiedArchive(listing) {
 function validateListingForStreetView(listing, mode = 'metadata') {
   // A requested interactive tour complements publisher photos. Automatic
   // image fallback still prefers those photos and avoids unnecessary calls.
-  if (mode !== 'walkthrough' && hasUsablePublisherPhoto(listing)) {
+  if (mode !== 'walkthrough' && mode !== 'alternatives' && hasUsablePublisherPhoto(listing)) {
     throw new PropertyImageError(409, 'publisher_photo_available', 'The publisher already supplies a usable property photo.');
   }
   const liveObserved=hasSourceObservedProvenance(listing),archiveIdentified=hasSourceIdentifiedArchive(listing);
@@ -404,6 +404,17 @@ function bearingDegrees(fromLat, fromLng, toLat, toLng) {
   const x = Math.cos(startLat) * Math.sin(endLat)
     - Math.sin(startLat) * Math.cos(endLat) * Math.cos(deltaLng);
   return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+}
+
+function resolveGeocodingConfig(env) {
+  const geocodingKey = safeText(env?.GOOGLE_GEOCODING_API_KEY, 1024) || safeText(env?.GOOGLE_MAPS_API_KEY, 1024);
+  if (!geocodingKey) {
+    throw new PropertyImageError(503, 'not_configured', 'Street View fallback is not configured.');
+  }
+  return {
+    geocodingKey,
+    timeoutMs: clampInteger(env.GOOGLE_STREETVIEW_TIMEOUT_MS, 500, 10_000, 5_000),
+  };
 }
 
 function runtimeConfig(env) {
@@ -812,8 +823,22 @@ function panoramaxViewerUrl(candidate) {
   const url = new URL('https://api.panoramax.xyz/');
   url.searchParams.set('focus', 'pic');
   url.searchParams.set('pic', candidate.pictureId);
-  url.searchParams.set('map', candidate.location.lat.toFixed(7) + ',' + candidate.location.lng.toFixed(7));
+  const lat = candidate?.location?.lat;
+  const lng = candidate?.location?.lng;
+  if (Number.isFinite(lat) && Number.isFinite(lng)) {
+    url.searchParams.set('map', `${lat.toFixed(7)},${lng.toFixed(7)}`);
+  }
   return url.toString();
+}
+
+function sanitizeAlternativeCandidates(entries, toPublicCandidate) {
+  return (Array.isArray(entries) ? entries : [])
+    .filter((entry) => entry?.license?.displayApproved === true)
+    .map(toPublicCandidate);
+}
+
+function sanitizePrimaryCandidate(candidate, toPublicCandidate) {
+  return candidate?.license?.displayApproved === true ? toPublicCandidate(candidate) : null;
 }
 
 function publicPanoramaxCandidate(candidate) {
@@ -906,7 +931,7 @@ function createPropertyImageService(options = {}) {
   // can distinguish the source. Errors are swallowed — Panoramax being
   // down should never turn into a 5xx when Google already returned its own
   // graceful "no imagery here" answer.
-  async function tryPanoramaxFallback({ coordinates, env, fetchImpl, cache }) {
+  async function tryPanoramaxFallback({ coordinates, env, fetchImpl, cache, primaryUnavailableReason = 'street_view_unavailable' }) {
     let lookup;
     try {
       lookup = await lookupPanoramax(coordinates, {
@@ -919,17 +944,16 @@ function createPropertyImageService(options = {}) {
     } catch (_) {
       return null;
     }
-    if (!lookup || !lookup.candidate) return null;
-    const candidate = publicPanoramaxCandidate(lookup.candidate);
+    const candidate = sanitizePrimaryCandidate(lookup?.candidate, publicPanoramaxCandidate);
+    if (!candidate) return null;
     return {
+      available: true,
       provider: 'panoramax_fallback',
       primaryProvider: 'Google Street View',
-      primaryUnavailableReason: 'street_view_unavailable',
+      primaryUnavailableReason,
       candidate,
-      panoramicMetadata: lookup.panoramicMetadata,
-      directionalSequences: lookup.directionalSequences
-        .filter((entry) => entry.license.displayApproved)
-        .map(publicPanoramaxCandidate),
+      panoramicMetadata: sanitizeAlternativeCandidates(lookup.panoramicMetadata, publicPanoramaxCandidate),
+      directionalSequences: sanitizeAlternativeCandidates(lookup.directionalSequences, publicPanoramaxCandidate),
       reason: lookup.reason,
       queriedRadiusMeters: lookup.queriedRadiusMeters,
       exactPropertyVerified: false,
@@ -944,13 +968,13 @@ function createPropertyImageService(options = {}) {
   // directional/panoramic metadata list. Errors are swallowed so a
   // Mapillary outage can never turn a Google "no imagery here" answer into
   // a 5xx.
-  async function tryMapillaryFallback({ coordinates, env, fetchImpl, cache }) {
+  async function tryMapillaryFallback({ coordinates, env, fetchImpl, cache, primaryUnavailableReason = 'street_view_unavailable' }) {
     let lookup;
     try {
       lookup = await lookupMapillary(coordinates, {
         fetchImpl,
         env,
-        radiusMeters: clampInteger(env.MAPILLARY_RADIUS_METERS, 1, 200, 100),
+        radiusMeters: clampInteger(env.MAPILLARY_RADIUS_METERS, 1, 100, 100),
         limit: clampInteger(env.MAPILLARY_RESULT_LIMIT, 1, 10, 10),
         timeoutMs: clampInteger(env.MAPILLARY_TIMEOUT_MS, 500, 15_000, 8_000),
         cache
@@ -958,22 +982,46 @@ function createPropertyImageService(options = {}) {
     } catch (_) {
       return null;
     }
-    if (!lookup || !lookup.candidate) return null;
-    const candidate = publicMapillaryCandidate(lookup.candidate);
+    const candidate = sanitizePrimaryCandidate(lookup?.candidate, publicMapillaryCandidate);
+    if (!candidate) return null;
     return {
+      available: true,
       provider: 'mapillary_fallback',
       primaryProvider: 'Google Street View',
-      primaryUnavailableReason: 'street_view_unavailable',
+      primaryUnavailableReason,
       candidate,
-      panoramicMetadata: lookup.panoramicMetadata,
-      directionalSequences: lookup.directionalSequences
-        .map(publicMapillaryCandidate),
+      panoramicMetadata: sanitizeAlternativeCandidates(lookup.panoramicMetadata, publicMapillaryCandidate),
+      directionalSequences: sanitizeAlternativeCandidates(lookup.directionalSequences, publicMapillaryCandidate),
       reason: lookup.reason,
       queriedRadiusMeters: lookup.queriedRadiusMeters,
       exactPropertyVerified: false,
       coordinateBasis: coordinates.basis,
       coverage: 'community_alternative'
     };
+  }
+
+  async function tryMetadataFallbacks({ coordinates, primaryUnavailableReason }) {
+    if (env.PROPERTY_IMAGE_GOOGLE_PANORAMAX_FALLBACK === '1') {
+      const fallback = await tryPanoramaxFallback({
+        coordinates,
+        env,
+        fetchImpl,
+        cache: panoramaxCache,
+        primaryUnavailableReason,
+      });
+      if (fallback) return fallback;
+    }
+    if (env.PROPERTY_IMAGE_GOOGLE_MAPILLARY_FALLBACK === '1') {
+      const fallback = await tryMapillaryFallback({
+        coordinates,
+        env,
+        fetchImpl,
+        cache: mapillaryCache,
+        primaryUnavailableReason,
+      });
+      if (fallback) return fallback;
+    }
+    return null;
   }
 
   async function resolve(req) {
@@ -997,17 +1045,19 @@ function createPropertyImageService(options = {}) {
       const listing = await database.getListingById(listingId);
       if (!listing) throw new PropertyImageError(404, 'listing_not_found', 'Listing not found.');
       if (mode === 'alternatives') {
-        if (!hasSourceObservedProvenance(listing)) {
-          throw new PropertyImageError(422, 'listing_not_current_source_observed', 'Alternative imagery requires a current source-observed listing.');
+        validateListingForStreetView(listing, 'alternatives');
+        const localCoordinates = sourceCoordinates(listing);
+        if (!localCoordinates && !sourceObservedAddress(listing)) {
+          throw new PropertyImageError(
+            422,
+            'exact_location_unavailable',
+            'Alternative imagery requires validated source coordinates or a complete source-observed street address with state and ZIP.'
+          );
         }
-        if (!inspectSourceRecordUrl(listing.source, listing.sourceUrl).isValid) {
-          throw new PropertyImageError(422, 'invalid_source_record', 'Alternative imagery requires an exact publisher record URL.');
-        }
-        const coordinates = sourceCoordinates(listing);
-        if (!coordinates) {
-          throw new PropertyImageError(422, 'source_coordinates_unavailable', 'Alternative imagery requires validated current source coordinates.');
-        }
+        const geocodeConfig = localCoordinates ? null : resolveGeocodingConfig(env);
         return await gate.run(async () => {
+          const coordinates = localCoordinates
+            || await resolveEphemeralCoordinates({ fetchImpl, config: geocodeConfig, listing, circuit: geocodingCircuit });
           // Panoramax and Mapillary run in parallel; each provider has its
           // own cache (provider-keyed) so the lookups do not duplicate work
           // across the two surfaces. A failure of one provider is isolated —
@@ -1023,7 +1073,7 @@ function createPropertyImageService(options = {}) {
           const mapillaryOptions = {
             fetchImpl,
             env,
-            radiusMeters: clampInteger(env.MAPILLARY_RADIUS_METERS, 1, 200, 100),
+            radiusMeters: clampInteger(env.MAPILLARY_RADIUS_METERS, 1, 100, 100),
             limit: clampInteger(env.MAPILLARY_RESULT_LIMIT, 1, 10, 10),
             timeoutMs: clampInteger(env.MAPILLARY_TIMEOUT_MS, 500, 15_000, 8_000),
             cache: mapillaryCache
@@ -1039,22 +1089,19 @@ function createPropertyImageService(options = {}) {
           if (!panoramaxLookup && !mapillaryLookup) {
             throw new PropertyImageError(503, 'alternative_provider_unavailable', 'Alternative imagery providers are temporarily unavailable.');
           }
-          const panoramaxCandidate = panoramaxLookup?.candidate ? publicPanoramaxCandidate(panoramaxLookup.candidate) : null;
-          const mapillaryCandidate = mapillaryLookup?.candidate ? publicMapillaryCandidate(mapillaryLookup.candidate) : null;
+          const panoramaxCandidate = sanitizePrimaryCandidate(panoramaxLookup?.candidate, publicPanoramaxCandidate);
+          const mapillaryCandidate = sanitizePrimaryCandidate(mapillaryLookup?.candidate, publicMapillaryCandidate);
           // Primary candidate stays Panoramax-first for backward compatibility
           // with the existing UI surface; the merged response also exposes a
           // `providers` sub-block so callers can render both columns.
           const primaryCandidate = panoramaxCandidate || mapillaryCandidate;
           const directionalSequences = [
-            ...(panoramaxLookup?.directionalSequences || [])
-              .filter((entry) => entry.license.displayApproved)
-              .map(publicPanoramaxCandidate),
-            ...(mapillaryLookup?.directionalSequences || [])
-              .map(publicMapillaryCandidate),
+            ...sanitizeAlternativeCandidates(panoramaxLookup?.directionalSequences, publicPanoramaxCandidate),
+            ...sanitizeAlternativeCandidates(mapillaryLookup?.directionalSequences, publicMapillaryCandidate),
           ];
           const panoramicMetadata = [
-            ...(panoramaxLookup?.panoramicMetadata || []),
-            ...(mapillaryLookup?.panoramicMetadata || []),
+            ...sanitizeAlternativeCandidates(panoramaxLookup?.panoramicMetadata, publicPanoramaxCandidate),
+            ...sanitizeAlternativeCandidates(mapillaryLookup?.panoramicMetadata, publicMapillaryCandidate),
           ];
           return {
             status: 200,
@@ -1090,6 +1137,24 @@ function createPropertyImageService(options = {}) {
         });
       }
       const identity=validateListingForStreetView(listing, mode);
+      const fallbackEnabled = mode === 'metadata' && (
+        env.PROPERTY_IMAGE_GOOGLE_PANORAMAX_FALLBACK === '1'
+        || env.PROPERTY_IMAGE_GOOGLE_MAPILLARY_FALLBACK === '1'
+      );
+      if (!safeText(env?.GOOGLE_MAPS_API_KEY, 1024) && fallbackEnabled) {
+        const localCoordinates = ['current_source_record', 'archived_source_record'].includes(identity.identityBasis)
+          ? sourceCoordinates(listing)
+          : null;
+        if (localCoordinates) {
+          return await gate.run(async () => {
+            const fallback = await tryMetadataFallbacks({ coordinates: localCoordinates, primaryUnavailableReason: 'not_configured' });
+            if (fallback) {
+              return { status: 200, headers: { ...baseHeaders(), 'Content-Type': 'application/json; charset=utf-8' }, body: fallback };
+            }
+            runtimeConfig(env);
+          });
+        }
+      }
       const config = runtimeConfig(env);
 
       return await gate.run(async () => {
@@ -1098,44 +1163,24 @@ function createPropertyImageService(options = {}) {
         let panorama;
         try { panorama = await coalescedPanorama(listing, coordinates, config); }
         catch (error) {
-          if (mode !== 'walkthrough' || !['street_view_unavailable', 'panorama_mismatch'].includes(error.code)) throw error;
+          const retryable = ['street_view_unavailable', 'panorama_mismatch'].includes(error.code);
+          if (retryable && fallbackEnabled && coordinates) {
+            const fallback = await tryMetadataFallbacks({ coordinates, primaryUnavailableReason: error.code });
+            if (fallback) {
+              return {
+                status: 200,
+                headers: { ...baseHeaders(), 'Content-Type': 'application/json; charset=utf-8' },
+                body: fallback,
+              };
+            }
+          }
+          if (mode !== 'walkthrough' || !retryable) throw error;
           // A street tour may start farther away; static property imagery keeps
           // its stricter gate. The response discloses this distinction.
           const radius = clampInteger(env.GOOGLE_WALKTHROUGH_RADIUS_METERS, 100, 500, 500);
           panorama = await coalescedPanorama(listing, coordinates, {...config, radiusMeters: radius, maximumDistanceMeters: radius});
         }
         if (mode === 'metadata' || mode === 'walkthrough') {
-          // Walkthrough has its own wider-radius retry above; the metadata path
-          // additionally falls back to Panoramax or Mapillary when Google has
-          // no nearby outdoor imagery. Both fallbacks are off by default —
-          // the source swap is visible to end-users, and operators opt in
-          // explicitly per provider:
-          //   PROPERTY_IMAGE_GOOGLE_PANORAMAX_FALLBACK=1
-          //   PROPERTY_IMAGE_GOOGLE_MAPILLARY_FALLBACK=1
-          // Panoramax wins when both opt-ins are enabled — the metadata
-          // surface can only return one body, and Panoramax was first.
-          if (mode === 'metadata' && coordinates) {
-            if (env.PROPERTY_IMAGE_GOOGLE_PANORAMAX_FALLBACK === '1') {
-              const fallback = await tryPanoramaxFallback({ coordinates, env, fetchImpl, cache: panoramaxCache });
-              if (fallback) {
-                return {
-                  status: 200,
-                  headers: { ...baseHeaders(), 'Content-Type': 'application/json; charset=utf-8' },
-                  body: fallback,
-                };
-              }
-            }
-            if (env.PROPERTY_IMAGE_GOOGLE_MAPILLARY_FALLBACK === '1') {
-              const fallback = await tryMapillaryFallback({ coordinates, env, fetchImpl, cache: mapillaryCache });
-              if (fallback) {
-                return {
-                  status: 200,
-                  headers: { ...baseHeaders(), 'Content-Type': 'application/json; charset=utf-8' },
-                  body: fallback,
-                };
-              }
-            }
-          }
           const { _panoId, ...publicMetadata } = panorama;
           const interactiveReady = Boolean(safeText(env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY, 1024));
           const coverage = panorama.distanceMeters <= config.maximumDistanceMeters ? 'near_property' : 'nearby_street';

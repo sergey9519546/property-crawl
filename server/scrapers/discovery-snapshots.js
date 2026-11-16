@@ -11,7 +11,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { createLedgerBlock, GENESIS_HASH, appendLedgerToFile, loadLedgerFromFile, getLedgerHealth } = require('../discovery/evidence-ledger');
+const { createLedgerBlock, GENESIS_HASH, appendLedgerToFile, loadLedgerFromFile, getLedgerHealth, getLedgerAnchorStatus } = require('../discovery/evidence-ledger');
 
 const DEFAULT_SNAPSHOT_DIR = path.resolve(__dirname, '../../.cache/discovery-snapshots');
 
@@ -379,18 +379,59 @@ function verifiedSnapshotReceipt(listing, options = {}) {
   const ref = listing?.provenance?.evidenceLedger;
   if (!ref?.entryHash) return null;
   try {
-    const snapshot = readSnapshot({sourceKey:listing.source,recordId:listing.provenance.recordId,entryHash:ref.entryHash,...options});
+    const snapshotDir = options.snapshotDir || process.env.PROPERTY_EVIDENCE_DIR || DEFAULT_SNAPSHOT_DIR;
+    const target = path.join(snapshotDir, 'evidence-ledger.jsonl');
+    const anchor = getLedgerAnchorStatus(target);
+    const storage = require('../discovery/evidence-storage').evidenceStorageStatus({ evidenceDir: snapshotDir });
+    const snapshot = readSnapshot({ sourceKey: listing.source, recordId: listing.provenance.recordId, entryHash: ref.entryHash, ...options });
     const block = snapshot.ledgerBlock;
-    return block ? {index:block.index,entryHash:block.entryHash,payloadSha256:block.payloadSha256,observedAt:snapshot.raw.observedAt,verification:'local_chain_and_snapshot',externalAnchor:false} : null;
+    return block ? {
+      index: block.index,
+      entryHash: block.entryHash,
+      payloadSha256: block.payloadSha256,
+      observedAt: snapshot.raw.observedAt,
+      verification: anchor.externalAnchor ? 'postgres_and_local_chain' : 'local_chain_and_snapshot',
+      externalAnchor: Boolean(anchor.externalAnchor),
+      durable: Boolean(storage.mountVerified || anchor.externalAnchor),
+    } : null;
   } catch { return null; }
 }
 
 function evidenceStoreHealth(snapshotDir = process.env.PROPERTY_EVIDENCE_DIR || DEFAULT_SNAPSHOT_DIR) {
-  const target = path.join(snapshotDir,'evidence-ledger.jsonl');
-  const base = {backend:'file',...require('../discovery/evidence-storage').evidenceStorageStatus({evidenceDir:snapshotDir}),externalAnchor:false};
-  if (!fs.existsSync(target)) return {...base,integrity:'not_recorded',entries:0};
-  try { return {...base, ...getLedgerHealth(target)}; }
-  catch { return {...base,integrity:'unreadable',writesBlocked:true,reason:'Evidence ledger is unreadable; original retained and writes refused'}; }
+  const target = path.join(snapshotDir, 'evidence-ledger.jsonl');
+  const anchor = getLedgerAnchorStatus(target);
+  const storage = require('../discovery/evidence-storage').evidenceStorageStatus({ evidenceDir: snapshotDir });
+  const externalAnchor = Boolean(anchor.externalAnchor || storage.externalAnchor);
+  const base = {
+    backend: 'file',
+    ...storage,
+    externalAnchor,
+    ...(anchor.anchorBackend ? { anchorBackend: anchor.anchorBackend, anchoredEntries: anchor.anchoredEntries } : {}),
+  };
+  if (!fs.existsSync(target)) {
+    return {
+      ...base,
+      integrity: 'not_recorded',
+      entries: 0,
+      backupVerified: Boolean(storage.backupVerified || externalAnchor),
+    };
+  }
+  try {
+    const health = getLedgerHealth(target);
+    const chainOk = health.integrity === 'chain_verified';
+    return {
+      ...base,
+      ...health,
+      backupVerified: Boolean(storage.backupVerified || (chainOk && externalAnchor)),
+    };
+  } catch {
+    return {
+      ...base,
+      integrity: 'unreadable',
+      writesBlocked: true,
+      reason: 'Evidence ledger is unreadable; original retained and writes refused',
+    };
+  }
 }
 
 module.exports = {

@@ -26,8 +26,16 @@
 const { createEnrichmentTriageGraph } = require('./capability-graph');
 const { triggerWeightManager } = require('./trigger-weights');
 const { computePublicBenchmarkConsensus } = require('../enrichment/public-benchmark-consensus');
-const { geocodeAddress } = require('../enrichment/geocoder');
-const { queryArcgisParcel } = require('../enrichment/arcgis-parcels');
+const {
+  geocodeAddress,
+  normalizeAddress,
+  hashAddress,
+  loadCache: loadGeocodeCache,
+  DEFAULT_CACHE_PATH: DEFAULT_GEOCODE_CACHE_PATH,
+} = require('../enrichment/geocoder');
+const { queryArcgisParcel, resolveCadastralParcelIdentity } = require('../enrichment/arcgis-parcels');
+const { queryLocalParcelIndex } = require('../enrichment/local-parcel-index');
+const { extractRawApn, extractCountyFips } = require('../scrapers/normalization');
 const { lookupCodeViolations } = require('../enrichment/code-enforcement');
 const { getHudSafmrBenchmark } = require('../enrichment/hud-safmr');
 const { arbitrateTitleRisk } = require('../intelligence/title-risk-engine');
@@ -49,13 +57,84 @@ const definition = (name, depends_on, outputs, handler, validateOutput, optional
 const ENRICHMENT_NODE_DEFS = {
   geocode: definition('geocode', [], ['lat','lng','fips'], async (ctx, options) => {
     let result = coordinates(ctx.lat, ctx.lng) ? {lat:ctx.lat,lng:ctx.lng,fips:ctx.fips,source:'Provided coordinates',timestamp:ctx.sourceObservedAt} : null;
-    if (!result && options.allowNetwork === true && (ctx.address || ctx.situs)) result = await geocodeAddress(ctx.address || ctx.situs, {fetchFn:options.fetchFn, signal:options.signal});
+    if (!result && (ctx.address || ctx.situs)) {
+      if (options.allowNetwork === true) {
+        result = await geocodeAddress(ctx.address || ctx.situs, {fetchFn:options.fetchFn, signal:options.signal, cachePath:options.geocodeCachePath});
+      } else {
+        const norm = normalizeAddress(ctx.address || ctx.situs);
+        if (norm) {
+          const cache = loadGeocodeCache(options.geocodeCachePath || DEFAULT_GEOCODE_CACHE_PATH);
+          const cachedEntry = cache[hashAddress(norm)];
+          if (cachedEntry) result = {...cachedEntry, cached:true};
+        }
+      }
+    }
     const valid = result && coordinates(result.lat,result.lng);
     return {lat:valid ? result.lat : null,lng:valid ? result.lng : null,fips:valid && /^\d{5}$/.test(result.fips || '') ? result.fips : null, geocodeEvidence:evidence(result?.source || 'US_CENSUS_GEOCODER',result?.timestamp,valid ? null : 'No observed geocode result')};
   }, res => ({valid: Boolean(res && ((coordinates(res.lat,res.lng)) || (res.lat === null && res.lng === null && res.geocodeEvidence?.reason)) && (res.fips === null || /^\d{5}$/.test(res.fips)))}), false),
   cadastral_parcel: definition('cadastral_parcel', ['geocode'], ['parcelGeometry','lotAcres'], async (ctx, options) => {
-    const parcel = ctx.parcel || (options.allowNetwork === true ? await queryArcgisParcel({...ctx,signal:options.signal,fetchFn:options.fetchFn}) : null);
-    return {parcelGeometry:parcel?.geometry || null,lotAcres:number(parcel?.lotAcres) && parcel.lotAcres >= 0 ? parcel.lotAcres : null,parcelEvidence:evidence(parcel?.source || 'County cadastral records',parcel?.observedAt,parcel ? null : 'Parcel not observed')};
+    const srcProp = ctx.property || ctx;
+    const apn = ctx.apn || extractRawApn(srcProp);
+    const countyFips = ctx.countyFips || (/^\d{5}$/.test(ctx.fips || '') ? ctx.fips : null) || extractCountyFips(srcProp);
+    let parcel = ctx.parcel || ctx.countyParcel || null;
+    let cadastralIdentity = null;
+    if (!parcel) {
+      if (options.allowNetwork === true) {
+        parcel = await queryArcgisParcel({ ...ctx, apn, countyFips, signal: options.signal, fetchFn: options.fetchFn });
+        if (parcel?.canonicalApn) {
+          cadastralIdentity = {
+            countyFips: parcel.countyFips || countyFips || null,
+            rawApn: parcel.rawApn || apn || null,
+            canonicalApn: parcel.canonicalApn,
+            parcelKey: (parcel.countyFips || countyFips) ? `${parcel.countyFips || countyFips}-${parcel.canonicalApn}` : parcel.canonicalApn,
+            situsAddress: parcel.situsAddress || null,
+            matchBasis: coordinates(ctx.lat, ctx.lng) ? 'cadastral_point_in_polygon' : 'cadastral_apn_lookup',
+          };
+        }
+      } else {
+        const localHit = apn
+          ? queryLocalParcelIndex({ apn, countyFips, state: ctx.state || srcProp.state, county: ctx.county || srcProp.county, dbPath: options.localParcelDbPath })
+          : null;
+        if (localHit) {
+          parcel = localHit;
+          cadastralIdentity = {
+            countyFips: localHit.countyFips || countyFips || null,
+            rawApn: localHit.rawApn,
+            canonicalApn: localHit.canonicalApn,
+            parcelKey: localHit.countyFips ? `${localHit.countyFips}-${localHit.canonicalApn}` : localHit.canonicalApn,
+            situsAddress: localHit.situsAddress || null,
+            matchBasis: 'cadastral_apn_lookup',
+          };
+        } else if (apn) {
+          const resolvedId = await resolveCadastralParcelIdentity(
+            { ...srcProp, ...ctx, apn, countyFips },
+            { allowNetwork: false, signal: options.signal, localDbPath: options.localParcelDbPath }
+          ).catch(() => null);
+          if (resolvedId?.parcel) {
+            parcel = resolvedId.parcel;
+            cadastralIdentity = {
+              countyFips: resolvedId.countyFips || null,
+              rawApn: resolvedId.rawApn || null,
+              canonicalApn: resolvedId.canonicalApn || null,
+              parcelKey: resolvedId.parcelKey || null,
+              situsAddress: resolvedId.situsAddress || null,
+              matchBasis: resolvedId.matchBasis || 'cadastral_apn_lookup',
+            };
+          }
+        }
+      }
+    }
+    const rawAcres = parcel?.lotAcres ?? parcel?.properties?.acres;
+    const lotAcres = number(rawAcres) && rawAcres >= 0 ? rawAcres : null;
+    const parcelSource = typeof parcel?.source === 'string'
+      ? parcel.source
+      : (parcel?.source?.name || parcel?.source?.publisher || 'County cadastral records');
+    return {
+      parcelGeometry: parcel?.geometry || null,
+      lotAcres,
+      ...(cadastralIdentity ? { cadastralIdentity } : {}),
+      parcelEvidence: evidence(parcelSource, parcel?.observedAt || parcel?.matchedAt || parcel?.source?.observedAt, parcel ? null : 'Parcel not observed'),
+    };
   }, res => ({valid:Boolean(res && nullable(res.lotAcres) && (res.lotAcres === null || res.lotAcres >= 0) && (res.parcelGeometry === null || ['Polygon','MultiPolygon'].includes(res.parcelGeometry?.type)))})),
   hpi_benchmark: definition('hpi_benchmark', ['geocode'], ['hpiIndex','hpiAppreciationPct'], async (ctx, options) => {
     const consensus=computePublicBenchmarkConsensus(ctx,{hpiSeries:options.hpiSeries,currentPeriod:options.currentPeriod});
@@ -67,22 +146,114 @@ const ENRICHMENT_NODE_DEFS = {
     return {...Object.fromEntries([0,1,2,3,4].map(i=>[`fmr${i}br`,benchmark?.bedroomRents?.[i] ?? null])),hudEvidence:evidence(benchmark?.source || 'HUD SAFMR',benchmark?.asOfFiscalYear,benchmark ? null : 'ZIP benchmark unavailable')};
   }, res=>({valid:Boolean(res && [0,1,2,3,4].every(i=>nullable(res[`fmr${i}br`]) && (res[`fmr${i}br`] === null || res[`fmr${i}br`] > 0)))})),
   code_enforcement: definition('code_enforcement', ['geocode'], ['openViolations','demolitionOrders','superLienFlag'], async (ctx, options) => {
-    const observed=ctx.municipalRecords || (options.allowNetwork === true ? await lookupCodeViolations({...ctx,signal:options.signal,fetchFn:options.fetchFn}) : null);
+    const hasInlineCe = Boolean(
+      ctx.codeEnforcement &&
+      typeof ctx.codeEnforcement === 'object' &&
+      (
+        Array.isArray(ctx.codeEnforcement.violations) ||
+        Number.isFinite(ctx.codeEnforcement.openViolationsCount) ||
+        Number.isFinite(ctx.codeEnforcement.openViolations) ||
+        ctx.codeEnforcement.vacantBuildingNotice !== undefined ||
+        ctx.codeEnforcement.hasDemolitionRisk !== undefined ||
+        ctx.codeEnforcement.superLienFlag === true ||
+        Number.isFinite(ctx.codeEnforcement.demolitionOrders)
+      )
+    );
+    const inlineCe = hasInlineCe
+      ? {
+          evidenceStatus: ctx.codeEnforcement.evidenceStatus || 'source_observed',
+          source: ctx.codeEnforcement.source || 'Municipal records',
+          queriedAt: ctx.codeEnforcement.lastInspectionDate || ctx.codeEnforcement.queriedAt || null,
+          openViolationsCount: Number.isFinite(ctx.codeEnforcement.openViolationsCount)
+            ? ctx.codeEnforcement.openViolationsCount
+            : Number.isFinite(ctx.codeEnforcement.openViolations)
+              ? ctx.codeEnforcement.openViolations
+              : Array.isArray(ctx.codeEnforcement.violations)
+                ? ctx.codeEnforcement.violations.length
+                : 0,
+          violations: Array.isArray(ctx.codeEnforcement.violations) ? ctx.codeEnforcement.violations : null,
+          hasDemolitionRisk: Boolean(
+            ctx.codeEnforcement.vacantBuildingNotice ||
+            ctx.codeEnforcement.hasDemolitionRisk ||
+            ctx.codeEnforcement.superLienFlag ||
+            (Number.isFinite(ctx.codeEnforcement.demolitionOrders) && ctx.codeEnforcement.demolitionOrders > 0)
+          ),
+        }
+      : null;
+    const observed=ctx.municipalRecords || inlineCe || (options.allowNetwork === true ? await lookupCodeViolations({...ctx,signal:options.signal,fetchFn:options.fetchFn}) : null);
     const covered=observed?.evidenceStatus === 'source_observed';
-    return {openViolations:covered ? observed.openViolationsCount : null,demolitionOrders:covered ? observed.violations.filter(v=>v.isDemolition || v.isCondemned).length : null,superLienFlag:covered && observed.hasDemolitionRisk === true ? true : null,municipalEvidence:evidence(observed?.source || 'Municipal records',observed?.queriedAt,covered ? null : 'Municipal coverage or query result unobserved')};
+    const demolitionCount=covered && Array.isArray(observed.violations)
+      ? observed.violations.filter(v=>v.isDemolition || v.isCondemned || v.isDemolitionRisk).length
+      : (covered && Number.isFinite(ctx.codeEnforcement?.demolitionOrders) ? ctx.codeEnforcement.demolitionOrders : null);
+    return {openViolations:covered ? observed.openViolationsCount : null,demolitionOrders:demolitionCount,superLienFlag:covered && (observed.hasDemolitionRisk === true || (demolitionCount !== null && demolitionCount > 0)) ? true : null,municipalEvidence:evidence(observed?.source || 'Municipal records',observed?.queriedAt,covered ? null : 'Municipal coverage or query result unobserved')};
   }, res=>({valid:Boolean(res && nullable(res.openViolations) && nullable(res.demolitionOrders) && (res.superLienFlag === null || typeof res.superLienFlag === 'boolean'))})),
   title_risk: definition('title_risk', ['code_enforcement'], ['riskScore','riskFactors'], async ctx => {
     const prop=ctx.property || ctx;
-    if (!prop.plaintiff && !prop.raw && !prop.description) return {riskScore:null,riskFactors:['Title evidence is unobserved'],titleEvidence:evidence('Title text patterns',null,'No title evidence')};
-    const risk=arbitrateTitleRisk(prop,ctx.noticeText || '');
-    return {riskScore:({LOW:20,MODERATE:45,HIGH:70,CRITICAL:90})[risk.riskLevel] ?? null,riskFactors:risk.titleWarnings || [],titleEvidence:{status:'model_derived',source:'Title text patterns',reason:'Pattern signal only; not a title conclusion'}};
+    const ceViolations = Array.isArray(prop.municipalViolations)
+      ? prop.municipalViolations
+      : (Array.isArray(prop.codeViolations)
+        ? prop.codeViolations
+        : (Array.isArray(ctx.municipalRecords?.violations)
+          ? ctx.municipalRecords.violations
+          : (Array.isArray(ctx.codeEnforcement?.violations) ? ctx.codeEnforcement.violations : null)));
+    const openCount = Number.isFinite(ctx.openViolations) ? ctx.openViolations : 0;
+    const demolitionCount = Number.isFinite(ctx.demolitionOrders) ? ctx.demolitionOrders : 0;
+    const superLienFlag = ctx.superLienFlag === true;
+    const hasCodeEnforcementSignals = superLienFlag || openCount > 0 || demolitionCount > 0 || Boolean(ceViolations && ceViolations.length > 0);
+    if (!prop.plaintiff && !prop.raw && !prop.description && !ctx.noticeText && !hasCodeEnforcementSignals) {
+      return {riskScore:null,riskFactors:['Title evidence is unobserved'],titleEvidence:evidence('Title text patterns',null,'No title evidence')};
+    }
+    let forwardedViolations = ceViolations;
+    if (!forwardedViolations && (superLienFlag || openCount > 0 || demolitionCount > 0)) {
+      forwardedViolations = [];
+      for (let i = 0; i < demolitionCount; i += 1) {
+        forwardedViolations.push({ violationType: 'DEMOLITION_ORDER', isDemolitionRisk: true, isCondemned: true, status: 'OPEN' });
+      }
+      const remainingOpen = Math.max(0, openCount - demolitionCount);
+      for (let i = 0; i < remainingOpen; i += 1) {
+        forwardedViolations.push({ violationType: superLienFlag && demolitionCount === 0 && i === 0 ? 'MUNICIPAL_SUPER_LIEN' : 'CODE_VIOLATION', isDemolitionRisk: Boolean(superLienFlag && demolitionCount === 0 && i === 0), status: 'OPEN' });
+      }
+      if (superLienFlag && forwardedViolations.length === 0) {
+        forwardedViolations.push({ violationType: 'MUNICIPAL_SUPER_LIEN', isDemolitionRisk: true, status: 'OPEN' });
+      }
+    }
+    const enrichedProp = {
+      ...prop,
+      ...(ctx.state && !prop.state ? { state: ctx.state } : {}),
+      codeEnforcement: {
+        ...(prop.codeEnforcement || {}),
+        openViolations: ctx.openViolations ?? prop.codeEnforcement?.openViolations ?? null,
+        demolitionOrders: ctx.demolitionOrders ?? prop.codeEnforcement?.demolitionOrders ?? null,
+        superLienFlag: ctx.superLienFlag ?? prop.codeEnforcement?.superLienFlag ?? null,
+      },
+      ...(forwardedViolations ? { municipalViolations: forwardedViolations } : {}),
+    };
+    const risk=arbitrateTitleRisk(enrichedProp, ctx.noticeText || '');
+    return {
+      riskScore:({LOW:20,MODERATE:45,HIGH:70,CRITICAL:90})[risk.riskLevel] ?? null,
+      riskFactors:risk.titleWarnings || [],
+      titleEvidence:{status:'model_derived',source:'Title text patterns',reason:'Pattern signal only; not a title conclusion'}
+    };
   }, res=>({valid:Boolean(res && nullable(res.riskScore) && (res.riskScore === null || (res.riskScore >= 0 && res.riskScore <= 100)) && Array.isArray(res.riskFactors))}),false),
-  dossier_synthesis: definition('dossier_synthesis',['title_risk','cadastral_parcel','hpi_benchmark','hud_safmr'],['dossier'],async ctx=>({dossier:{
+  dossier_synthesis: definition('dossier_synthesis',['title_risk','cadastral_parcel','hpi_benchmark','hud_safmr'],['dossier'],async (ctx, options = {})=>({dossier:{
     synthesizedAt:new Date().toISOString(),address:ctx.address || ctx.situs || null,coordinates:{lat:ctx.lat ?? null,lng:ctx.lng ?? null},fips:ctx.fips ?? null,
-    cadastral:{lotAcres:ctx.lotAcres ?? null,hasGeometry:ctx.parcelGeometry ? true : null},
+    cadastral:{lotAcres:ctx.lotAcres ?? null,hasGeometry:ctx.parcelGeometry ? true : null,...(ctx.cadastralIdentity ? {cadastralIdentity:ctx.cadastralIdentity} : {})},
     valuationBenchmarks:{hpiIndex:ctx.hpiIndex ?? null,hpiAppreciationPct:ctx.hpiAppreciationPct ?? null,hudSafmr2br:ctx.fmr2br ?? null},
     codeEnforcement:{openViolations:ctx.openViolations ?? null,demolitionOrders:ctx.demolitionOrders ?? null,superLienFlag:ctx.superLienFlag ?? null},
     titleRisk:{riskScore:ctx.riskScore ?? null,riskFactors:ctx.riskFactors || []},
+    calibration: options.triggerWeights ? {
+      overallConfidence: options.triggerWeights.applyCalibration(1.0, 'dossier_synthesis'),
+      nodeWeights: Object.fromEntries(
+        ['geocode', 'cadastral_parcel', 'hpi_benchmark', 'hud_safmr', 'code_enforcement', 'title_risk'].map((cap) => [
+          cap,
+          {
+            weight: options.triggerWeights.getWeight(cap),
+            calibratedConfidence: options.triggerWeights.applyCalibration(1.0, cap),
+            observed: typeof options.triggerWeights.hasObservations === 'function' ? options.triggerWeights.hasObservations(cap) : false,
+          }
+        ])
+      ),
+    } : null,
     evidence:Object.fromEntries(['geocodeEvidence','parcelEvidence','hpiEvidence','hudEvidence','municipalEvidence','titleEvidence'].map(key=>[key,ctx[key] || {status:'unavailable',reason:'Provider did not complete'}])),
   }}),res=>({valid:Boolean(res?.dossier && typeof res.dossier === 'object')}),false),
 };
@@ -182,7 +353,7 @@ class DagOrchestrator {
         }, timeoutMs);
       });
 
-      const execPromise = Promise.resolve(handler(context, {...options, signal:controller.signal}));
+      const execPromise = Promise.resolve(handler(context, {...options, triggerWeights: options.triggerWeights || this.triggerWeights, signal:controller.signal}));
       const rawOutput = await Promise.race([execPromise, timeoutPromise]);
 
       const durationMs = Date.now() - startTime;
@@ -346,6 +517,7 @@ class DagOrchestrator {
         failedNodes,
         skippedNodes,
         nodeDiagnostics,
+        triggerWeights: this.triggerWeights ? this.triggerWeights.exportWeights() : null,
       },
     };
   }

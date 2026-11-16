@@ -1,7 +1,7 @@
 'use client';
 // acknowledged-orphan: Task 11 vector blueprint image fallback component used for decision packets and responsive card visuals.
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Image from 'next/image';
 
 interface PropertyImageProps {
@@ -30,6 +30,10 @@ export function PropertyImage({
   priority = false
 }: PropertyImageProps) {
   const [imageError, setImageError] = useState(false);
+
+  useEffect(() => {
+    setImageError(false);
+  }, [src]);
 
   const ratioClass =
     aspectRatio === '16/9'

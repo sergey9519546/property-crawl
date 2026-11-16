@@ -1,5 +1,6 @@
 const db = require('../db/client');
 const SecuritySanitizer = require('../security/sanitizer');
+const ModelRouter = require('../ai/model_router');
 
 const SUMMARY_MODEL = 'evidence-summary-v1';
 
@@ -91,12 +92,112 @@ ${gaps.map((gap) => `- ${gap}`).join('\n')}
 This deterministic summary reports stored fields only. It is not a title search, legal opinion, appraisal, condition report, or bid recommendation.`;
 }
 
-async function handleEnrich(req, res) {
+async function generateAiNarrative(listing, options = {}) {
+  const env = options.env || process.env;
+  const fetchFn = options.fetchFn || globalThis.fetch;
+  const deterministicSummary = buildEvidenceSummary(listing);
+  const geminiKey = env?.GEMINI_API_KEY || env?.GOOGLE_AI_API_KEY || null;
+  const openaiKey = env?.OPENAI_API_KEY || null;
+
+  if (typeof fetchFn !== 'function' || (!geminiKey && !openaiKey)) {
+    return {
+      narrative: null,
+      provider: null,
+      model: null,
+      costUsd: 0,
+      cached: false,
+      fallback: true,
+      reason: typeof fetchFn !== 'function' ? 'fetch_unavailable' : 'api_key_missing',
+    };
+  }
+
+  const prompt = [
+    'Write a concise operator briefing summarizing ONLY the observed facts and explicitly stating all verification-required gaps below.',
+    'Zero-Fabrication Rule: Never invent ARV, repair cost, title status, lien clearance, occupancy, or bidding advice not present in the evidence summary.',
+    '',
+    deterministicSummary,
+  ].join('\n');
+
+  const requestedModel = options.model || (openaiKey ? 'gpt-4o-mini' : 'gemini-2.0-flash-lite');
+  const preferredProvider = ModelRouter.providerForModel(requestedModel);
+
+  const callOpenAi = async () => {
+    if (!openaiKey) return null;
+    const actualModel = requestedModel.startsWith('gpt-') ? requestedModel : 'gpt-4o-mini';
+    const resp = await fetchFn('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${openaiKey}` },
+      body: JSON.stringify({ model: actualModel, messages: [{ role: 'user', content: prompt }], temperature: 0 }),
+      signal: options.signal || AbortSignal.timeout(8000),
+    });
+    if (!resp || !resp.ok) return null;
+    const body = await resp.json();
+    const text = body?.choices?.[0]?.message?.content?.trim();
+    if (!text) return null;
+    const inTok = body?.usage?.prompt_tokens || Math.ceil(prompt.length / 4);
+    const outTok = body?.usage?.completion_tokens || Math.ceil(text.length / 4);
+    return {
+      narrative: text,
+      provider: 'openai',
+      model: actualModel,
+      costUsd: Number(((inTok * 0.00000015) + (outTok * 0.0000006)).toFixed(6)),
+    };
+  };
+
+  const callGemini = async () => {
+    if (!geminiKey) return null;
+    const actualModel = requestedModel.startsWith('gemini') ? requestedModel : 'gemini-2.0-flash-lite';
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(actualModel)}:generateContent?key=${encodeURIComponent(geminiKey)}`;
+    const resp = await fetchFn(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0 },
+      }),
+      signal: options.signal || AbortSignal.timeout(8000),
+    });
+    if (!resp || !resp.ok) return null;
+    const body = await resp.json();
+    const text = (body?.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('').trim();
+    if (!text) return null;
+    return {
+      narrative: text,
+      provider: 'gemini',
+      model: actualModel,
+      costUsd: 0,
+    };
+  };
+
+  const attempts = preferredProvider === 'gemini' ? [callGemini, callOpenAi] : [callOpenAi, callGemini];
+  for (const attempt of attempts) {
+    try {
+      const res = await attempt();
+      if (res && res.narrative) {
+        return { ...res, cached: false, fallback: false, reason: null };
+      }
+    } catch (_) {
+      // Primary provider failed; fall through to alternate provider or deterministic summary
+    }
+  }
+
+  return {
+    narrative: null,
+    provider: null,
+    model: null,
+    costUsd: 0,
+    cached: false,
+    fallback: true,
+    reason: 'llm_unavailable',
+  };
+}
+
+async function handleEnrich(req, res, deps = {}) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { listingId } = req.body || {};
+  const { listingId, includeAiNarrative, useAi, model } = req.body || {};
   if (!listingId) {
     return res.status(400).json({ error: 'listingId is required' });
   }
@@ -106,11 +207,34 @@ async function handleEnrich(req, res) {
     return res.status(404).json({ error: 'Listing not found' });
   }
 
+  const analysis = buildEvidenceSummary(listing);
+  const wantsAi = Boolean(includeAiNarrative || useAi);
+  if (!wantsAi) {
+    return res.json({
+      analysis,
+      cached: false,
+      model: SUMMARY_MODEL,
+      costUsd: 0,
+      verified: false,
+    });
+  }
+
+  const ai = await generateAiNarrative(listing, {
+    env: deps.env || process.env,
+    fetchFn: deps.fetchFn || globalThis.fetch,
+    model: model || null,
+  });
+
   return res.json({
-    analysis: buildEvidenceSummary(listing),
-    cached: false,
+    analysis,
+    aiNarrative: ai.narrative,
+    narrativeModel: ai.model || SUMMARY_MODEL,
+    narrativeProvider: ai.provider,
+    narrativeFallback: ai.fallback,
+    narrativeReason: ai.reason,
+    cached: ai.cached,
     model: SUMMARY_MODEL,
-    costUsd: 0,
+    costUsd: ai.costUsd,
     verified: false,
   });
 }
@@ -118,3 +242,4 @@ async function handleEnrich(req, res) {
 module.exports = handleEnrich;
 module.exports.buildEvidenceSummary = buildEvidenceSummary;
 module.exports.SUMMARY_MODEL = SUMMARY_MODEL;
+module.exports.generateAiNarrative = generateAiNarrative;

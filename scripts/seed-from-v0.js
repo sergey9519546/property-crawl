@@ -117,6 +117,9 @@ async function seedFromV0(options = {}) {
       }
 
       await client.query('COMMIT');
+      try {
+        await client.query('REFRESH MATERIALIZED VIEW mv_neighborhood_stats');
+      } catch {}
       logger(`[Seed v0] Successfully committed ${sourcesSeeded} sources and ${listingsSeeded} listings.`);
 
       const verifyRes = await client.query('SELECT count(*) AS count FROM listings');

@@ -81,16 +81,74 @@ function replaceFileWithRetry(temporary,resolved,options={}) {
   }
 }
 
+function acquireOwnedLock(lockPath, options = {}) {
+  const token = `${process.pid}:${crypto.randomUUID()}`;
+  const openWithToken = () => {
+    const fd = fs.openSync(lockPath, 'wx', 0o600);
+    try {
+      fs.writeSync(fd, token, 0, 'utf8');
+    } catch (writeErr) {
+      try { fs.closeSync(fd); } catch (_) {}
+      try {
+        const current = fs.readFileSync(lockPath, 'utf8');
+        if (current === '' || current === token) fs.unlinkSync(lockPath);
+      } catch (_) {}
+      throw writeErr;
+    }
+    return fd;
+  };
+  let fd;
+  try {
+    fd = openWithToken();
+  } catch (error) {
+    if (error.code !== 'EEXIST') throw error;
+    const staleLockMs = typeof options.staleLockMs === 'number' ? options.staleLockMs : 30_000;
+    let stale = false;
+    let staleContent = null;
+    try {
+      staleContent = fs.readFileSync(lockPath, 'utf8');
+      stale = Date.now() - fs.statSync(lockPath).mtimeMs > staleLockMs;
+    } catch (_) {}
+    if (stale) {
+      try {
+        if (staleContent !== null && fs.readFileSync(lockPath, 'utf8') === staleContent) {
+          fs.unlinkSync(lockPath);
+        }
+      } catch (_) {}
+      try { fd = openWithToken(); } catch (_) {}
+    }
+    if (fd === undefined) throw error;
+  }
+  return { lockPath, fd, token };
+}
+
+function releaseOwnedLock(handle) {
+  if (!handle) return false;
+  const { lockPath, fd, token } = handle;
+  if (fd !== undefined) {
+    try { fs.closeSync(fd); } catch (_) {}
+  }
+  try {
+    if (fs.readFileSync(lockPath, 'utf8') === token) {
+      fs.unlinkSync(lockPath);
+      return true;
+    }
+  } catch (_) {}
+  return false;
+}
+
 function mutateStore(filePath, mutate, options = {}) {
   if (typeof mutate !== 'function') throw new TypeError('Research-workspace mutation must be a function');
   const resolved = resolveStorePath(filePath);
   fs.mkdirSync(path.dirname(resolved), { recursive: true });
   const lockPath = `${resolved}.lock`;
-  let lock;
+  let lockHandle;
   try {
-    lock = fs.openSync(lockPath, 'wx', 0o600);
+    lockHandle = acquireOwnedLock(lockPath, { staleLockMs: options.staleLockMs });
   } catch (error) {
-    if (error.code === 'EEXIST') throw new Error('Research workspace is locked by another writer; retry after it finishes');
+    if (error.code === 'EEXIST') {
+      throw new Error('Research workspace is locked by another writer; retry after it finishes');
+    }
     throw error;
   }
   const temporary = `${resolved}.${crypto.randomUUID()}.tmp`;
@@ -107,9 +165,8 @@ function mutateStore(filePath, mutate, options = {}) {
     replaceFileWithRetry(temporary, resolved, options.replaceOptions);
     return result.value;
   } finally {
-    if (fs.existsSync(temporary)) fs.unlinkSync(temporary);
-    if (lock !== undefined) fs.closeSync(lock);
-    if (fs.existsSync(lockPath)) fs.unlinkSync(lockPath);
+    try { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); } catch (_) {}
+    releaseOwnedLock(lockHandle);
   }
 }
 
@@ -119,10 +176,12 @@ module.exports = {
   MAX_CASES,
   MAX_CASE_HISTORY,
   MAX_STORE_BYTES,
+  acquireOwnedLock,
   assertStoreShape,
   emptyStore,
   loadStore,
   mutateStore,
+  releaseOwnedLock,
   resolveStorePath,
   replaceFileWithRetry,
 };

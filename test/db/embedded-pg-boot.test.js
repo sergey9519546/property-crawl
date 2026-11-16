@@ -112,3 +112,49 @@ test('recordSourceRun persists run metadata on a real engine and accumulates acr
     removeDir(dataDir);
   }
 });
+
+test('EmbeddedPool serializes concurrent pool.query callers while a connect() checkout is active', { timeout: BOOT_TIMEOUT_MS }, async () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pc-embedded-serial-'));
+  try {
+    const { pool } = await startEmbeddedPostgres({ dataDir });
+    try {
+      await pool.query('CREATE TABLE serial_probe (id INT PRIMARY KEY)');
+      const events = [];
+      const client = await pool.connect();
+      await client.query('BEGIN');
+      await client.query('INSERT INTO serial_probe (id) VALUES (1)');
+      events.push('client-inserted');
+
+      // Fire an unrelated pool.query concurrently while client holds the checkout.
+      // Before flowToken scoping, storage.flow was globally true so pool.query ran
+      // immediately inside the open transaction instead of waiting for release().
+      let settled = false;
+      const contender = pool.query('SELECT id FROM serial_probe ORDER BY id').then((res) => {
+        settled = true;
+        events.push(`pool-read:${res.rows.map((r) => r.id).join(',')}`);
+        return res;
+      });
+
+      await new Promise((r) => setTimeout(r, 30));
+      assert.equal(settled, false, 'unrelated pool.query must wait while connect() holds the single-connection gate');
+
+      await client.query('COMMIT');
+      events.push('client-committed');
+      client.release();
+
+      const res = await contender;
+      assert.equal(res.rows.length, 1);
+      assert.deepEqual(events, ['client-inserted', 'client-committed', 'pool-read:1']);
+
+      // Concurrent pool.query burst must serialize without interleaving errors.
+      const burst = await Promise.all(
+        Array.from({ length: 8 }, (_, idx) => pool.query('SELECT $1::int AS n', [idx + 1]))
+      );
+      assert.deepEqual(burst.map((r) => Number(r.rows[0].n)), [1, 2, 3, 4, 5, 6, 7, 8]);
+    } finally {
+      await pool.end();
+    }
+  } finally {
+    removeDir(dataDir);
+  }
+});

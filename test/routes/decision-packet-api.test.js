@@ -389,3 +389,72 @@ test('Decision Packet API: PROPERTY_OPERATOR_SECRET alias configures the route (
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.schemaVersion, 'decision-packet/v1');
 });
+
+test('Decision Packet API: supports custom underwriting inputs uniformly across POST body and GET query params', async () => {
+  const customInputs = {
+    customValuation: 215000,
+    customOpeningBid: 62000,
+    holdingMonths: 6,
+    isHomestead: false,
+    operatorNotes: 'Checked non-homestead redemption window.',
+    operatorId: 'underwriter-9',
+    isTaxSale: true,
+  };
+
+  const postReq = {
+    method: 'POST',
+    headers: { authorization: 'Bearer test-operator-secret' },
+    body: {
+      disposition: 'UNDERWRITE',
+      ...customInputs,
+    },
+  };
+  const postRes = mockResponse();
+  await handleDecisionPacket(
+    postReq,
+    postRes,
+    new URL('http://localhost/api/listings/SHERIFF-OH-CUY-4401/packet'),
+    { database: mockDb, env: CONFIGURED_ENV }
+  );
+
+  assert.equal(postRes.statusCode, 200);
+  assert.equal(postRes.body.underwritingAssumptions.customValuation, 215000);
+  assert.equal(postRes.body.underwritingAssumptions.customOpeningBid, 62000);
+  assert.equal(postRes.body.underwritingAssumptions.holdingMonths, 6);
+  assert.equal(postRes.body.underwritingAssumptions.isHomestead, false);
+  assert.equal(postRes.body.dispositionSignOff.operatorNotes, customInputs.operatorNotes);
+  assert.equal(postRes.body.dispositionSignOff.operatorId, customInputs.operatorId);
+  assert.equal(postRes.body.underwriting.statutoryDeadlinesAndCarry.holdingMonths, 6);
+  assert.equal(postRes.body.property.openingBid, 55000);
+  assert.equal(postRes.body.underwriting.macroValuation, null);
+
+  const qs = new URLSearchParams({
+    disposition: 'UNDERWRITE',
+    customValuation: '215000',
+    customOpeningBid: '62000',
+    holdingMonths: '6',
+    isHomestead: 'false',
+    operatorNotes: customInputs.operatorNotes,
+    operatorId: customInputs.operatorId,
+    isTaxSale: 'true',
+  });
+  const getReq = {
+    method: 'GET',
+    headers: { authorization: 'Bearer test-operator-secret' },
+  };
+  const getRes = mockResponse();
+  await handleDecisionPacket(
+    getReq,
+    getRes,
+    new URL(`http://localhost/api/listings/SHERIFF-OH-CUY-4401/packet?${qs.toString()}`),
+    { database: mockDb, env: CONFIGURED_ENV }
+  );
+
+  assert.equal(getRes.statusCode, 200);
+  assert.deepEqual(getRes.body.underwritingAssumptions, postRes.body.underwritingAssumptions);
+  assert.equal(getRes.body.dispositionSignOff.operatorNotes, postRes.body.dispositionSignOff.operatorNotes);
+  assert.equal(getRes.body.dispositionSignOff.operatorId, postRes.body.dispositionSignOff.operatorId);
+  assert.equal(getRes.body.underwriting.statutoryDeadlinesAndCarry.holdingMonths, 6);
+  assert.equal(postRes.body.property.isTaxSale, true);
+  assert.equal(getRes.body.property.isTaxSale, true);
+});

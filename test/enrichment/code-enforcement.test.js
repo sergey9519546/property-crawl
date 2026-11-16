@@ -307,3 +307,23 @@ test('lookupCodeViolations returns UNSUPPORTED_MUNICIPALITY for unconfigured jur
     violations: []
   });
 });
+
+
+test('lookupCodeViolations unescapes only Socrata query parameter names starting with $', async () => {
+  let calledUrl = '';
+  const mockFetch = async (url) => {
+    calledUrl = url;
+    return { ok: true, status: 200, json: async () => [] };
+  };
+
+  await lookupCodeViolations({
+    state: 'FL',
+    city: 'Orlando',
+    address: '100 $Main St',
+    fetchFn: mockFetch,
+  });
+
+  assert.match(calledUrl, /\?\$where=/);
+  assert.match(calledUrl, /&\$limit=50/);
+  assert.ok(calledUrl.includes('%24MAIN'), `dollar sign inside $where value must stay URL-encoded: ${calledUrl}`);
+});

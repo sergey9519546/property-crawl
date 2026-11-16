@@ -17,6 +17,11 @@ const net = require('net');
 const tls = require('tls');
 const crypto = require('crypto');
 const {
+  acquireOwnedLock,
+  releaseOwnedLock,
+  replaceFileWithRetry,
+} = require('../intelligence/research-store');
+const {
   parseLegalNotice,
   neutralizePromptInjection,
   normalizeOcrText,
@@ -60,7 +65,7 @@ function envConfig(env = process.env) {
     host: env.IMAP_HOST || '',
     port: Number(env.IMAP_PORT || 993),
     user: env.IMAP_USER || '',
-    pass: env.IMAP_PASS || '',
+    pass: env.IMAP_PASSWORD || env.IMAP_PASS || '',
     tls: String(env.IMAP_TLS || 'true').toLowerCase() !== 'false',
     mailbox: env.IMAP_MAILBOX || 'INBOX',
     maxMessages: Math.max(1, Math.min(Number(env.IMAP_MAX_MESSAGES || 50), 500)),
@@ -103,6 +108,9 @@ function parseRfc822(raw) {
   }
 
   let bodyText = body;
+  if (Object.keys(headers).length === 0) {
+    bodyText = text;
+  }
   const ct = headers['content-type'] || '';
   if (/multipart\//i.test(ct)) {
     // Prefer the first text/plain part; keep raw body if none found.
@@ -211,30 +219,62 @@ function ingestEmlDirectory(dir, options = {}) {
   };
 }
 
-function writePackets(packets, storePath = DEFAULT_STORE_PATH) {
-  fs.mkdirSync(path.dirname(storePath), { recursive: true });
-  let existing = [];
-  if (fs.existsSync(storePath)) {
+function sleepSync(ms) {
+  if (!(ms > 0)) return;
+  try {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+  } catch (_) {
+    const until = Date.now() + ms;
+    while (Date.now() < until) { /* sync wait fallback */ }
+  }
+}
+
+function acquireLockWithRetry(lockPath, attempts = 25) {
+  for (let i = 0; i < attempts; i += 1) {
     try {
-      existing = JSON.parse(fs.readFileSync(storePath, 'utf8'));
-      if (!Array.isArray(existing)) existing = [];
-    } catch (_) {
-      existing = [];
+      return acquireOwnedLock(lockPath, { staleLockMs: 30_000 });
+    } catch (err) {
+      if (err && err.code === 'EEXIST' && i < attempts - 1) {
+        sleepSync(5 + Math.min(i * 2, 15));
+        continue;
+      }
+      throw err;
     }
   }
-  const seen = new Set(existing.map((p) => `${p.messageId || ''}:${p.parcelIndex || 0}:${p.noticeSha256 || ''}`));
-  const appended = [];
-  for (const packet of packets) {
-    const key = `${packet.messageId || ''}:${packet.parcelIndex || 0}:${packet.noticeSha256 || ''}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    appended.push(packet);
+  throw new Error(`Timed out acquiring email packet store lock: ${lockPath}`);
+}
+
+function writePackets(packets, storePath = DEFAULT_STORE_PATH) {
+  fs.mkdirSync(path.dirname(storePath), { recursive: true });
+  const lockPath = `${storePath}.lock`;
+  const lockHandle = acquireLockWithRetry(lockPath);
+  const tmp = `${storePath}.${crypto.randomUUID()}.tmp`;
+  try {
+    let existing = [];
+    if (fs.existsSync(storePath)) {
+      try {
+        existing = JSON.parse(fs.readFileSync(storePath, 'utf8'));
+        if (!Array.isArray(existing)) existing = [];
+      } catch (_) {
+        existing = [];
+      }
+    }
+    const seen = new Set(existing.map((p) => `${p.messageId || ''}:${p.parcelIndex || 0}:${p.noticeSha256 || ''}`));
+    const appended = [];
+    for (const packet of (packets || [])) {
+      const key = `${packet.messageId || ''}:${packet.parcelIndex || 0}:${packet.noticeSha256 || ''}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      appended.push(packet);
+    }
+    const next = existing.concat(appended);
+    fs.writeFileSync(tmp, JSON.stringify(next, null, 2), { encoding: 'utf8', flag: 'wx', mode: 0o600 });
+    replaceFileWithRetry(tmp, storePath);
+    return { storePath, total: next.length, appended: appended.length };
+  } finally {
+    try { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); } catch (_) {}
+    releaseOwnedLock(lockHandle);
   }
-  const next = existing.concat(appended);
-  const tmp = `${storePath}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(next, null, 2), 'utf8');
-  fs.renameSync(tmp, storePath);
-  return { storePath, total: next.length, appended: appended.length };
 }
 
 /**
@@ -242,12 +282,112 @@ function writePackets(packets, storePath = DEFAULT_STORE_PATH) {
  * Used only against an operator-configured mailbox that the operator is
  * authorized to read (their own alert subscription inbox).
  */
+function escapeRegex(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Inspect a raw IMAP byte buffer for a CRLF-terminated `${tag} (OK|NO|BAD)` line
+ * outside any `{N}` RFC-3501 literal payloads.
+ */
+function findTaggedImapResponse(rawBuffer, tag) {
+  const buf = Buffer.isBuffer(rawBuffer) ? rawBuffer : Buffer.from(String(rawBuffer || ''), 'utf8');
+  const tagRe = new RegExp(`^${escapeRegex(tag)}\\s+(OK|NO|BAD)(?:\\s+(.*))?$`, 'i');
+  let pos = 0;
+  while (pos < buf.length) {
+    const crlf = buf.indexOf('\r\n', pos, 'utf8');
+    if (crlf === -1) {
+      return { complete: false };
+    }
+    const line = buf.subarray(pos, crlf).toString('utf8');
+    const litMatch = line.match(/\{(\d+)\+?\}$/);
+    if (litMatch) {
+      const litLen = Number(litMatch[1]);
+      const litStart = crlf + 2;
+      if (litStart + litLen > buf.length) {
+        return { complete: false };
+      }
+      pos = litStart + litLen;
+      continue;
+    }
+    const m = line.match(tagRe);
+    if (m) {
+      return {
+        complete: true,
+        status: m[1].toUpperCase(),
+        detail: (m[2] || '').trim(),
+        rawText: buf.subarray(0, crlf + 2).toString('utf8'),
+        endOffset: crlf + 2,
+      };
+    }
+    pos = crlf + 2;
+  }
+  return { complete: false };
+}
+
+function parseImapSearchUids(searchOut, limit = Infinity) {
+  const lines = String(searchOut || '').split(/\r?\n/);
+  const uids = [];
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!/^\*\s+SEARCH\b/i.test(trimmed)) continue;
+    const afterKeyword = trimmed.replace(/^\*\s+SEARCH\b/i, '');
+    for (const token of (afterKeyword.match(/\d+/g) || [])) {
+      const n = Number(token);
+      if (Number.isFinite(n) && n > 0) uids.push(n);
+    }
+  }
+  return Number.isFinite(limit) ? uids.slice(0, limit) : uids;
+}
+
+function extractImapFetchPayload(rawText) {
+  const buf = Buffer.from(String(rawText || ''), 'utf8');
+  const literals = [];
+  let pos = 0;
+  while (pos < buf.length) {
+    const crlf = buf.indexOf('\r\n', pos, 'utf8');
+    if (crlf === -1) break;
+    const line = buf.subarray(pos, crlf).toString('utf8');
+    const litMatch = line.match(/\{(\d+)\+?\}$/);
+    if (litMatch) {
+      const litLen = Number(litMatch[1]);
+      const litStart = crlf + 2;
+      const litEnd = Math.min(buf.length, litStart + litLen);
+      literals.push(buf.subarray(litStart, litEnd).toString('utf8'));
+      pos = litEnd;
+      continue;
+    }
+    pos = crlf + 2;
+  }
+  if (literals.length === 1) return literals[0].trim();
+  if (literals.length > 1) {
+    let combined = '';
+    for (const part of literals) {
+      if (!combined) {
+        combined = part;
+      } else if (/\r?\n\r?\n$/.test(combined)) {
+        combined += part;
+      } else {
+        combined += '\r\n\r\n' + part;
+      }
+    }
+    return combined.trim();
+  }
+  // Fallback for mock servers returning plain RFC822 lines without {N} literals.
+  return String(rawText || '')
+    .replace(/^\*\s+\d+\s+FETCH\s*\([^\r\n]*\r?\n?/i, '')
+    .replace(/(?:\r?\n)?\)?\s*(?:\r?\n)?A\d+\s+(?:OK|NO|BAD)[^\r\n]*(?:\r?\n)?$/i, '')
+    .trim();
+}
+
 class ImapClient {
   constructor(cfg) {
     this.cfg = cfg;
     this.socket = null;
     this.buffer = '';
+    this._rawBuffer = Buffer.alloc(0);
     this.tagSeq = 0;
+    this.lastSocketError = null;
   }
 
   connect() {
@@ -272,25 +412,31 @@ class ImapClient {
       }
       this.socket.once('error', onError);
       this.socket.on('data', (chunk) => {
-        this.buffer += chunk.toString('utf8');
+        const chunkBuf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk), 'utf8');
+        this._rawBuffer = Buffer.concat([this._rawBuffer, chunkBuf]);
+        this.buffer = this._rawBuffer.toString('utf8');
       });
     });
   }
 
-  _waitLine(prefix) {
+  _waitTaggedResponse(tag) {
+    const timeoutMs = Number(this.cfg?.timeoutMs) > 0 ? Number(this.cfg.timeoutMs) : 30000;
     return new Promise((resolve, reject) => {
-      const deadline = Date.now() + 30000;
+      const deadline = Date.now() + timeoutMs;
       const tick = () => {
         if (this.lastSocketError) {
           reject(this.lastSocketError);
           return;
         }
-        if (this.buffer.includes(prefix)) {
-          resolve(this.buffer);
+        const parsed = findTaggedImapResponse(this._rawBuffer, tag);
+        if (parsed.complete) {
+          this._rawBuffer = this._rawBuffer.subarray(parsed.endOffset);
+          this.buffer = this._rawBuffer.toString('utf8');
+          resolve(parsed);
           return;
         }
         if (Date.now() > deadline) {
-          reject(new Error(`IMAP timeout waiting for ${prefix}`));
+          reject(new Error(`IMAP timeout waiting for ${tag} completion`));
           return;
         }
         setTimeout(tick, 25);
@@ -299,20 +445,16 @@ class ImapClient {
     });
   }
 
-  async command(cmd, waitPrefix) {
+  async command(cmd) {
     this.tagSeq += 1;
     const tag = `A${this.tagSeq}`;
     const full = `${tag} ${cmd}\r\n`;
-    this.buffer = '';
     this.socket.write(full);
-    const out = await this._waitLine(waitPrefix || `${tag} `);
-    if (!/OK/i.test(out.split('\r\n').pop() || out)) {
-      const failed = /NO|BAD/i.test(out);
-      if (failed && waitPrefix !== `${tag} `) {
-        throw new Error(`IMAP command failed: ${cmd}`);
-      }
+    const res = await this._waitTaggedResponse(tag);
+    if (res.status === 'NO' || res.status === 'BAD') {
+      throw new Error(`IMAP command failed (${tag} ${res.status}): ${res.detail || cmd}`);
     }
-    return out;
+    return res.rawText;
   }
 
   close() {
@@ -321,8 +463,10 @@ class ImapClient {
         resolve();
         return;
       }
+      this.tagSeq += 1;
+      const tag = `A${this.tagSeq}`;
       try {
-        this.socket.write('A99 LOGOUT\r\n');
+        this.socket.write(`${tag} LOGOUT\r\n`);
       } catch (_) {}
       try { this.socket.end(); } catch (_) {}
       setTimeout(() => {
@@ -338,45 +482,52 @@ class ImapClient {
  * Fails closed when credentials are missing.
  */
 async function ingestImapMailbox(env = process.env, options = {}) {
+  if (
+    env &&
+    typeof env === 'object' &&
+    env.env &&
+    typeof env.env === 'object' &&
+    !('IMAP_HOST' in env) &&
+    !('IMAP_USER' in env) &&
+    !('IMAP_PASSWORD' in env) &&
+    !('IMAP_PASS' in env)
+  ) {
+    if (!options || Object.keys(options).length === 0) {
+      options = env;
+    }
+    env = env.env;
+  }
   const cfg = options.cfg || envConfig(env);
   if (!cfg.host || !cfg.user || !cfg.pass) {
     return {
       ok: false,
       error: 'imap_not_configured',
-      reason: 'IMAP_HOST, IMAP_USER, and IMAP_PASS are required',
+      reason: 'IMAP_HOST, IMAP_USER, and IMAP_PASSWORD (or IMAP_PASS) are required',
       accepted: 0,
       packets: [],
     };
   }
 
-  const client = new ImapClient(cfg);
+  const client = options.imapClient || new ImapClient(cfg);
   const observedAt = options.observedAt || new Date().toISOString();
   try {
     await client.connect();
     await client.command(`LOGIN ${cfg.user} ${JSON.stringify(cfg.pass)}`);
     await client.command(`SELECT ${cfg.mailbox}`);
-    const searchOut = await client.command('UID SEARCH UNSEEN', 'A');
-    const uidLine = (searchOut.split(/\r?\n/).find((l) => /SEARCH/i.test(l)) || '').trim();
-    const uids = (uidLine.match(/\d+/g) || [])
-      .map(Number)
-      .filter((n) => Number.isFinite(n) && n > 0)
-      .slice(0, cfg.maxMessages);
+    const searchOut = await client.command('UID SEARCH UNSEEN');
+    const uids = parseImapSearchUids(searchOut, cfg.maxMessages);
 
     const packets = [];
+    const matchedUids = [];
     let matchedMessages = 0;
     for (const uid of uids) {
       let fetchOut;
       try {
-        fetchOut = await client.command(`UID FETCH ${uid} BODY[TEXT]`);
+        fetchOut = await client.command(`UID FETCH ${uid} (BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE MESSAGE-ID CONTENT-TYPE)] BODY.PEEK[TEXT])`);
       } catch (_) {
         continue;
       }
-      const bodyStart = fetchOut.indexOf('{');
-      let body = fetchOut;
-      if (bodyStart >= 0) {
-        const rest = fetchOut.slice(fetchOut.indexOf('}', bodyStart) + 1);
-        body = rest.replace(/\)\s*A\d+\s+OK[^\r\n]*/i, '').trim();
-      }
+      const body = extractImapFetchPayload(fetchOut);
       const message = parseRfc822(body);
       if (!message.subject && !message.body) {
         // Subject may not be in BODY[TEXT]; still parse body-only.
@@ -391,7 +542,24 @@ async function ingestImapMailbox(env = process.env, options = {}) {
       );
       if (result.matched) {
         matchedMessages += 1;
+        matchedUids.push(uid);
         packets.push(...result.packets);
+      }
+    }
+
+    let persisted = false;
+    if (packets.length > 0 && options.persist !== false) {
+      if (typeof options.onSave === 'function') {
+        await options.onSave(packets);
+      } else {
+        writePackets(packets, options.storePath || cfg.storePath);
+      }
+      persisted = true;
+    }
+
+    // Only acknowledge \Seen on the mailbox AFTER parsing and durable save succeed.
+    if (matchedUids.length > 0 && (packets.length === 0 || persisted)) {
+      for (const uid of matchedUids) {
         try {
           await client.command(`UID STORE ${uid} +FLAGS (\\Seen)`);
         } catch (_) {}
@@ -405,6 +573,7 @@ async function ingestImapMailbox(env = process.env, options = {}) {
       uidsSearched: uids.length,
       matchedMessages,
       accepted: packets.length,
+      persisted,
       packets,
     };
   } catch (err) {
@@ -464,12 +633,24 @@ class PublicNoticesEmailScraper {
     const reports = [];
     let packets = [];
 
+    let corpusPackets = [];
     if (this.corpusDir) {
       const corpus = ingestEmlDirectory(this.corpusDir, {
         keywords: envConfig(this.env).keywords,
       });
       reports.push(corpus);
-      if (corpus.ok) packets = packets.concat(corpus.packets);
+      if (corpus.ok) {
+        corpusPackets = corpus.packets;
+        packets = packets.concat(corpusPackets);
+      }
+    }
+
+    if (corpusPackets.length > 0) {
+      try {
+        writePackets(corpusPackets, envConfig(this.env).storePath);
+      } catch (err) {
+        reports.push({ ok: false, error: 'store_write_failed', reason: err.message });
+      }
     }
 
     if (isConfigured(this.env)) {
@@ -490,14 +671,6 @@ class PublicNoticesEmailScraper {
           reason: 'Email alerts require IMAP credentials or an IMAP_CORPUS_DIR fixture path',
         },
       };
-    }
-
-    if (packets.length > 0) {
-      try {
-        writePackets(packets, envConfig(this.env).storePath);
-      } catch (err) {
-        reports.push({ ok: false, error: 'store_write_failed', reason: err.message });
-      }
     }
 
     const complete = reports.every((r) => r.ok) && (packets.length > 0 || reports.some((r) => r.mode === 'imap'));
@@ -532,4 +705,7 @@ module.exports = {
   writePackets,
   PublicNoticesEmailScraper,
   ImapClient,
+  findTaggedImapResponse,
+  parseImapSearchUids,
+  extractImapFetchPayload,
 };

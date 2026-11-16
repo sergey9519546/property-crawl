@@ -735,3 +735,48 @@ test('Adversarial robustness: null, primitive, and corrupt object resilience', a
   });
   assert.equal(res, null);
 });
+
+
+test('ArcGIS Resolver: routes PA-ALLEGHENY through wparcels and forwards signal + countyFips in resolveCadastralParcelIdentity', async () => {
+  let capturedInit = null;
+  let capturedUrl = null;
+  const mockFetch = async (url, init) => {
+    capturedUrl = String(url);
+    capturedInit = init;
+    return {
+      ok: true,
+      json: async () => ({
+        result: {
+          records: [
+            {
+              PARID: '0001-B-00100-0000-00',
+              PROPERTYADDRESS: '123 LIBERTY AVE',
+              CLASS: 'RESIDENTIAL',
+              FAIRMARKETTOTAL: 210000,
+              FAIRMARKETLAND: 40000,
+              FAIRMARKETBUILDING: 170000
+            }
+          ]
+        }
+      })
+    };
+  };
+
+  const controller = new AbortController();
+  const identity = await resolveCadastralParcelIdentity({
+    state: 'PA',
+    county: 'Allegheny',
+    apn: '0001-B-00100-0000-00',
+    countyFips: '42003'
+  }, {
+    fetchFn: mockFetch,
+    signal: controller.signal
+  });
+
+  assert.ok(capturedUrl, 'PA-ALLEGHENY must dispatch query through wparcels');
+  assert.equal(capturedInit.signal, controller.signal, 'Caller AbortSignal must be forwarded');
+  assert.ok(identity);
+  assert.equal(identity.canonicalApn, '0001B00100000000');
+  assert.equal(identity.countyFips, '42003');
+  assert.match(identity.parcelKey, /^42003-0001B00100000000/);
+});

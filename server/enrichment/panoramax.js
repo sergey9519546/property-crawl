@@ -9,16 +9,40 @@
  * and generates deterministic vector parcel blueprints for zero-broken-image guarantees.
  */
 
+const { inspectPublisherPhoto } = require('../scrapers/media-policy');
+
 const PANORAMAX_API_ENDPOINT = 'https://api.panoramax.xyz/api/search';
+const DEFAULT_RADIUS_METERS = 100;
+const DISPLAY_APPROVED_LICENSES = new Set(['CC-BY-SA-4.0', 'ETALAB-2.0']);
+
+function haversineDistanceMeters(lat1, lng1, lat2, lng2) {
+  const toRad = (deg) => (deg * Math.PI) / 180;
+  const earthRadiusMeters = 6_371_000;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2
+    + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * earthRadiusMeters * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function normalizeRadiusMeters(radiusMeters) {
+  return Number.isFinite(radiusMeters) && radiusMeters > 0
+    ? Math.min(radiusMeters, DEFAULT_RADIUS_METERS)
+    : DEFAULT_RADIUS_METERS;
+}
 
 /**
  * Calculates a bounding box around a lat/lng point given a radius in meters.
  * Approx 1 deg lat = 111,320m; 1 deg lng = 111,320m * cos(lat).
  */
-function calculateBbox(lat, lng, radiusMeters = 75) {
-  const latDelta = radiusMeters / 111320;
+function calculateBbox(lat, lng, radiusMeters = DEFAULT_RADIUS_METERS) {
+  const effectiveRadius = Number.isFinite(radiusMeters) && radiusMeters > 0
+    ? radiusMeters
+    : DEFAULT_RADIUS_METERS;
+  const latDelta = effectiveRadius / 111320;
   const rad = (lat * Math.PI) / 180;
-  const lngDelta = radiusMeters / (111320 * Math.cos(rad));
+  const cosLat = Math.max(Math.abs(Math.cos(rad)), 1e-6);
+  const lngDelta = effectiveRadius / (111320 * cosLat);
 
   const minLng = Math.round((lng - lngDelta) * 100000) / 100000;
   const minLat = Math.round((lat - latDelta) * 100000) / 100000;
@@ -34,21 +58,25 @@ function calculateBbox(lat, lng, radiusMeters = 75) {
  * @param {Object} params
  * @param {number} params.lat - Latitude
  * @param {number} params.lng - Longitude
- * @param {number} [params.radiusMeters=75] - Search radius in meters
+ * @param {number} [params.radiusMeters=100] - Search radius in meters
+ * @param {number} [params.limit=10] - Candidate fetch limit
  * @param {Function} [params.fetchFn] - Custom fetch for testing
  * @returns {Promise<Object|null>}
  */
-async function queryPanoramaxImagery({ lat, lng, radiusMeters = 75, fetchFn = globalThis.fetch }) {
+async function queryPanoramaxImagery({ lat, lng, radiusMeters = DEFAULT_RADIUS_METERS, limit = 10, fetchFn = globalThis.fetch }) {
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
     return null;
   }
 
-  const bbox = calculateBbox(lat, lng, radiusMeters);
-  const url = `${PANORAMAX_API_ENDPOINT}?bbox=${bbox.join(',')}&limit=1`;
+  const effectiveRadiusMeters = normalizeRadiusMeters(radiusMeters);
+  const boundedLimit = Number.isFinite(limit) && limit >= 1 ? Math.min(Math.trunc(limit), 10) : 10;
+  const bbox = calculateBbox(lat, lng, effectiveRadiusMeters);
+  const url = `${PANORAMAX_API_ENDPOINT}?bbox=${bbox.join(',')}&limit=${boundedLimit}`;
 
   try {
     const res = await fetchFn(url, {
       method: 'GET',
+      redirect: 'error',
       headers: {
         'Accept': 'application/geo+json, application/json',
         'User-Agent': 'PropertyCrawl/2.0 (Panoramax Open Street View Client)'
@@ -62,22 +90,43 @@ async function queryPanoramaxImagery({ lat, lng, radiusMeters = 75, fetchFn = gl
       return null;
     }
 
-    const feature = data.features[0];
-    const props = feature.properties || {};
-    const coords = feature.geometry?.coordinates || [lng, lat];
+    const candidates = [];
+    for (const feature of data.features) {
+      const featureId = typeof feature?.id === 'string' ? feature.id.trim() : '';
+      const rawCoords = feature?.geometry?.coordinates;
+      if (!featureId || !Array.isArray(rawCoords) || rawCoords.length < 2) continue;
 
-    return {
-      source: 'PANORAMAX_OPEN_STREET_VIEW',
-      id: feature.id,
-      sequenceId: feature.collection,
-      coordinates: { lng: coords[0], lat: coords[1] },
-      viewerUrl: `https://api.panoramax.xyz/?pic=${encodeURIComponent(feature.id)}`,
-      thumbnailUrl: `https://api.panoramax.xyz/api/pictures/${encodeURIComponent(feature.id)}/thumb.jpg`,
-      license: props.license || 'CC-BY-SA-4.0',
-      capturedAt: props.datetime || null,
-      fieldOfView: props.field_of_view || null,
-      attribution: 'Panoramax contributors (CC-BY-SA-4.0)'
-    };
+      const featureLng = Number(rawCoords[0]);
+      const featureLat = Number(rawCoords[1]);
+      if (!Number.isFinite(featureLat) || !Number.isFinite(featureLng)) continue;
+      if (featureLat < -90 || featureLat > 90 || featureLng < -180 || featureLng > 180) continue;
+
+      const distanceMeters = haversineDistanceMeters(lat, lng, featureLat, featureLng);
+      if (!Number.isFinite(distanceMeters) || distanceMeters > effectiveRadiusMeters) continue;
+
+      const props = feature.properties || {};
+      const license = typeof props.license === 'string' ? props.license.trim() : '';
+      if (!DISPLAY_APPROVED_LICENSES.has(license)) continue;
+
+      candidates.push({
+        source: 'PANORAMAX_OPEN_STREET_VIEW',
+        id: featureId,
+        sequenceId: feature.collection,
+        coordinates: { lng: featureLng, lat: featureLat },
+        distanceMeters: Math.round(distanceMeters * 100) / 100,
+        viewerUrl: `https://api.panoramax.xyz/?pic=${encodeURIComponent(featureId)}`,
+        thumbnailUrl: `https://api.panoramax.xyz/api/pictures/${encodeURIComponent(featureId)}/thumb.jpg`,
+        license,
+        displayApproved: true,
+        capturedAt: props.datetime || null,
+        fieldOfView: props.field_of_view || null,
+        attribution: `Panoramax contributors (${license})`
+      });
+    }
+
+    if (candidates.length === 0) return null;
+    candidates.sort((a, b) => a.distanceMeters - b.distanceMeters);
+    return candidates[0];
   } catch (err) {
     return null;
   }
@@ -147,21 +196,27 @@ function generateParcelSvgBlueprint(listing = {}) {
 async function resolveListingVisual(listing, options = {}) {
   if (!listing) return null;
 
-  // Tier 1: Official publisher photo
-  if (listing.imageUrl && typeof listing.imageUrl === 'string' && listing.imageUrl.startsWith('http')) {
-    return {
-      tier: 'PUBLISHER',
-      url: listing.imageUrl,
-      attribution: listing.source || 'Publisher Official',
-      isFallback: false
-    };
+  // Tier 1: Official publisher photo (.photo primary, .imageUrl fallback) gated by media-policy provenance
+  const publisherCandidates = [listing.photo, listing.imageUrl]
+    .filter((value, idx, arr) => typeof value === 'string' && value.trim() && arr.indexOf(value) === idx);
+  for (const candidateUrl of publisherCandidates) {
+    const inspected = inspectPublisherPhoto({ ...listing, photo: candidateUrl });
+    if (inspected.accepted && inspected.url) {
+      return {
+        tier: 'PUBLISHER',
+        url: inspected.url,
+        attribution: listing.source || 'Publisher Official',
+        isFallback: false
+      };
+    }
   }
 
   // Tier 2: Panoramax Open Street View
-  if (Number.isFinite(listing.lat) && Number.isFinite(listing.lng)) {
+  if (Number.isFinite(listing.lat) && Number.isFinite(listing.lng) && (listing.lat !== 0 || listing.lng !== 0)) {
     const panoramax = await queryPanoramaxImagery({
       lat: listing.lat,
       lng: listing.lng,
+      radiusMeters: options.radiusMeters,
       fetchFn: options.fetchFn
     });
 
@@ -172,6 +227,7 @@ async function resolveListingVisual(listing, options = {}) {
         viewerUrl: panoramax.viewerUrl,
         attribution: panoramax.attribution,
         license: panoramax.license,
+        distanceMeters: panoramax.distanceMeters,
         isFallback: false
       };
     }

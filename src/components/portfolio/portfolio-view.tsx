@@ -103,6 +103,7 @@ export function PortfolioView() {
   const [tab, setTab] = React.useState<"watchlist" | "pipeline" | "drops" | "schedule" | "allocation">("pipeline");
   const [dashboard, setDashboard] = React.useState<DashboardPayload | null>(null);
   const [priceDrops, setPriceDrops] = React.useState<PriceDropItem[]>([]);
+  const [historyUnavailable, setHistoryUnavailable] = React.useState(false);
   const [deals, setDeals] = React.useState<SavedDeal[]>([]);
   const [pipelineStages, setPipelineStages] = React.useState<Record<string, PipelineStage>>({});
   const [loading, setLoading] = React.useState(true);
@@ -151,27 +152,51 @@ export function PortfolioView() {
         setDashboard(dashData);
       }
 
-      if (dropsRes.ok) {
-        const dropsData = await dropsRes.json();
-        setPriceDrops(Array.isArray(dropsData.items) ? dropsData.items : []);
-      }
-
+      const dealAddressById = new Map<string, { address?: string; state?: string }>();
       if (alertsRes.ok) {
         const alertsData = await alertsRes.json();
         const rawDeals = Array.isArray(alertsData.deals) ? alertsData.deals : [];
-        setDeals(
-          rawDeals.map((d: any) => ({
+        const mappedDeals: SavedDeal[] = rawDeals.map((d: any) => {
+          const listingId = typeof d === "string" ? d : d.listingId || d.id;
+          const address = typeof d === "string" ? undefined : d.address || d.headlineAddress;
+          const state = typeof d === "string" ? undefined : d.state;
+          if (listingId) dealAddressById.set(listingId, { address, state });
+          return {
             id: typeof d === "string" ? d : d.id || d.listingId,
-            listingId: typeof d === "string" ? d : d.listingId || d.id,
-            address: d.address || d.headlineAddress,
+            listingId,
+            address,
             city: d.city,
-            state: d.state,
+            state,
             openingBid: d.openingBid,
             dealScore: d.dealScore,
             saleDate: d.saleDate,
             source: d.source,
             propType: d.propType,
-          }))
+          };
+        });
+        setDeals(mappedDeals);
+      }
+
+      if (dropsRes.ok) {
+        const dropsData = await dropsRes.json();
+        setHistoryUnavailable(Boolean(dropsData.historyUnavailable));
+        const rawDrops = Array.isArray(dropsData.drops)
+          ? dropsData.drops
+          : (Array.isArray(dropsData.items) ? dropsData.items : []);
+        setPriceDrops(
+          rawDrops.map((d: any) => {
+            const meta = dealAddressById.get(d.listingId);
+            return {
+              listingId: d.listingId,
+              address: d.address || meta?.address,
+              state: d.state || meta?.state,
+              dropped: Boolean(d.dropped),
+              dropAmount: d.dropAmount ?? (typeof d.delta === "number" ? Math.abs(d.delta) : undefined),
+              dropPct: d.dropPct ?? (typeof d.deltaPct === "number" ? Math.abs(d.deltaPct) : undefined),
+              currentBid: d.currentBid ?? null,
+              previousBid: d.previousBid ?? null,
+            };
+          })
         );
       }
     } catch (err) {
@@ -204,20 +229,27 @@ export function PortfolioView() {
     return (
       <div className="mx-auto max-w-4xl px-6 py-20 text-center">
         <ShieldCheck className="mx-auto h-12 w-12 text-ink-3 mb-4" />
-        <h2 className="text-2xl font-bold text-ink">Operator Access Required</h2>
+        <h1 className="text-2xl font-bold text-ink">Member Access Required</h1>
         <p className="mt-2 text-sm text-ink-3 max-w-md mx-auto">
-          The Portfolio & Capital Pipeline dashboard requires an active operator session. Unlock the workspace with your administrative credential to view portfolio rollups, track price drops, and manage capital workflows.
+          Your saved properties, price drops, and upcoming sale schedule are available to active members and staff operators. Sign in to your account or unlock an operator session to view this dashboard.
         </p>
-        <div className="mt-6 flex justify-center gap-4">
-          <button
-            onClick={() => session.requestUnlock()}
+        <div className="mt-6 flex flex-wrap justify-center gap-3">
+          <Link
+            href="/sign-in"
             className="rounded-control bg-ink px-6 py-3 text-sm font-semibold text-white hover:bg-ink-2 transition"
           >
-            Unlock Workspace
+            Member sign-in
+          </Link>
+          <button
+            type="button"
+            onClick={() => session.requestUnlock()}
+            className="rounded-control border border-line-strong bg-card px-5 py-3 text-sm font-semibold text-ink-2 hover:bg-paper transition"
+          >
+            Operator Unlock
           </button>
           <Link
             href="/listings"
-            className="rounded-control border border-line-strong bg-card px-6 py-3 text-sm font-semibold text-ink-2 hover:bg-paper transition"
+            className="rounded-control border border-line-strong bg-card px-5 py-3 text-sm font-semibold text-ink-2 hover:bg-paper transition"
           >
             Explore Listings
           </Link>
@@ -230,13 +262,14 @@ export function PortfolioView() {
     return (
       <div className="mx-auto max-w-6xl px-6 py-20 text-center">
         <Loader2 className="mx-auto h-8 w-8 animate-spin text-ink-3 mb-4" />
-        <p className="text-sm font-medium text-ink-3">Calculating portfolio roll-up metrics...</p>
+        <p className="text-sm font-medium text-ink-3">Loading your saved properties…</p>
       </div>
     );
   }
 
   const count = dashboard?.count ?? deals.length;
-  const dropsCount = priceDrops.filter((d) => d.dropped).length;
+  const activeDrops = priceDrops.filter((d) => d.dropped);
+  const dropsCount = activeDrops.length;
 
   // Pipeline calculations
   const dealsByStage: Record<PipelineStage, SavedDeal[]> = {
@@ -272,12 +305,12 @@ export function PortfolioView() {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-line pb-8">
         <div>
-          <p className="text-label font-bold uppercase tracking-[0.14em] text-ink-3">Capital & Portfolio Management</p>
+          <p className="text-label font-bold uppercase tracking-[0.14em] text-ink-3">Portfolio</p>
           <h1 className="mt-1 text-3xl font-extrabold tracking-tight text-ink">
-            Institutional Capital Pipeline
+            Saved Properties &amp; Price Drops
           </h1>
           <p className="mt-1.5 text-xs text-ink-3">
-            Track saved distressed assets through 6 operational deal stages, monitor price drop alerts, and aggregate committed capital.
+            Track saved listings across six research stages, watch for opening bid drops, and prepare for upcoming sale dates.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2.5">
@@ -285,16 +318,16 @@ export function PortfolioView() {
             href="/api/export?format=markdown&saved=true"
             download="perfectproperty_dossiers.md"
             className="flex items-center gap-1.5 rounded-control border border-line-strong bg-card px-3.5 py-2.5 text-xs font-semibold text-ink-2 hover:bg-paper transition"
-            title="Download printable Markdown Underwriting Dossiers for saved deals"
+            title="Download printable Markdown summaries for saved properties"
           >
             <Download className="h-3.5 w-3.5" />
-            Export Dossiers (.md)
+            Export Summaries (.md)
           </a>
           <a
             href="/api/export?format=csv&saved=true"
             download="perfectproperty_portfolio.csv"
             className="flex items-center gap-1.5 rounded-control border border-line-strong bg-card px-3.5 py-2.5 text-xs font-semibold text-ink-2 hover:bg-paper transition"
-            title="Download CSV table of all saved deals"
+            title="Download CSV table of all saved listings"
           >
             <Download className="h-3.5 w-3.5" />
             CSV Export
@@ -321,7 +354,7 @@ export function PortfolioView() {
       </div>
 
       {error && (
-        <div className="mt-6 flex items-center gap-2 rounded-control border border-caution/40 bg-caution/10 p-4 text-xs font-medium text-caution">
+        <div className="mt-6 flex items-center gap-2 rounded-control border border-catch/30 bg-catch-wash p-4 text-xs font-medium text-catch-ink" role="alert">
           <AlertCircle className="h-4 w-4 shrink-0" />
           <span>{error}</span>
         </div>
@@ -331,22 +364,22 @@ export function PortfolioView() {
       <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-card border border-line bg-card p-5 shadow-sm">
           <div className="flex items-center justify-between text-xs font-semibold text-ink-3">
-            <span>Pipeline Capital Exposure</span>
+            <span>Total Opening Bids</span>
             <DollarSign className="h-4 w-4 text-ink-3" />
           </div>
           <p className="mt-3 text-3xl font-extrabold text-ink">{formatMoney(totalPipelineCapital)}</p>
-          <p className="mt-1 text-label text-ink-3">Across {deals.length} tracked opportunities</p>
+          <p className="mt-1 text-label text-ink-3">Across {deals.length} tracked listings</p>
         </div>
 
         <div className="rounded-card border border-line bg-card p-5 shadow-sm">
           <div className="flex items-center justify-between text-xs font-semibold text-ink-3">
-            <span>Modeled Spread</span>
+            <span>Estimated Equity Spread</span>
             <Building className="h-4 w-4 text-ink-3" />
           </div>
           <p className="mt-3 text-3xl font-extrabold text-ink">
             {formatMoney(dashboard?.totalEstimatedEquity)}
           </p>
-          <p className="mt-1 text-label text-ink-3">Total modeled spread vs mid</p>
+          <p className="mt-1 text-label text-ink-3">Published value midpoint minus bid</p>
         </div>
 
         <div className="rounded-card border border-line bg-card p-5 shadow-sm">
@@ -358,13 +391,13 @@ export function PortfolioView() {
             {dashboard?.medianDealScore != null ? Math.round(dashboard.medianDealScore) : "—"}
           </p>
           <p className="mt-1 text-label text-ink-3">
-            {dashboard?.medianDiscount != null ? `${Math.round(dashboard.medianDiscount * 100)}% median discount` : "Weighted quality index"}
+            {dashboard?.medianDiscount != null ? `${Math.round(dashboard.medianDiscount * 100)}% median discount` : "Shown when value range exists"}
           </p>
         </div>
 
         <div className="rounded-card border border-line bg-card p-5 shadow-sm">
           <div className="flex items-center justify-between text-xs font-semibold text-ink-3">
-            <span>Upcoming Auctions</span>
+            <span>Upcoming Sales</span>
             <CalendarDays className="h-4 w-4 text-ink-3" />
           </div>
           <p className="mt-3 text-3xl font-extrabold text-ink">
@@ -375,7 +408,7 @@ export function PortfolioView() {
       </div>
 
       {/* Navigation Tabs */}
-      <div className="mt-10 flex border-b border-line text-xs font-bold overflow-x-auto">
+      <div className="mt-10 flex flex-wrap border-b border-line text-xs font-bold">
         <button
           onClick={() => setTab("pipeline")}
           className={`border-b-2 px-5 py-3 transition flex items-center gap-1.5 shrink-0 ${
@@ -385,7 +418,7 @@ export function PortfolioView() {
           }`}
         >
           <Kanban className="h-3.5 w-3.5" />
-          Capital Pipeline ({deals.length})
+          Pipeline ({deals.length})
         </button>
         <button
           onClick={() => setTab("watchlist")}
@@ -395,7 +428,7 @@ export function PortfolioView() {
               : "border-transparent text-ink-3 hover:text-ink"
           }`}
         >
-          Tracked Deals ({deals.length})
+          Saved List ({deals.length})
         </button>
         <button
           onClick={() => setTab("drops")}
@@ -405,7 +438,7 @@ export function PortfolioView() {
               : "border-transparent text-ink-3 hover:text-ink"
           }`}
         >
-          Price Drop Radar
+          Price Drops
           {dropsCount > 0 && (
             <span className="rounded-full bg-line px-2 py-0.5 text-label text-ink">
               {dropsCount}
@@ -420,7 +453,7 @@ export function PortfolioView() {
               : "border-transparent text-ink-3 hover:text-ink"
           }`}
         >
-          Auction Schedule ({dashboard?.upcomingSales?.length ?? 0})
+          Sale Calendar ({dashboard?.upcomingSales?.length ?? 0})
         </button>
         <button
           onClick={() => setTab("allocation")}
@@ -430,7 +463,7 @@ export function PortfolioView() {
               : "border-transparent text-ink-3 hover:text-ink"
           }`}
         >
-          Jurisdiction Allocation
+          By State &amp; Type
         </button>
       </div>
 
@@ -442,16 +475,16 @@ export function PortfolioView() {
             {deals.length === 0 ? (
               <div className="rounded-card border border-dashed border-line bg-card p-12 text-center">
                 <Kanban className="mx-auto h-8 w-8 text-ink-3 mb-3" />
-                <h3 className="text-base font-bold text-ink">No deals in pipeline</h3>
+                <h2 className="text-base font-bold text-ink">No saved properties in your pipeline</h2>
                 <p className="mt-1 text-xs text-ink-3 max-w-sm mx-auto">
-                  Save listings to your watchlist to begin tracking opportunities through institutional underwriting, title review, auction bidding, and redemption carry.
+                  Save listings to your watchlist to organize your research from initial screening and title checks through sale day.
                 </p>
                 <div className="mt-5">
                   <Link
                     href="/listings"
                     className="inline-flex items-center gap-2 rounded-control bg-ink px-5 py-2.5 text-xs font-semibold text-white hover:bg-ink-2 transition"
                   >
-                    Browse Opportunities <ArrowRight className="h-3.5 w-3.5" />
+                    Browse Listings <ArrowRight className="h-3.5 w-3.5" />
                   </Link>
                 </div>
               </div>
@@ -475,10 +508,10 @@ export function PortfolioView() {
                           </span>
                         </div>
                         <div className="mt-1.5 flex items-center justify-between text-label text-ink-3">
-                          <span>Committed Capital:</span>
+                          <span>Opening Bids:</span>
                           <span className="font-bold text-ink">{formatMoney(stageCapital)}</span>
                         </div>
-                        <p className="mt-1 text-meta text-ink-3 line-clamp-1" title={stage.description}>
+                        <p className="mt-1 text-xs text-ink-3 line-clamp-1" title={stage.description}>
                           {stage.description}
                         </p>
                       </div>
@@ -487,7 +520,7 @@ export function PortfolioView() {
                       <div className="mt-3 space-y-3 flex-1 overflow-y-auto">
                         {stageDeals.length === 0 ? (
                           <div className="py-8 text-center text-label text-ink-3 border border-dashed border-line/60 rounded-control">
-                            No assets in {stage.label.toLowerCase()}
+                            No listings in {stage.label.toLowerCase()}
                           </div>
                         ) : (
                           stageDeals.map((deal) => {
@@ -586,7 +619,7 @@ export function PortfolioView() {
             {deals.length === 0 ? (
               <div className="rounded-card border border-dashed border-line bg-card p-12 text-center">
                 <Building className="mx-auto h-8 w-8 text-ink-3 mb-3" />
-                <h3 className="text-base font-bold text-ink">No saved properties yet</h3>
+                <h2 className="text-base font-bold text-ink">No saved properties yet</h2>
                 <p className="mt-1 text-xs text-ink-3 max-w-sm mx-auto">
                   Browse public listings, save promising assets, and monitor their status over time.
                 </p>
@@ -686,10 +719,15 @@ export function PortfolioView() {
         {/* Price Drop Radar Tab */}
         {tab === "drops" && (
           <div className="space-y-4">
-            {priceDrops.length === 0 ? (
+            {historyUnavailable && (
+              <div className="rounded-control border border-catch/40 bg-catch/5 px-4 py-3 text-xs text-ink">
+                Historical bid snapshots are temporarily unavailable, so prior-bid comparisons could not be computed for your saved listings.
+              </div>
+            )}
+            {activeDrops.length === 0 ? (
               <div className="rounded-card border border-dashed border-line bg-card p-12 text-center">
                 <TrendingDown className="mx-auto h-8 w-8 text-ink-3 mb-3" />
-                <h3 className="text-base font-bold text-ink">No price drops recorded</h3>
+                <h2 className="text-base font-bold text-ink">No price drops recorded</h2>
                 <p className="mt-1 text-xs text-ink-3 max-w-sm mx-auto">
                   When auctioneers or sheriff departments reduce opening bids or upset prices on your tracked assets,
                   they will appear here automatically.
@@ -697,7 +735,7 @@ export function PortfolioView() {
               </div>
             ) : (
               <div className="divide-y divide-line rounded-card border border-line bg-card shadow-sm overflow-hidden">
-                {priceDrops.map((drop) => (
+                {activeDrops.map((drop) => (
                   <div key={drop.listingId} className="flex items-center justify-between p-5 hover:bg-paper transition">
                     <div>
                       <div className="flex items-center gap-2">
@@ -730,7 +768,7 @@ export function PortfolioView() {
             {!dashboard?.upcomingSales?.length ? (
               <div className="rounded-card border border-dashed border-line bg-card p-12 text-center">
                 <CalendarDays className="mx-auto h-8 w-8 text-ink-3 mb-3" />
-                <h3 className="text-base font-bold text-ink">No sales in the next 30 days</h3>
+                <h2 className="text-base font-bold text-ink">No sales in the next 30 days</h2>
                 <p className="mt-1 text-xs text-ink-3 max-w-sm mx-auto">
                   None of your currently tracked properties have an auction date scheduled in the next 30-day window.
                 </p>

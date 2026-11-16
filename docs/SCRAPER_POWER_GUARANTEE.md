@@ -1,6 +1,6 @@
 # Scraper power & source amount — coverage guarantee
 
-> Generated 2026-11-06T14:05:02.449Z from `server/sources/catalog.js` + `server/scrapers/scheduler.js` + `data.js`.
+> Generated 2026-11-15T07:50:28.486Z from `server/sources/catalog.js` + `server/scrapers/scheduler.js` + `data.js`.
 > **Code guarantee ≠ live inventory guarantee.** Volume depends on publisher reachability.
 
 ## Headline numbers
@@ -18,7 +18,7 @@
 | End | Catalog | Scheduled | Strong (P4) | Required | Status |
 |---|---:|---:|---:|:---:|---|
 | Federal/GSE REO | 7 | 5 | 1 | yes | ✅ adapter |
-| Federal seizure/forfeiture | 5 | 3 | 2 | yes | ✅ adapter |
+| Federal seizure/forfeiture | 5 | 3 | 1 | yes | ✅ adapter |
 | Federal/state surplus real property | 54 | 1 | 1 | yes | ✅ adapter |
 | Federal/state land sales | 2 | 1 | 0 | yes | ✅ adapter |
 | Foreclosure/sheriff/trustee auction | 25 | 8 | 1 | yes | ✅ adapter |
@@ -39,7 +39,8 @@
 
 | Tier | Meaning | Count |
 |---|---|---:|
-| P4_LIVE_STRONG | Scheduled + Scrapling optional + fail-closed + lastRunReport | 5 |
+| P4_LIVE_STRONG | Scheduled + Scrapling optional + fail-closed + lastRunReport | 4 |
+| P3_LIVE_ADAPTER | Scheduled production adapter with run reports | 1 |
 | P2_DISCOVERY_ADAPTER | Adapter registered but DISCOVERY_ONLY (canaries pending) | 12 |
 | P2_BLOCKED_PUBLISHER | Publisher blocked/challenged; fail-closed in code | 2 |
 | P0_CATALOG_ONLY | Catalog workflow/enrollment template only | 227 |
@@ -50,13 +51,13 @@
 | Adapter | Tier | Scrapling | Seed listings | Limitation |
 |---|---|---|---:|---|
 | `gsa` (GSA Real Estate Sales) | P4_LIVE_STRONG | gsa-index, gsa-detail | 41 | robots exclusion on /our-listing; sparse inventory; Scrapling optional |
-| `irs` (IRS Auctions) | P4_LIVE_STRONG | irs-detail | 1 | — |
 | `servicelink` (Public Auction Network) | P4_LIVE_STRONG | table-extract | 25 | — |
 | `treasury` (Treasury Forfeiture Real Property) | P4_LIVE_STRONG | treasury-detail | 16 | — |
 | `usda` (USDA RD/FSA Property Resales) | P4_LIVE_STRONG | usda-table | 16 | — |
 | `civilview` (CivilView Sheriff/Tax Sale Platform) | P3_SCOPE_LIMITED | civilview-sales | 60 | Jurisdiction-scoped (countyId); not nationwide |
 | `civilview` (CivilView Participating Jurisdictions (Nationwide set)) | P3_SCOPE_LIMITED | civilview-sales | 60 | Jurisdiction-scoped (countyId); not nationwide |
 | `hud` (HUD HomeStore) | P3_SCOPE_LIMITED | hud-cards | 1971 | Publisher maintenance/challenges possible; fail-closed + Scrapling hud-cards |
+| `irs` (IRS Auctions) | P3_LIVE_ADAPTER | irs-detail | 1 | Real-estate cards sparse/0 on recent live canaries (canary held NOT_CLEAN); fail-closed |
 | `bid4assets` (Bid4Assets) | P2_BLOCKED_PUBLISHER | — | 0 | CAPTCHA/account; circuit breaker fails closed |
 | `ca-controller-tax-sale` (CA State Controller Tax-Defaulted Sales Directory) | P2_DISCOVERY_ADAPTER | table-extract | 0 | Cloudflare; DISCOVERY_ONLY until canaries |
 | `ca-controller-tax-sale` (California State Controller — Tax-Defaulted Public Auctions Directory) | P2_DISCOVERY_ADAPTER | table-extract | 0 | Cloudflare; DISCOVERY_ONLY until canaries |

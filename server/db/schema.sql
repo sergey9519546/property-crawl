@@ -301,7 +301,7 @@ BEGIN
       THEN 2 ELSE 0 END)
     + (CASE WHEN NEW.latitude IS NOT NULL AND NEW.longitude IS NOT NULL THEN 1 ELSE 0 END)
   )::smallint;
-  NEW.discovery_is_live := coalesce(NEW.provenance->>'origin' = 'live', FALSE);
+  NEW.discovery_is_live := coalesce((NEW.provenance->>'origin') IN ('live', 'email_notice'), FALSE);
   NEW.discovery_program := nullif(coalesce(NEW.auction_program, NEW.provenance->'sourceFacts'->>'auctionProgram'), '');
   NEW.discovery_search_text := (
     coalesce(NEW.id, '') || ' ' ||
@@ -440,7 +440,7 @@ WITH base AS (
     sqft,
     deal_score,
     source_key,
-    prop_type,
+    coalesce(prop_type, 'Unknown') AS prop_type,
     source_observed_at
   FROM listings
   WHERE (status = 'active' OR status IS NULL)
@@ -454,17 +454,15 @@ zip_counts AS (
     SUBSTRING(TRIM(zip) FROM 1 FOR 5)::text AS label,
     MAX(state)::text AS state,
     COUNT(*)::int AS count,
-    PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY opening_bid)::float8 AS "medianOpeningBid",
-    AVG(opening_bid)::float8 AS "meanOpeningBid",
-    PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY sqft)::float8 AS "medianSqft",
-    PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY deal_score)::float8 AS "medianDealScore",
+    PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY opening_bid) FILTER (WHERE opening_bid > 0)::float8 AS "medianOpeningBid",
+    AVG(opening_bid) FILTER (WHERE opening_bid > 0)::float8 AS "meanOpeningBid",
+    PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY sqft) FILTER (WHERE sqft > 0)::float8 AS "medianSqft",
+    PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY deal_score) FILTER (WHERE opening_bid > 0 AND est_low > 0 AND est_high >= est_low AND deal_score IS NOT NULL)::float8 AS "medianDealScore",
     PERCENTILE_CONT(0.5) WITHIN GROUP (
-      ORDER BY CASE WHEN est_low > 0 AND est_high >= est_low AND opening_bid > 0
-        THEN (1.0 - (opening_bid / ((est_low + est_high) / 2.0)))
-        ELSE NULL END
-    )::float8 AS "medianDiscount",
+      ORDER BY (1.0 - (opening_bid / ((est_low + est_high) / 2.0)))
+    ) FILTER (WHERE est_low > 0 AND est_high >= est_low AND opening_bid > 0)::float8 AS "medianDiscount",
     jsonb_object_agg(source_key, src_count) FILTER (WHERE source_key IS NOT NULL) AS sources,
-    jsonb_object_agg(prop_type, pt_count) FILTER (WHERE prop_type IS NOT NULL) AS prop_types
+    jsonb_object_agg(prop_type, pt_count) AS prop_types
   FROM (
     SELECT
       b.*,
@@ -482,17 +480,15 @@ city_counts AS (
     (LOWER(TRIM(city)) || ', ' || UPPER(TRIM(state)))::text AS label,
     UPPER(TRIM(state))::text AS state,
     COUNT(*)::int AS count,
-    PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY opening_bid)::float8 AS "medianOpeningBid",
-    AVG(opening_bid)::float8 AS "meanOpeningBid",
-    PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY sqft)::float8 AS "medianSqft",
-    PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY deal_score)::float8 AS "medianDealScore",
+    PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY opening_bid) FILTER (WHERE opening_bid > 0)::float8 AS "medianOpeningBid",
+    AVG(opening_bid) FILTER (WHERE opening_bid > 0)::float8 AS "meanOpeningBid",
+    PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY sqft) FILTER (WHERE sqft > 0)::float8 AS "medianSqft",
+    PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY deal_score) FILTER (WHERE opening_bid > 0 AND est_low > 0 AND est_high >= est_low AND deal_score IS NOT NULL)::float8 AS "medianDealScore",
     PERCENTILE_CONT(0.5) WITHIN GROUP (
-      ORDER BY CASE WHEN est_low > 0 AND est_high >= est_low AND opening_bid > 0
-        THEN (1.0 - (opening_bid / ((est_low + est_high) / 2.0)))
-        ELSE NULL END
-    )::float8 AS "medianDiscount",
+      ORDER BY (1.0 - (opening_bid / ((est_low + est_high) / 2.0)))
+    ) FILTER (WHERE est_low > 0 AND est_high >= est_low AND opening_bid > 0)::float8 AS "medianDiscount",
     jsonb_object_agg(source_key, src_count) FILTER (WHERE source_key IS NOT NULL) AS sources,
-    jsonb_object_agg(prop_type, pt_count) FILTER (WHERE prop_type IS NOT NULL) AS prop_types
+    jsonb_object_agg(prop_type, pt_count) AS prop_types
   FROM (
     SELECT
       b.*,

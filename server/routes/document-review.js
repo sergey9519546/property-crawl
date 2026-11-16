@@ -61,10 +61,27 @@ function requireOperator(req, res, env) {
 }
 
 let store = createDocumentReviewStore();
+const pgLoadPromises = new WeakMap();
+
+async function ensureStoreLoaded(database, activeStore) {
+  const pool = database && database.pool ? database.pool : activeStore?.pool;
+  if (!pool || typeof activeStore?.loadPg !== 'function') return activeStore;
+  if (!pgLoadPromises.has(activeStore)) {
+    const loadPromise = Promise.resolve()
+      .then(() => activeStore.loadPg())
+      .catch((err) => {
+        pgLoadPromises.delete(activeStore);
+        throw err;
+      });
+    pgLoadPromises.set(activeStore, loadPromise);
+  }
+  await pgLoadPromises.get(activeStore);
+  return activeStore;
+}
 
 function getStore(database) {
   const pool = database && database.pool ? database.pool : null;
-  if (pool && !store.pool) {
+  if (pool && store.pool !== pool) {
     store = createDocumentReviewStore({ pool, storePath: store.storePath, env: process.env });
   }
   return store;
@@ -266,6 +283,7 @@ async function handleDocumentReview(req, res, dependencies = {}) {
   const method = req.method;
   res.setHeader('Cache-Control', 'no-store');
   if (!requireOperator(req, res, env)) return;
+  await ensureStoreLoaded(database, store);
 
   if (method === 'GET' && url.pathname === '/api/document-review') {
     const requestedStatus = url.searchParams.get('status');

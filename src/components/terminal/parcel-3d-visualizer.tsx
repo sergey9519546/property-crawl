@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Box, LoaderCircle, MapPin } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
+import { AlertTriangle, Box, Compass, Layers, LoaderCircle, MapPin, RotateCcw } from "lucide-react";
 import { Listing } from "@/data/listings";
 import { inspectParcelBoundaryInputs } from "@/lib/listing-map-policy";
 
@@ -21,6 +22,7 @@ interface ParcelMetadata {
   depthFt: number | null;
   zoning: string | null;
   topography: string | null;
+  setbacks?: Record<string, number> | null;
   source: "arcgis_rest";
   sourceName: string;
   evidenceStatus: "source_observed";
@@ -43,6 +45,10 @@ type LoadState =
   | { status: "unavailable"; feature: null; message: string };
 
 const NOT_A_SURVEY = "Cadastral reference only — not a boundary survey";
+const DEFAULT_YAW = 34;
+const DEFAULT_TILT = 52;
+const VIEW_W = 640;
+const VIEW_H = 340;
 
 function isPosition(value: unknown): value is Position {
   return Array.isArray(value)
@@ -60,6 +66,21 @@ function outerRing(feature: ParcelFeature | null): Position[] {
   return Array.isArray(ring) ? ring.filter(isPosition) : [];
 }
 
+function haversineMeters(pt1: Position, pt2: Position): number {
+  const [lng1, lat1] = pt1;
+  const [lng2, lat2] = pt2;
+  const dLat = (lat2 - lat1) * (Math.PI / 180);
+  const dLng = (lng2 - lng1) * (Math.PI / 180);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * (Math.PI / 180)) *
+      Math.cos(lat2 * (Math.PI / 180)) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return 6_371_000 * c;
+}
+
 function computeClientPerimeter(ring: Position[]): number | null {
   if (!ring || ring.length < 4) return null;
   let totalMeters = 0;
@@ -67,44 +88,118 @@ function computeClientPerimeter(ring: Position[]): number | null {
     const pt1 = ring[i];
     const pt2 = ring[i + 1];
     if (!pt1 || !pt2) continue;
-    const [lng1, lat1] = pt1;
-    const [lng2, lat2] = pt2;
-    const dLat = (lat2 - lat1) * (Math.PI / 180);
-    const dLng = (lng2 - lng1) * (Math.PI / 180);
-    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-              Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
-              Math.sin(dLng / 2) * Math.sin(dLng / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    totalMeters += 6371000 * c;
+    totalMeters += haversineMeters(pt1, pt2);
   }
   const feet = Math.round(totalMeters * 3.28084);
   return feet > 0 ? feet : null;
 }
 
-function toSvgPoints(ring: Position[]) {
-  if (ring.length < 4) return "";
-  const unique = ring.slice(0, -1);
-  const lngs = unique.map(([lng]) => lng);
-  const lats = unique.map(([, lat]) => lat);
-  const minLng = Math.min(...lngs);
-  const maxLng = Math.max(...lngs);
-  const minLat = Math.min(...lats);
-  const maxLat = Math.max(...lats);
-  const lngSpan = Math.max(maxLng - minLng, Number.EPSILON);
-  const latSpan = Math.max(maxLat - minLat, Number.EPSILON);
-  const scale = Math.min(520 / lngSpan, 190 / latSpan);
-  const width = lngSpan * scale;
-  const height = latSpan * scale;
-  const offsetX = (640 - width) / 2;
-  const offsetY = (280 - height) / 2;
+interface LocalVertex {
+  x: number; // East (normalized scene units)
+  y: number; // North (normalized scene units)
+}
 
-  return unique
-    .map(([lng, lat]) => {
-      const x = offsetX + (lng - minLng) * scale;
-      const y = offsetY + (maxLat - lat) * scale;
-      return `${x.toFixed(2)},${y.toFixed(2)}`;
-    })
-    .join(" ");
+interface LocalEdge {
+  index: number;
+  start: LocalVertex;
+  end: LocalVertex;
+  midpoint: LocalVertex;
+  feet: number;
+}
+
+interface LocalParcelGeometry {
+  vertices: LocalVertex[];
+  edges: LocalEdge[];
+  radius: number;
+}
+
+function buildLocalParcelGeometry(ring: Position[]): LocalParcelGeometry | null {
+  if (ring.length < 4) return null;
+  const unique = ring.slice(0, -1);
+  if (unique.length < 3) return null;
+
+  const meanLng = unique.reduce((acc, [lng]) => acc + lng, 0) / unique.length;
+  const meanLat = unique.reduce((acc, [, lat]) => acc + lat, 0) / unique.length;
+  const metersPerLat = 111_320;
+  const metersPerLng = Math.max(111_320 * Math.cos((meanLat * Math.PI) / 180), 1e-3);
+
+  const meterPts = unique.map(([lng, lat]) => ({
+    x: (lng - meanLng) * metersPerLng,
+    y: (lat - meanLat) * metersPerLat,
+  }));
+
+  const xs = meterPts.map((p) => p.x);
+  const ys = meterPts.map((p) => p.y);
+  const spanX = Math.max(...xs) - Math.min(...xs);
+  const spanY = Math.max(...ys) - Math.min(...ys);
+  const maxSpan = Math.max(spanX, spanY, 1);
+  const normScale = 230 / maxSpan;
+  const centerX = (Math.min(...xs) + Math.max(...xs)) / 2;
+  const centerY = (Math.min(...ys) + Math.max(...ys)) / 2;
+
+  const vertices: LocalVertex[] = meterPts.map((p) => ({
+    x: (p.x - centerX) * normScale,
+    y: (p.y - centerY) * normScale,
+  }));
+
+  const edges: LocalEdge[] = [];
+  for (let i = 0; i < unique.length; i++) {
+    const nextIdx = (i + 1) % unique.length;
+    const v1 = vertices[i];
+    const v2 = vertices[nextIdx];
+    const feet = Math.round(haversineMeters(unique[i], unique[nextIdx]) * 3.28084);
+    edges.push({
+      index: i,
+      start: v1,
+      end: v2,
+      midpoint: {
+        x: (v1.x + v2.x) / 2,
+        y: (v1.y + v2.y) / 2,
+      },
+      feet,
+    });
+  }
+
+  return { vertices, edges, radius: 115 };
+}
+
+interface ProjectedPoint {
+  sx: number;
+  sy: number;
+  depth: number;
+}
+
+function projectPoint(
+  wx: number,
+  wy: number,
+  wz: number,
+  yawDeg: number,
+  tiltDeg: number,
+  is2d: boolean,
+): ProjectedPoint {
+  const yaw = is2d ? 0 : (yawDeg * Math.PI) / 180;
+  const tilt = is2d ? Math.PI / 2 : (tiltDeg * Math.PI) / 180;
+
+  const rx = wx * Math.cos(yaw) - wy * Math.sin(yaw);
+  const ry = wx * Math.sin(yaw) + wy * Math.cos(yaw);
+
+  const cosTilt = Math.cos(tilt);
+  const sinTilt = Math.sin(tilt);
+  const perspectiveDenom = is2d ? 1 : Math.max(0.55, 1 - (ry * cosTilt) / 860);
+  const perspective = 1 / perspectiveDenom;
+
+  const cx = VIEW_W / 2;
+  const cy = is2d ? VIEW_H / 2 : VIEW_H * 0.57;
+
+  return {
+    sx: cx + rx * perspective,
+    sy: cy - (ry * sinTilt + wz * cosTilt) * perspective,
+    depth: ry,
+  };
+}
+
+function polygonString(pts: ProjectedPoint[]): string {
+  return pts.map((p) => `${p.sx.toFixed(1)},${p.sy.toFixed(1)}`).join(" ");
 }
 
 function formatNumber(value: number | null) {
@@ -128,6 +223,15 @@ export function Parcel3DVisualizer({ listing }: Parcel3DProps) {
       ? { status: "loading", feature: null, message: null }
       : { status: "unavailable", feature: null, message: unavailableMessage }
   );
+
+  const [viewMode, setViewMode] = useState<"3d" | "2d">("3d");
+  const [yawDeg, setYawDeg] = useState<number>(DEFAULT_YAW);
+  const [tiltDeg, setTiltDeg] = useState<number>(DEFAULT_TILT);
+  const [extruded, setExtruded] = useState<boolean>(true);
+  const [showSetbackGuide, setShowSetbackGuide] = useState<boolean>(true);
+  const [showContours, setShowContours] = useState<boolean>(true);
+  const [dragging, setDragging] = useState<boolean>(false);
+  const dragOrigin = useRef<{ x: number; y: number; yaw: number; tilt: number } | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -180,7 +284,7 @@ export function Parcel3DVisualizer({ listing }: Parcel3DProps) {
   }, [listing.id, preflight.eligible, unavailableMessage, preflight.state, preflight.county, preflight.apn, preflight.lat, preflight.lng]);
 
   const ring = useMemo(() => outerRing(loadState.feature), [loadState.feature]);
-  const points = useMemo(() => toSvgPoints(ring), [ring]);
+  const localGeo = useMemo(() => buildLocalParcelGeometry(ring), [ring]);
   const metadata = loadState.feature?.properties ?? null;
   const perimeter = metadata?.perimeterFt ?? computeClientPerimeter(ring);
   const coordCount = metadata?.coordinatesCount ?? (ring.length > 0 ? ring.length : null);
@@ -188,21 +292,212 @@ export function Parcel3DVisualizer({ listing }: Parcel3DProps) {
     && metadata?.depthFt !== null && metadata?.depthFt !== undefined
     ? `${metadata.frontageFt.toLocaleString()}′ × ${metadata.depthFt.toLocaleString()}′`
     : "Not reported";
-
   const resolvedApn = (metadata?.parcelId || preflight.apn || "").toString().trim();
+  const hasObservedTopography = Boolean(metadata?.topography && metadata.topography.trim());
+
+  const is2d = viewMode === "2d";
+  const effectiveExtrusion = !is2d && extruded ? 44 : 0;
+
+  const scene = useMemo(() => {
+    if (!localGeo) return null;
+    const { vertices, edges } = localGeo;
+
+    const baseProjected = vertices.map((v) => projectPoint(v.x, v.y, 0, yawDeg, tiltDeg, is2d));
+    const topProjected = vertices.map((v) =>
+      projectPoint(v.x, v.y, effectiveExtrusion, yawDeg, tiltDeg, is2d),
+    );
+    const setbackProjected = vertices.map((v) =>
+      projectPoint(v.x * 0.86, v.y * 0.86, effectiveExtrusion, yawDeg, tiltDeg, is2d),
+    );
+
+    // Side walls sorted back-to-front by mid-depth for painter's order + directional lighting.
+    const walls = effectiveExtrusion > 0
+      ? edges
+          .map((edge, idx) => {
+            const nextIdx = (idx + 1) % vertices.length;
+            const b1 = baseProjected[idx];
+            const b2 = baseProjected[nextIdx];
+            const t2 = topProjected[nextIdx];
+            const t1 = topProjected[idx];
+            const avgDepth = (b1.depth + b2.depth) / 2;
+            const dx = edge.end.x - edge.start.x;
+            const dy = edge.end.y - edge.start.y;
+            const len = Math.hypot(dx, dy) || 1;
+            const nx = dy / len;
+            const ny = -dx / len;
+            const yawRad = (yawDeg * Math.PI) / 180;
+            const rnx = nx * Math.cos(yawRad) - ny * Math.sin(yawRad);
+            const rny = nx * Math.sin(yawRad) + ny * Math.cos(yawRad);
+            const light = 0.24 + 0.16 * Math.max(0, rnx * 0.65 - rny * 0.75);
+            return {
+              key: idx,
+              points: polygonString([b1, b2, t2, t1]),
+              avgDepth,
+              fillOpacity: Number(light.toFixed(3)),
+            };
+          })
+          .sort((a, b) => b.avgDepth - a.avgDepth)
+      : [];
+
+    // Reference ground grid lines (5x5 grid in 3D ground plane)
+    const gridLines: { key: string; p1: ProjectedPoint; p2: ProjectedPoint }[] = [];
+    for (let g = -140; g <= 140; g += 35) {
+      gridLines.push({
+        key: `x-${g}`,
+        p1: projectPoint(g, -140, 0, yawDeg, tiltDeg, is2d),
+        p2: projectPoint(g, 140, 0, yawDeg, tiltDeg, is2d),
+      });
+      gridLines.push({
+        key: `y-${g}`,
+        p1: projectPoint(-140, g, 0, yawDeg, tiltDeg, is2d),
+        p2: projectPoint(140, g, 0, yawDeg, tiltDeg, is2d),
+      });
+    }
+
+    // Terrain contour bands (strictly gated on observed metadata.topography)
+    const contourPolygons = hasObservedTopography && showContours
+      ? [0.74, 0.56, 0.38].map((scale, idx) => {
+          const zLift = effectiveExtrusion > 0 ? effectiveExtrusion + (idx + 1) * 5 : (idx + 1) * 4;
+          const pts = vertices.map((v) =>
+            projectPoint(v.x * scale, v.y * scale, is2d ? 0 : zLift, yawDeg, tiltDeg, is2d),
+          );
+          return { key: `contour-${scale}`, points: polygonString(pts) };
+        })
+      : [];
+
+    // Major edges sorted descending by length so callout labels stay legible without clutter
+    const maxFeet = Math.max(...edges.map((e) => e.feet), 1);
+    const labeledEdges = [...edges]
+      .filter((e) => e.feet > 0 && (edges.length <= 8 || e.feet >= maxFeet * 0.18))
+      .sort((a, b) => b.feet - a.feet)
+      .slice(0, 8)
+      .map((edge) => {
+        const pt = projectPoint(
+          edge.midpoint.x * 1.12,
+          edge.midpoint.y * 1.12,
+          effectiveExtrusion > 0 ? 4 : 0,
+          yawDeg,
+          tiltDeg,
+          is2d,
+        );
+        return {
+          key: `edge-${edge.index}`,
+          feet: edge.feet,
+          sx: pt.sx,
+          sy: pt.sy,
+        };
+      });
+
+    // Compass directions projected around center (top-right HUD)
+    const compassYaw = is2d ? 0 : (yawDeg * Math.PI) / 180;
+    const compassDirs = [
+      { label: "N", wx: 0, wy: 1, highlight: true },
+      { label: "E", wx: 1, wy: 0, highlight: false },
+      { label: "S", wx: 0, wy: -1, highlight: false },
+      { label: "W", wx: -1, wy: 0, highlight: false },
+    ].map((d) => {
+      const rx = d.wx * Math.cos(compassYaw) - d.wy * Math.sin(compassYaw);
+      const ry = d.wx * Math.sin(compassYaw) + d.wy * Math.cos(compassYaw);
+      return {
+        label: d.label,
+        highlight: d.highlight,
+        x: 590 + rx * 20,
+        y: 288 - ry * 20,
+      };
+    });
+
+    return {
+      basePoints: polygonString(baseProjected),
+      topPoints: polygonString(topProjected),
+      setbackPoints: polygonString(setbackProjected),
+      topVertices: topProjected,
+      walls,
+      gridLines,
+      contourPolygons,
+      labeledEdges,
+      compassDirs,
+      compassNorthEnd: compassDirs[0],
+    };
+  }, [localGeo, yawDeg, tiltDeg, is2d, effectiveExtrusion, hasObservedTopography, showContours]);
+
+  function handlePointerDown(e: ReactPointerEvent<SVGSVGElement>) {
+    setDragging(true);
+    dragOrigin.current = {
+      x: e.clientX,
+      y: e.clientY,
+      yaw: yawDeg,
+      tilt: is2d ? 52 : tiltDeg,
+    };
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      /* ignore synthetic events without pointer capture */
+    }
+  }
+
+  function handlePointerMove(e: ReactPointerEvent<SVGSVGElement>) {
+    if (!dragging || !dragOrigin.current) return;
+    const dx = e.clientX - dragOrigin.current.x;
+    const dy = e.clientY - dragOrigin.current.y;
+    if (viewMode === "2d" && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
+      setViewMode("3d");
+    }
+    const nextYaw = ((dragOrigin.current.yaw + dx * 0.55) % 360 + 360) % 360;
+    const nextTilt = Math.max(15, Math.min(85, Math.round(dragOrigin.current.tilt + dy * 0.35)));
+    setYawDeg(Math.round(nextYaw));
+    setTiltDeg(nextTilt);
+  }
+
+  function handlePointerEnd(e: ReactPointerEvent<SVGSVGElement>) {
+    if (!dragging) return;
+    setDragging(false);
+    dragOrigin.current = null;
+    try {
+      if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function resetView() {
+    setViewMode("3d");
+    setYawDeg(DEFAULT_YAW);
+    setTiltDeg(DEFAULT_TILT);
+    setExtruded(true);
+    setShowSetbackGuide(true);
+  }
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-line bg-ink text-white shadow-xl" aria-label="Parcel geometry reference">
-      <div className="relative min-h-[280px]">
+    <section
+      className="overflow-hidden rounded-2xl border border-line bg-ink text-white shadow-xl"
+      aria-label="Parcel geometry reference"
+      data-testid="parcel-3d-visualizer"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 bg-black/25 px-4 py-3">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wider text-white/60">
+            Cadastral Spatial Reference
+          </p>
+          <h2 className="text-sm font-bold text-white">3D Parcel &amp; Topography</h2>
+        </div>
+        <span className="inline-flex items-center gap-1.5 rounded-xl border border-catch/30 bg-black/60 px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-catch">
+          <MapPin className="h-3.5 w-3.5" />
+          {NOT_A_SURVEY}
+        </span>
+      </div>
+
+      <div className="relative min-h-[340px]">
         {loadState.status === "loading" ? (
-          <div className="flex min-h-[280px] items-center justify-center gap-2 text-sm text-white/75" role="status">
+          <div className="flex min-h-[340px] items-center justify-center gap-2 text-sm text-white/75" role="status">
             <LoaderCircle className="h-4 w-4 animate-spin" />
             Resolving cadastral boundary overlay…
           </div>
         ) : null}
 
         {loadState.status === "unavailable" ? (
-          <div className="mx-auto flex min-h-[280px] max-w-lg flex-col items-center justify-center px-6 text-center">
+          <div className="mx-auto flex min-h-[340px] max-w-lg flex-col items-center justify-center px-6 text-center">
             <span className="mb-4 grid h-11 w-11 place-items-center rounded-full border border-catch/30 bg-catch/10">
               <AlertTriangle className="h-5 w-5 text-catch" />
             </span>
@@ -212,30 +507,271 @@ export function Parcel3DVisualizer({ listing }: Parcel3DProps) {
           </div>
         ) : null}
 
-        {loadState.status === "ready" && points ? (
+        {loadState.status === "ready" && scene ? (
           <>
-            <svg className="h-[280px] w-full" viewBox="0 0 640 280" role="img" aria-label="Source-provided cadastral parcel polygon">
+            <svg
+              className={`h-[340px] w-full select-none touch-none ${dragging ? "cursor-grabbing" : "cursor-grab"}`}
+              viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
+              role="img"
+              aria-label={`Interactive ${is2d ? "2D top-down" : "3D extruded"} cadastral parcel geometry`}
+              onPointerDown={handlePointerDown}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerEnd}
+              onPointerCancel={handlePointerEnd}
+            >
               <defs>
-                <pattern id="parcel-grid" width="20" height="20" patternUnits="userSpaceOnUse">
-                  <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#3d3a4f" strokeOpacity="0.38" strokeWidth="0.7" />
-                </pattern>
                 <filter id="parcel-glow" x="-20%" y="-20%" width="140%" height="140%">
-                  <feGaussianBlur stdDeviation="5" result="blur" />
-                  <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+                  <feGaussianBlur stdDeviation="4" result="blur" />
+                  <feMerge>
+                    <feMergeNode in="blur" />
+                    <feMergeNode in="SourceGraphic" />
+                  </feMerge>
                 </filter>
               </defs>
-              <rect width="640" height="280" fill="url(#parcel-grid)" />
-              <polygon points={points} fill="#f5f6f7" fillOpacity="0.14" stroke="#f5f6f7" strokeWidth="2.5" filter="url(#parcel-glow)" />
+
+              {/* Projected 3D ground reference grid */}
+              <g>
+                {scene.gridLines.map((line) => (
+                  <line
+                    key={line.key}
+                    x1={line.p1.sx.toFixed(1)}
+                    y1={line.p1.sy.toFixed(1)}
+                    x2={line.p2.sx.toFixed(1)}
+                    y2={line.p2.sy.toFixed(1)}
+                    stroke="#6b7280"
+                    strokeOpacity="0.22"
+                    strokeWidth="0.75"
+                  />
+                ))}
+              </g>
+
+              {/* Base cadastral footprint */}
+              <polygon
+                points={scene.basePoints}
+                fill="#0b1220"
+                fillOpacity="0.55"
+                stroke="#9ca3af"
+                strokeOpacity="0.6"
+                strokeWidth="1.25"
+              />
+
+              {/* Painter-sorted 3D extruded prism side walls */}
+              {scene.walls.map((wall) => (
+                <polygon
+                  key={wall.key}
+                  points={wall.points}
+                  fill="#93c5fd"
+                  fillOpacity={wall.fillOpacity}
+                  stroke="#dbeafe"
+                  strokeOpacity="0.45"
+                  strokeWidth="1"
+                />
+              ))}
+
+              {/* Top prism face / footprint */}
+              <polygon
+                points={scene.topPoints}
+                fill="#fbf9f5"
+                fillOpacity={effectiveExtrusion > 0 ? "0.2" : "0.14"}
+                stroke="#fbf9f5"
+                strokeWidth="2.4"
+                filter="url(#parcel-glow)"
+              />
+
+              {/* Illustrative interior setback ring (visual reference only) */}
+              {showSetbackGuide ? (
+                <polygon
+                  points={scene.setbackPoints}
+                  fill="none"
+                  stroke="#fbbf24"
+                  strokeOpacity="0.65"
+                  strokeWidth="1.2"
+                  strokeDasharray="4 4"
+                />
+              ) : null}
+
+              {/* Terrain contour lines (only rendered when metadata.topography is reported) */}
+              {scene.contourPolygons.map((c) => (
+                <polygon
+                  key={c.key}
+                  points={c.points}
+                  fill="none"
+                  stroke="#34d399"
+                  strokeOpacity="0.6"
+                  strokeWidth="1.1"
+                  strokeDasharray="3 3"
+                />
+              ))}
+
+              {/* Vertex beacons */}
+              {scene.topVertices.map((pt, idx) => (
+                <circle
+                  key={`v-${idx}`}
+                  cx={pt.sx.toFixed(1)}
+                  cy={pt.sy.toFixed(1)}
+                  r="3"
+                  fill="#fbf9f5"
+                  fillOpacity="0.9"
+                />
+              ))}
+
+              {/* Haversine edge-footage callouts */}
+              {scene.labeledEdges.map((edge) => (
+                <g key={edge.key}>
+                  <rect
+                    x={(edge.sx - 20).toFixed(1)}
+                    y={(edge.sy - 9).toFixed(1)}
+                    width="40"
+                    height="17"
+                    rx="4"
+                    fill="#090d16"
+                    fillOpacity="0.82"
+                    stroke="#ffffff"
+                    strokeOpacity="0.22"
+                    strokeWidth="0.75"
+                  />
+                  <text
+                    x={edge.sx.toFixed(1)}
+                    y={(edge.sy + 3).toFixed(1)}
+                    textAnchor="middle"
+                    fill="#fbf9f5"
+                    fontSize="10"
+                    fontFamily="monospace"
+                    fontWeight="600"
+                  >
+                    {edge.feet}&prime;
+                  </text>
+                </g>
+              ))}
+
+              {/* Interactive rotating N / E / S / W Compass Rose */}
+              <g aria-label="Compass rose">
+                <circle cx="590" cy="288" r="29" fill="#090d16" fillOpacity="0.8" stroke="#ffffff" strokeOpacity="0.2" strokeWidth="1" />
+                <line
+                  x1="590"
+                  y1="288"
+                  x2={scene.compassNorthEnd.x.toFixed(1)}
+                  y2={scene.compassNorthEnd.y.toFixed(1)}
+                  stroke="#ef4444"
+                  strokeWidth="2"
+                />
+                {scene.compassDirs.map((d) => (
+                  <text
+                    key={d.label}
+                    x={d.x.toFixed(1)}
+                    y={(d.y + 3).toFixed(1)}
+                    textAnchor="middle"
+                    fill={d.highlight ? "#f87171" : "#cbd5e1"}
+                    fontSize="10"
+                    fontWeight="700"
+                  >
+                    {d.label}
+                  </text>
+                ))}
+              </g>
             </svg>
+
             <div className="pointer-events-none absolute inset-x-3 top-3 flex flex-wrap items-center justify-between gap-2">
-              <span className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-black/60 px-3 py-2 text-xs font-semibold backdrop-blur-md">
+              <span className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-black/65 px-3 py-1.5 text-xs font-semibold backdrop-blur-md">
                 <Box className="h-3.5 w-3.5 text-white/75" />
-                Source cadastral footprint
+                Source cadastral footprint · Drag to orbit
               </span>
-              <span className="inline-flex items-center gap-1.5 rounded-xl border border-catch/30 bg-black/60 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-catch backdrop-blur-md">
-                <MapPin className="h-3.5 w-3.5" />
-                {NOT_A_SURVEY}
-              </span>
+              {effectiveExtrusion > 0 ? (
+                <span className="rounded-xl border border-white/10 bg-black/65 px-2.5 py-1 text-xs text-white/75 backdrop-blur-md">
+                  Visual parcel extrusion (not building height)
+                </span>
+              ) : null}
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 bg-black/35 px-4 py-2.5 text-xs">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <button
+                  type="button"
+                  aria-pressed={viewMode === "3d"}
+                  onClick={() => setViewMode("3d")}
+                  className={`rounded-lg border px-2.5 py-1 font-semibold transition ${viewMode === "3d" ? "border-white/40 bg-white/15 text-white" : "border-white/10 bg-transparent text-white/65 hover:text-white"}`}
+                >
+                  3D Isometric
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={viewMode === "2d"}
+                  onClick={() => setViewMode("2d")}
+                  className={`rounded-lg border px-2.5 py-1 font-semibold transition ${viewMode === "2d" ? "border-white/40 bg-white/15 text-white" : "border-white/10 bg-transparent text-white/65 hover:text-white"}`}
+                >
+                  2D Top-Down
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={extruded}
+                  disabled={is2d}
+                  onClick={() => setExtruded((prev) => !prev)}
+                  className="inline-flex items-center gap-1 rounded-lg border border-white/15 px-2.5 py-1 font-medium text-white/85 hover:bg-white/10 disabled:opacity-40"
+                >
+                  <Layers className="h-3.5 w-3.5" />
+                  {extruded ? "Extrude On" : "Flat Footprint"}
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={showSetbackGuide}
+                  onClick={() => setShowSetbackGuide((prev) => !prev)}
+                  className="rounded-lg border border-white/15 px-2.5 py-1 font-medium text-white/85 hover:bg-white/10"
+                >
+                  {showSetbackGuide ? "Hide Setback Inset" : "Show Setback Inset"}
+                </button>
+                {hasObservedTopography ? (
+                  <button
+                    type="button"
+                    aria-pressed={showContours}
+                    onClick={() => setShowContours((prev) => !prev)}
+                    className="rounded-lg border border-white/35 bg-white/10 px-2.5 py-1 font-medium text-white hover:bg-white/20"
+                  >
+                    {showContours ? "Contours On" : "Contours Off"}
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={resetView}
+                  className="inline-flex items-center gap-1 rounded-lg border border-white/15 px-2.5 py-1 font-medium text-white/75 hover:bg-white/10 hover:text-white"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  Reset
+                </button>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-4 text-xs text-white/80">
+                <label className="flex items-center gap-2">
+                  <Compass className="h-3.5 w-3.5 text-white/60" />
+                  <span>Azimuth {yawDeg}&deg;</span>
+                  <input
+                    type="range"
+                    aria-label="Parcel rotation azimuth"
+                    min={0}
+                    max={360}
+                    value={yawDeg}
+                    onChange={(e) => {
+                      if (viewMode === "2d") setViewMode("3d");
+                      setYawDeg(Number(e.target.value));
+                    }}
+                    className="h-1.5 w-20 cursor-pointer accent-white"
+                  />
+                </label>
+                <label className="flex items-center gap-2">
+                  <span>Tilt {is2d ? 90 : tiltDeg}&deg;</span>
+                  <input
+                    type="range"
+                    aria-label="Parcel elevation tilt"
+                    min={15}
+                    max={85}
+                    value={is2d ? 85 : tiltDeg}
+                    onChange={(e) => {
+                      if (viewMode === "2d") setViewMode("3d");
+                      setTiltDeg(Number(e.target.value));
+                    }}
+                    className="h-1.5 w-20 cursor-pointer accent-white"
+                  />
+                </label>
+              </div>
             </div>
           </>
         ) : null}
@@ -249,7 +785,7 @@ export function Parcel3DVisualizer({ listing }: Parcel3DProps) {
               value={metadata.lotAcres !== null ? `${formatNumber(metadata.lotAcres)} ac (${formatNumber(metadata.lotSqft)} sq ft)` : metadata.lotSqft !== null ? `${formatNumber(metadata.lotSqft)} sq ft` : "Not reported"}
             />
             <Fact
-              label="Perimeter"
+              label="Perimeter (Haversine)"
               value={perimeter !== null ? `${perimeter.toLocaleString()} ft` : "Not reported"}
             />
             <Fact
@@ -258,6 +794,7 @@ export function Parcel3DVisualizer({ listing }: Parcel3DProps) {
             />
             <Fact label="Dimensions" value={dimensions} />
             <Fact label="Zoning" value={metadata.zoning || "Not reported"} />
+            <Fact label="Topography" value={metadata.topography || "Not reported by GIS"} />
             <Fact label="Parcel / APN" value={resolvedApn || "Not reported"} />
           </div>
           <div className="mt-4 flex flex-wrap items-start justify-between gap-2 border-t border-white/10 pt-3 text-xs leading-5 text-white/60">

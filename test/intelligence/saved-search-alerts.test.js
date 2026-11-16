@@ -295,3 +295,50 @@ test('matchListingAgainstSearch: numeric filter fields read from the blob correc
     blob
   ).reason, 'minEquity_not_met');
 });
+
+test('matchListingAgainstSearch aligns county suffixes, case-insensitive propTypes, and workbench seniorLien/redemption semantics', () => {
+  // 1. County suffix normalization ('Cuyahoga County' <-> 'cuyahoga')
+  assert.equal(
+    matchListingAgainstSearch(listing({ county: 'Cuyahoga County' }), { counties: ['cuyahoga'] }).match,
+    true
+  );
+  assert.equal(
+    matchListingAgainstSearch(listing({ county: 'Cuyahoga' }), { counties: ['cuyahoga county'] }).match,
+    true
+  );
+
+  // 2. Case-insensitive propTypes
+  assert.equal(
+    matchListingAgainstSearch(listing({ propType: 'Single Family' }), { propTypes: ['single family'] }).match,
+    true
+  );
+
+  // 3. Workbench seniorLien buckets ('clean' vs 'risk') + literal fallback
+  assert.equal(matchListingAgainstSearch(listing({ seniorLienRisk: 'low' }), { seniorLien: 'clean' }).match, true);
+  assert.equal(matchListingAgainstSearch(listing({ seniorLienRisk: 'moderate' }), { seniorLien: 'clean' }).match, true);
+  assert.equal(matchListingAgainstSearch(listing({ seniorLienRisk: 'high' }), { seniorLien: 'clean' }).match, false);
+  assert.equal(matchListingAgainstSearch(listing({ seniorLienRisk: 'unknown' }), { seniorLien: 'clean' }).match, false);
+  assert.equal(matchListingAgainstSearch(listing({ seniorLienRisk: '' }), { seniorLien: 'clean' }).match, false);
+  assert.equal(matchListingAgainstSearch(listing({ seniorLienRisk: 'high' }), { seniorLien: 'risk' }).match, true);
+  assert.equal(matchListingAgainstSearch(listing({ seniorLienRisk: 'low' }), { seniorLien: 'risk' }).match, false);
+
+  // 4. Workbench redemption semantics ('immediate' vs 'redemption_active') ignoring derivedFields.redemption stamps
+  assert.equal(matchListingAgainstSearch(listing({ redemptionDays: 0 }), { redemption: 'immediate' }).match, true);
+  assert.equal(matchListingAgainstSearch(listing({ redemptionDays: 180 }), { redemption: 'immediate' }).match, false);
+  assert.equal(
+    matchListingAgainstSearch(
+      listing({ redemptionDays: 0, provenance: { derivedFields: { redemption: { source: 'state_table' } } } }),
+      { redemption: 'immediate' }
+    ).match,
+    false
+  );
+  assert.equal(matchListingAgainstSearch(listing({ redemptionDays: 180 }), { redemption: 'redemption_active' }).match, true);
+  assert.equal(matchListingAgainstSearch(listing({ redemptionDays: 0 }), { redemption: 'redemption_active' }).match, false);
+  assert.equal(
+    matchListingAgainstSearch(
+      listing({ redemptionDays: 180, provenance: { derivedFields: { redemption: { source: 'state_table' } } } }),
+      { redemption: 'redemption_active' }
+    ).match,
+    false
+  );
+});

@@ -406,3 +406,188 @@ test('refreshByParcelKey surfaces an outcome for every scraper even when one thr
   assert.ok(fl, 'fl-dor-cadastral outcome should be present');
   assert.ok(['failed', 'skipped'].includes(fl.outcome));
 });
+
+test('refreshByParcelKey splits FIPS+APN for fl-dor-cadastral, scopes CourtListenerScraper options without mutating singleton, and preserves env', async () => {
+  const { CourtListenerScraper } = require('../server/scrapers/courtlistener');
+  const receivedFlDor = [];
+  let clQuery = null;
+  let clKey = null;
+
+  const singletonCL = new CourtListenerScraper({
+    searchQuery: 'default-query',
+    apiKey: 'orig-key',
+    fetchImpl: async (url, init) => {
+      clQuery = url;
+      clKey = init?.headers?.Authorization || null;
+      return { ok: true, status: 200, headers: new Headers({ 'content-type': 'application/json' }), async json() { return { results: [] }; }, async text() { return '{"results":[]}'; } };
+    },
+  });
+  // Preserve prototype scrapeFeed method (no own-property stub) and inject fetchImpl onto prototype check via subclass
+  class TestCL extends CourtListenerScraper {
+    async fetchSearchPage({ cursor } = {}) {
+      clQuery = this.buildSearchUrl({ cursor });
+      clKey = this.apiKey;
+      return { queryUrl: clQuery, payload: { results: [] } };
+    }
+  }
+  const origConstructor = singletonCL.constructor;
+  singletonCL.constructor = TestCL;
+
+  const scrapers = [
+    {
+      source: 'fl-dor-cadastral',
+      scraper: {
+        async scrapeByApns(apns, options) {
+          receivedFlDor.push({ apns, options });
+          return [];
+        },
+      },
+    },
+    { source: 'courtlistener', scraper: singletonCL },
+  ];
+
+  const env = { COURTLISTENER_API_KEY: 'scoped-cl-token', COURTLISTENER_COURT: 'flmb' };
+  const refresh = await refreshByParcelKey('12086-01234567', {
+    database: fakeDatabase([]),
+    scrapers,
+    limit: 9,
+    env,
+    parallel: false,
+  });
+
+  assert.equal(receivedFlDor.length, 1);
+  assert.deepEqual(receivedFlDor[0].apns, ['01234567']);
+  assert.equal(receivedFlDor[0].options.countyFips, '12086');
+  assert.equal(receivedFlDor[0].options.fips, '12086');
+  assert.equal(receivedFlDor[0].options.env, env);
+  assert.equal(singletonCL.searchQuery, 'default-query');
+  assert.equal(singletonCL.apiKey, 'orig-key');
+  assert.ok(origConstructor);
+  assert.equal(refresh.adapterOutcomes.length, 2);
+
+  // Also test real CourtListenerScraper scoping
+  class StubCL {
+    constructor(opts = {}) {
+      this.searchQuery = opts.searchQuery || 'default';
+      this.maxRecords = opts.maxRecords || 50;
+      this.apiKey = opts.apiKey || null;
+      this.courtId = opts.courtId || null;
+    }
+    async scrapeFeed() {
+      clQuery = this.searchQuery;
+      clKey = this.apiKey;
+      return [];
+    }
+  }
+  Object.defineProperty(StubCL, 'name', { value: 'CourtListenerScraper' });
+  const realShapeCL = new StubCL();
+  await refreshByParcelKey('12086-01234567', {
+    database: fakeDatabase([]),
+    scrapers: [{ source: 'courtlistener', scraper: realShapeCL }],
+    limit: 9,
+    env,
+  });
+  assert.equal(clQuery, '12086-01234567');
+  assert.equal(clKey, 'scoped-cl-token');
+  assert.equal(realShapeCL.searchQuery, 'default');
+});
+
+test('runScraperSafely and refreshByParcelKey reject invalid/evidence-only/unavailable outputs and only write full valid listings when SCRAPLING_LIVE_WRITE is enabled', async () => {
+  const evidenceOut = await runScraperSafely({
+    async scrapeFeed() {
+      return { publicationStatus: 'evidence_only', evidencePackets: 3, accepted: 3 };
+    },
+  }, { source: 'public-notices-email' });
+  assert.equal(evidenceOut.outcome, 'evidence_only');
+  assert.equal(evidenceOut.persistedToDb, false);
+  assert.equal(evidenceOut.persisted, 0);
+
+  const unavailableOut = await runScraperSafely({
+    async scrapeFeed() {
+      return { ok: false, error: 'courtlistener_api_unavailable', observationError: true, accepted: 0 };
+    },
+  }, { source: 'courtlistener' });
+  assert.equal(unavailableOut.outcome, 'failed');
+  assert.equal(unavailableOut.persistedToDb, false);
+
+  const badUrlOut = await runScraperSafely({
+    async scrape() {
+      return {
+        listings: [
+          {
+            id: 'FLDOR-1',
+            source: 'fl-dor-cadastral',
+            state: 'FL',
+            address: '100 Biscayne Blvd',
+            sourceUrl: 'http://evil.invalid/bad',
+          },
+        ],
+      };
+    },
+  }, { source: 'fl-dor-cadastral' });
+  assert.equal(badUrlOut.outcome, 'rejected');
+  assert.equal(badUrlOut.rejectedCount, 1);
+
+  // Full schema-valid listing persists ONLY when SCRAPLING_LIVE_WRITE === '1'
+  const flDorScraper = require('../server/scrapers/fl-dor-cadastral');
+  const exactUrl = flDorScraper.featureUrl(42);
+  const validFullListing = {
+    id: 'FLDOR-42',
+    source: 'fl-dor-cadastral',
+    parcelKey: '12086-01234567',
+    state: 'FL',
+    address: '100 Biscayne Blvd, Miami, FL 33132',
+    sourceUrl: exactUrl,
+    raw: 'Verified FL DOR parcel record OBJECTID=42 at 100 Biscayne Blvd, Miami FL 33132',
+    sourceObservedAt: '2026-10-01T00:00:00.000Z',
+    provenance: {
+      origin: 'cadastral',
+      observed: true,
+      publisher: 'Florida Dept of Revenue',
+      recordId: 'FLDOR-42',
+      observedAt: '2026-10-01T00:00:00.000Z',
+      exactSourceUrl: exactUrl,
+      sourceFacts: {},
+    },
+  };
+  const persistedRows = [];
+  const writableDb = {
+    async getListings() { return { total: persistedRows.length, listings: [...persistedRows] }; },
+    async upsertListing(row) { persistedRows.push(row); return row; },
+  };
+  const scrapers = [{ source: 'fl-dor-cadastral', scraper: { async scrape() { return { listings: [validFullListing] }; } } }];
+
+  const readOnlyRes = await refreshByParcelKey('12086-01234567', { database: writableDb, scrapers, env: {} });
+  assert.equal(persistedRows.length, 0);
+  assert.equal(readOnlyRes.adapterOutcomes[0].persistedToDb, false);
+  assert.equal(readOnlyRes.adapterOutcomes[0].persistenceStatus, 'read_only_live_write_disabled');
+
+  const liveRes = await refreshByParcelKey('12086-01234567', { database: writableDb, scrapers, env: { SCRAPLING_LIVE_WRITE: '1' } });
+  assert.equal(persistedRows.length, 1);
+  assert.equal(liveRes.adapterOutcomes[0].persisted, 1);
+  assert.equal(liveRes.adapterOutcomes[0].persistedToDb, true);
+  assert.equal(liveRes.adapterOutcomes[0].persistenceStatus, 'persisted');
+});
+
+
+test('aggregateByParcelKey preserves source on each safeSourceSummary entry', async () => {
+  const { aggregateByParcelKey: agg } = require('../server/intelligence/enrichment-gateway');
+  const parcelKey = '06037-11223344';
+  const grouped = await agg(parcelKey, {
+    database: {
+      async getListings() {
+        return {
+          total: 2,
+          listings: [
+            fakeListing({ id: 'src-check-1', source: 'courtlistener', parcelKey, sourceObservedAt: '2026-10-01T00:00:00.000Z' }),
+            fakeListing({ id: 'src-check-2', source: 'socrata-code-enforcement', parcelKey, sourceObservedAt: '2026-10-02T00:00:00.000Z' }),
+          ],
+        };
+      },
+    },
+  });
+  assert.equal(grouped.sourceCount, 2);
+  assert.equal(grouped.freshestObservation.source, 'socrata-code-enforcement');
+  assert.equal(grouped.freshestObservation.rank, 1);
+  assert.equal(grouped.sources.find((s) => s.source === 'courtlistener')?.summary?.source, 'courtlistener');
+});

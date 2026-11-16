@@ -310,7 +310,7 @@ function buildMunicipalQueryUrl({ state, county, city, parcelId, address } = {})
     url.searchParams.set('$order', `${portal.dateField} DESC`);
   }
 
-  const queryString = url.searchParams.toString().replace(/%24/g, '$');
+  const queryString = url.searchParams.toString().replace(/(?:^|(?<=&))%24([a-zA-Z0-9_]+=)/g, (_, param) => `$${param}`);
   return `${portal.endpoint}?${queryString}`;
 }
 

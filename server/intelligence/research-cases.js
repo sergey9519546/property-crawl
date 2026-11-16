@@ -89,7 +89,7 @@ function sourceRefFromListing(listing, referenceNow = Date.now()) {
   const validation = validateListingForIngestion(listing);
   const normalized = validation.listing;
   const errors = [...validation.errors];
-  if (normalized.provenance?.origin !== 'live') errors.push('non_live_origin');
+  if (normalized.provenance?.origin !== 'live' && normalized.provenance?.origin !== 'email_notice') errors.push('non_live_origin');
   const observedAt = normalized.sourceObservedAt || normalized.provenance?.observedAt;
   if (Number.isFinite(Date.parse(observedAt)) && Date.parse(observedAt) > Date.parse(referenceNow) + FUTURE_TOLERANCE_MS) errors.push('future_observation');
   if (errors.length) throw new ResearchCaseError('RESEARCH_LISTING_UNVERIFIED', 'Research cases require validated live publisher evidence', [...new Set(errors)]);
@@ -108,7 +108,7 @@ function safeListingSnapshot(listing) {
     if (value === null || ['string', 'number', 'boolean'].includes(typeof value)) snapshot[field] = value; else if (value && typeof value === 'object' && !Array.isArray(value)) { try { snapshot[field] = JSON.parse(JSON.stringify(value)); } catch {} }
   }
   snapshot.provenance = {
-    origin: 'live', observed: true,
+    origin: listing.provenance?.origin === 'email_notice' ? 'email_notice' : 'live', observed: true,
     publisher: cleanText(listing.provenance?.publisher, 200, 'provenance.publisher', { required: true }),
     recordId: cleanText(String(listing.provenance?.recordId || ''), 300, 'provenance.recordId', { required: true }),
     observedAt: new Date(listing.sourceObservedAt || listing.provenance?.observedAt).toISOString(),

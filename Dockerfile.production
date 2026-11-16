@@ -20,10 +20,14 @@ FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
+ENV DISCOVERY_MIN_FREE_BYTES=52428800
 ENV NEXT_TELEMETRY_DISABLED=1
 
 USER root
 RUN apk add --no-cache curl
+# Note: node:22-alpine (musl) omits scripts/crawlers/requirements.txt (scrapling/camoufox/
+# patchright/curl_cffi require glibc + browser binaries unsuitable for 512MB free-tier builds).
+# Node-native scrapers run out-of-the-box; set SCRAPLING_PYTHON on glibc hosts when needed.
 
 COPY --chown=node:node --from=builder /app/package.json /app/package-lock.json ./
 COPY --chown=node:node --from=builder /app/node_modules ./node_modules
@@ -40,7 +44,7 @@ COPY --chown=node:node --from=builder /app/config ./config
 COPY --chown=node:node --from=builder /app/src ./src
 
 # Writable cache for form submissions / live observations / embedded PG (node user).
-RUN mkdir -p /app/.cache/form-submissions /app/.cache/source-observations /app/.cache/pgdata \
+RUN mkdir -p /app/.cache/form-submissions /app/.cache/source-observations /app/.cache/discovery-snapshots /app/.cache/pgdata \
   && chown -R node:node /app/.cache
 
 USER node

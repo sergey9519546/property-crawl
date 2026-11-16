@@ -18,10 +18,11 @@ const COLUMNS: { title: string; links: { label: string; href: string }[] }[] = [
     title: "Product",
     links: [
       { label: "Browse listings", href: "/listings" },
-      { label: "Due diligence dossiers", href: "/research" },
+      { label: "Research cases", href: "/research" },
       { label: "The catch", href: "/#the-catch" },
       { label: "Hunts", href: "/hunts" },
       { label: "Portfolio", href: "/portfolio" },
+      { label: "Activity", href: "/activity" },
       { label: "Free vs member", href: "/#pricing" },
     ],
   },
@@ -31,6 +32,8 @@ const COLUMNS: { title: string; links: { label: string; href: string }[] }[] = [
       { label: "Buyer's guide", href: "/resources#knowledge-base" },
       { label: "Questions", href: "/#faq" },
       { label: "States and counties", href: "/states" },
+      { label: "Sources", href: "/sources" },
+      { label: "Case studies", href: "/case-studies" },
       { label: "What's new", href: "/resources#changelog" },
     ],
   },
@@ -45,6 +48,8 @@ const COLUMNS: { title: string; links: { label: string; href: string }[] }[] = [
     title: "Company",
     links: [
       { label: "About", href: "/about" },
+      { label: "For teams", href: "/enterprise" },
+      { label: "Security", href: "/security" },
       { label: "Contact", href: "/contact" },
       { label: "Legal", href: "/terms" },
       { label: "Privacy", href: "/privacy" },
@@ -109,7 +114,7 @@ export function SiteFooter() {
                   setNewsletterStatus("");
                 }}
                 aria-describedby="newsletter-status"
-                placeholder="you@company.com"
+                placeholder="you@example.com"
                 className="h-12 min-w-0 flex-1 rounded-control border border-line-strong bg-card px-4 text-meta text-ink shadow-sm placeholder:text-ink-3 focus:border-ink focus:outline-none focus:ring-2 focus:ring-ink/20"
               />
               <button

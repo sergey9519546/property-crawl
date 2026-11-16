@@ -74,6 +74,7 @@ const WEAKNESS = {
   fdic: 'historical-only collector; not scheduled as live opportunity',
   hud: 'Publisher maintenance/challenges possible; fail-closed + Scrapling hud-cards',
   gsa: 'robots exclusion on /our-listing; sparse inventory; Scrapling optional',
+  irs: 'Real-estate cards sparse/0 on recent live canaries (canary held NOT_CLEAN); fail-closed',
   'government-land': 'Enrollment template: GOV_LAND_DISCOVERY_URL required; skipped_not_enrolled until enrolled',
   'local-surplus': 'Enrollment template: LOCAL_SURPLUS_DISCOVERY_URL required; skipped_not_enrolled until enrolled',
 };
@@ -112,6 +113,9 @@ function powerFor(source, scheduled) {
     score = 3;
   } else if (status === 'SCOPE_LIMITED') {
     tier = 'P3_SCOPE_LIMITED';
+    score = 4;
+  } else if (adapter === 'irs') {
+    tier = 'P3_LIVE_ADAPTER';
     score = 4;
   } else if (inScheduler && scrapling) {
     tier = 'P4_LIVE_STRONG';

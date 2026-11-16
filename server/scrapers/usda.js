@@ -122,11 +122,13 @@ class UsdaResalesScraper extends BaseScraper {
       };
       console.log(`[${this.name}] Scraped ${listings.length} USDA properties`);
       const standardized = [];
+      let schemaRejected = 0;
       for (const item of listings) {
         try {
           standardized.push(this.standardizeListing(item));
         } catch (err) {
           if (err && err.code === 'LISTING_SCHEMA_INVALID') {
+            schemaRejected += 1;
             if (this.lastRunReport) {
               this.lastRunReport.recordsRejected = (this.lastRunReport.recordsRejected || 0) + 1;
             }
@@ -138,6 +140,26 @@ class UsdaResalesScraper extends BaseScraper {
       }
       if (this.lastRunReport) {
         this.lastRunReport.recordsEmitted = standardized.length;
+        const totalRejected = this.lastRunReport.recordsRejected || 0;
+        if (failures.length > 0 && standardized.length === 0) {
+          this.lastRunReport.outcome = 'failed';
+          this.lastRunReport.complete = false;
+          this.lastRunReport.fullSweepComplete = false;
+        } else if (failures.length > 0) {
+          this.lastRunReport.outcome = 'partial_failure';
+          this.lastRunReport.complete = false;
+          this.lastRunReport.fullSweepComplete = false;
+        } else if (standardized.length === 0 && (totalRejected > 0 || listings.length > 0)) {
+          this.lastRunReport.outcome = 'failed';
+          this.lastRunReport.complete = false;
+          this.lastRunReport.fullSweepComplete = false;
+        } else if (schemaRejected > 0 || malformedRows > 0) {
+          this.lastRunReport.outcome = 'degraded';
+        } else if (standardized.length > 0) {
+          this.lastRunReport.outcome = 'success';
+        } else {
+          this.lastRunReport.outcome = 'empty';
+        }
       }
       return standardized;
     });
@@ -229,10 +251,22 @@ class UsdaResalesScraper extends BaseScraper {
 
     const detailHref = detailMatch ? detailMatch[1].replace(/&amp;/g, '&') : null;
     const detailId = detailHref ? (detailHref.match(/[?&]id=(\d+)/) || [])[1] : null;
-    const sourceUrl = detailHref ? new URL(detailHref, this.baseUrl).toString() : null;
-    const photoCandidate = photoMatch
-      ? new URL(photoMatch[1].replace(/&amp;/g, '&'), this.baseUrl).toString()
-      : null;
+    let sourceUrl = null;
+    if (detailHref) {
+      try {
+        sourceUrl = new URL(detailHref, this.baseUrl).toString();
+      } catch (_) {
+        sourceUrl = null;
+      }
+    }
+    let photoCandidate = null;
+    if (photoMatch) {
+      try {
+        photoCandidate = new URL(photoMatch[1].replace(/&amp;/g, '&'), this.baseUrl).toString();
+      } catch (_) {
+        photoCandidate = null;
+      }
+    }
     // USDA's summary row is bound to the exact SFH detail record. Still reject
     // its explicit No_Image/site-art placeholders before they reach media
     // provenance or a gallery UI.

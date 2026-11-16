@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { Listing } from "@/data/listings";
 import { AlertTriangle, Calculator, CheckCircle2, Download, FileJson, FileText, Scale, ShieldCheck, Sparkles } from "lucide-react";
-import { classifyInvestmentStrategies, computeCashToClose, computeConstitutionalSurplus, computeDscrCoverage, computeReassessmentShock, computeRedemptionYield, computeStatutoryDeadlinesAndCarry, computeStatutoryFeePreset, computeTargetPriceScenario } from "@/lib/underwriting";
+import { classifyInvestmentStrategies, computeCashToClose, computeConstitutionalSurplus, computeDscrCoverage, computeReassessmentShock, computeRedemptionYield, computeStatutoryDeadlinesAndCarry, computeStatutoryFeePreset, computeTargetPriceScenario, isTaxSaleContext, publishedRedemptionDays } from "@/lib/underwriting";
 import { computeRedemptionExpectedValue } from "@/lib/redemption-ev";
 import { displayMoney, positiveNumber } from "@/lib/listing-display";
 import { readUnderwriteScenario, writeUnderwriteScenario } from "@/lib/underwrite-scenario";
@@ -54,9 +54,16 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
   const [loadingStrategy, setLoadingStrategy] = useState(false);
   const [appliedPresetCitations, setAppliedPresetCitations] = useState<string[] | null>(null);
   const [isHomestead, setIsHomestead] = useState<boolean>(Boolean(listing.isHomestead));
+  const [ltvPct, setLtvPct] = useState<number>(80);
+  const [interestRatePct, setInterestRatePct] = useState<number>(7.25);
+  const [monthlyInsurance, setMonthlyInsurance] = useState<number>(125);
+  const [redemptionProbabilityPct, setRedemptionProbabilityPct] = useState<number>(75);
+  const [packetExporting, setPacketExporting] = useState<"json" | "markdown" | null>(null);
+  const [packetExportNotice, setPacketExportNotice] = useState<string | null>(null);
+  const publishedRedemption = publishedRedemptionDays(listing);
   const [holdingMonths, setHoldingMonths] = useState<number>(() => {
-    if (typeof listing.redemptionDays === "number" && listing.redemptionDays > 0) {
-      return Math.max(1, Math.round(listing.redemptionDays / 30));
+    if (publishedRedemption !== null && publishedRedemption > 0) {
+      return Math.max(1, Math.round(publishedRedemption / 30));
     }
     return 6;
   });
@@ -84,6 +91,21 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
     if (typeof stored.holdingMonths === "number" && stored.holdingMonths > 0) {
       setHoldingMonths(stored.holdingMonths);
     }
+    if (typeof stored.isHomestead === "boolean") {
+      setIsHomestead(stored.isHomestead);
+    }
+    if (typeof stored.ltvPct === "number") {
+      setLtvPct(stored.ltvPct);
+    }
+    if (typeof stored.interestRatePct === "number") {
+      setInterestRatePct(stored.interestRatePct);
+    }
+    if (typeof stored.monthlyInsurance === "number") {
+      setMonthlyInsurance(stored.monthlyInsurance);
+    }
+    if (typeof stored.redemptionProbabilityPct === "number") {
+      setRedemptionProbabilityPct(stored.redemptionProbabilityPct);
+    }
   }, [listing.id]);
 
   useEffect(() => {
@@ -91,12 +113,12 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
     if (typeof stored?.holdingMonths === "number" && stored.holdingMonths > 0) {
       return;
     }
-    if (typeof listing.redemptionDays === "number" && listing.redemptionDays > 0) {
-      setHoldingMonths(Math.max(1, Math.round(listing.redemptionDays / 30)));
+    if (publishedRedemption !== null && publishedRedemption > 0) {
+      setHoldingMonths(Math.max(1, Math.round(publishedRedemption / 30)));
     } else {
       setHoldingMonths(6);
     }
-  }, [listing.id, listing.redemptionDays]);
+  }, [listing.id, publishedRedemption]);
 
   const publishedOpeningBid = positiveNumber(listing.openingBid);
   const customOpeningBidNum = (() => { const val = enteredAmount(customOpeningBid); return val !== null && val > 0 ? val : null; })();
@@ -143,6 +165,11 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
     customVal = customValuation,
     customBid = customOpeningBid,
     months = holdingMonths,
+    homestead = isHomestead,
+    ltv = ltvPct,
+    rate = interestRatePct,
+    insurance = monthlyInsurance,
+    redemptionProb = redemptionProbabilityPct,
   ) => {
     writeUnderwriteScenario(listing.id, {
       ...next,
@@ -151,21 +178,23 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
       customValuation: customVal,
       customOpeningBid: customBid,
       holdingMonths: months,
+      isHomestead: homestead,
+      ltvPct: ltv,
+      interestRatePct: rate,
+      monthlyInsurance: insurance,
+      redemptionProbabilityPct: redemptionProb,
       maxAllowableOffer: calculateMao(rehab, margin, customVal, customBid, next),
     });
   };
 
   const updateHoldingMonths = (months: number) => {
     setHoldingMonths(months);
-    writeUnderwriteScenario(listing.id, {
-      ...scenario,
-      rehabBudget,
-      targetMargin,
-      customValuation,
-      customOpeningBid,
-      holdingMonths: months,
-      maxAllowableOffer: calculateMao(rehabBudget, targetMargin, customValuation, customOpeningBid, scenario),
-    });
+    persistScenario(scenario, rehabBudget, targetMargin, customValuation, customOpeningBid, months);
+  };
+
+  const updateHomestead = (homestead: boolean) => {
+    setIsHomestead(homestead);
+    persistScenario(scenario, rehabBudget, targetMargin, customValuation, customOpeningBid, holdingMonths, homestead);
   };
 
   const updateScenario = (field: ScenarioField, value: string) => {
@@ -201,41 +230,7 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
   // its amber notice and nothing else - including the cash model it had already
   // computed and never displayed. That is dead code behind a gate the cost model
   // does not need.
-  if (openingBid === null) {
-    return (
-      <div className="rounded-2xl border border-catch/30 bg-catch-wash p-5 text-ink shadow-sm">
-        <div className="flex items-start gap-3">
-          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-catch-ink" />
-          <div className="flex-1">
-            <h3 className="text-sm font-bold">Price scenario unavailable</h3>
-            <p className="mt-1 text-xs leading-relaxed text-ink-2">This record carries no published opening amount, so no bid scenario can be modeled. Nothing is inferred from the address or the county.</p>
-            <div className="mt-3 border-t border-catch/30 pt-3">
-              <label htmlFor="custom-opening-bid-input" className="block text-xs font-semibold text-ink">
-                Model scenario with your target or assumed opening bid:
-              </label>
-              <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                <div className="flex items-center rounded-lg border border-line-strong bg-card px-3 focus-within:border-yours">
-                  <span className="text-xs font-bold text-ink-3">$</span>
-                  <input
-                    id="custom-opening-bid-input"
-                    inputMode="decimal"
-                    value={customOpeningBid}
-                    onChange={(event) => updateCustomOpeningBid(event.target.value)}
-                    placeholder="e.g. 85000"
-                    aria-label="Target bid or assumed opening amount"
-                    className="w-32 bg-transparent px-2 py-1.5 text-xs font-semibold text-yours outline-none"
-                  />
-                </div>
-              </div>
-              <p className="mt-1.5 text-xs text-ink-3">
-                Entering an assumed opening bid enables cash-to-close and statutory fee modeling for this session as an investor assumption.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+
 
 
 
@@ -260,7 +255,7 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
     }
   };
 
-  const statutoryPreset = computeStatutoryFeePreset({ purchasePrice: openingBid, state: listing.state, source: listing.source, depositText: typeof listing.deposit === "string" ? listing.deposit : null });
+  const statutoryPreset = openingBid !== null ? computeStatutoryFeePreset({ purchasePrice: openingBid, state: listing.state, source: listing.source, depositText: typeof listing.deposit === "string" ? listing.deposit : null }) : null;
   const applyStatutoryPreset = () => {
     if (!statutoryPreset) return;
     const next: Record<ScenarioField, string> = {
@@ -278,36 +273,30 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
     setAiStrategy(null);
   };
   const hasIrsNoticeFlag = listing.source === "irs" || /(?:internal\s*revenue|federal\s*tax\s*lien|26\s*u\.?s\.?c\.?\s*§?\s*7425)/i.test(`${listing.seniorLienWarning || ""} ${listing.redemptionWarning || ""}`);
-  const isTaxCandidate = Boolean(
-    listing.auctionProgram === "tax_deed" ||
-    (typeof listing.source === "string" && listing.source.toLowerCase().includes("tax")) ||
-    (typeof listing.program === "string" && listing.program.toLowerCase().includes("tax")) ||
-    (typeof listing.notes === "string" && listing.notes.toLowerCase().includes("tax"))
-  );
+  const isTaxCandidate = isTaxSaleContext(listing);
   const deadlinesAndCarry = computeStatutoryDeadlinesAndCarry({
     saleDate: listing.saleDate,
     state: listing.state,
-    purchasePrice: cash.totalAcquisitionCost ?? openingBid,
-    redemptionDays: typeof listing.redemptionDays === "number" ? listing.redemptionDays : null,
+    source: listing.source,
+    distressType: listing.distressType,
+    auctionProgram: listing.auctionProgram,
+    program: listing.program,
+    notes: listing.notes,
+    purchasePrice: cash.totalAcquisitionCost ?? openingBid ?? 0,
+    redemptionDays: publishedRedemption,
     hasIrsLien: hasIrsNoticeFlag,
     isTaxSale: isTaxCandidate,
     isHomestead,
   });
   const statutoryCarry = deadlinesAndCarry;
-  const reassessmentShock = computeReassessmentShock({ purchasePrice: openingBid, state: listing.state });
-  const isTaxSale = Boolean(
-    listing.auctionProgram === "tax_deed" ||
-    (typeof listing.source === "string" && listing.source.toLowerCase().includes("tax")) ||
-    (typeof listing.program === "string" && listing.program.toLowerCase().includes("tax")) ||
-    statutoryCarry.stateRedemptionDays > 0 ||
-    (typeof listing.notes === "string" && listing.notes.toLowerCase().includes("tax"))
-  );
+  const reassessmentShock = openingBid !== null ? computeReassessmentShock({ purchasePrice: openingBid, state: listing.state }) : null;
+  const isTaxSale = Boolean(isTaxCandidate || statutoryCarry.stateRedemptionDays > 0);
   const simulatedDays = holdingMonths * 30;
   const redemptionEv = isTaxSale && openingBid !== null
     ? computeRedemptionExpectedValue({
         winningBid: openingBid,
         assumedArv: estimatedValue,
-        redemptionProbability: 0.75,
+        redemptionProbability: Math.max(0, Math.min(1, redemptionProbabilityPct / 100)),
         stateCode: listing.state,
         isHomestead,
         expectedHoldingMonths: holdingMonths,
@@ -327,20 +316,79 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
     : null;
   const hudSafmr = listing.hudSafmr;
   const modeledDscr = hudSafmr && openingBid !== null ? (() => {
-    const loanAmount = openingBid * 0.8;
-    const r = 0.0725 / 12;
-    const monthlyPrincipalInterest = Math.round((loanAmount * (r * Math.pow(1 + r, 360))) / (Math.pow(1 + r, 360) - 1));
-    const monthlyReassessedTax = Math.round((reassessmentShock.reassessedAnnualTax ?? 0) / 12);
-    const monthlyInsurance = 125;
+    const loanAmount = openingBid * Math.max(0, Math.min(1, ltvPct / 100));
+    const r = Math.max(0, interestRatePct) / 100 / 12;
+    const monthlyPrincipalInterest =
+      loanAmount <= 0
+        ? 0
+        : r === 0
+          ? Math.round(loanAmount / 360)
+          : Math.round((loanAmount * (r * Math.pow(1 + r, 360))) / (Math.pow(1 + r, 360) - 1));
+    const monthlyReassessedTax = Math.round((reassessmentShock?.reassessedAnnualTax ?? 0) / 12);
     return computeDscrCoverage({
       monthlyGrossRent: hudSafmr.fairMarketRent,
       monthlyPrincipalInterest,
       monthlyReassessedTax,
-      monthlyInsurance,
+      monthlyInsurance: Math.max(0, monthlyInsurance),
       minDscrTarget: 1.20,
     });
   })() : null;
-  const strategyClassification = estimatedValue !== null ? classifyInvestmentStrategies({
+
+  const handleSignedPacketExport = async (format: "json" | "markdown") => {
+    setPacketExporting(format);
+    setPacketExportNotice(null);
+    try {
+      const payload = {
+        disposition: "UNDERWRITE",
+        maxAllowableOffer: reverseScenario?.maxPurchasePrice ?? openingBid ?? null,
+        rehabBudget,
+        targetMargin,
+        customValuation: customValuation || undefined,
+        customOpeningBid: customOpeningBid || undefined,
+        holdingMonths,
+        isHomestead,
+        isTaxSale,
+        ...Object.fromEntries(
+          Object.entries(scenario).filter(([, val]) => val !== ""),
+        ),
+      };
+      const res = await fetch(
+        `/api/listings/${encodeURIComponent(listing.id)}/packet?format=${format}`,
+        {
+          method: "POST",
+          credentials: "same-origin",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: format === "markdown" ? "text/markdown" : "application/json",
+          },
+          body: JSON.stringify(payload),
+        },
+      );
+      if (res.status === 401 || res.status === 403 || res.status === 503) {
+        setPacketExportNotice("Sign in / unlock operator session for server-signed POST export, or use the direct download links.");
+        return;
+      }
+      if (!res.ok) {
+        const err = await res.json().catch(() => null);
+        throw new Error(err?.error || `Export returned HTTP ${res.status}`);
+      }
+      const text = await res.text();
+      const mime = format === "markdown" ? "text/markdown; charset=utf-8" : "application/json; charset=utf-8";
+      const ext = format === "markdown" ? "md" : "json";
+      const blobUrl = URL.createObjectURL(new Blob([text], { type: mime }));
+      const anchor = document.createElement("a");
+      anchor.href = blobUrl;
+      anchor.download = `decision-packet-${listing.id}.${ext}`;
+      anchor.click();
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+      setPacketExportNotice(`Server-signed ${format.toUpperCase()} packet exported.`);
+    } catch (err) {
+      setPacketExportNotice(err instanceof Error ? err.message : "Signed packet export failed.");
+    } finally {
+      setPacketExporting(null);
+    }
+  };
+  const strategyClassification = estimatedValue !== null && openingBid !== null ? classifyInvestmentStrategies({
     purchasePrice: openingBid,
     estimatedValueLow: estimatedValue,
     hasSaleDate: Boolean(listing.saleDate),
@@ -364,7 +412,7 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
         : `Other acquisition costs you entered total ${displayMoney(otherAcquisitionCosts)}.`;
       const reductionLine = reverseScenario.priceReductionNeeded > 0
         ? `The published opening amount is ${displayMoney(reverseScenario.priceReductionNeeded)} above that target.`
-        : `The published opening amount is ${displayMoney(openingBid - reverseScenario.maxPurchasePrice)} below that target.`;
+        : `The published opening amount is ${displayMoney(Math.max(0, reverseScenario.maxPurchasePrice - openingBid))} below that target.`;
       const feasibilityLine = reverseScenario.targetAchievableAtCurrentPrice
         ? `Reaching the target at the opening amount requires ${displayMoney(reverseScenario.costReductionNeeded)} of cost reduction.`
         : "The target is not achievable at the opening amount, even with zero other acquisition costs.";
@@ -375,7 +423,7 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
         `1. Maximum Allowable Offer = ${valuationLabel} minus ${targetMargin}% target margin, ${displayMoney(rehabBudget)} rehab budget, and entered settlement costs.`,
         `2. Target purchase ceiling: ${displayMoney(reverseScenario.maxPurchasePrice)}. ${costLine} ${reductionLine}`,
         `3. Feasibility: ${feasibilityLine}`,
-        `4. Statutory Due Diligence: ${listing.redemptionWarning || (listing.redemptionDays ? `${listing.redemptionDays}-day statutory redemption window applies.` : "Check local statutory redemption.")} ${listing.seniorLienWarning || "Verify senior judicial and municipal liens before bidding."}`,
+        `4. Statutory Due Diligence: ${listing.redemptionWarning || (publishedRedemption !== null ? `${publishedRedemption}-day statutory redemption window applies.` : statutoryCarry.stateRedemptionDays > 0 ? `${statutoryCarry.stateRedemptionDays}-day statutory tax-sale redemption baseline applies.` : "Check local statutory redemption.")} ${listing.seniorLienWarning || "Verify senior judicial and municipal liens before bidding."}`,
       ].join("\n\n"));
     } else {
       const totalCost = cash.totalAcquisitionCost !== null
@@ -387,7 +435,7 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
       
       setAiStrategy([
         `1. Acquisition Cost Model: Published opening amount is ${displayMoney(openingBid)}. Modeled total acquisition cost: ${totalCost} (with ${displayMoney(rehabBudget)} estimated rehab). Estimated cash to close: ${cashToClose}.`,
-        `2. Statutory Redemption: ${listing.redemptionWarning || (listing.redemptionDays ? `${listing.redemptionDays}-day statutory redemption period under ${listing.state || "state"} law.` : "No statutory redemption period detected; verify clerk docket.")}`,
+        `2. Statutory Redemption: ${listing.redemptionWarning || (publishedRedemption !== null ? `${publishedRedemption}-day statutory redemption period under ${listing.state || "state"} law.` : statutoryCarry.stateRedemptionDays > 0 ? `${statutoryCarry.stateRedemptionDays}-day statutory tax-sale redemption baseline under ${listing.state || "state"} law.` : "No statutory redemption period detected; verify clerk docket.")}`,
         `3. Title & Lien Risk: ${listing.seniorLienWarning || "No senior lien phrase detected. Certified title search must be performed before tender of cashier's check."}`,
         `4. Bidding Discipline: In distressed judicial auctions, opening amounts reflect petitioner debt or upset statutory minimums, not property value. Ensure rehab plus holding costs remain under 70% of verified local tax assessor or CMA value.`,
       ].join("\n\n"));
@@ -397,6 +445,39 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
 
   return (
     <div className="space-y-6 animate-in fade-in">
+      {openingBid === null && (
+        <div className="rounded-2xl border border-catch/30 bg-catch-wash p-5 text-ink shadow-sm">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-catch-ink" />
+            <div className="flex-1">
+              <h3 className="text-sm font-bold">Price scenario unavailable</h3>
+              <p className="mt-1 text-xs leading-relaxed text-ink-2">This record carries no published opening amount, so no bid scenario can be modeled. Nothing is inferred from the address or the county. Statutory deadlines, lien forensics, and packet export remain available below.</p>
+              <div className="mt-3 border-t border-catch/30 pt-3">
+                <label htmlFor="custom-opening-bid-input" className="block text-xs font-semibold text-ink">
+                  Model scenario with your target or assumed opening bid:
+                </label>
+                <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                  <div className="flex items-center rounded-control border border-line-strong bg-card px-3 focus-within:border-yours focus-within:ring-2 focus-within:ring-yours/20">
+                    <span className="text-xs font-bold text-ink-3">$</span>
+                    <input
+                      id="custom-opening-bid-input"
+                      inputMode="decimal"
+                      value={customOpeningBid}
+                      onChange={(event) => updateCustomOpeningBid(event.target.value)}
+                      placeholder="e.g. 85000"
+                      aria-label="Target bid or assumed opening amount"
+                      className="w-32 bg-transparent px-2 py-1.5 text-xs font-semibold text-yours outline-none focus-visible:shadow-none"
+                    />
+                  </div>
+                </div>
+                <p className="mt-1.5 text-xs text-ink-3">
+                  Entering an assumed opening bid enables cash-to-close and statutory fee modeling for this session as an investor assumption.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="space-y-5 rounded-2xl border border-line bg-card p-5 shadow-sm">
         <div className="flex items-start gap-2">
           <Calculator className="mt-0.5 h-5 w-5 text-ink" />
@@ -407,6 +488,7 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
               : "No fee is inferred from the source or state. Enter a published amount or your own assumption; enter 0 only when zero is your deliberate assumption."}</p>
           </div>
         </div>
+        {openingBid !== null && (<>
 
         {isCustomOpeningBid && (
           <div className="rounded-xl border border-yours/30 bg-yours-wash px-3.5 py-2.5 text-xs text-ink">
@@ -430,9 +512,9 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
           {Object.entries(fieldLabels).map(([field, label]) => (
             <label key={field} className="space-y-1 text-xs font-semibold text-ink-2">
               <span>{label}</span>
-              <div className="flex items-center rounded-lg border border-line-strong bg-card px-3 focus-within:border-yours">
+              <div className="flex items-center rounded-control border border-line-strong bg-card px-3 focus-within:border-yours focus-within:ring-2 focus-within:ring-yours/20">
                 <span className="text-ink-3">$</span>
-                <input inputMode="decimal" value={scenario[field as ScenarioField]} onChange={(event) => updateScenario(field as ScenarioField, event.target.value)} placeholder="Unresolved" aria-label={`${label} assumption`} className="min-w-0 flex-1 bg-transparent px-2 py-2 text-sm font-semibold text-yours outline-none" />
+                <input inputMode="decimal" value={scenario[field as ScenarioField]} onChange={(event) => updateScenario(field as ScenarioField, event.target.value)} placeholder="Unresolved" aria-label={`${label} assumption`} className="min-w-0 flex-1 bg-transparent px-2 py-2 text-sm font-semibold text-yours outline-none focus-visible:shadow-none" />
               </div>
             </label>
           ))}
@@ -455,12 +537,13 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
             <p className="mt-1 text-xs text-ink-3">Explicit scenario assumptions only — verify exact county clerk / sheriff fee sheet before bidding.</p>
           </div>
         )}
+        </>)}
         <StatutoryDeadlinesTimeline
           saleDate={listing.saleDate}
           state={listing.state}
           openingBid={openingBid}
           isHomestead={isHomestead}
-          onHomesteadChange={setIsHomestead}
+          onHomesteadChange={updateHomestead}
           deadlinesAndCarry={deadlinesAndCarry}
         />
         <TitleRiskForensics
@@ -588,11 +671,34 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
 
             {redemptionEv && (
               <div className="rounded-lg border border-line bg-card/60 p-2.5 space-y-1 text-xs">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-ink">Dual-Outcome Tax Deed EV (75% Redeem / 25% Acquire)</span>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-bold text-ink">Dual-Outcome Tax Deed EV ({redemptionProbabilityPct}% Redeem / {100 - redemptionProbabilityPct}% Acquire)</span>
                   <span className="font-extrabold text-yours">
                     {redemptionEv.expectedNetProfit !== null ? displayMoney(redemptionEv.expectedNetProfit) : "ARV Needed for Blended EV"}
                   </span>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs">
+                  <label htmlFor="redemption-probability-pct" className="font-medium text-ink-2">
+                    Assumed redemption probability:
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      id="redemption-probability-pct"
+                      type="range"
+                      min="0"
+                      max="100"
+                      step="5"
+                      value={redemptionProbabilityPct}
+                      onChange={(e) => {
+                        const next = Number(e.target.value);
+                        setRedemptionProbabilityPct(next);
+                        persistScenario(scenario, rehabBudget, targetMargin, customValuation, customOpeningBid, holdingMonths, isHomestead, ltvPct, interestRatePct, monthlyInsurance, next);
+                      }}
+                      className="w-28 accent-ink"
+                      aria-label="Assumed redemption probability percent"
+                    />
+                    <span className="font-bold text-ink min-w-[2.5rem] text-right">{redemptionProbabilityPct}%</span>
+                  </div>
                 </div>
                 <p className="text-xs text-ink-3 leading-relaxed">
                   {redemptionEv.status === "benchmarked" && redemptionEv.blendedIrr !== null
@@ -615,6 +721,7 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
           </div>
         </div>
 
+        {openingBid !== null && (<>
         {cash.totalAcquisitionCost !== null ? (
           <div className="grid grid-cols-1 gap-3 border-t border-line pt-4 sm:grid-cols-2">
             <div className="rounded-xl border border-line bg-paper p-3">
@@ -650,7 +757,7 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
                 Model MAO with your target ARV or county assessor figure:
               </label>
               <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                <div className="flex items-center rounded-lg border border-line-strong bg-card px-3 focus-within:border-yours">
+                <div className="flex items-center rounded-control border border-line-strong bg-card px-3 focus-within:border-yours focus-within:ring-2 focus-within:ring-yours/20">
                   <span className="text-xs font-bold text-ink-3">$</span>
                   <input
                     id="custom-valuation-input"
@@ -659,7 +766,7 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
                     onChange={(event) => updateCustomValuation(event.target.value)}
                     placeholder="e.g. 185000"
                     aria-label="Target ARV or valuation assumption"
-                    className="w-32 bg-transparent px-2 py-1.5 text-xs font-semibold text-yours outline-none"
+                    className="w-32 bg-transparent px-2 py-1.5 text-xs font-semibold text-yours outline-none focus-visible:shadow-none"
                   />
                 </div>
                 <button
@@ -709,12 +816,13 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
         ) : (
           <div className="flex gap-3 rounded-xl border border-catch/30 bg-catch-wash p-4 text-xs text-ink"><AlertTriangle className="h-4 w-4 shrink-0" /><p>Target price remains unresolved until every acquisition-cost field has a value. Unknown taxes, debt, and fees are not treated as $0.</p></div>
         )}
+        </>)}
       </div>
 
-      {reverseScenario && (
+      {openingBid !== null && reverseScenario && (
         <div className={`flex gap-3 rounded-xl border p-4 text-sm ${reverseScenario.priceReductionNeeded > 0 ? "border-catch/30 bg-catch-wash text-ink" : "border-line-strong bg-paper text-ink-2"}`}>
           {reverseScenario.priceReductionNeeded > 0 ? <AlertTriangle className="h-5 w-5 shrink-0 text-catch-ink" /> : <CheckCircle2 className="h-5 w-5 shrink-0 text-ink-3" />}
-          <p>{reverseScenario.priceReductionNeeded > 0 ? <>The opening amount is {displayMoney(reverseScenario.priceReductionNeeded)} above the price that meets this scenario&apos;s target.</> : <>The opening amount meets this scenario&apos;s target with {displayMoney(reverseScenario.maxPurchasePrice - openingBid)} of price headroom.</>}</p>
+          <p>{reverseScenario.priceReductionNeeded > 0 ? <>The opening amount is {displayMoney(reverseScenario.priceReductionNeeded)} above the price that meets this scenario&apos;s target.</> : <>The opening amount meets this scenario&apos;s target with {displayMoney(reverseScenario.maxPurchasePrice - (openingBid ?? 0))} of price headroom.</>}</p>
         </div>
       )}
 
@@ -733,7 +841,7 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
         </div>
         <div className="flex flex-wrap items-center gap-2.5 pt-1">
           <a
-            href={`/api/listings/${encodeURIComponent(listing.id)}/packet?format=json&disposition=UNDERWRITE&maxAllowableOffer=${encodeURIComponent(String(reverseScenario?.maxPurchasePrice ?? openingBid ?? ""))}&rehabBudget=${encodeURIComponent(String(rehabBudget))}&targetMargin=${encodeURIComponent(String(targetMargin))}&transferTax=${encodeURIComponent(scenario.transferTax)}&registrationFunds=${encodeURIComponent(scenario.registrationFunds)}&creditedDeposit=${encodeURIComponent(scenario.creditedDeposit)}&sheriffPoundage=${encodeURIComponent(scenario.sheriffPoundage)}&buyersPremium=${encodeURIComponent(scenario.buyersPremium)}&settlementCosts=${encodeURIComponent(scenario.settlementCosts)}&delinquentTaxes=${encodeURIComponent(scenario.delinquentTaxes)}`}
+            href={`/api/listings/${encodeURIComponent(listing.id)}/packet?format=json&disposition=UNDERWRITE&maxAllowableOffer=${encodeURIComponent(String(reverseScenario?.maxPurchasePrice ?? openingBid ?? ""))}&rehabBudget=${encodeURIComponent(String(rehabBudget))}&targetMargin=${encodeURIComponent(String(targetMargin))}&transferTax=${encodeURIComponent(scenario.transferTax)}&registrationFunds=${encodeURIComponent(scenario.registrationFunds)}&creditedDeposit=${encodeURIComponent(scenario.creditedDeposit)}&sheriffPoundage=${encodeURIComponent(scenario.sheriffPoundage)}&buyersPremium=${encodeURIComponent(scenario.buyersPremium)}&settlementCosts=${encodeURIComponent(scenario.settlementCosts)}&delinquentTaxes=${encodeURIComponent(scenario.delinquentTaxes)}&customValuation=${encodeURIComponent(customValuation)}&customOpeningBid=${encodeURIComponent(customOpeningBid)}&holdingMonths=${encodeURIComponent(String(holdingMonths))}&isHomestead=${encodeURIComponent(String(isHomestead))}&isTaxSale=${encodeURIComponent(String(isTaxSale))}`}
             target="_blank"
             rel="noopener noreferrer"
             download={`decision-packet-${listing.id}.json`}
@@ -743,7 +851,7 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
             <span>Download JSON Packet</span>
           </a>
           <a
-            href={`/api/listings/${encodeURIComponent(listing.id)}/packet?format=markdown&disposition=UNDERWRITE&maxAllowableOffer=${encodeURIComponent(String(reverseScenario?.maxPurchasePrice ?? openingBid ?? ""))}&rehabBudget=${encodeURIComponent(String(rehabBudget))}&targetMargin=${encodeURIComponent(String(targetMargin))}&transferTax=${encodeURIComponent(scenario.transferTax)}&registrationFunds=${encodeURIComponent(scenario.registrationFunds)}&creditedDeposit=${encodeURIComponent(scenario.creditedDeposit)}&sheriffPoundage=${encodeURIComponent(scenario.sheriffPoundage)}&buyersPremium=${encodeURIComponent(scenario.buyersPremium)}&settlementCosts=${encodeURIComponent(scenario.settlementCosts)}&delinquentTaxes=${encodeURIComponent(scenario.delinquentTaxes)}`}
+            href={`/api/listings/${encodeURIComponent(listing.id)}/packet?format=markdown&disposition=UNDERWRITE&maxAllowableOffer=${encodeURIComponent(String(reverseScenario?.maxPurchasePrice ?? openingBid ?? ""))}&rehabBudget=${encodeURIComponent(String(rehabBudget))}&targetMargin=${encodeURIComponent(String(targetMargin))}&transferTax=${encodeURIComponent(scenario.transferTax)}&registrationFunds=${encodeURIComponent(scenario.registrationFunds)}&creditedDeposit=${encodeURIComponent(scenario.creditedDeposit)}&sheriffPoundage=${encodeURIComponent(scenario.sheriffPoundage)}&buyersPremium=${encodeURIComponent(scenario.buyersPremium)}&settlementCosts=${encodeURIComponent(scenario.settlementCosts)}&delinquentTaxes=${encodeURIComponent(scenario.delinquentTaxes)}&customValuation=${encodeURIComponent(customValuation)}&customOpeningBid=${encodeURIComponent(customOpeningBid)}&holdingMonths=${encodeURIComponent(String(holdingMonths))}&isHomestead=${encodeURIComponent(String(isHomestead))}&isTaxSale=${encodeURIComponent(String(isTaxSale))}`}
             target="_blank"
             rel="noopener noreferrer"
             download={`decision-packet-${listing.id}.md`}
@@ -752,7 +860,30 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
             <FileText className="h-3.5 w-3.5 text-yours" />
             <span>Download Markdown Memo</span>
           </a>
+          <button
+            type="button"
+            disabled={packetExporting !== null}
+            onClick={() => handleSignedPacketExport("json")}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-line-strong bg-card px-3 py-1.5 text-xs font-bold text-ink shadow-sm transition hover:border-yours disabled:opacity-60"
+          >
+            <FileJson className="h-3.5 w-3.5 text-ink-2" />
+            <span>{packetExporting === "json" ? "Exporting..." : "Signed POST JSON"}</span>
+          </button>
+          <button
+            type="button"
+            disabled={packetExporting !== null}
+            onClick={() => handleSignedPacketExport("markdown")}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-line-strong bg-card px-3 py-1.5 text-xs font-bold text-ink shadow-sm transition hover:border-yours disabled:opacity-60"
+          >
+            <FileText className="h-3.5 w-3.5 text-ink-2" />
+            <span>{packetExporting === "markdown" ? "Exporting..." : "Signed POST Markdown"}</span>
+          </button>
         </div>
+        {packetExportNotice && (
+          <p className="text-xs text-ink-3" role="status">
+            {packetExportNotice}
+          </p>
+        )}
       </div>
 
       {/* Statutory Tax Reset, Surplus & Rental Coverage */}
@@ -772,17 +903,27 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
           <div className="rounded-xl border border-line bg-paper p-3.5 space-y-1.5">
             <div className="flex items-center justify-between gap-2">
               <span className="text-xs font-bold uppercase tracking-wider text-ink-3">Post-Sale Tax Reassessment</span>
-              <span className="rounded bg-line px-1.5 py-0.5 text-xs font-semibold text-ink-2">{reassessmentShock.rule.ruleName}</span>
+              {reassessmentShock && (
+                <span className="rounded bg-line px-1.5 py-0.5 text-xs font-semibold text-ink-2">{reassessmentShock.rule.ruleName}</span>
+              )}
             </div>
-            <p className="text-lg font-extrabold text-yours">
-              {reassessmentShock.reassessedAnnualTax !== null ? `${displayMoney(reassessmentShock.reassessedAnnualTax)}/yr` : "Unresolved"}
-            </p>
-            <p className="text-xs text-ink-2">
-              Reassessed annual tax ({reassessmentShock.reassessedAnnualTax !== null ? displayMoney(reassessmentShock.reassessedAnnualTax) : "Unresolved"}/yr at {reassessmentShock.rule.effectiveTaxRatePct}% statutory basis on {displayMoney(openingBid)} purchase price).
-            </p>
-            <p className="text-xs text-ink-3 leading-tight">
-              Citation: {reassessmentShock.rule.statutoryReference}
-            </p>
+            {reassessmentShock && openingBid !== null ? (
+              <>
+                <p className="text-lg font-extrabold text-yours">
+                  {reassessmentShock.reassessedAnnualTax !== null ? `${displayMoney(reassessmentShock.reassessedAnnualTax)}/yr` : "Unresolved"}
+                </p>
+                <p className="text-xs text-ink-2">
+                  Reassessed annual tax ({reassessmentShock.reassessedAnnualTax !== null ? displayMoney(reassessmentShock.reassessedAnnualTax) : "Unresolved"}/yr at {reassessmentShock.rule.effectiveTaxRatePct}% statutory basis on {displayMoney(openingBid)} purchase price).
+                </p>
+                <p className="text-xs text-ink-3 leading-tight">
+                  Citation: {reassessmentShock.rule.statutoryReference}
+                </p>
+              </>
+            ) : (
+              <p className="text-xs text-ink-3">
+                Enter an assumed opening bid above to model statutory post-sale tax reassessment for {listing.state || "this state"}.
+              </p>
+            )}
           </div>
 
           {/* HUD FY2025 SAFMR Rent Benchmark */}
@@ -799,14 +940,70 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
                 Published Section 8 Fair Market Rent ({displayMoney(hudSafmr.fairMarketRent)}/mo for {hudSafmr.bedrooms}BR in ZIP {hudSafmr.zip}, 90%–110% payment standard {displayMoney(hudSafmr.paymentStandard90Pct)}–{displayMoney(hudSafmr.paymentStandard110Pct)}/mo).
               </p>
               {modeledDscr && (
-                <div className="mt-1 pt-1.5 border-t border-line text-xs">
+                <div className="mt-1 pt-1.5 border-t border-line text-xs space-y-2">
                   <div className="flex items-center justify-between gap-1 text-ink">
-                    <span className="font-semibold">Modeled DSCR Scenario (80% LTV, 7.25% 30-yr P&amp;I + {displayMoney(Math.round((reassessmentShock.reassessedAnnualTax ?? 0) / 12))}/mo tax + $125/mo insurance):</span>
-                    <span className={`font-bold ${modeledDscr.status === "qualified" ? "text-yours" : modeledDscr.status === "stressed" ? "text-catch-ink" : "text-catch-ink"}`}>
+                    <span className="font-semibold">Modeled DSCR Scenario ({ltvPct}% LTV, {interestRatePct}% 30-yr P&amp;I + {displayMoney(Math.round((reassessmentShock?.reassessedAnnualTax ?? 0) / 12))}/mo tax + {displayMoney(monthlyInsurance)}/mo insurance):</span>
+                    <span className={`font-bold ${modeledDscr.status === "qualified" ? "text-yours" : "text-catch-ink"}`}>
                       {modeledDscr.dscrRatio ? `${modeledDscr.dscrRatio}x` : "N/A"} ({modeledDscr.status})
                     </span>
                   </div>
-                  <p className="text-xs text-ink-3 leading-tight mt-0.5">
+                  <div className="grid grid-cols-3 gap-2">
+                    <label className="space-y-0.5 text-label font-medium text-ink-2">
+                      <span>LTV %</span>
+                      <input
+                        type="number"
+                        min="0"
+                        max="95"
+                        step="5"
+                        value={ltvPct}
+                        aria-label="Modeled DSCR LTV percentage"
+                        onChange={(e) => {
+                          const parsed = Number(e.target.value);
+                          const next = Number.isFinite(parsed) ? Math.max(0, Math.min(95, parsed)) : 0;
+                          setLtvPct(next);
+                          persistScenario(scenario, rehabBudget, targetMargin, customValuation, customOpeningBid, holdingMonths, isHomestead, next, interestRatePct, monthlyInsurance, redemptionProbabilityPct);
+                        }}
+                        className="w-full rounded border border-line-strong bg-card px-2 py-1 text-xs font-semibold text-ink outline-none focus:border-yours"
+                      />
+                    </label>
+                    <label className="space-y-0.5 text-label font-medium text-ink-2">
+                      <span>Rate %</span>
+                      <input
+                        type="number"
+                        min="0"
+                        max="20"
+                        step="0.125"
+                        value={interestRatePct}
+                        aria-label="Modeled DSCR interest rate percentage"
+                        onChange={(e) => {
+                          const parsed = Number(e.target.value);
+                          const next = Number.isFinite(parsed) ? Math.max(0, Math.min(20, parsed)) : 0;
+                          setInterestRatePct(next);
+                          persistScenario(scenario, rehabBudget, targetMargin, customValuation, customOpeningBid, holdingMonths, isHomestead, ltvPct, next, monthlyInsurance, redemptionProbabilityPct);
+                        }}
+                        className="w-full rounded border border-line-strong bg-card px-2 py-1 text-xs font-semibold text-ink outline-none focus:border-yours"
+                      />
+                    </label>
+                    <label className="space-y-0.5 text-label font-medium text-ink-2">
+                      <span>Ins. $/mo</span>
+                      <input
+                        type="number"
+                        min="0"
+                        max="5000"
+                        step="25"
+                        value={monthlyInsurance}
+                        aria-label="Modeled DSCR monthly insurance assumption"
+                        onChange={(e) => {
+                          const parsed = Number(e.target.value);
+                          const next = Number.isFinite(parsed) ? Math.max(0, Math.min(5000, parsed)) : 0;
+                          setMonthlyInsurance(next);
+                          persistScenario(scenario, rehabBudget, targetMargin, customValuation, customOpeningBid, holdingMonths, isHomestead, ltvPct, interestRatePct, next, redemptionProbabilityPct);
+                        }}
+                        className="w-full rounded border border-line-strong bg-card px-2 py-1 text-xs font-semibold text-ink outline-none focus:border-yours"
+                      />
+                    </label>
+                  </div>
+                  <p className="text-xs text-ink-3 leading-tight">
                     {modeledDscr.explanation}
                   </p>
                 </div>

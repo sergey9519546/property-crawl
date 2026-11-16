@@ -223,9 +223,9 @@ export function SavedHunts() {
       headers: { ...(body ? { "Content-Type": "application/json" } : {}) },
       ...(body ? { body: JSON.stringify(body) } : {}),
     });
-    const data = await response.json();
+    const data = await response.json().catch(() => ({}));
     if (!response.ok)
-      throw new Error(data.details?.[0] || data.error || "The hunt could not be completed");
+      throw new Error(data.details?.[0] || data.error || `The hunt could not be completed (HTTP ${response.status})`);
     return data;
   }
   useEffect(() => {
@@ -414,7 +414,7 @@ export function SavedHunts() {
               </div>
             ) : (
               <p className="mt-3 text-sm text-ink-3">
-                No durable hunt events yet. A first run establishes a baseline;
+                No hunt matches or updates yet. A first run establishes a baseline;
                 later source observations can create explainable changes.
               </p>
             )}
@@ -425,7 +425,7 @@ export function SavedHunts() {
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <h2 className="text-lg font-semibold">
-                  Start with a hunt that has a job
+                  Start from a template or describe what you want
                 </h2>
                 <p className="mt-1 text-xs leading-5 text-ink-3">
                   Load a template into the same editable criteria builder used
@@ -451,8 +451,8 @@ export function SavedHunts() {
                     setMissingDependencies(compiled.missingDependencies);
                     setMessage(
                       compiled.criteria.rules.length
-                        ? "The request was compiled into visible criteria below. Edit every field before saving."
-                        : "No supported criteria were found. Review the missing data dependency.",
+                        ? "We turned your description into editable criteria below. Review every field before saving."
+                        : "No matching filter rule was recognized. See the missing data note below.",
                     );
                   }}
                   className="shrink-0 rounded-lg bg-ink px-4 py-2 text-xs font-semibold text-white"

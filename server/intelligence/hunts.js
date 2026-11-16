@@ -465,7 +465,7 @@ function validateObservedListing(listing, now) {
   const validation = validateListingForIngestion(listing);
   const observedAt = validation.listing.sourceObservedAt || validation.listing.provenance?.observedAt;
   const errors = [...validation.errors];
-  if (validation.listing.provenance?.origin !== 'live') errors.push('non_live_origin');
+  if (validation.listing.provenance?.origin !== 'live' && validation.listing.provenance?.origin !== 'email_notice') errors.push('non_live_origin');
   if (Number.isFinite(Date.parse(observedAt)) && Date.parse(observedAt) > Date.parse(now) + FUTURE_TOLERANCE_MS) errors.push('future_observation');
   return { isValid: errors.length === 0, errors: [...new Set(errors)], listing: validation.listing, observedAt };
 }

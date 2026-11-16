@@ -16,6 +16,10 @@ const text = (v) =>
   String(v ?? "")
     .trim()
     .toLowerCase();
+const stripCountySuffix = (v) =>
+  text(v)
+    .replace(/\s+(?:county|parish|borough)$/, "")
+    .trim();
 function cursorEncode(v) {
   return Buffer.from(JSON.stringify(v)).toString("base64url");
 }
@@ -223,7 +227,7 @@ function derived(row) {
     lifecycle: row.lifecycleStatus || row.status || null,
     outcome: row.transactionOutcome || null,
     hasDocuments,
-    freshness: row.provenance?.origin === "live" ? "observed" : "unverified",
+    freshness: (row.provenance?.origin === "live" || row.provenance?.origin === "email_notice") ? "observed" : "unverified",
   };
 }
 function publishedRedemptionDays(row) {
@@ -275,7 +279,13 @@ function matches(row, f) {
       if (text(row[k]) !== "") return false;
       continue;
     }
-    if (text(row[k]) !== v) return false;
+    if (v.includes(",")) {
+      const parts = v.split(",").map((p) => (k === "county" ? stripCountySuffix(p) : text(p))).filter(Boolean);
+      const rowVal = k === "county" ? stripCountySuffix(row[k]) : text(row[k]);
+      if (parts.length > 0 && !parts.some((p) => (p === "unknown" ? text(row[k]) === "" : rowVal === p))) return false;
+      continue;
+    }
+    if ((k === "county" ? stripCountySuffix(row[k]) : text(row[k])) !== (k === "county" ? stripCountySuffix(v) : v)) return false;
   }
   // "unknown" is the canonical sentinel for "this field was never determined",
   // and it applies to the derived fields too. Without it, program=unknown
@@ -505,7 +515,33 @@ function pgWhere(f, start = 1, options = {}) {
       w.push(`coalesce(${sqlCol},'')=''`);
       continue;
     }
-    add(`lower(${sqlCol})=?`, v);
+    const isCountyCol = col === "county";
+    const colExpr = isCountyCol
+      ? "btrim(regexp_replace(btrim(lower(coalesce(county,''))), '\\s+(county|parish|borough)$', ''))"
+      : `lower(${sqlCol})`;
+    const normFilterPart = (part) => (isCountyCol ? stripCountySuffix(part) : part.trim().toLowerCase());
+    if (v.includes(",")) {
+      const parts = v.split(",").map(normFilterPart).filter(Boolean);
+      if (parts.length > 0) {
+        const hasUnknown = parts.includes("unknown");
+        const known = parts.filter((part) => part !== "unknown");
+        if (hasUnknown && known.length > 0) {
+          add(`(coalesce(${sqlCol},'')='' OR ${colExpr} = ANY(?::text[]))`, known);
+        } else if (hasUnknown) {
+          w.push(`coalesce(${sqlCol},'')=''`);
+        } else {
+          add(`${colExpr} = ANY(?::text[])`, known);
+        }
+      }
+      continue;
+    }
+    if (isCountyCol) {
+      const idx = start + p.length;
+      p.push(normFilterPart(v));
+      w.push(`(lower(${sqlCol})=$${idx} OR ${colExpr}=$${idx})`);
+    } else {
+      add(`lower(${sqlCol})=?`, normFilterPart(v));
+    }
   }
   if (f.q) {
     // The same derived program matches() searches: a record whose program only
@@ -566,9 +602,9 @@ function pgWhere(f, start = 1, options = {}) {
   else if (f.hasDocuments === true) w.push(docsTrue);
   else if (f.hasDocuments === false) w.push(docsFalse);
   if (f.freshness && f.freshness !== "all") {
-    if (f.freshness === "observed") w.push(accel ? "discovery_is_live IS TRUE" : "provenance->>'origin'='live'");
+    if (f.freshness === "observed") w.push(accel ? "discovery_is_live IS TRUE" : "provenance->>'origin' IN ('live', 'email_notice')");
     else if (f.freshness === "unverified")
-      w.push(accel ? "discovery_is_live IS NOT TRUE" : "coalesce(provenance->>'origin','')<>'live'");
+      w.push(accel ? "discovery_is_live IS NOT TRUE" : "coalesce(provenance->>'origin','') NOT IN ('live', 'email_notice')");
     else throw new DiscoveryQueryError(400, "Invalid freshness");
   }
   if (f.bbox) {
@@ -649,7 +685,7 @@ function pgSort(f, options = {}) {
       : "("
       + "lower(coalesce(status, '')) IN ('sold', 'closed', 'cancelled') "
       + "OR lower(coalesce(lifecycle_status, '')) ~ '(reverted[[:space:]]+to[[:space:]]+(plaintiff|beneficiary)|(purchased|sold)[[:space:]]*[-:][[:space:]]*(3rd|third)[- [:space:]]*party|(purchased|sold)[[:space:]]*[-:][[:space:]]*(plaintiff|beneficiary)|(^|[^a-z0-9])(closed|sold)($|[^a-z0-9])|dismiss|settl|cancel)' "
-      + "OR nullif(coalesce(provenance->'sourceFacts'->>'transactionOutcome', ''), '') IS NOT NULL "
+      + "OR nullif(coalesce(nullif(transaction_outcome, ''), provenance->'sourceFacts'->>'transactionOutcome', ''), '') IS NOT NULL "
       + "OR (provenance ? 'publisherAbsence') "
       + "OR (provenance ? 'supersededBy')"
       + ")";
@@ -894,7 +930,7 @@ async function pgSearch(database, f, options = {}) {
       // facet returns can be selected without a 400. The CASE is total, so it
       // can never yield the "unknown" sentinel the freshness parser rejects.
       freshness:
-        "CASE WHEN provenance->>'origin'='live' THEN 'observed' ELSE 'unverified' END",
+        "CASE WHEN provenance->>'origin' IN ('live', 'email_notice') THEN 'observed' ELSE 'unverified' END",
     },
     facets = {};
   const queryAllowed = accelerated

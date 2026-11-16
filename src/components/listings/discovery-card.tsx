@@ -70,7 +70,7 @@ type Props = {
 // withdrawn, and the harness bug that produced them.
 export const DiscoveryCard = React.memo(function DiscoveryCard({ listing, href, saved, saving, onSave, compared, compareFull, onCompare }: Props) {
   const { street, locality } = addressLines(listing);
-  const observed = listing.provenance?.origin === "live" && listing.provenance?.observed === true;
+  const observed = (listing.provenance?.origin === "live" || listing.provenance?.origin === "email_notice") && listing.provenance?.observed === true;
   const archived = listing.provenance?.origin === "archive";
   const program = listing.program || listing.auctionProgram;
   const lifecycle = listing.lifecycle || listing.lifecycleStatus;

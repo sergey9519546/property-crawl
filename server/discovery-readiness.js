@@ -1,6 +1,7 @@
 'use strict';
 const { workerHealthStatus, withExpiredJobSignal, collectionDegraded } = require('./discovery/worker-health');
 const { inspectCollectionStorage } = require('./discovery/storage-health');
+const { resolveDatabaseTarget } = require('./db/database-target');
 const REQUIRED_TABLES=['listings','discovery_source_runs','discovery_snapshots','discovery_observations','discovery_checkpoints','discovery_jobs','discovery_leases','discovery_source_rollouts','discovery_hunts','discovery_hunt_baselines','discovery_hunt_events','discovery_listing_revision','discovery_media_references','discovery_media_assets','discovery_media_links','discovery_atlas_sources','discovery_public_record_research','discovery_worker_health'];
 async function probeDiscoveryDatabase(pool) {
   if(!pool?.query)throw new Error('PostgreSQL is not configured');
@@ -54,14 +55,15 @@ async function probeDiscoveryDatabase(pool) {
  */
 async function discoveryReadiness(options = {}) {
   const env = options.env || process.env;
+  const dbTarget = resolveDatabaseTarget(env);
   const result = {
     ready: false,
-    mode: env.DATABASE_URL ? 'advanced' : 'demo',
+    mode: dbTarget === 'missing' ? 'demo' : 'advanced',
     checks: {},
     limitations: [],
   };
 
-  if (!env.DATABASE_URL) {
+  if (dbTarget === 'missing') {
     result.checks.database = { ready: false, reason: 'DATABASE_URL is not configured' };
     result.collectionHealth={status:'disabled',degraded:false,lastSeenAt:null,lastLoopStatus:null,currentJobId:null,backlog:{queued:0,expiredRunning:0}};
     result.limitations.push('Demo/in-memory mode cannot provide durable discovery state, leases, or production completeness.');
@@ -77,7 +79,7 @@ async function discoveryReadiness(options = {}) {
     const details = await options.databaseProbe();
     result.checks.database = { ready: true, ...(details && typeof details === 'object' ? details : {}) };
     result.collectionHealth=withExpiredJobSignal(details?.collectionHealth||{status:'not_started',degraded:false,lastSeenAt:null,lastLoopStatus:null,currentJobId:null,backlog:{queued:0,expiredRunning:0}});
-    const requiredTables = ['listings', 'discovery_source_runs', 'discovery_snapshots', 'discovery_checkpoints', 'discovery_jobs', 'discovery_leases'];
+    const requiredTables = ['listings', 'discovery_source_runs', 'discovery_snapshots', 'discovery_observations', 'discovery_checkpoints', 'discovery_jobs', 'discovery_leases'];
     const missing = requiredTables.filter((name) => details?.tables && !details.tables.includes(name));
     if (missing.length) throw new Error(`required discovery tables are missing: ${missing.join(', ')}`);
     if (details?.postgis === false) throw new Error('PostGIS extension is unavailable');

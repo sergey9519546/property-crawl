@@ -175,3 +175,36 @@ test('Hunt digest refuses a missing or placeholder recipient', async () => {
   assert.equal(delivered.sent, false);
   assert.equal(delivered.delivery, 'unavailable');
 });
+
+
+test('Hunt Evaluator: uses crypto UUIDs for match IDs and PUBLIC_APP_ORIGIN in digest links', () => {
+  const prevOrigin = process.env.PUBLIC_APP_ORIGIN;
+  process.env.PUBLIC_APP_ORIGIN = 'https://staging.example.org/';
+  try {
+    const hunt = {
+      id: 'HUNT-UUID',
+      label: 'Test Hunt',
+      subscriberEmail: 'buyer@example.org',
+      filters: { states: ['OH'] },
+    };
+    const listing = {
+      id: 'L-UUID-1',
+      address: '100 Main St',
+      state: 'OH',
+      openingBid: 50000,
+      dealScore: 80,
+      source: 'sheriff',
+    };
+    const matches = evaluateListingAcrossHunts(listing, [hunt, { ...hunt, id: 'HUNT-UUID-2' }]);
+    assert.equal(matches.length, 2);
+    assert.match(matches[0].id, /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+    assert.notEqual(matches[0].id, matches[1].id);
+
+    const digest = generateHuntEmailDigest(hunt, [listing]);
+    assert.match(digest.text, /https:\/\/staging\.example\.org\/hunts/);
+    assert.doesNotMatch(digest.text, /https:\/\/propertycrawl\.com\/hunts/);
+  } finally {
+    if (prevOrigin === undefined) delete process.env.PUBLIC_APP_ORIGIN;
+    else process.env.PUBLIC_APP_ORIGIN = prevOrigin;
+  }
+});

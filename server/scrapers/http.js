@@ -160,9 +160,6 @@ async function fetchTextWithPolicy(url, options = {}) {
     else externalSignal.addEventListener('abort', forwardAbort, { once: true });
   }
 
-  const effectiveTimeoutMs = normalizeRequestTimeout(timeoutMs);
-  const timer = setTimeout(() => controller.abort(), effectiveTimeoutMs);
-
   const requestCheck = assertFetchableUrl(url);
   if (!requestCheck.ok) {
     throw new ScraperResponseError(`${requestCheck.reason} for ${url}`, {
@@ -171,6 +168,9 @@ async function fetchTextWithPolicy(url, options = {}) {
       circuitRecorded: false
     });
   }
+
+  const effectiveTimeoutMs = normalizeRequestTimeout(timeoutMs);
+  const timer = setTimeout(() => controller.abort(), effectiveTimeoutMs);
 
   try {
     if (options.autoThrottle !== false) {

@@ -128,7 +128,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     needs: unit-gate
-    continue-on-error: true
     services:
       postgres:
         image: postgis/postgis:16-3.4-alpine
@@ -160,7 +159,7 @@ jobs:
           DATABASE_URL: postgres://property:property-local-dev@127.0.0.1:55432/property_crawl
           DISCOVERY_MODE: advanced
         run: |
-          node -e "const {Pool}=require('pg');const fs=require('fs');const p=new Pool({connectionString:process.env.DATABASE_URL});p.query(fs.readFileSync('server/db/schema.sql','utf8')).then(()=>p.end()).catch(e=>{console.error(e);process.exit(1)});"
+          npm run discovery:migrate
           printf 'SCRAPER_ADMIN_TOKEN=ci-e2e-operator-token\nPROPERTY_API_URL=http://127.0.0.1:3002\n' > .env.local
           node scripts/run-production-e2e.js --with-db
       - name: Live PostgreSQL contract suite (db.test.js round-trip)

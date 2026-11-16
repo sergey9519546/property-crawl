@@ -280,4 +280,76 @@ test('enrichment: normalizes trailing slash on /api/enrichment/', async () => {
   assert.equal(res.payload.schema, 'property-crawl.enrichment-gateway/v1');
 });
 
+test('verify-docket: aggregates attached provenance dockets and optional CourtListener lookup without claiming full verification', async () => {
+  const dbModule = require('../../server/db/client');
+  const originalGetById = dbModule.getListingById;
+  dbModule.getListingById = async () => ({
+    id: 'cl-test-1',
+    address: '500 Oak St',
+    county: 'Cuyahoga',
+    state: 'OH',
+    defendant: 'Oak Street Holdings LLC',
+    sourceObservedAt: '2026-10-01T00:00:00Z',
+    provenance: {
+      sourceFacts: {
+        caseNumber: '24-CV-1092',
+        documents: [
+          { kind: 'docket', label: 'Cuyahoga Common Pleas docket', url: 'https://cpdocket.cuyahogacounty.us/case/24-CV-1092' },
+        ],
+      },
+    },
+  });
+  try {
+    const res = captureRes();
+    const mockCourtListener = {
+      async scrapeFeed() {
+        return [
+          {
+            sourceUrl: 'https://www.courtlistener.com/docket/98765/in-re-oak-street-holdings/',
+            sourceObservedAt: '2026-10-02T00:00:00Z',
+            defendant: 'Oak Street Holdings LLC',
+            provenance: {
+              sourceFacts: {
+                caseNumber: '1:24-bk-98765',
+                documents: [{ kind: 'docket', label: 'Bankruptcy docket 1:24-bk-98765', url: 'https://www.courtlistener.com/docket/98765/in-re-oak-street-holdings/' }],
+              },
+            },
+          },
+        ];
+      },
+    };
+    await handleVerifyDocket({
+      method: 'POST',
+      url: 'http://localhost/api/verify-docket',
+      body: { listingId: 'cl-test-1', lookup: true },
+    }, res, { courtlistenerClient: mockCourtListener });
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.payload.verified, false);
+    assert.equal(res.payload.verificationState, 'partial_docket_evidence');
+    assert.equal(res.payload.caseNumber, '24-CV-1092');
+    assert.equal(res.payload.officialEvidence.length, 2);
+    assert.ok(!res.payload.missingEvidence.includes('Official court docket response'));
+    assert.ok(res.payload.missingEvidence.includes('Recorded lien and mortgage instruments'));
+
+    // Upstream CourtListener failure degrades gracefully without throwing
+    const failRes = captureRes();
+    await handleVerifyDocket({
+      method: 'POST',
+      url: 'http://localhost/api/verify-docket',
+      body: { listingId: 'cl-test-1', lookup: true },
+    }, failRes, {
+      courtlistenerClient: {
+        async scrapeFeed() {
+          throw new Error('rate limited');
+        },
+      },
+    });
+    assert.equal(failRes.statusCode, 200);
+    assert.equal(failRes.payload.verified, false);
+    assert.equal(failRes.payload.officialEvidence.length, 1);
+  } finally {
+    dbModule.getListingById = originalGetById;
+  }
+});
+
 

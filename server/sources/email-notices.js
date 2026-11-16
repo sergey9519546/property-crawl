@@ -33,11 +33,25 @@ const {
 const { detectNoticeState, evaluateNoticeConfidence, CONFIDENCE_THRESHOLD } = require('./email-notice-collector');
 const { getStore, documentId } = require('../routes/document-review');
 const { validateListingForIngestion } = require('../scrapers/validation');
-const { parseRfc822 } = require('../scrapers/email-ingest');
+const {
+  parseRfc822,
+  findTaggedImapResponse,
+  parseImapSearchUids,
+  extractImapFetchPayload,
+} = require('../scrapers/email-ingest');
 const defaultDb = require('../db/client');
 const { defaultVault } = require('../storage/document-vault');
 
+const CANONICAL_SOURCE_KEY = 'public-notices-email';
 const FEED_CONFIG = emailFeeds.feeds || {};
+
+function canonicalizeEmailSourceKey(source) {
+  const norm = String(source || '').trim().toLowerCase();
+  if (!norm || norm === 'email-notices' || norm === 'press-association-email' || norm === CANONICAL_SOURCE_KEY) {
+    return CANONICAL_SOURCE_KEY;
+  }
+  return norm;
+}
 
 const PRESS_ASSOCIATION_DOMAINS = Object.freeze([
   ...new Set(
@@ -80,14 +94,21 @@ class DefaultImapClient {
     };
     this.socket = null;
     this.buffer = '';
+    this._rawBuffer = Buffer.alloc(0);
     this.tagSeq = 0;
+    this.lastSocketError = null;
   }
 
   connect() {
     return new Promise((resolve, reject) => {
       const onError = (err) => reject(err);
       const onReady = () => {
-        if (this.socket) this.socket.removeListener('error', onError);
+        if (this.socket) {
+          this.socket.removeListener('error', onError);
+          this.socket.on('error', (err) => {
+            this.lastSocketError = err;
+          });
+        }
         resolve();
       };
       if (this.cfg.tls) {
@@ -102,21 +123,30 @@ class DefaultImapClient {
       }
       this.socket.once('error', onError);
       this.socket.on('data', (chunk) => {
-        this.buffer += chunk.toString('utf8');
+        const chunkBuf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk), 'utf8');
+        this._rawBuffer = Buffer.concat([this._rawBuffer, chunkBuf]);
+        this.buffer = this._rawBuffer.toString('utf8');
       });
     });
   }
 
-  _waitLine(prefix) {
+  _waitTaggedResponse(tag) {
     return new Promise((resolve, reject) => {
       const deadline = Date.now() + this.cfg.timeoutMs;
       const tick = () => {
-        if (this.buffer.includes(prefix)) {
-          resolve(this.buffer);
+        if (this.lastSocketError) {
+          reject(this.lastSocketError);
+          return;
+        }
+        const parsed = findTaggedImapResponse(this._rawBuffer, tag);
+        if (parsed.complete) {
+          this._rawBuffer = this._rawBuffer.subarray(parsed.endOffset);
+          this.buffer = this._rawBuffer.toString('utf8');
+          resolve(parsed);
           return;
         }
         if (Date.now() > deadline) {
-          reject(new Error(`IMAP timeout waiting for ${prefix}`));
+          reject(new Error(`IMAP timeout waiting for ${tag} completion`));
           return;
         }
         setTimeout(tick, 25);
@@ -125,29 +155,28 @@ class DefaultImapClient {
     });
   }
 
-  async command(cmd, waitPrefix) {
+  async command(cmd) {
     this.tagSeq += 1;
     const tag = `A${this.tagSeq}`;
     const full = `${tag} ${cmd}\r\n`;
-    this.buffer = '';
     this.socket.write(full);
-    const out = await this._waitLine(waitPrefix || `${tag} `);
-    if (!/OK/i.test(out.split('\r\n').pop() || out)) {
-      const failed = /NO|BAD/i.test(out);
-      if (failed && waitPrefix !== `${tag} `) {
-        throw new Error(`IMAP command failed: ${cmd}`);
-      }
+    const res = await this._waitTaggedResponse(tag);
+    if (res.status === 'NO' || res.status === 'BAD') {
+      throw new Error(`IMAP command failed (${tag} ${res.status}): ${res.detail || cmd}`);
     }
-    return out;
+    return res.rawText;
   }
 
   async close() {
     if (!this.socket || this.socket.destroyed) return;
+    this.tagSeq += 1;
+    const tag = `A${this.tagSeq}`;
     try {
-      this.socket.write('A99 LOGOUT\r\n');
+      this.socket.write(`${tag} LOGOUT\r\n`);
     } catch (_) {}
-    this.socket.end();
+    try { this.socket.end(); } catch (_) {}
     await new Promise((resolve) => setTimeout(resolve, 50));
+    try { if (this.socket && !this.socket.destroyed) this.socket.destroy(); } catch (_) {}
   }
 }
 
@@ -155,12 +184,15 @@ class DefaultImapClient {
  * Standardize extracted notice fields into a canonical listing object
  */
 function standardizeEmailNoticeListing(parsed = {}, meta = {}) {
-  const state = parsed.state || meta.state || 'OH';
+  const rawState = parsed.state || meta.state || 'UNKNOWN';
+  const state = String(rawState).trim().toUpperCase() || 'UNKNOWN';
+  const stateSlug = state === 'UNKNOWN' ? 'unknown' : state.toLowerCase();
+  const sourceKey = canonicalizeEmailSourceKey(meta.source);
   const feedInfo = FEED_CONFIG[state] || null;
   const hash = meta.contentHash || hashNotice(meta.rawSnippet || parsed.property_address);
   const parcelIndex = Number(meta.parcelIndex || 0);
-  const recordId = `email-notice-${state.toLowerCase()}-${hash.slice(0, 12)}-${parcelIndex}`;
-  const publisherName = feedInfo?.name || feedInfo?.operator || `${state} Press Association`;
+  const recordId = `email-notice-${stateSlug}-${hash.slice(0, 12)}-${parcelIndex}`;
+  const publisherName = feedInfo?.name || feedInfo?.operator || (state === 'UNKNOWN' ? 'Press Association Notice' : `${state} Press Association`);
   const portalUrl = feedInfo?.portalUrl || `https://www.${PRESS_ASSOCIATION_DOMAINS[0]}`;
   const noticeUrl = `${portalUrl.replace(/\/+$/, '')}/notice/${recordId}`;
   const observedAt = meta.observedAt || new Date().toISOString();
@@ -168,25 +200,21 @@ function standardizeEmailNoticeListing(parsed = {}, meta = {}) {
   const openingBid = Number(parsed.opening_bid) > 0 ? Number(parsed.opening_bid) : null;
   const judgment = Number(parsed.judgment_amount) > 0 ? Number(parsed.judgment_amount) : null;
 
-  if (meta.rawSnippet) {
-    try {
-      if (typeof defaultVault.putDocumentSync === 'function') {
-        defaultVault.putDocumentSync(`reviews/${encodeURIComponent(recordId)}.txt`, meta.rawSnippet, {
+  if (meta.rawSnippet && meta.skipVault !== true && meta.vault !== null) {
+    const targetVault = meta.vault || defaultVault;
+    if (targetVault && typeof targetVault.putDocumentSync === 'function') {
+      try {
+        targetVault.putDocumentSync(`reviews/${encodeURIComponent(recordId)}.txt`, meta.rawSnippet, {
           contentType: 'text/plain',
-          metadata: { recordId, source: 'email-notices' },
+          metadata: { recordId, source: sourceKey },
         });
-      } else if (typeof defaultVault.putDocument === 'function') {
-        defaultVault.putDocument(`reviews/${encodeURIComponent(recordId)}.txt`, meta.rawSnippet, {
-          contentType: 'text/plain',
-          metadata: { recordId, source: 'email-notices' },
-        }).catch(() => {});
-      }
-    } catch (_) {}
+      } catch (_) {}
+    }
   }
 
   return {
     id: recordId,
-    source: 'email-notices',
+    source: sourceKey,
     state,
     county: parsed.county || null,
     city: parsed.city || null,
@@ -225,7 +253,7 @@ function standardizeEmailNoticeListing(parsed = {}, meta = {}) {
             title: `Statutory Legal Notice Evidence - ${parsed.case_number || recordId}`,
             url: noticeUrl,
             rawText: meta.rawSnippet || parsed.raw || null,
-            evidenceSpans: parsed.evidence_spans || {},
+            evidenceSpans: parsed.evidenceSpans || parsed.evidence_spans || {},
             confidenceScore: typeof parsed.confidence_score === 'number' ? parsed.confidence_score : null,
           },
         ],
@@ -238,14 +266,16 @@ class EmailNoticesPipeline {
   constructor(options = {}) {
     this.env = options.env || process.env;
     this.db = options.database || options.db || defaultDb;
+    this.sourceKey = canonicalizeEmailSourceKey(options.sourceKey || options.source);
     this.corpusDir = options.corpusDir || this.env.IMAP_CORPUS_DIR || null;
     this.transport = options.transport || null;
     this.imapClient = options.imapClient || null;
     this.allowedDomains = options.allowedDomains || PRESS_ASSOCIATION_DOMAINS;
     this.now = options.now || (() => new Date());
     this.maxMessages = Number(options.maxMessages || this.env.IMAP_MAX_MESSAGES || 50);
-    this.vault = options.vault || defaultVault;
+    this.vault = options.vault !== undefined ? options.vault : defaultVault;
     this.documentReviewStore = options.documentReviewStore || options.store || null;
+    this._activeImapClient = null;
 
     const host = options.host || this.env.IMAP_HOST || '';
     const user = options.user || this.env.IMAP_USER || '';
@@ -255,6 +285,14 @@ class EmailNoticesPipeline {
     const mailbox = options.mailbox || this.env.IMAP_MAILBOX || 'INBOX';
 
     this.config = { host, user, pass, port, tls: tlsFlag, mailbox };
+  }
+
+  async closeActiveImapClient() {
+    const client = this._activeImapClient;
+    this._activeImapClient = null;
+    if (client && typeof client.close === 'function') {
+      await client.close().catch(() => {});
+    }
   }
 
   isConfigured() {
@@ -270,8 +308,9 @@ class EmailNoticesPipeline {
     }
   }
 
-  async fetchUnreadNotices() {
+  async fetchUnreadNotices(options = {}) {
     this.checkCredentials();
+    const deferClose = Boolean(options.deferClose);
 
     // 0. Local fixture corpus directory
     if (this.corpusDir && fs.existsSync(this.corpusDir)) {
@@ -326,17 +365,14 @@ class EmailNoticesPipeline {
 
     // 3. IMAP protocol execution (either injected low-level client or built-in client)
     const client = this.imapClient || new DefaultImapClient(this.config);
+    let keepOpen = false;
     try {
       if (typeof client.connect === 'function') await client.connect();
       if (typeof client.command === 'function') {
         await client.command(`LOGIN ${this.config.user} ${JSON.stringify(this.config.pass)}`);
         await client.command(`SELECT ${this.config.mailbox}`);
-        const searchOut = await client.command('UID SEARCH UNSEEN', 'A');
-        const uidLine = (searchOut.split(/\r?\n/).find((l) => /SEARCH/i.test(l)) || '').trim();
-        const uids = (uidLine.match(/\d+/g) || [])
-          .map(Number)
-          .filter((n) => Number.isFinite(n) && n > 0)
-          .slice(0, this.maxMessages);
+        const searchOut = await client.command('UID SEARCH UNSEEN');
+        const uids = parseImapSearchUids(searchOut, this.maxMessages);
 
         const messages = [];
         for (const uid of uids) {
@@ -347,23 +383,25 @@ class EmailNoticesPipeline {
             continue;
           }
 
+          const payload = extractImapFetchPayload(fetchOut);
+          const parsedMsg = parseRfc822(payload);
           const rawText = String(fetchOut || '');
-          const fromMatch = rawText.match(/From:\s*(.*)/i);
-          const subjectMatch = rawText.match(/Subject:\s*(.*)/i);
-          const dateMatch = rawText.match(/Date:\s*(.*)/i);
-          const msgIdMatch = rawText.match(/Message-ID:\s*(.*)/i);
-
-          const from = fromMatch ? fromMatch[1].trim() : '';
-          const subject = subjectMatch ? subjectMatch[1].trim() : '';
-          const date = dateMatch ? dateMatch[1].trim() : '';
-          const messageId = msgIdMatch ? msgIdMatch[1].trim() : `imap-${uid}`;
+          const from = parsedMsg.from || (rawText.match(/^From:\s*(.*)$/im)?.[1] || '').trim();
+          const subject = parsedMsg.subject || (rawText.match(/^Subject:\s*(.*)$/im)?.[1] || '').trim();
+          const date = parsedMsg.date || (rawText.match(/^Date:\s*(.*)$/im)?.[1] || '').trim();
+          const messageId = parsedMsg.messageId || (rawText.match(/^Message-ID:\s*(.*)$/im)?.[1] || '').trim() || `imap-${uid}`;
 
           if (!isFromPressAssociation(from, this.allowedDomains)) {
             continue;
           }
 
-          const bodyIdx = rawText.indexOf('\r\n\r\n') >= 0 ? rawText.indexOf('\r\n\r\n') + 4 : rawText.indexOf('\n\n') + 2;
-          const body = bodyIdx > 1 ? rawText.slice(bodyIdx).replace(/\)\s*A\d+\s+OK[^\r\n]*/i, '').trim() : rawText;
+          let body = parsedMsg.body || '';
+          if (!body) {
+            const bodyIdx = rawText.indexOf('\r\n\r\n') >= 0 ? rawText.indexOf('\r\n\r\n') + 4 : rawText.indexOf('\n\n') + 2;
+            body = bodyIdx > 1
+              ? rawText.slice(bodyIdx).replace(/\)\s*(?:\r?\n)?[A-Za-z0-9._-]+\s+OK[^\r\n]*/i, '').trim()
+              : rawText;
+          }
 
           messages.push({
             id: messageId,
@@ -373,16 +411,16 @@ class EmailNoticesPipeline {
             body,
             uid,
           });
-
-          try {
-            await client.command(`UID STORE ${uid} +FLAGS (\\Seen)`);
-          } catch (_) {}
+        }
+        if (deferClose) {
+          this._activeImapClient = client;
+          keepOpen = true;
         }
         return messages;
       }
       return [];
     } finally {
-      if (typeof client.close === 'function') {
+      if (!keepOpen && typeof client.close === 'function') {
         await client.close().catch(() => {});
       }
     }
@@ -417,10 +455,13 @@ class EmailNoticesPipeline {
 
     for (let i = 0; i < parcelSnippets.length; i++) {
       const snippet = parcelSnippets[i];
-      const parsed = deterministicParse(snippet);
+      const parsed = deterministicParse(snippet, {
+        defaultState: state !== 'UNKNOWN' ? state : null,
+      });
 
-      if (state !== 'UNKNOWN' && (!parsed.state || parsed.state === 'OH')) {
-        parsed.state = state;
+      const resolvedState = String(parsed.state || state || 'UNKNOWN').trim().toUpperCase() || 'UNKNOWN';
+      if (!parsed.state && resolvedState !== 'UNKNOWN') {
+        parsed.state = resolvedState;
       }
 
       const snippetHasAdversarial = hasAdversarialPayload ||
@@ -433,32 +474,46 @@ class EmailNoticesPipeline {
         adversarialInjectionDetected: snippetHasAdversarial,
         rawText: snippet,
       });
+      const reasons = Array.isArray(evaluation.reasons) ? [...evaluation.reasons] : [];
+      let isConfident = Boolean(evaluation.isConfident);
+      if (resolvedState === 'UNKNOWN') {
+        isConfident = false;
+        if (!reasons.includes('UNKNOWN_STATE')) {
+          reasons.push('UNKNOWN_STATE');
+        }
+      }
 
       const contentHash = hashNotice(snippet);
-      const listing = standardizeEmailNoticeListing(parsed, {
-        state,
-        contentHash,
-        parcelIndex: i,
-        totalParcels: parcelSnippets.length,
-        rawSnippet: snippet,
-        emailId: email.id || null,
-        emailSubject: email.subject || null,
-        sender: email.from || null,
-        observedAt,
-      });
+      const listing = standardizeEmailNoticeListing(
+        { ...parsed, state: resolvedState },
+        {
+          state: resolvedState,
+          source: this.sourceKey,
+          skipVault: true,
+          contentHash,
+          parcelIndex: i,
+          totalParcels: parcelSnippets.length,
+          rawSnippet: snippet,
+          emailId: email.id || null,
+          emailSubject: email.subject || null,
+          sender: email.from || null,
+          observedAt,
+        }
+      );
 
-      const portalUrl = feedInfo?.portalUrl || `https://www.${PRESS_ASSOCIATION_DOMAINS[0]}`;
+      const snippetFeedInfo = FEED_CONFIG[resolvedState] || feedInfo || null;
+      const portalUrl = snippetFeedInfo?.portalUrl || `https://www.${PRESS_ASSOCIATION_DOMAINS[0]}`;
       const noticeUrl = listing.sourceUrl || `${portalUrl.replace(/\/+$/, '')}/notice/${listing.id}`;
 
-      if (evaluation.isConfident) {
+      if (isConfident) {
         listings.push(listing);
       } else {
         lowConfidenceNotices.push({
           id: listing.id,
           recordId: listing.id,
           noticeUrl,
-          state,
-          reasons: evaluation.reasons,
+          state: resolvedState,
+          reasons,
           rawSnippet: snippet,
           contentHash,
           observedAt,
@@ -483,8 +538,9 @@ class EmailNoticesPipeline {
 
     let unreadMessages = [];
     try {
-      unreadMessages = await this.fetchUnreadNotices();
+      unreadMessages = await this.fetchUnreadNotices({ deferClose: true });
     } catch (err) {
+      await this.closeActiveImapClient();
       if (err instanceof ImapCredentialsUnsetError) throw err;
       throw new Error(`IMAP ingestion failed: ${err.message}`);
     }
@@ -493,6 +549,7 @@ class EmailNoticesPipeline {
 
     const report = {
       ok: true,
+      source: this.sourceKey,
       messagesFound: unreadMessages.length,
       listingsGenerated: 0,
       listingsAccepted: 0,
@@ -504,119 +561,179 @@ class EmailNoticesPipeline {
       errors: [],
     };
 
-    for (const email of unreadMessages) {
-      try {
-        const { listings, lowConfidenceNotices } = this.processEmail(email);
-        report.listingsGenerated += (listings.length + (lowConfidenceNotices?.length || 0));
+    try {
+      if (reviewStore && typeof reviewStore.loadPg === 'function') {
+        try {
+          await reviewStore.loadPg();
+        } catch (loadErr) {
+          report.errors.push({ stage: 'reviewStore.loadPg', error: loadErr.message });
+        }
+      }
 
-        for (const candidate of listings) {
-          const validation = validateListingForIngestion(candidate, { expectedSource: 'email-notices' });
-          if (!validation.isValid) {
-            report.listingsRejected += 1;
-            report.rejected.push({
-              id: candidate.id,
-              errors: validation.errors,
-              address: candidate.address,
-            });
-            continue;
+      const emailPersistStatus = [];
+
+      for (const email of unreadMessages) {
+        const uid = Number.isInteger(email?.uid) && email.uid > 0 ? email.uid : null;
+        let emailListingsSaved = 0;
+        let emailHasReviews = false;
+        let emailError = false;
+        try {
+          const { listings, lowConfidenceNotices } = this.processEmail(email);
+          report.listingsGenerated += (listings.length + (lowConfidenceNotices?.length || 0));
+
+          for (const candidate of listings) {
+            const validation = validateListingForIngestion(candidate, { expectedSource: this.sourceKey });
+            if (!validation.isValid) {
+              report.listingsRejected += 1;
+              report.rejected.push({
+                id: candidate.id,
+                errors: validation.errors,
+                address: candidate.address,
+              });
+              continue;
+            }
+
+            let saved;
+            if (typeof this.db.createListing === 'function') {
+              saved = await this.db.createListing(validation.listing);
+            } else if (typeof this.db.upsertListing === 'function') {
+              saved = await this.db.upsertListing(validation.listing);
+            } else {
+              saved = validation.listing;
+            }
+
+            if (saved === false || saved?.ok === false) {
+              throw new Error(`Listing persistence failed for ${validation.listing.id}`);
+            }
+
+            emailListingsSaved += 1;
+            report.listingsAccepted += 1;
+            report.upserted.push(saved || validation.listing);
           }
 
-          let saved;
-          if (typeof this.db.createListing === 'function') {
-            saved = await this.db.createListing(validation.listing);
-          } else if (typeof this.db.upsertListing === 'function') {
-            saved = await this.db.upsertListing(validation.listing);
-          } else {
-            saved = validation.listing;
-          }
+          for (const item of (lowConfidenceNotices || [])) {
+            const docId = typeof documentId === 'function'
+              ? documentId(item.recordId, 0, item.noticeUrl)
+              : item.recordId;
+            const vault = this.vault;
+            if (vault && item.rawSnippet) {
+              try {
+                if (typeof vault.putDocumentSync === 'function') {
+                  vault.putDocumentSync(`reviews/${encodeURIComponent(docId)}.txt`, item.rawSnippet, {
+                    contentType: 'text/plain',
+                    metadata: { recordId: item.recordId, source: this.sourceKey, reason: 'LOW_CONFIDENCE_NOTICE' },
+                  });
+                } else if (typeof vault.putDocument === 'function') {
+                  await vault.putDocument(`reviews/${encodeURIComponent(docId)}.txt`, item.rawSnippet, {
+                    contentType: 'text/plain',
+                    metadata: { recordId: item.recordId, source: this.sourceKey, reason: 'LOW_CONFIDENCE_NOTICE' },
+                  });
+                }
+              } catch (_) {}
+            }
 
-          report.listingsAccepted += 1;
-          report.upserted.push(saved || validation.listing);
+            const existingReview = reviewStore && reviewStore.map ? reviewStore.map.get(docId) : null;
+            const preserveHumanDecision = Boolean(
+              existingReview && (
+                (existingReview.status && existingReview.status !== 'pending')
+                || Number(existingReview.revision) > 0
+              )
+            );
+
+            const reviewEntry = {
+              ...(existingReview && typeof existingReview === 'object' ? existingReview : {}),
+              id: docId,
+              listingId: item.recordId,
+              documentIndex: 0,
+              documentUrl: item.noticeUrl,
+              status: preserveHumanDecision ? existingReview.status : 'pending',
+              reason: 'LOW_CONFIDENCE_NOTICE',
+              reasons: item.reasons,
+              notes: preserveHumanDecision
+                ? existingReview.notes
+                : `LOW_CONFIDENCE_NOTICE: ${item.reasons.join(', ')}`,
+              reviewer: preserveHumanDecision ? existingReview.reviewer : null,
+              reviewedAt: preserveHumanDecision ? existingReview.reviewedAt : null,
+              revision: Number.isInteger(existingReview?.revision) && existingReview.revision >= 0
+                ? existingReview.revision
+                : 0,
+              priorStatus: preserveHumanDecision ? (existingReview.priorStatus ?? null) : null,
+              extractedAt: existingReview?.extractedAt || item.observedAt,
+              contentHash: item.contentHash,
+              rawText: item.rawSnippet,
+              extractedFields: {
+                property_address: item.parsed.property_address || '',
+                address: item.parsed.property_address || '',
+                caseNumber: item.parsed.case_number || '',
+                apn: item.parsed.apn || '',
+                plaintiff: item.parsed.plaintiff_or_seller || '',
+                defendant: item.parsed.defendant || '',
+                judgmentAmount: item.parsed.judgment_amount || 0,
+                openingBid: item.parsed.opening_bid || 0,
+                saleDate: item.parsed.sale_date || '',
+                depositTerms: item.parsed.deposit_terms || '',
+                state: item.parsed.state || item.state,
+                county: item.parsed.county || '',
+                city: item.parsed.city || '',
+                zip: item.parsed.zip || '',
+                confidenceScore: item.parsed.confidence_score,
+                evidenceSpans: item.parsed.evidenceSpans || item.parsed.evidence_spans || {},
+              },
+            };
+
+            if (reviewStore && reviewStore.map) {
+              reviewStore.map.set(docId, reviewEntry);
+            }
+
+            emailHasReviews = true;
+            report.reviewsRouted += 1;
+            report.reviews.push(reviewEntry);
+          }
+        } catch (err) {
+          emailError = true;
+          report.errors.push({ emailId: email.id, error: err.message });
         }
 
-        for (const item of (lowConfidenceNotices || [])) {
-          const docId = typeof documentId === 'function'
-            ? documentId(item.recordId, 0, item.noticeUrl)
-            : item.recordId;
-          const vault = this.vault || defaultVault;
-          if (vault && item.rawSnippet) {
-            try {
-              if (typeof vault.putDocumentSync === 'function') {
-                vault.putDocumentSync(`reviews/${encodeURIComponent(docId)}.txt`, item.rawSnippet, {
-                  contentType: 'text/plain',
-                  metadata: { recordId: item.recordId, source: 'email-notices', reason: 'LOW_CONFIDENCE_NOTICE' },
-                });
-                vault.putDocumentSync(`reviews/${encodeURIComponent(item.recordId)}.txt`, item.rawSnippet, {
-                  contentType: 'text/plain',
-                  metadata: { recordId: item.recordId, source: 'email-notices', reason: 'LOW_CONFIDENCE_NOTICE' },
-                });
-              } else if (typeof vault.putDocument === 'function') {
-                await vault.putDocument(`reviews/${encodeURIComponent(docId)}.txt`, item.rawSnippet, {
-                  contentType: 'text/plain',
-                  metadata: { recordId: item.recordId, source: 'email-notices', reason: 'LOW_CONFIDENCE_NOTICE' },
-                });
-                await vault.putDocument(`reviews/${encodeURIComponent(item.recordId)}.txt`, item.rawSnippet, {
-                  contentType: 'text/plain',
-                  metadata: { recordId: item.recordId, source: 'email-notices', reason: 'LOW_CONFIDENCE_NOTICE' },
-                });
-              }
-            } catch (_) {}
-          }
-
-          const reviewEntry = {
-            id: docId,
-            listingId: item.recordId,
-            documentIndex: 0,
-            documentUrl: item.noticeUrl,
-            status: 'pending',
-            reason: 'LOW_CONFIDENCE_NOTICE',
-            reasons: item.reasons,
-            notes: `LOW_CONFIDENCE_NOTICE: ${item.reasons.join(', ')}`,
-            reviewer: null,
-            reviewedAt: null,
-            revision: 0,
-            priorStatus: null,
-            extractedAt: item.observedAt,
-            contentHash: item.contentHash,
-            rawText: item.rawSnippet,
-            extractedFields: {
-              property_address: item.parsed.property_address || '',
-              address: item.parsed.property_address || '',
-              caseNumber: item.parsed.case_number || '',
-              apn: item.parsed.apn || '',
-              plaintiff: item.parsed.plaintiff_or_seller || '',
-              defendant: item.parsed.defendant || '',
-              judgmentAmount: item.parsed.judgment_amount || 0,
-              openingBid: item.parsed.opening_bid || 0,
-              saleDate: item.parsed.sale_date || '',
-              depositTerms: item.parsed.deposit_terms || '',
-              state: item.parsed.state || item.state,
-              county: item.parsed.county || '',
-              city: item.parsed.city || '',
-              zip: item.parsed.zip || '',
-              confidenceScore: item.parsed.confidence_score,
-              evidenceSpans: item.parsed.evidenceSpans || item.parsed.evidence_spans || {},
-            },
-          };
-
-          if (reviewStore && reviewStore.map) {
-            reviewStore.map.set(docId, reviewEntry);
-          }
-
-          report.reviewsRouted += 1;
-          report.reviews.push(reviewEntry);
+        if (uid) {
+          emailPersistStatus.push({
+            uid,
+            emailListingsSaved,
+            emailHasReviews,
+            emailError,
+          });
         }
-      } catch (err) {
-        report.errors.push({ emailId: email.id, error: err.message });
       }
-    }
 
-    if (reviewStore && report.reviewsRouted > 0) {
-      if (typeof reviewStore.persistAsync === 'function') {
-        await reviewStore.persistAsync();
-      } else if (typeof reviewStore.persist === 'function') {
-        reviewStore.persist();
+      let reviewsPersisted = Boolean(reviewStore);
+      if (reviewStore && report.reviewsRouted > 0) {
+        try {
+          if (typeof reviewStore.persistAsync === 'function') {
+            const persisted = await reviewStore.persistAsync();
+            if (persisted === false) reviewsPersisted = false;
+          } else if (typeof reviewStore.persist === 'function') {
+            const persisted = reviewStore.persist();
+            if (persisted === false) reviewsPersisted = false;
+          }
+        } catch (persistErr) {
+          reviewsPersisted = false;
+          report.errors.push({ stage: 'reviewStore.persist', error: persistErr.message });
+        }
       }
+
+      if (this._activeImapClient && typeof this._activeImapClient.command === 'function') {
+        for (const item of emailPersistStatus) {
+          if (item.emailError) continue;
+          const durablyHandled = item.emailHasReviews
+            ? reviewsPersisted
+            : item.emailListingsSaved > 0;
+          if (!durablyHandled) continue;
+          try {
+            await this._activeImapClient.command(`UID STORE ${item.uid} +FLAGS (\\Seen)`);
+          } catch (_) {}
+        }
+      }
+    } finally {
+      await this.closeActiveImapClient();
     }
 
     report.accepted = report.listingsAccepted;
@@ -633,6 +750,8 @@ async function collectEmailNotices(options = {}) {
 }
 
 module.exports = {
+  CANONICAL_SOURCE_KEY,
+  canonicalizeEmailSourceKey,
   EmailNoticesPipeline,
   collectEmailNotices,
   ImapCredentialsUnsetError,

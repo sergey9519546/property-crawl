@@ -62,7 +62,7 @@ function normalizedStates(search) {
 function normalizedCounties(search) {
   const counties = getFilter(search, 'counties');
   if (!isStringArray(counties) || counties.length === 0) return null;
-  return [...new Set(counties.map((c) => c.trim().toLowerCase()))];
+  return [...new Set(counties.map((c) => c.trim().toLowerCase().replace(/\s+(?:county|parish|borough)$/i, '').trim()).filter(Boolean))];
 }
 
 function normalizedSources(search) {
@@ -74,7 +74,7 @@ function normalizedSources(search) {
 function normalizedPropTypes(search) {
   const propTypes = getFilter(search, 'propTypes');
   if (!isStringArray(propTypes) || propTypes.length === 0) return null;
-  return [...new Set(propTypes.map((s) => s.trim()))];
+  return [...new Set(propTypes.map((s) => s.trim().toLowerCase()).filter(Boolean))];
 }
 
 function normalizedKeywords(search) {
@@ -135,7 +135,9 @@ function matchListingAgainstSearch(listing, search) {
 
   const counties = normalizedCounties(search);
   if (counties) {
-    const listingCounty = typeof listing.county === 'string' ? listing.county.trim().toLowerCase() : '';
+    const listingCounty = typeof listing.county === 'string'
+      ? listing.county.trim().toLowerCase().replace(/\s+(?:county|parish|borough)$/i, '').trim()
+      : '';
     if (!listingCounty || !counties.includes(listingCounty)) {
       return { match: false, reason: 'county_mismatch' };
     }
@@ -151,7 +153,7 @@ function matchListingAgainstSearch(listing, search) {
 
   const propTypes = normalizedPropTypes(search);
   if (propTypes) {
-    const listingType = typeof listing.propType === 'string' ? listing.propType.trim() : '';
+    const listingType = typeof listing.propType === 'string' ? listing.propType.trim().toLowerCase() : '';
     if (!listingType || !propTypes.includes(listingType)) {
       return { match: false, reason: 'propType_mismatch' };
     }
@@ -194,7 +196,12 @@ function matchListingAgainstSearch(listing, search) {
   if (seniorLien) {
     const wanted = seniorLien.toLowerCase();
     const got = typeof listing.seniorLienRisk === 'string' ? listing.seniorLienRisk.trim().toLowerCase() : '';
-    if (!got || got !== wanted) {
+    const matched = wanted === 'clean'
+      ? Boolean(got && got !== 'high' && got !== 'unknown')
+      : wanted === 'risk'
+        ? (got === 'high' || got === 'risk')
+        : Boolean(got && got === wanted);
+    if (!matched) {
       return { match: false, reason: 'seniorLien_mismatch' };
     }
   }
@@ -203,7 +210,16 @@ function matchListingAgainstSearch(listing, search) {
   if (redemption) {
     const wanted = redemption.toLowerCase();
     const got = typeof listing.redemptionWarning === 'string' ? listing.redemptionWarning.trim().toLowerCase() : '';
-    if (!got || got !== wanted) {
+    const rawDays = listing?.provenance?.derivedFields?.redemption != null ? null : listing?.redemptionDays;
+    const pubDays = (rawDays !== null && rawDays !== undefined && rawDays !== '' && Number.isFinite(Number(rawDays)))
+      ? Number(rawDays)
+      : null;
+    const matched = wanted === 'immediate'
+      ? (pubDays === 0 || got === 'immediate')
+      : wanted === 'redemption_active'
+        ? ((pubDays !== null && pubDays > 0) || got === 'redemption_active')
+        : Boolean(got && got === wanted);
+    if (!matched) {
       return { match: false, reason: 'redemption_mismatch' };
     }
   }

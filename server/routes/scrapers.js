@@ -69,6 +69,7 @@ async function handleScrapers(req, res) {
     const hasExplicitOptions = Boolean(sourceIds || wave || allowNetwork !== undefined);
     let runPromise;
     try {
+      if (hasExplicitOptions && typeof scheduler.validateRunOptions === 'function') scheduler.validateRunOptions(runOptions);
       runPromise = hasExplicitOptions ? scheduler.runAll(runOptions) : scheduler.runAll();
     } catch (err) {
       return res.status(400).json({ error: err.message });

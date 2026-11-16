@@ -146,3 +146,62 @@ test('POST /api/sources/press-association-email/collect reports waiting_for_inbo
   assert.equal(res.body.sourceId, 'press-association-email');
   assert.match(res.body.message, /IMAP credentials unset and no corpus directory found/i);
 });
+
+test('POST /api/sources/press-association-email/collect disables test fixture fallback in non-test env unless explicitly opted in', async () => {
+  const prodHandler = createSourceNetworkHandler({
+    env: {
+      NODE_ENV: 'production',
+      SCRAPER_ADMIN_TOKEN: 'correct-secret-token',
+    },
+  });
+  const prodRes = await invoke(prodHandler, {
+    url: '/api/sources/press-association-email/collect',
+    method: 'POST',
+    token: 'correct-secret-token',
+  });
+  assert.equal(prodRes.statusCode, 200);
+  assert.equal(prodRes.body.status, 'waiting_for_inbox');
+
+  const optedInHandler = createSourceNetworkHandler({
+    env: {
+      NODE_ENV: 'production',
+      ALLOW_EMAIL_FIXTURE_FALLBACK: '1',
+      SCRAPER_ADMIN_TOKEN: 'correct-secret-token',
+    },
+  });
+  const optInRes = await invoke(optedInHandler, {
+    url: '/api/sources/press-association-email/collect',
+    method: 'POST',
+    token: 'correct-secret-token',
+  });
+  assert.equal(optInRes.statusCode, 200);
+  assert.equal(optInRes.body.status, 'collected');
+  assert.ok(optInRes.body.accepted > 0);
+});
+
+test('POST /api/sources/:id/collect evidenceCollectors guards null database.pool cleanly', async () => {
+  let collectorCalls = 0;
+  let recordRunCalls = 0;
+  const handler = createSourceNetworkHandler({
+    env: { SCRAPER_ADMIN_TOKEN: 'correct-secret-token' },
+    database: { pool: null },
+    scheduler: { networkEnabled: true, isRunning: false, realScrapers: [], realScraperKeys: new Set() },
+    recordSourceRun: async () => { recordRunCalls += 1; },
+    evidenceCollectors: {
+      'federal-register': async () => {
+        collectorCalls += 1;
+        return { submitted: 2 };
+      },
+    },
+  });
+
+  const res = await invoke(handler, {
+    url: '/api/sources/federal-register/collect',
+    method: 'POST',
+    token: 'correct-secret-token',
+  });
+  assert.equal(res.statusCode, 202);
+  await new Promise((r) => setTimeout(r, 30));
+  assert.equal(collectorCalls, 1);
+  assert.equal(recordRunCalls, 0);
+});

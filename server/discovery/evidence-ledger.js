@@ -11,9 +11,65 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const {
+  acquireOwnedLock,
+  releaseOwnedLock,
+  replaceFileWithRetry,
+} = require('../intelligence/research-store');
 
 const GENESIS_HASH = '0'.repeat(64);
 const DEFAULT_LEDGER_PATH = path.resolve(__dirname, '../../.cache/evidence-ledger.json');
+
+function defaultSnapshotLedgerPath() {
+  const dir = process.env.PROPERTY_EVIDENCE_DIR || path.resolve(__dirname, '../../.cache/discovery-snapshots');
+  return path.resolve(dir, 'evidence-ledger.jsonl');
+}
+
+let _anchorPool = null;
+let _anchorSynced = false;
+let _anchorTargetPath = null;
+let _anchoredEntryCount = 0;
+let _lastAnchoredHash = null;
+
+function attachLedgerAnchorPool(pool, targetPath = null) {
+  _anchorPool = pool || null;
+  if (!pool) {
+    _anchorSynced = false;
+    _anchorTargetPath = null;
+    _anchoredEntryCount = 0;
+    _lastAnchoredHash = null;
+  } else if (targetPath) {
+    _anchorTargetPath = path.resolve(targetPath);
+  }
+}
+
+function isAnchoredPath(targetPath) {
+  if (!_anchorPool || !_anchorTargetPath || !targetPath) return false;
+  return path.resolve(targetPath) === _anchorTargetPath;
+}
+
+function getLedgerAnchorStatus(targetPath = defaultSnapshotLedgerPath()) {
+  const matched = isAnchoredPath(targetPath) && _anchorSynced;
+  return {
+    externalAnchor: matched,
+    anchorBackend: matched ? 'postgres' : null,
+    anchoredEntries: matched ? _anchoredEntryCount : 0,
+    lastAnchoredHash: matched ? _lastAnchoredHash : null,
+  };
+}
+
+async function persistEntryToAnchor(entry, targetPath) {
+  if (!_anchorPool || !isAnchoredPath(targetPath) || !entry || !entry.entryHash) return false;
+  await _anchorPool.query(
+    `INSERT INTO discovery_legacy_imports (content_sha256, kind, original_path, payload, imported_at)
+     VALUES ($1, 'evidence_ledger_block', $2, $3::jsonb, COALESCE($4::timestamptz, NOW()))
+     ON CONFLICT (content_sha256, kind) DO NOTHING`,
+    [entry.entryHash, path.resolve(targetPath), JSON.stringify(entry), entry.timestamp || null]
+  );
+  _anchoredEntryCount = Math.max(_anchoredEntryCount, Number(entry.index ?? 0) + 1);
+  _lastAnchoredHash = entry.entryHash;
+  return true;
+}
 
 /**
  * Recursively serializes any JavaScript object or primitive into a deterministic,
@@ -353,21 +409,35 @@ const STALE_LEDGER_LOCK_MS = 30_000;
 function withLedgerLock(target, fn) {
   fs.mkdirSync(path.dirname(target), { recursive: true });
   const lockPath = `${target}.lock`;
-  const acquire = () => fs.openSync(lockPath, 'wx', 0o600);
-  let lock;
-  try { lock = acquire(); }
-  catch (error) {
-    if (error.code !== 'EEXIST') throw error;
-    let stale = false;
-    try { stale = Date.now() - fs.statSync(lockPath).mtimeMs > STALE_LEDGER_LOCK_MS; }
-    catch (_) { throw ledgerError('Evidence ledger has another writer', 'EVIDENCE_LEDGER_BUSY'); }
-    if (!stale) throw ledgerError('Evidence ledger has another writer', 'EVIDENCE_LEDGER_BUSY');
-    fs.unlinkSync(lockPath);
-    try { lock = acquire(); }
-    catch (_) { throw ledgerError('Evidence ledger has another writer', 'EVIDENCE_LEDGER_BUSY'); }
+  let lockHandle;
+  try {
+    lockHandle = acquireOwnedLock(lockPath, { staleLockMs: STALE_LEDGER_LOCK_MS });
+  } catch (error) {
+    if (error.code === 'EEXIST') {
+      throw ledgerError('Evidence ledger has another writer', 'EVIDENCE_LEDGER_BUSY');
+    }
+    throw error;
   }
-  try { return fn(); }
-  finally { fs.closeSync(lock); fs.unlinkSync(lockPath); }
+  let released = false;
+  const release = () => {
+    if (released) return;
+    released = true;
+    releaseOwnedLock(lockHandle);
+  };
+  try {
+    const result = fn();
+    if (result && typeof result.then === 'function') {
+      return result.then(
+        (value) => { release(); return value; },
+        (err) => { release(); throw err; }
+      );
+    }
+    release();
+    return result;
+  } catch (err) {
+    release();
+    throw err;
+  }
 }
 
 function persistSuffix(target, chain, existing) {
@@ -399,7 +469,7 @@ async function appendLedgerToFile(filePath, entryData, { timeoutMs = 5000 } = {}
   const deadline = Date.now() + timeoutMs;
   for (;;) {
     try {
-      return withLedgerLock(target, () => {
+      const writtenBlock = await withLedgerLock(target, async () => {
         const sig = statSignature(target);
         let state = verifiedLedgerCache.get(resolved);
         if (!sig) {
@@ -469,13 +539,141 @@ async function appendLedgerToFile(filePath, entryData, { timeoutMs = 5000 } = {}
         } else {
           verifiedLedgerCache.delete(resolved);
         }
+        if (isAnchoredPath(target)) {
+          await persistEntryToAnchor(block, target).catch((err) => {
+            console.warn('[EvidenceLedger] Postgres anchor write-through failed:', err && err.message ? err.message : err);
+          });
+        }
         return block;
       });
+      return writtenBlock;
     } catch (error) {
       if (error.code !== 'EVIDENCE_LEDGER_BUSY' || Date.now() >= deadline) throw error;
       await new Promise(resolve => setTimeout(resolve, 10));
     }
   }
+}
+
+async function syncEvidenceLedgerWithPostgres(pool, filePath = defaultSnapshotLedgerPath()) {
+  if (!pool || typeof pool.query !== 'function') {
+    attachLedgerAnchorPool(null);
+    return { synced: false, hydratedFromPostgres: 0, anchoredEntries: 0, headHash: null };
+  }
+  const target = path.resolve(filePath || defaultSnapshotLedgerPath());
+  attachLedgerAnchorPool(pool, target);
+
+  const res = await pool.query(
+    `SELECT payload FROM discovery_legacy_imports
+      WHERE kind = 'evidence_ledger_block'
+      ORDER BY (payload->>'index')::int ASC`
+  );
+  const remoteEntries = (res?.rows || [])
+    .map((row) => (typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload))
+    .filter((block) => block && typeof block === 'object' && Number.isInteger(block.index) && typeof block.entryHash === 'string');
+
+  let localEntries = loadLedgerFromFile(target);
+  let hydratedFromPostgres = 0;
+  const remoteVerification = remoteEntries.length > 0 ? verifyLedgerChain(remoteEntries) : { valid: true };
+
+  if (remoteEntries.length > 0 && !remoteVerification.valid) {
+    console.warn(`[EvidenceLedger] Remote Postgres anchor chain invalid (${remoteVerification.error}); refusing sync.`);
+    _anchorSynced = false;
+    _anchoredEntryCount = 0;
+    _lastAnchoredHash = null;
+    return {
+      synced: false,
+      diverged: true,
+      divergenceIndex: 0,
+      reason: 'invalid_remote_chain',
+      error: remoteVerification.error,
+      hydratedFromPostgres: 0,
+      uploadedToPostgres: 0,
+      anchoredEntries: 0,
+      headHash: null,
+      targetPath: target,
+    };
+  }
+
+  let commonPrefixLen = 0;
+  const minLen = Math.min(localEntries.length, remoteEntries.length);
+  while (
+    commonPrefixLen < minLen &&
+    canonicalStringify(localEntries[commonPrefixLen]) === canonicalStringify(remoteEntries[commonPrefixLen])
+  ) {
+    commonPrefixLen += 1;
+  }
+
+  if (commonPrefixLen < localEntries.length && commonPrefixLen < remoteEntries.length) {
+    const remoteHead = remoteEntries.at(-1)?.entryHash || null;
+    const localHead = localEntries.at(-1)?.entryHash || null;
+    console.warn(
+      `[EvidenceLedger] Local ledger (${localEntries.length} entries) and Postgres anchor (${remoteEntries.length} entries) diverged at index ${commonPrefixLen}; refusing silent overwrite.`
+    );
+    _anchorSynced = false;
+    _anchoredEntryCount = remoteEntries.length;
+    _lastAnchoredHash = remoteHead;
+    return {
+      synced: false,
+      diverged: true,
+      divergenceIndex: commonPrefixLen,
+      reason: 'chain_diverged',
+      hydratedFromPostgres: 0,
+      uploadedToPostgres: 0,
+      anchoredEntries: remoteEntries.length,
+      headHash: remoteHead,
+      localHeadHash: localHead,
+      targetPath: target,
+    };
+  }
+
+  if (localEntries.length === 0 && remoteEntries.length > 0) {
+    withLedgerLock(target, () => {
+      const tempPath = `${target}.${process.pid}.${crypto.randomUUID()}.tmp`;
+      const content = remoteEntries.map((entry) => JSON.stringify(entry)).join('\n') + '\n';
+      try {
+        const fd = fs.openSync(tempPath, 'wx', 0o600);
+        try {
+          fs.writeFileSync(fd, content, 'utf8');
+          fs.fsyncSync(fd);
+        } finally {
+          fs.closeSync(fd);
+        }
+        replaceFileWithRetry(tempPath, target);
+        verifiedLedgerCache.delete(target);
+      } finally {
+        try { if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath); } catch (_) {}
+      }
+    });
+    localEntries = loadLedgerFromFile(target);
+    hydratedFromPostgres = localEntries.length;
+  } else if (remoteEntries.length > localEntries.length && commonPrefixLen === localEntries.length) {
+    saveLedgerToFile(target, remoteEntries);
+    hydratedFromPostgres = remoteEntries.length - localEntries.length;
+    localEntries = loadLedgerFromFile(target);
+  }
+
+  let uploadedToPostgres = 0;
+  if (localEntries.length > remoteEntries.length && commonPrefixLen === remoteEntries.length) {
+    for (const entry of localEntries.slice(remoteEntries.length)) {
+      await persistEntryToAnchor(entry, target);
+      uploadedToPostgres += 1;
+    }
+  }
+
+  const totalAnchored = Math.max(localEntries.length, remoteEntries.length);
+  const head = localEntries.at(-1) || remoteEntries.at(-1) || null;
+  _anchorSynced = true;
+  _anchoredEntryCount = totalAnchored;
+  _lastAnchoredHash = head ? head.entryHash : null;
+
+  return {
+    synced: true,
+    hydratedFromPostgres,
+    uploadedToPostgres,
+    anchoredEntries: _anchoredEntryCount,
+    headHash: _lastAnchoredHash,
+    targetPath: target,
+  };
 }
 
 module.exports = {
@@ -490,5 +688,9 @@ module.exports = {
   loadLedgerFromFile,
   getLedgerHealth,
   withLedgerLock,
-  appendLedgerToFile
+  appendLedgerToFile,
+  defaultSnapshotLedgerPath,
+  attachLedgerAnchorPool,
+  getLedgerAnchorStatus,
+  syncEvidenceLedgerWithPostgres
 };

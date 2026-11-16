@@ -22,8 +22,10 @@ test('Panoramax Client: calculates spatial bounding box from coordinates', () =>
 });
 
 test('Panoramax Client: queries open street view imagery and extracts CC-BY metadata', async () => {
-  const mockFetch = async (url) => {
+  const mockFetch = async (url, init) => {
     assert.match(url, /api\.panoramax\.xyz\/api\/search\?bbox=/);
+    assert.match(url, /[?&]limit=10(?:&|$)/);
+    assert.equal(init?.redirect, 'error');
     return {
       ok: true,
       json: async () => ({
@@ -57,9 +59,73 @@ test('Panoramax Client: queries open street view imagery and extracts CC-BY meta
   assert.equal(imagery.source, 'PANORAMAX_OPEN_STREET_VIEW');
   assert.equal(imagery.id, 'photo-uuid-1234');
   assert.equal(imagery.license, 'CC-BY-SA-4.0');
+  assert.equal(imagery.displayApproved, true);
+  assert.ok(imagery.distanceMeters <= 100);
   assert.match(imagery.viewerUrl, /pic=photo-uuid-1234/);
   assert.match(imagery.thumbnailUrl, /thumb\.jpg/);
   assert.equal(imagery.attribution, 'Panoramax contributors (CC-BY-SA-4.0)');
+});
+
+test('Panoramax Client: defaults radius to 100m, gates license strictly, and enforces Haversine distance', async () => {
+  assert.deepEqual(calculateBbox(40.7128, -74.006), calculateBbox(40.7128, -74.006, 100));
+
+  const missingGeometry = await queryPanoramaxImagery({
+    lat: 40.7128,
+    lng: -74.0060,
+    fetchFn: async () => ({
+      ok: true,
+      json: async () => ({
+        features: [{ id: 'no-geom', properties: { license: 'CC-BY-SA-4.0' } }]
+      })
+    })
+  });
+  assert.equal(missingGeometry, null);
+
+  const missingOrProprietaryLicense = await queryPanoramaxImagery({
+    lat: 40.7128,
+    lng: -74.0060,
+    fetchFn: async () => ({
+      ok: true,
+      json: async () => ({
+        features: [
+          { id: 'unlicensed', geometry: { type: 'Point', coordinates: [-74.006, 40.7128] }, properties: {} },
+          { id: 'proprietary', geometry: { type: 'Point', coordinates: [-74.006, 40.7128] }, properties: { license: 'proprietary' } },
+        ]
+      })
+    })
+  });
+  assert.equal(missingOrProprietaryLicense, null);
+
+  const outsideRadius = await queryPanoramaxImagery({
+    lat: 40.7128,
+    lng: -74.0060,
+    fetchFn: async () => ({
+      ok: true,
+      json: async () => ({
+        features: [
+          { id: 'too-far', geometry: { type: 'Point', coordinates: [-74.006, 40.7145] }, properties: { license: 'CC-BY-SA-4.0' } }
+        ]
+      })
+    })
+  });
+  assert.equal(outsideRadius, null);
+
+  const nearestApproved = await queryPanoramaxImagery({
+    lat: 40.7128,
+    lng: -74.0060,
+    fetchFn: async () => ({
+      ok: true,
+      json: async () => ({
+        features: [
+          { id: 'farther-ok', geometry: { type: 'Point', coordinates: [-74.0065, 40.7133] }, properties: { license: 'CC-BY-SA-4.0' } },
+          { id: 'nearest-etalab', geometry: { type: 'Point', coordinates: [-74.0061, 40.71285] }, properties: { license: 'ETALAB-2.0' } }
+        ]
+      })
+    })
+  });
+  assert.equal(nearestApproved?.id, 'nearest-etalab');
+  assert.equal(nearestApproved?.license, 'ETALAB-2.0');
+  assert.equal(nearestApproved?.attribution, 'Panoramax contributors (ETALAB-2.0)');
 });
 
 test('Parcel Blueprint Generator: produces clean vector SVG without external scripts', () => {
@@ -80,19 +146,53 @@ test('Parcel Blueprint Generator: produces clean vector SVG without external scr
 });
 
 test('Visual Tier Resolver: enforces Tier 1 (Publisher) -> Tier 2 (Panoramax) -> Tier 3 (SVG Blueprint)', async () => {
-  // Case A: Publisher photo exists
-  const tier1 = await resolveListingVisual({
-    imageUrl: 'https://sheriff.cuyahogacounty.us/photos/101.jpg',
-    source: 'sheriff'
-  });
-  assert.equal(tier1.tier, 'PUBLISHER');
-  assert.equal(tier1.isFallback, false);
+  const sourceUrl = 'https://salesweb.civilview.com/Sales/SaleDetails?PropertyId=101';
+  const provenance = {
+    media: {
+      photo: {
+        origin: 'publisher_record',
+        verification: 'source_extracted',
+        sourceRecordUrl: sourceUrl
+      }
+    }
+  };
 
-  // Case B: No publisher photo, Panoramax available
+  // Case A1: Provenance-verified publisher photo (.imageUrl legacy field)
+  const tier1Legacy = await resolveListingVisual({
+    imageUrl: 'https://salesweb.civilview.com/photos/101.jpg',
+    source: 'civilview',
+    sourceUrl,
+    provenance
+  });
+  assert.equal(tier1Legacy.tier, 'PUBLISHER');
+  assert.equal(tier1Legacy.isFallback, false);
+
+  // Case A2: Provenance-verified publisher photo (.photo canonical field)
+  const tier1Photo = await resolveListingVisual({
+    photo: 'https://salesweb.civilview.com/photos/101-primary.jpg',
+    source: 'civilview',
+    sourceUrl,
+    provenance
+  });
+  assert.equal(tier1Photo.tier, 'PUBLISHER');
+  assert.equal(tier1Photo.url, 'https://salesweb.civilview.com/photos/101-primary.jpg');
+
+  // Case A3: Unverified .imageUrl without provenance must NOT pass as Tier 1 publisher photo
+  const unverifiedFallback = await resolveListingVisual(
+    { imageUrl: 'https://salesweb.civilview.com/photos/101.jpg', source: 'civilview', address: '101 Unverified St' },
+    { fetchFn: async () => ({ ok: true, json: async () => ({ features: [] }) }) }
+  );
+  assert.equal(unverifiedFallback.tier, 'BLUEPRINT_SVG');
+
+  // Case B: No publisher photo, Panoramax available within 100m with approved license
   const mockFetch = async () => ({
     ok: true,
     json: async () => ({
-      features: [{ id: 'pano-1', properties: { license: 'CC-BY-SA-4.0' } }]
+      features: [{
+        id: 'pano-1',
+        geometry: { type: 'Point', coordinates: [-74.0061, 40.7129] },
+        properties: { license: 'CC-BY-SA-4.0' }
+      }]
     })
   });
   const tier2 = await resolveListingVisual(

@@ -128,3 +128,25 @@ test('form UI copy no longer claims email delivery when local-only', () => {
   assert.match(contact, /can't send an email confirmation/);
   assert.doesNotMatch(contact, /will follow up by email/);
 });
+
+test('removeNewsletterEmail breaks stale lock files cleanly', () => {
+  const dir = tempFormDir();
+  process.env.PROPERTY_FORM_SUBMISSIONS_DIR = dir;
+  const newsletterFile = path.join(dir, 'newsletter.jsonl');
+  const lockFile = path.join(dir, 'newsletter.jsonl.lock');
+  fs.writeFileSync(newsletterFile, [
+    JSON.stringify({ email: 'stale@example.com' }),
+    JSON.stringify({ email: 'keep2@example.com' }),
+  ].join('\n') + '\n');
+  fs.writeFileSync(lockFile, '999999');
+  const past = new Date(Date.now() - 60000);
+  fs.utimesSync(lockFile, past, past);
+
+  const result = removeNewsletterEmail('stale@example.com');
+  assert.equal(result.removed, 1);
+  assert.equal(fs.existsSync(lockFile), false);
+  const content = fs.readFileSync(newsletterFile, 'utf8');
+  assert.doesNotMatch(content, /stale@example.com/);
+  assert.match(content, /keep2@example.com/);
+  process.env.PROPERTY_FORM_SUBMISSIONS_DIR = '';
+});

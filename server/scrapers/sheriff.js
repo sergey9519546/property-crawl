@@ -8,7 +8,7 @@
 const BaseScraper = require('./base');
 const { extractWithScrapling, isScraplingEnabled } = require('./scrapling-bridge');
 const { createRunReport, recordUnitFailure, recordUnitSuccess, finalizeRunReport, applyEmptyInventoryHonesty } = require('./run-report');
-const { mapWithConcurrency } = require('./http');
+const { assertFetchableUrl, mapWithConcurrency } = require('./http');
 const {
   REALAUCTION_FLORIDA_COUNTIES,
   REALAUCTION_FLORIDA_TAXDEED_COUNTIES, REALAUCTION_MULTI_STATE_PORTALS,
@@ -331,6 +331,18 @@ class SheriffSaleScraper extends BaseScraper {
       }
       finalizeRunReport(report, { emitted: standardized.length, rejected: schemaRejected });
 
+      if (report.outcome === 'failed') {
+        throw new Error(`SHERIFF_UPSTREAM_UNAVAILABLE: all ${this.counties.length} county endpoints failed`);
+      }
+      applyEmptyInventoryHonesty(report, { emitted: standardized.length, htmlSamples: this._htmlSamples || [], sourceKey: 'sheriff' });
+
+      const errors = Array.isArray(report.failures) ? report.failures : [];
+      const isRunComplete = Boolean(
+        errors.length === 0 &&
+        (!Array.isArray(report.statesFailed) || report.statesFailed.length === 0) &&
+        !partialSweep &&
+        report.complete !== false
+      );
       const totalPortalsByCounty = new Map();
       for (const c of this.counties) {
         const k = countyPortalKey(c);
@@ -344,16 +356,16 @@ class SheriffSaleScraper extends BaseScraper {
         outcomesByCounty.get(k).push(outcome);
       }
       const completedCounties = [];
-      for (const [k, outcomes] of outcomesByCounty.entries()) {
-        const expectedPortals = totalPortalsByCounty.get(k) || 1;
-        if (outcomes.length >= expectedPortals && outcomes.every((o) => o.ok)) {
-          const state = String(outcomes[0].county.state || '').toUpperCase();
-          const countyName = String(outcomes[0].county.name || '');
-          const seenIds = standardized
-            .filter((item) => String(item.state || '').toUpperCase() === state && String(item.county || '').toLowerCase() === countyName.toLowerCase())
-            .map((item) => item.id)
-            .filter(Boolean);
-          if (seenIds.length > 0) {
+      if (report.outcome !== 'unverified_empty') {
+        for (const [k, outcomes] of outcomesByCounty.entries()) {
+          const expectedPortals = totalPortalsByCounty.get(k) || 1;
+          if (outcomes.length >= expectedPortals && outcomes.every((o) => o.ok)) {
+            const state = String(outcomes[0].county.state || '').toUpperCase();
+            const countyName = String(outcomes[0].county.name || '');
+            const seenIds = standardized
+              .filter((item) => String(item.state || '').toUpperCase() === state && String(item.county || '').toLowerCase() === countyName.toLowerCase())
+              .map((item) => item.id)
+              .filter(Boolean);
             completedCounties.push({ county: countyName, state, seenIds });
           }
         }
@@ -362,16 +374,13 @@ class SheriffSaleScraper extends BaseScraper {
       report.scrapling = this.useScrapling
         ? { enabled: true, profile: 'table-extract', engine: this._lastExtraction?.engine || null, error: this._lastExtraction?.error || null }
         : { enabled: false };
-      if (report.outcome === 'failed') {
-        throw new Error(`SHERIFF_UPSTREAM_UNAVAILABLE: all ${this.counties.length} county endpoints failed`);
-      }
-      applyEmptyInventoryHonesty(report, { emitted: standardized.length, htmlSamples: this._htmlSamples || [], sourceKey: 'sheriff' });
-      report.complete = !partialSweep;
+      report.complete = isRunComplete;
+      report.fullSweepComplete = isRunComplete;
       Object.defineProperties(standardized, {
         partialSweep: { value: partialSweep, enumerable: false, writable: true, configurable: true },
         nextContinuationToken: { value: nextContinuationToken, enumerable: false, writable: true, configurable: true },
         nextCursor: { value: nextContinuationToken, enumerable: false, writable: true, configurable: true },
-        complete: { value: !partialSweep, enumerable: false, writable: true, configurable: true },
+        complete: { value: isRunComplete, enumerable: false, writable: true, configurable: true },
         report: { value: report, enumerable: false, writable: true, configurable: true },
       });
       console.log(`[${this.name}] Standardized ${standardized.length} Sheriff Sale listings (${report.outcome})`);
@@ -516,7 +525,36 @@ class SheriffSaleScraper extends BaseScraper {
       if (listings.length === 0 && !html.includes('nonstandard skin') && !html.includes('<div id="root">')) {
         try {
           const fetcher = this.fetchImpl || globalThis.fetch;
-          const res1 = await fetcher(url, {
+          const fetchAjax = async (targetUrl, init = {}) => {
+            const urlCheck = assertFetchableUrl(targetUrl);
+            if (!urlCheck.ok) {
+              const err = new Error(`Refused unfetchable RealAuction URL (${urlCheck.reason}): ${targetUrl}`);
+              err.code = 'SSRF_BLOCKED';
+              throw err;
+            }
+            const timeoutMs = Number.isFinite(Number(this.timeoutMs)) && Number(this.timeoutMs) > 0
+              ? Number(this.timeoutMs)
+              : 15000;
+            const maxAttempts = 2;
+            let lastErr = null;
+            for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+              const signal = init.signal || (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
+                ? AbortSignal.timeout(timeoutMs)
+                : undefined);
+              try {
+                const res = await fetcher(targetUrl, { ...init, ...(signal ? { signal } : {}) });
+                if (res && typeof res.status === 'number' && res.status >= 500 && attempt < maxAttempts) {
+                  continue;
+                }
+                return res;
+              } catch (err) {
+                lastErr = err;
+                if (attempt >= maxAttempts || err?.code === 'SSRF_BLOCKED') throw err;
+              }
+            }
+            throw lastErr;
+          };
+          const res1 = await fetchAjax(url, {
             headers: {
               'User-Agent': ua,
               Accept: 'text/html,application/xhtml+xml',
@@ -536,7 +574,7 @@ class SheriffSaleScraper extends BaseScraper {
           for (const targetDate of datesToTry) {
             if (targetDate) {
               try {
-                await fetcher(`${url}&AuctionDate=${encodeURIComponent(targetDate)}`, {
+                await fetchAjax(`${url}&AuctionDate=${encodeURIComponent(targetDate)}`, {
                   headers: { 'User-Agent': ua, Cookie: cookieHeader },
                 });
               } catch (_) {}
@@ -545,7 +583,7 @@ class SheriffSaleScraper extends BaseScraper {
             const maxPages = Math.max(1, Math.min(5, Number(process.env.REALAUCTION_MAX_PAGES_PER_DATE) || 3));
             for (let page = 0; page < maxPages; page++) {
               const ajaxUrl = `${baseUrl}/index.cfm?zaction=AUCTION&Zmethod=UPDATE&FNC=LOAD&AREA=W&PageDir=${page}&doR=1&tx=${Date.now()}&bypassPage=1&test=1`;
-              const res2 = await fetcher(ajaxUrl, {
+              const res2 = await fetchAjax(ajaxUrl, {
                 headers: {
                   'User-Agent': ua,
                   Cookie: cookieHeader,
@@ -574,7 +612,7 @@ class SheriffSaleScraper extends BaseScraper {
 
             try {
               const cancelUrl = `${baseUrl}/index.cfm?zaction=AUCTION&Zmethod=UPDATE&FNC=LOAD&AREA=C&PageDir=0&doR=1&tx=${Date.now()}&bypassPage=1&test=1`;
-              const resCancel = await fetcher(cancelUrl, {
+              const resCancel = await fetchAjax(cancelUrl, {
                 headers: {
                   'User-Agent': ua,
                   Cookie: cookieHeader,

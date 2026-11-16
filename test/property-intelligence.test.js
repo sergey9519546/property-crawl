@@ -498,3 +498,100 @@ test('buildPropertyDossier surfaces municipalLiens into VoI gap ranking requirin
   assert.match(muniGap.title, /municipal payoff certificate/i);
   assert.match(muniGap.nextAction, /municipal payoff certificate/i);
 });
+
+test('buildPropertyDossier guards null/empty terrainSlopePct, maps sig.key weights, and forwards codeViolations + municipalRecords.violations', (t) => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const crypto = require('node:crypto');
+  const { normalizeCoordinates } = require('../server/enrichment/usgs-terrain');
+  const { TriggerWeightManager } = require('../server/swarm/trigger-weights');
+
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dossier-terrain-'));
+  const terrainPath = path.join(tmpDir, 'terrain.json');
+  t.after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
+
+  const coords = normalizeCoordinates(40.918, -74.028);
+  const coordKey = crypto.createHash('sha256').update(`${coords.lat},${coords.lng}`).digest('hex').slice(0, 32);
+  fs.writeFileSync(terrainPath, JSON.stringify({
+    [coordKey]: {
+      observedAt: '2026-10-01T00:00:00.000Z',
+      slopeAnalysis: { slopePct: 22.5, classification: 'steep_slope', summary: 'Steep grade from cached USGS 3DEP' },
+      elevationMeters: 82,
+      samples: 5,
+    },
+  }));
+
+  const weights = new TriggerWeightManager({ learningRate: 0.5 });
+  weights.recordExecutionOutcome('code_enforcement', { success: false });
+
+  const dossierNullSlope = buildPropertyDossier(publisherFixture({
+    lat: 40.918,
+    lng: -74.028,
+    terrainSlopePct: null,
+    codeViolations: [{ violationType: 'Unsafe Structure Order', isDemolitionRisk: true, fineAmount: 9000 }],
+  }), {
+    now: NOW,
+    hazardCachePaths: { usgsTerrain: terrainPath },
+    triggerWeights: weights,
+  });
+
+  assert.equal(dossierNullSlope.federalHazards.layers.usgsTerrain.provenance, 'usgs-3dep-elevation-query');
+  assert.equal(dossierNullSlope.federalHazards.layers.usgsTerrain.slopeAnalysis.slopePct, 22.5);
+  assert.equal(dossierNullSlope.titleRisk.municipalLiens.isCondemnedOrDemolitionRisk, true);
+
+  const dossierCalibratedCe = buildPropertyDossier(publisherFixture({
+    codeEnforcement: { checked: true, violations: [] },
+  }), {
+    now: NOW,
+    triggerWeights: weights,
+  });
+  const codeSig = dossierCalibratedCe.opportunitySignals.find((s) => s.key === 'municipal_code_enforcement');
+  assert.ok(codeSig);
+  assert.equal(codeSig.status, 'supported');
+  assert.equal(codeSig.calibratedConfidence, weights.applyCalibration(1.0, 'code_enforcement'));
+  assert.ok(codeSig.calibratedConfidence < 1.0);
+
+  const dossierEmptySlope = buildPropertyDossier(publisherFixture({
+    terrainSlopePct: '',
+  }), {
+    now: NOW,
+    publicRecords: {
+      municipalRecords: {
+        violations: [{ violationType: 'Demolition Citation', isDemolitionRisk: true, fineAmount: 15000 }],
+      },
+    },
+  });
+  assert.equal(dossierEmptySlope.federalHazards.layers.usgsTerrain.status, 'unavailable');
+  assert.equal(dossierEmptySlope.titleRisk.municipalLiens.isCondemnedOrDemolitionRisk, true);
+});
+
+test('property-intelligence route passes countyParcel and observations into executeDag', async () => {
+  const listing = publisherFixture({
+    state: 'FL',
+    county: 'Alachua',
+    parcelId: '01234-005-000',
+  });
+  const handler = createPropertyIntelligenceHandler({
+    database: { getListingById: async () => listing },
+    buildPublicRecordEvidence: async () => ({
+      parcel: null,
+      countyParcel: {
+        status: 'matched',
+        lotAcres: 0.42,
+        geometry: { type: 'Polygon', coordinates: [[[-82.3, 29.6], [-82.31, 29.6], [-82.31, 29.61], [-82.3, 29.6]]] },
+        source: 'Alachua County Property Appraiser',
+      },
+      areaContext: null,
+      issues: [],
+      sources: [],
+    }),
+    env: { SCRAPER_ADMIN_TOKEN: 'operator-secret' },
+  });
+
+  const res = await invoke(handler, 'POST', listing.id);
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.enrichmentExecution.success, true);
+  assert.equal(res.body.enrichmentExecution.dossier.cadastral.lotAcres, 0.42);
+  assert.equal(res.body.enrichmentExecution.dossier.cadastral.hasGeometry, true);
+});

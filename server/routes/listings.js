@@ -64,7 +64,7 @@ function presentListing(listing) {
   const origin = listing.provenance?.origin;
   const ageHours = Number.isFinite(time) ? Math.max(0,(Date.now()-time)/3600000) : null;
   presented.sourceFreshness = { observedAt: timestamp || null, ageHours, cadenceHours,
-    status: origin === 'archive' ? 'archive' : origin !== 'live' || ageHours === null ? 'unknown' : ageHours > cadenceHours ? 'stale' : 'current' };
+    status: origin === 'archive' ? 'archive' : (origin !== 'live' && origin !== 'email_notice') || ageHours === null ? 'unknown' : ageHours > cadenceHours ? 'stale' : 'current' };
   presented.discoveryStatus = origin === 'archive' ? 'Dated archive snapshot' : presented.sourceFreshness.status === 'current'
     ? 'Within source refresh window' : presented.sourceFreshness.status === 'stale' ? 'Source refresh due' : 'Observation unresolved';
   const evidenceFields=['sourceUrl','sourceObservedAt','auctionProgram','lifecycleStatus','saleDate','openingBid','occupancy','hasDocuments'];
@@ -334,7 +334,9 @@ async function handleAssessorLookup(encodedId, req, res, db = defaultDb) {
   const resolvedParcelKey = listing.parcelKey || (parcel?.canonicalApn ? buildParcelKey({ apn: parcel.canonicalApn, countyFips: parcel.countyFips }) : null);
   if (authorizedToPersist && ((!listing.parcelKey && resolvedParcelKey || parcel)) && typeof db.createListing === 'function') {
     if (resolvedParcelKey) listing.parcelKey = resolvedParcelKey;
-    try { await db.createListing(listing); } catch (_) {}
+    try { await db.createListing(listing); } catch (persistErr) {
+      console.warn('[Listings] Failed to persist enriched assessor parcel for', listing?.id, persistErr?.message || persistErr);
+    }
   }
 
   return res.json({

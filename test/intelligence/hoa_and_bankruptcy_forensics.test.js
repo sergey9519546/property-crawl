@@ -559,3 +559,48 @@ test('arbitrateTitleRisk: detects omitted junior lienholder (defective joinder) 
   assert.equal(muniRisk.canProceedWithBid, false);
   assert.ok(muniRisk.titleWarnings.some((w) => w.includes('CRITICAL MUNICIPAL ALERT')));
 });
+
+test('evaluateIrsNoticeRule & arbitrateTitleRisk: unverified IRS notice leaves discharge null and blocks unqualified bid', () => {
+  const unverified = evaluateIrsNoticeRule({
+    hasIrsLien: true,
+    state: 'OH',
+    saleDate: '2026-10-25',
+  });
+  assert.equal(unverified.hasFederalTaxLien, true);
+  assert.equal(unverified.noticeProvided, null);
+  assert.equal(unverified.lienSurvivesForeclosure, null);
+  assert.equal(unverified.taxLienDischarged, null);
+  assert.equal(unverified.redemptionDays, 120);
+  assert.match(unverified.warning, /120-day right of redemption/i);
+  assert.match(unverified.bidderRecommendation, /VERIFY IRS NOTICE BEFORE BIDDING/i);
+
+  const risk = arbitrateTitleRisk({
+    id: 'oh-irs-unverified-001',
+    plaintiff: 'U.S. Bank National Association',
+    state: 'OH',
+    hasIrsLien: true,
+    saleDate: '2026-10-25',
+  });
+  assert.equal(risk.riskLevel, 'HIGH');
+  assert.equal(risk.canProceedWithBid, false);
+  assert.equal(risk.irsNoticeEvaluation.lienSurvivesForeclosure, null);
+  assert.equal(risk.irsNoticeEvaluation.taxLienDischarged, null);
+  assert.match(risk.titleActionAdvice, /VERIFY BEFORE BIDDING/);
+});
+
+test('detectIrsNoticeSignals & evaluateIrsNoticeRule: generic homeowner certified mail does not false-positive IRS timely notice', () => {
+  const homeownerMailingText = 'Defendant homeowner Jane Doe served via certified mail on 2026-09-01. Notice of Federal Tax Lien recorded in Book 88 Page 12.';
+  const signals = detectIrsNoticeSignals(homeownerMailingText);
+  assert.equal(signals.hasFederalTaxLien, true);
+  assert.equal(signals.noticeProvided, null);
+
+  const ruleEval = evaluateIrsNoticeRule({
+    hasFederalTaxLien: true,
+    saleDate: '2026-10-20',
+    rawText: homeownerMailingText,
+  });
+  assert.equal(ruleEval.noticeProvided, null);
+  assert.equal(ruleEval.noticeTimely, null);
+  assert.equal(ruleEval.lienSurvivesForeclosure, null);
+  assert.match(ruleEval.bidderRecommendation, /VERIFY IRS NOTICE BEFORE BIDDING/i);
+});

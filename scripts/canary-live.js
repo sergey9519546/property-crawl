@@ -230,12 +230,12 @@ async function cmdList() {
   const statuses = await store.sourceRolloutStatuses();
   if (!statuses.length) {
     console.log('No rollout rows yet. Run canaries to create discovery_source_rollouts state.');
-    db.pool?.end?.();
+    await db.pool?.end?.();
     return 0;
   }
   console.log('Source rollouts (Migration 014 evidence gate):');
   for (const row of statuses) console.log(`  ${formatRolloutRow(row)}`);
-  db.pool?.end?.();
+  await db.pool?.end?.();
   return 0;
 }
 
@@ -252,7 +252,7 @@ async function cmdStatus(flags) {
     statuses = statuses.filter((row) => row.sourceKey === key);
     if (!statuses.length) {
       console.log(`No rollout row for source "${key}".`);
-      db.pool?.end?.();
+      await db.pool?.end?.();
       return 1;
     }
   }
@@ -263,7 +263,7 @@ async function cmdStatus(flags) {
       console.log(`  promotedAt: ${row.promotedAt || '—'}`);
     }
   }
-  db.pool?.end?.();
+  await db.pool?.end?.();
   return 0;
 }
 
@@ -306,7 +306,7 @@ async function cmdRun(flags) {
   const targets = resolveTargets({ flags, promoted });
   if (!targets.sources.length) {
     console.log('No target sources. Pass --sources, --wave wave1, or --all-promoted after promotion.');
-    db.pool?.end?.();
+    await db.pool?.end?.();
     return 1;
   }
 
@@ -384,7 +384,7 @@ async function cmdRun(flags) {
     }
   }
 
-  db.pool?.end?.();
+  await db.pool?.end?.();
   const anyNotClean = results.some((r) => !r.evaluation?.clean);
   if (strict && anyNotClean) {
     console.error('[canary] STRICT: one or more canaries were not clean.');
@@ -408,11 +408,11 @@ async function cmdPromote(flags) {
   try {
     const row = await store.promoteSource(source);
     console.log(JSON.stringify(row, null, 2));
-    db.pool?.end?.();
+    await db.pool?.end?.();
     return 0;
   } catch (error) {
     console.error(`Promote failed for ${source}: ${error.message}`);
-    db.pool?.end?.();
+    await db.pool?.end?.();
     return 1;
   }
 }

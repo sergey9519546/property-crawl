@@ -37,6 +37,8 @@ async function createIsolatedDatabase(options = {}) {
     await bootstrap.end();
   }
   const pool = new Pool({ connectionString, max: options.max || 20, options: `-c search_path=${schema},public` });
+  // Keep explicit SET without pool.on('connect') firing concurrent client.query() during startup.
+  await pool.query(`SET search_path TO "${schema}", public`);
   const migrations = fs.readdirSync(path.resolve(__dirname, '../server/db/migrations'))
     .filter((item) => /^\d+.*\.sql$/.test(item))
     .sort();

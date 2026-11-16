@@ -1,5 +1,6 @@
 'use strict';
 
+const zlib = require('node:zlib');
 const SecuritySanitizer = require('../security/sanitizer');
 const Validator = require('../security/validation');
 const AiCache = require('../ai/cache');
@@ -10,6 +11,107 @@ const { normalizeOcrText, neutralizePromptInjection } = require('../ai/notice-pa
 const { requireWorkspaceIdentity } = require('../security/workspace-identity');
 
 const CACHE_VERSION = 'notice-evidence-v2';
+const MAX_PDF_INFLATE_BYTES = 2 * 1024 * 1024;
+
+function unescapePdfLiteral(raw) {
+  return String(raw || '')
+    .replace(/\\([()\\])/g, '$1')
+    .replace(/\\n/g, '\n')
+    .replace(/\\r/g, ' ')
+    .replace(/\\t/g, ' ')
+    .replace(/\\\r?\n/g, '');
+}
+
+function readPdfLiteralAt(content, startIdx) {
+  let depth = 1;
+  let i = startIdx + 1;
+  let raw = '';
+  while (i < content.length && depth > 0) {
+    const ch = content[i];
+    if (ch === '\\' && i + 1 < content.length) {
+      raw += ch + content[i + 1];
+      i += 2;
+      continue;
+    }
+    if (ch === '(') depth += 1;
+    else if (ch === ')') {
+      depth -= 1;
+      if (depth === 0) return { text: unescapePdfLiteral(raw), nextIdx: i + 1 };
+    }
+    raw += ch;
+    i += 1;
+  }
+  return null;
+}
+
+function skipWs(content, idx) {
+  let i = idx;
+  while (i < content.length && /\s/.test(content[i])) i += 1;
+  return i;
+}
+
+function extractPdfOperatorsText(content) {
+  let out = '';
+  let i = 0;
+  while (i < content.length) {
+    const ch = content[i];
+    if (ch === '(') {
+      const lit = readPdfLiteralAt(content, i);
+      if (lit) {
+        const after = skipWs(content, lit.nextIdx);
+        if (content.startsWith('Tj', after) && (after + 2 >= content.length || /[\s/<>\[\](]/.test(content[after + 2]))) {
+          out += `${lit.text} `;
+          i = after + 2;
+          continue;
+        }
+        i = lit.nextIdx;
+        continue;
+      }
+    } else if (ch === '[') {
+      let j = i + 1;
+      let arrayText = '';
+      let closed = false;
+      while (j < content.length) {
+        if (content[j] === '(') {
+          const lit = readPdfLiteralAt(content, j);
+          if (lit) {
+            arrayText += lit.text;
+            j = lit.nextIdx;
+            continue;
+          }
+        } else if (content[j] === ']') {
+          closed = true;
+          j += 1;
+          break;
+        }
+        j += 1;
+      }
+      if (closed) {
+        const after = skipWs(content, j);
+        if (content.startsWith('TJ', after) && (after + 2 >= content.length || /[\s/<>\[\](]/.test(content[after + 2]))) {
+          if (arrayText) out += `${arrayText} `;
+          i = after + 2;
+          continue;
+        }
+        i = j;
+        continue;
+      }
+    }
+    i += 1;
+  }
+  return out;
+}
+
+function tryDecompressPdfStream(streamBody) {
+  const buf = Buffer.from(streamBody, 'latin1');
+  try {
+    return zlib.inflateSync(buf, { maxOutputLength: MAX_PDF_INFLATE_BYTES }).toString('latin1');
+  } catch (_) {}
+  try {
+    return zlib.inflateRawSync(buf, { maxOutputLength: MAX_PDF_INFLATE_BYTES }).toString('latin1');
+  } catch (_) {}
+  return streamBody;
+}
 
 function extractTextFromPdf(input) {
   if (typeof input !== 'string') return '';
@@ -20,22 +122,27 @@ function extractTextFromPdf(input) {
     } catch (_) {
       return '';
     }
-  } else if (/^[A-Za-z0-9+/=]{100,}$/.test(str.trim())) {
+  } else if (/^[A-Za-z0-9+/=\s]{100,}$/.test(str.trim())) {
     try {
-      const decoded = Buffer.from(str.trim(), 'base64').toString('latin1');
+      const decoded = Buffer.from(str.replace(/\s+/g, ''), 'base64').toString('latin1');
       if (decoded.startsWith('%PDF')) str = decoded;
     } catch (_) {}
   }
   if (!str.includes('%PDF')) return input;
 
-  const streamRegex = /stream[\r\n]+([\s\S]*?)[\r\n]+endstream/g;
+  const streamRegex = /stream(?:\r\n|\r|\n)([\s\S]*?)(?:\r\n|\r|\n)?endstream/g;
   let text = '';
   let match;
   while ((match = streamRegex.exec(str)) !== null) {
-    const textMatches = match[1].match(/\(([^)]+)\)\s*Tj/g) || [];
-    for (const textMatch of textMatches) {
-      const inner = textMatch.match(/\(([^)]+)\)\s*Tj/);
-      if (inner?.[1]) text += `${inner[1]} `;
+    const rawStream = match[1];
+    const directText = extractPdfOperatorsText(rawStream);
+    if (directText.trim()) {
+      text += directText;
+      continue;
+    }
+    const inflated = tryDecompressPdfStream(rawStream);
+    if (inflated !== rawStream) {
+      text += extractPdfOperatorsText(inflated);
     }
   }
   return text.trim() || str.replace(/[^\x20-\x7E\r\n\t]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -282,44 +389,133 @@ function sanitizeLlmCandidates(payload, cleanNotice) {
   return safe;
 }
 
-async function callLlmExtraction(cleanNotice, model) {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return null;
-
-  const prompt = `Extract candidate fields from the legal notice. Do not infer, calculate, complete, or normalize missing facts. Every non-null candidate must include a short verbatim evidence excerpt found in the notice. Return only JSON in this shape: {"candidates":{"field":{"value":null,"evidence":null}}}. Candidate fields: property_address, city, state, zip, county, case_number, plaintiff_or_seller, defendant, judgment_amount, appraised_value, opening_bid, sale_date, sale_time, sale_type, deposit_terms, attorney, parcel_or_lot.\n\nNOTICE:\n${cleanNotice}`;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8000);
-  try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model: model === 'gpt-4o' ? 'gpt-4o' : 'gpt-4o-mini',
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0,
-        response_format: { type: 'json_object' }
-      }),
-      signal: controller.signal
-    });
-    if (!response.ok) return null;
-    const responseBody = await response.json();
-    const content = responseBody.choices?.[0]?.message?.content;
-    if (!content) return null;
-    return {
-      data: JSON.parse(content),
-      inputTokens: responseBody.usage?.prompt_tokens || Math.ceil(prompt.length / 4),
-      outputTokens: responseBody.usage?.completion_tokens || Math.ceil(content.length / 4)
-    };
-  } catch (_) {
-    return null;
-  } finally {
-    clearTimeout(timeout);
-  }
+function parseJsonContent(rawText) {
+  if (!rawText || typeof rawText !== 'string') return null;
+  const cleaned = rawText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+  if (!cleaned) return null;
+  return JSON.parse(cleaned);
 }
 
-async function handleParse(req, res) {
+async function callGeminiExtraction(prompt, model, apiKey, signal, fetchFn) {
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+  const response = await fetchFn(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+    body: JSON.stringify({
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0,
+        responseMimeType: 'application/json'
+      }
+    }),
+    signal
+  });
+  if (!response || !response.ok) return null;
+  const responseBody = await response.json();
+  const content = responseBody.candidates?.[0]?.content?.parts
+    ?.map((part) => (typeof part?.text === 'string' ? part.text : ''))
+    .join('') || '';
+  const data = parseJsonContent(content);
+  if (!data) return null;
+  return {
+    provider: 'gemini',
+    model,
+    data,
+    inputTokens: responseBody.usageMetadata?.promptTokenCount || Math.ceil(prompt.length / 4),
+    outputTokens: responseBody.usageMetadata?.candidatesTokenCount || Math.ceil(content.length / 4)
+  };
+}
+
+async function callOpenAiExtraction(prompt, model, apiKey, signal, fetchFn) {
+  const actualModel = model === 'gpt-4o' ? 'gpt-4o' : 'gpt-4o-mini';
+  const response = await fetchFn('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({
+      model: actualModel,
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0,
+      response_format: { type: 'json_object' }
+    }),
+    signal
+  });
+  if (!response || !response.ok) return null;
+  const responseBody = await response.json();
+  const content = responseBody.choices?.[0]?.message?.content;
+  const data = parseJsonContent(content);
+  if (!data) return null;
+  return {
+    provider: 'openai',
+    model: actualModel,
+    data,
+    inputTokens: responseBody.usage?.prompt_tokens || Math.ceil(prompt.length / 4),
+    outputTokens: responseBody.usage?.completion_tokens || Math.ceil(content.length / 4)
+  };
+}
+
+function buildExtractionPrompt(cleanNotice) {
+  return `Extract candidate fields from the legal notice. Do not infer, calculate, complete, or normalize missing facts. Every non-null candidate must include a short verbatim evidence excerpt found in the notice. Return only JSON in this shape: {"candidates":{"field":{"value":null,"evidence":null}}}. Candidate fields: property_address, city, state, zip, county, case_number, plaintiff_or_seller, defendant, judgment_amount, appraised_value, opening_bid, sale_date, sale_time, sale_type, deposit_terms, attorney, parcel_or_lot.\n\nNOTICE:\n${cleanNotice}`;
+}
+
+async function callLlmWithRouting(promptOrOptions, modelArg, envArg = process.env, fetchFnArg = globalThis.fetch, signalArg = null) {
+  const isOpts = Boolean(promptOrOptions && typeof promptOrOptions === 'object' && !Array.isArray(promptOrOptions));
+  const model = isOpts ? promptOrOptions.model : modelArg;
+  const env = (isOpts ? promptOrOptions.env : envArg) ?? process.env;
+  const fetchFn = (isOpts ? promptOrOptions.fetchFn : fetchFnArg) ?? globalThis.fetch;
+  const externalSignal = (isOpts ? promptOrOptions.signal : signalArg) || null;
+  const prompt = isOpts
+    ? (promptOrOptions.prompt ?? (typeof promptOrOptions.cleanNotice === 'string' ? buildExtractionPrompt(promptOrOptions.cleanNotice) : ''))
+    : promptOrOptions;
+
+  if (typeof fetchFn !== 'function' || !prompt) return null;
+
+  const geminiKey = env?.GEMINI_API_KEY || env?.GOOGLE_AI_API_KEY || null;
+  const openaiKey = env?.OPENAI_API_KEY || null;
+  const desiredProvider = ModelRouter.providerForModel(model);
+
+  const attempts = [];
+  if (desiredProvider === 'gemini') {
+    if (geminiKey) attempts.push((sig) => callGeminiExtraction(prompt, model || 'gemini-2.0-flash-lite', geminiKey, sig, fetchFn));
+    if (openaiKey) attempts.push((sig) => callOpenAiExtraction(prompt, 'gpt-4o-mini', openaiKey, sig, fetchFn));
+  } else if (desiredProvider === 'openai') {
+    if (openaiKey) attempts.push((sig) => callOpenAiExtraction(prompt, model || 'gpt-4o-mini', openaiKey, sig, fetchFn));
+    if (geminiKey) attempts.push((sig) => callGeminiExtraction(prompt, 'gemini-2.0-flash-lite', geminiKey, sig, fetchFn));
+  } else {
+    if (openaiKey) attempts.push((sig) => callOpenAiExtraction(prompt, 'gpt-4o-mini', openaiKey, sig, fetchFn));
+    if (geminiKey) attempts.push((sig) => callGeminiExtraction(prompt, 'gemini-2.0-flash-lite', geminiKey, sig, fetchFn));
+  }
+
+  for (const attempt of attempts) {
+    if (externalSignal?.aborted) break;
+    const controller = externalSignal ? null : new AbortController();
+    const timeout = controller ? setTimeout(() => controller.abort(), 8000) : null;
+    const activeSignal = externalSignal || controller.signal;
+    try {
+      const result = await attempt(activeSignal);
+      if (result && result.data) {
+        return result;
+      }
+    } catch (_) {
+      // Primary provider failed at runtime; fall through to alternate provider if configured
+    } finally {
+      if (timeout) clearTimeout(timeout);
+    }
+  }
+  return null;
+}
+
+async function callLlmExtraction(cleanNotice, model, env = process.env, fetchFn = globalThis.fetch) {
+  if (typeof fetchFn !== 'function') return null;
+  const prompt = buildExtractionPrompt(cleanNotice);
+  return callLlmWithRouting(prompt, model, env, fetchFn);
+}
+
+async function handleParse(req, res, options = {}) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  if (!requireWorkspaceIdentity(req, res)) return;
+  const env = options?.env || process.env;
+  const fetchFn = options?.fetchFn || globalThis.fetch;
+  const cache = options?.cache || AiCache;
+  if (!requireWorkspaceIdentity(req, res, env)) return;
 
   let { noticeText, pdfBase64, forceLlm } = req.body || {};
   if (pdfBase64) {
@@ -334,9 +530,17 @@ async function handleParse(req, res) {
   const cleanNotice = normalizeOcrText(
     neutralizePromptInjection(SecuritySanitizer.sanitizePromptInput(noticeText))
   );
-  const model = ModelRouter.selectModel({ taskType: 'notice_parser', promptLength: cleanNotice.length });
+  const route = ModelRouter.selectRoute({
+    taskType: 'notice_parser',
+    promptLength: cleanNotice.length,
+    isHighComplexity: cleanNotice.length > 4000,
+    env
+  });
+  const requestedModel = route.model;
+  let model = requestedModel;
+  let provider = route.provider;
   const cacheKey = `${CACHE_VERSION}\n${cleanNotice}`;
-  const cachedResponse = await AiCache.get(cacheKey, model);
+  const cachedResponse = await cache.get(cacheKey, requestedModel);
   if (cachedResponse) {
     try {
       const cached = JSON.parse(cachedResponse);
@@ -350,13 +554,21 @@ async function handleParse(req, res) {
   let cost = 0;
   let unverifiedCandidates = {};
 
-  if ((confidence < 0.75 || forceLlm === true) && process.env.OPENAI_API_KEY && !runtimeCostTracker.isOverBudget) {
-    const llmResult = await callLlmExtraction(cleanNotice, model);
+  if ((confidence < 0.75 || forceLlm === true) && route.configured && !runtimeCostTracker.isOverBudget) {
+    const llmResult = await callLlmExtraction(cleanNotice, requestedModel, env, fetchFn);
     if (llmResult?.data) {
+      model = llmResult.model || model;
+      provider = llmResult.provider || provider;
       unverifiedCandidates = sanitizeLlmCandidates(llmResult.data, cleanNotice);
       if (Object.keys(unverifiedCandidates).length > 0) strategy = 'deterministic_with_unverified_llm_candidates';
       cost = CostTracker.calculateCost(model, llmResult.inputTokens, llmResult.outputTokens);
-      runtimeCostTracker = runtimeCostTracker.add(new CostRecord({ model, inputTokens: llmResult.inputTokens, outputTokens: llmResult.outputTokens, costUsd: cost }));
+      runtimeCostTracker = runtimeCostTracker.add(new CostRecord({
+        provider,
+        model,
+        inputTokens: llmResult.inputTokens,
+        outputTokens: llmResult.outputTokens,
+        costUsd: cost
+      }));
     }
   }
 
@@ -366,15 +578,17 @@ async function handleParse(req, res) {
     confidence,
     confidenceMeaning: 'Extraction completeness only; not factual verification.',
     strategy,
+    provider,
+    requestedModel,
     model,
     costUsd: cost,
     unverifiedCandidates,
     reviewRequired: true
   };
 
-  await AiCache.set(
+  await cache.set(
     cacheKey,
-    model,
+    requestedModel,
     JSON.stringify(response),
     Math.ceil(cleanNotice.length / 4),
     Math.ceil(JSON.stringify(response).length / 4),
@@ -391,5 +605,7 @@ module.exports.explicitStatutoryFraction = explicitStatutoryFraction;
 module.exports.extractObservedNotice = extractObservedNotice;
 module.exports.extractTextFromPdf = extractTextFromPdf;
 module.exports.sanitizeLlmCandidates = sanitizeLlmCandidates;
+module.exports.callLlmWithRouting = callLlmWithRouting;
+module.exports.callLlmExtraction = callLlmExtraction;
 module.exports.getCostTracker = () => runtimeCostTracker;
 module.exports.resetCostTracker = (budgetLimitUsd = 5.00) => { runtimeCostTracker = new CostTracker({ budgetLimitUsd }); };

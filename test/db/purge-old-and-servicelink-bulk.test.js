@@ -235,6 +235,29 @@ test('Migration 037 and purgeStaleListings remove old, archive, concluded, and s
 
       const remainingAfter037 = (await embedded.pool.query('SELECT id FROM listings ORDER BY id')).rows.map((r) => r.id);
       assert.deepEqual(remainingAfter037, ['gsa:fresh-active', 'servicelink:fresh-active', 'sheriff:past-postponed']);
+
+      // Verify Migration 039 treats provenance.origin = 'email_notice' as discovery_is_live = TRUE and preserves it across Pass B
+      await db.createListing({
+        id: 'email:live-notice-1',
+        source: 'sheriff',
+        state: 'OH',
+        county: 'Franklin',
+        city: 'Columbus',
+        zip: '43215',
+        address: '800 Notice Ln, Columbus, OH 43215',
+        propType: 'Single Family',
+        openingBid: 110000,
+        saleDate: dateDaysOffset(14),
+        status: 'scheduled',
+        lifecycleStatus: 'scheduled',
+        provenance: { origin: 'email_notice', observed: true, publisher: 'Ohio Public Notices', recordId: 'email-notice-1' },
+        sourceObservedAt: isoDaysAgo(1),
+      });
+      const emailRow = await embedded.pool.query(`SELECT discovery_is_live FROM listings WHERE id = 'email:live-notice-1'`);
+      assert.equal(emailRow.rows[0]?.discovery_is_live, true, 'Migration 039 must mark email_notice rows as discovery_is_live = TRUE');
+      await db.purgeStaleListings({ batchSize: 10, maxBatches: 5, batchPauseMs: 0 });
+      const survivingEmail = await embedded.pool.query(`SELECT id FROM listings WHERE id = 'email:live-notice-1'`);
+      assert.equal(survivingEmail.rowCount, 1, 'email_notice rows must survive purgeStaleListings Pass B');
     } finally {
       await embedded.pool.end().catch(() => {});
     }

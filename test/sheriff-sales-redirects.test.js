@@ -37,5 +37,11 @@ test('sheriff-sales county route permanently redirects to canonical /states/[sta
   const content = fs.readFileSync(pagePath, 'utf8');
 
   assert.match(content, /import\s*\{\s*permanentRedirect\s*\}\s*from\s*["']next\/navigation["']/);
-  assert.match(content, /permanentRedirect\(`\/states\/\$\{encodeURIComponent\(state\.toUpperCase\(\)\)\}\/\$\{encodeURIComponent\(county\)\}`\)/);
+  assert.match(content, /import\s*\{\s*countyToSlug\s*\}\s*from\s*["']@\/lib\/county-seo["']/);
+  assert.match(content, /countyToSlug\(county\)/);
+  assert.doesNotMatch(content, /\/\$\{encodeURIComponent\(county\)\}`\)/);
+
+  const { countyToSlug } = require('../src/lib/county-seo.js');
+  assert.equal(countyToSlug('St. Johns'), 'st-johns');
+  assert.equal(countyToSlug('Miami-Dade'), 'miami-dade');
 });

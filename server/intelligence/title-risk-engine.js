@@ -255,8 +255,12 @@ function arbitrateTitleRisk(listing = {}, rawNoticeText = '') {
 
   // II. Federal Tax Lien 25-Day Rule Analysis
   if (irsNoticeEval.hasFederalTaxLien) {
-    if (irsNoticeEval.lienSurvivesForeclosure) {
+    if (irsNoticeEval.lienSurvivesForeclosure === true) {
       riskLevel = 'CRITICAL';
+      canProceedWithBid = false;
+      warnings.push(irsNoticeEval.warning);
+    } else if (irsNoticeEval.lienSurvivesForeclosure === null) {
+      if (riskLevel !== 'CRITICAL') riskLevel = 'HIGH';
       canProceedWithBid = false;
       warnings.push(irsNoticeEval.warning);
     } else {
@@ -330,7 +334,11 @@ function arbitrateTitleRisk(listing = {}, rawNoticeText = '') {
       titleActionAdvice = 'DO NOT BID. Senior mortgage survives sale; winning bidder takes property encumbered by underlying debt.';
     }
   } else if (riskLevel === 'HIGH') {
-    titleActionAdvice = 'ESCROW ESCALATION. Order full 40-year title search to confirm federal tax lien and HOA payoff balances.';
+    if (irsNoticeEval.hasFederalTaxLien && irsNoticeEval.lienSurvivesForeclosure === null) {
+      titleActionAdvice = 'VERIFY BEFORE BIDDING. IRS tax lien detected without verified 25-day notice (26 U.S.C. § 7425(b)(1)). Confirm certified-mail proof before bidding; federal tax lien survives if notice was omitted or untimely.';
+    } else {
+      titleActionAdvice = 'ESCROW ESCALATION. Order full 40-year title search to confirm federal tax lien and HOA payoff balances.';
+    }
   } else if (riskLevel === 'MODERATE') {
     titleActionAdvice = 'PROCEED WITH CAUTION. Verify county docket for unjoined junior lienholders or extended statutory redemption.';
   }

@@ -87,12 +87,17 @@ def main():
     def is_private_url(raw_url):
         try:
             parsed = urllib.parse.urlparse(raw_url)
-            host = (parsed.hostname or "").lower().strip("[]")
+            host = (parsed.hostname or "").lower().strip("[]").split("%")[0]
             if not host:
                 return False
-            if host in ("localhost", "127.0.0.1", "::1") or host.endswith((".local", ".internal", ".localhost")):
+            if host in ("localhost", "127.0.0.1", "::1", "0.0.0.0", "::") or host.endswith((".local", ".internal", ".localhost")):
                 return True
             ip = ipaddress.ip_address(host)
+            mapped = getattr(ip, "ipv4_mapped", None)
+            if mapped and (mapped.is_private or mapped.is_loopback or mapped.is_link_local or mapped.is_reserved or mapped.is_multicast):
+                return True
+            if isinstance(ip, ipaddress.IPv4Address) and ip in ipaddress.ip_network("100.64.0.0/10"):
+                return True
             return ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast
         except Exception:
             return False

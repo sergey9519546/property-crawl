@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { loadListingInventory } from '../src/lib/listing-inventory.ts';
-import { matchesSavedSearch, parseSavedSearches } from '../src/lib/saved-searches.ts';
+import { matchesSavedSearch, parseSavedSearches, toClientSavedSearch } from '../src/lib/saved-searches.ts';
+import { listingMatchesFilters, DEFAULT_TERMINAL_FILTERS } from '../src/lib/terminal-filter-store.ts';
 import { parseStreetViewMetadata, formatCaptureDate, requestStreetViewMetadata } from '../src/lib/street-view-client.ts';
 
 test('Street View client bounds disclosure fields and does not imply a successful match on unavailable responses', () => {
@@ -65,4 +66,26 @@ test('corrupt and legacy fake alert storage is not treated as active saved searc
   assert.deepEqual(parseSavedSearches(JSON.stringify([{ email: 'investor@firm.com', active: true }])), []);
   const value = { id: 's', name: 'NJ', state: 'NJ', minScore: 0, maxBid: 0, createdAt: '2026-09-04' };
   assert.deepEqual(parseSavedSearches(JSON.stringify([value])), [value]);
+});
+
+test('multi-state saved searches survive conversion, parsing, matching, and terminal filtering', () => {
+  const converted = toClientSavedSearch({
+    id: 'srv-multi',
+    label: null,
+    filters: { states: ['nj', 'NV', 'nj'], minScore: 60, maxBid: 250000 },
+    isActive: true,
+    createdAt: '2026-11-15T00:00:00Z',
+    updatedAt: '2026-11-15T00:00:00Z',
+  });
+  assert.equal(converted.state, 'NJ,NV');
+  assert.equal(converted.name, 'NJ/NV opportunities');
+  assert.deepEqual(parseSavedSearches(JSON.stringify([converted])), [converted]);
+
+  assert.equal(matchesSavedSearch({ state: 'NJ', dealScore: 70, openingBid: 100000 }, converted), true);
+  assert.equal(matchesSavedSearch({ state: 'NV', dealScore: 70, openingBid: 100000 }, converted), true);
+  assert.equal(matchesSavedSearch({ state: 'OH', dealScore: 70, openingBid: 100000 }, converted), false);
+
+  const termFilters = { ...DEFAULT_TERMINAL_FILTERS, selectedState: converted.state };
+  assert.equal(listingMatchesFilters({ id: '1', source: 'sheriff', state: 'NV', address: '1 Main' }, termFilters), true);
+  assert.equal(listingMatchesFilters({ id: '2', source: 'sheriff', state: 'TX', address: '2 Main' }, termFilters), false);
 });

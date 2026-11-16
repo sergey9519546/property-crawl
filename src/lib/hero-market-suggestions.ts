@@ -103,6 +103,8 @@ export function buildMarketSuggestions(
 
   const normalizedQuery = trimmed.toLowerCase();
   const markets = new Map<string, MarketSuggestion>();
+  const marketOrder = new Map<string, number>();
+  let nextOrder = 0;
 
   markets.set("country:united states", {
     id: "country:US",
@@ -188,7 +190,9 @@ export function buildMarketSuggestions(
       }
       // Dedupe on normalized label so publisher case variations ("HADDON TOWNSHIP"
       // vs "Haddon Township") collapse to a single market option.
-      markets.set(`${suggestion.kind}:${suggestion.label.toLowerCase()}`, suggestion);
+      const key = `${suggestion.kind}:${suggestion.label.toLowerCase()}`;
+      if (!marketOrder.has(key)) marketOrder.set(key, nextOrder++);
+      markets.set(key, suggestion);
     }
   }
 
@@ -200,7 +204,9 @@ export function buildMarketSuggestions(
     .sort((a, b) => {
       const aStarts = a.label.toLowerCase().startsWith(normalizedQuery) ? 0 : 1;
       const bStarts = b.label.toLowerCase().startsWith(normalizedQuery) ? 0 : 1;
-      return aStarts - bStarts || KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind) || a.label.localeCompare(b.label);
+      const aOrder = marketOrder.get(`${a.kind}:${a.label.toLowerCase()}`) ?? Number.MAX_SAFE_INTEGER;
+      const bOrder = marketOrder.get(`${b.kind}:${b.label.toLowerCase()}`) ?? Number.MAX_SAFE_INTEGER;
+      return aStarts - bStarts || KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind) || aOrder - bOrder || a.label.localeCompare(b.label);
     })
     .slice(0, limit);
 }

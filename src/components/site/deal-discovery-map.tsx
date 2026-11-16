@@ -36,7 +36,10 @@ type ListingRow = {
   address?: string | null;
   city?: string | null;
   county?: string | null;
+  state?: string | null;
   source?: string | null;
+  propType?: string | null;
+  saleDate?: string | null;
   lat?: number | string | null;
   lng?: number | string | null;
   openingBid?: number | string | null;
@@ -61,11 +64,19 @@ function moneyOrDash(value: unknown): string {
   return `$${Math.round(n).toLocaleString()}`;
 }
 
+function isClevelandCoord(lat: number, lng: number): boolean {
+  return lat >= 41.3 && lat <= 41.6 && lng >= -81.9 && lng <= -81.5;
+}
+
+function isUsCoord(lat: number, lng: number): boolean {
+  return lat >= 15 && lat <= 72 && lng >= -180 && lng <= -64;
+}
+
 function listingToOpportunity(row: ListingRow, index: number): Opportunity | null {
   const lat = finite(row.lat);
   const lng = finite(row.lng);
   if (lat === null || lng === null || !row.id) return null;
-  if (lat < 41.3 || lat > 41.6 || lng < -81.9 || lng > -81.5) return null;
+  if (!isUsCoord(lat, lng)) return null;
   const low = finite(row.estLow);
   const high = finite(row.estHigh);
   const hasBand = low !== null && low > 0 && high !== null && high >= low;
@@ -73,14 +84,21 @@ function listingToOpportunity(row: ListingRow, index: number): Opportunity | nul
   const opening = finite(row.openingBid);
   const spread = mid !== null && opening !== null && opening > 0 ? mid - opening : null;
   const score = finite(row.dealScore);
+  const area = [row.city?.trim() || row.county?.trim(), row.state?.trim()]
+    .filter((part): part is string => Boolean(part))
+    .join(", ");
+  const datePart = row.saleDate ? String(row.saleDate).slice(0, 10) : "";
+  const signal = datePart
+    ? `Scheduled ${datePart}`
+    : row.propType?.trim() || "Published record";
   return {
     id: String(row.id),
     address: row.address?.trim() || "Address not published",
-    area: row.city?.trim() || row.county?.trim() || "Ohio",
+    area: area || "United States",
     source: row.source?.trim() || "Listing",
     sourceKey: "listing",
-    signal: "Published listing",
-    insight: "Coordinates and amounts are the fields on the listing record.",
+    signal,
+    insight: "Geocoded record with published source terms. Verify status and title on the publisher docket.",
     score: score !== null && score > 0 ? score : 0,
     opening: moneyOrDash(opening),
     arv: mid !== null ? moneyOrDash(mid) : "—",
@@ -141,6 +159,7 @@ export function DealDiscoveryMap() {
 
   const [activeIndex, setActiveIndex] = React.useState(0);
   const [deals, setDeals] = React.useState<Opportunity[]>([]);
+  const [windowLabel, setWindowLabel] = React.useState("Cleveland window");
   const [inventoryNote, setInventoryNote] = React.useState("Reading published listings.");
   const [announcement, setAnnouncement] = React.useState("");
   const [mapReady, setMapReady] = React.useState(false);
@@ -152,10 +171,11 @@ export function DealDiscoveryMap() {
   const shouldReduceMotion = usePrefersReducedMotion();
   const reduceMotionRef = React.useRef(shouldReduceMotion);
   const activeDeal = deals[activeIndex] ?? null;
+  const isClevelandWindow = deals.length === 0 || deals.every((deal) => isClevelandCoord(deal.lat, deal.lng));
 
   React.useEffect(() => {
     let cancelled = false;
-    const params = new URLSearchParams({
+    const clevelandParams = new URLSearchParams({
       state: "OH",
       lat: "41.4993",
       lng: "-81.6944",
@@ -163,23 +183,63 @@ export function DealDiscoveryMap() {
       limit: "40",
       sort: "date",
     });
-    void fetch(`/api/listings?${params.toString()}`, { cache: "no-store" })
-      .then((response) => (response.ok ? response.json() : Promise.reject(new Error(String(response.status)))))
-      .then((data: { listings?: ListingRow[] }) => {
+
+    const loadOpportunities = async () => {
+      try {
+        const response = await fetch(`/api/listings?${clevelandParams.toString()}`, { cache: "no-store" });
+        if (!response.ok) throw new Error(String(response.status));
+        const data = (await response.json()) as { listings?: ListingRow[] };
         if (cancelled) return;
-        const next = (data.listings ?? [])
+        const clevelandDeals = (data.listings ?? [])
+          .filter((row) => {
+            const lat = finite(row.lat);
+            const lng = finite(row.lng);
+            return lat !== null && lng !== null && isClevelandCoord(lat, lng);
+          })
           .map((row, index) => listingToOpportunity(row, index))
           .filter((row): row is Opportunity => row !== null)
           .slice(0, 8);
-        setDeals(next);
+
+        if (clevelandDeals.length > 0) {
+          setDeals(clevelandDeals);
+          setWindowLabel("Cleveland window");
+          setActiveIndex(0);
+          setInventoryNote("");
+          return;
+        }
+
+        const fallbackRes = await fetch("/api/listings?limit=40&sort=score", { cache: "no-store" });
+        if (!fallbackRes.ok) throw new Error(String(fallbackRes.status));
+        const fallbackData = (await fallbackRes.json()) as { listings?: ListingRow[] };
+        if (cancelled) return;
+        const rawRows = fallbackData.listings ?? [];
+        const nationalDeals = rawRows
+          .map((row, index) => listingToOpportunity(row, index))
+          .filter((row): row is Opportunity => row !== null)
+          .slice(0, 8);
+        const states = new Set(
+          rawRows
+            .map((row) => (typeof row.state === "string" ? row.state.trim().toUpperCase() : ""))
+            .filter(Boolean),
+        );
+        setDeals(nationalDeals);
+        setWindowLabel(
+          nationalDeals.length > 0
+            ? states.size === 1
+              ? `${[...states][0]} market window`
+              : "National market window"
+            : "Market window",
+        );
         setActiveIndex(0);
-        setInventoryNote(next.length ? "" : "No published listing with coordinates in this window.");
-      })
-      .catch(() => {
+        setInventoryNote(nationalDeals.length ? "" : "No published listing with coordinates in this window.");
+      } catch {
         if (cancelled) return;
         setDeals([]);
         setInventoryNote("The listing feed did not return this window.");
-      });
+      }
+    };
+
+    void loadOpportunities();
     return () => {
       cancelled = true;
     };
@@ -259,7 +319,7 @@ export function DealDiscoveryMap() {
       map.stop();
       const camera = {
         center: [deal.lng, deal.lat] as [number, number],
-        zoom: Math.max(map.getZoom(), 12.4),
+        zoom: Math.max(map.getZoom(), 11.8),
         offset:
           typeof window !== "undefined" && window.innerWidth >= 1024
             ? ([-170, 0] as [number, number])
@@ -274,16 +334,10 @@ export function DealDiscoveryMap() {
     [deals],
   );
 
-  // Ref updates belong in effects — writing during render breaks under
-  // React strict/concurrent re-renders.
   React.useEffect(() => {
     selectDealRef.current = selectDeal;
   }, [selectDeal]);
 
-  // Roving keyboard control for the map markers: ArrowRight/Down selects the
-  // next opportunity, ArrowLeft/Up the previous, Home/End jump to the ends.
-  // Selection follows focus so screen-reader and keyboard users get the same
-  // fly-to + announcement as pointer users.
   const handleMarkerKeydown = React.useCallback(
     (event: React.KeyboardEvent) => {
       const navigationKeys: Record<string, number> = {
@@ -306,8 +360,6 @@ export function DealDiscoveryMap() {
       else if (direction === Infinity) next = count - 1;
       else next = ((next % count) + count) % count;
       selectDealRef.current(next, true);
-      // Prefer the imperative MapLibre marker handles; fall back to a DOM
-      // query so the engine-failure fallback buttons rove focus identically.
       const markerElement = markerEntriesRef.current[next]?.element;
       const fallback = atlasRef.current?.querySelectorAll<HTMLElement>(
         '[data-opportunity-marker="true"]',
@@ -330,6 +382,13 @@ export function DealDiscoveryMap() {
     if (!container) return;
     let disposed = false;
     let loadTimeout: number | null = null;
+    const localWindow = deals.length === 0 || deals.every((deal) => isClevelandCoord(deal.lat, deal.lng));
+    const initialCenter: [number, number] = deals.length > 0
+      ? [
+          deals.reduce((sum, d) => sum + d.lng, 0) / deals.length,
+          deals.reduce((sum, d) => sum + d.lat, 0) / deals.length,
+        ]
+      : CLEVELAND_CENTER;
 
     void import("maplibre-gl")
       .then((maplibre) => {
@@ -338,11 +397,11 @@ export function DealDiscoveryMap() {
         const map = new maplibre.Map({
           container: mapContainerRef.current,
           style: "https://tiles.openfreemap.org/styles/positron",
-          center: CLEVELAND_CENTER,
-          zoom: compactMap ? 10.2 : 10.8,
-          pitch: compactMap ? 0 : 18,
-          bearing: compactMap ? 0 : -7,
-          minZoom: 8,
+          center: initialCenter,
+          zoom: localWindow ? (compactMap ? 10.2 : 10.8) : 4,
+          pitch: localWindow && !compactMap ? 18 : 0,
+          bearing: localWindow && !compactMap ? -7 : 0,
+          minZoom: 2,
           maxZoom: 17,
           attributionControl: false,
         });
@@ -404,10 +463,6 @@ export function DealDiscoveryMap() {
           return { element, marker };
         });
 
-        // Fail fast on style/source errors instead of waiting for the load
-        // timeout — the fallback banner and ranked list should appear
-        // immediately when tiles are unreachable. One broken zoom tile must
-        // NOT trip it, so we only degrade while the style itself is cold.
         const handleMapError = () => {
           if (disposed) return;
           const styleCold = !map.isStyleLoaded();
@@ -425,6 +480,21 @@ export function DealDiscoveryMap() {
           if (loadTimeout !== null) {
             window.clearTimeout(loadTimeout);
             loadTimeout = null;
+          }
+          if (!localWindow && deals.length >= 2) {
+            const lngs = deals.map((d) => d.lng);
+            const lats = deals.map((d) => d.lat);
+            try {
+              map.fitBounds(
+                [
+                  [Math.min(...lngs), Math.min(...lats)],
+                  [Math.max(...lngs), Math.max(...lats)],
+                ],
+                { padding: 60, maxZoom: 12.2, duration: 0 },
+              );
+            } catch {
+              // Keep initial center if bounds fit fails on single point.
+            }
           }
           const geojson = {
             type: "FeatureCollection" as const,
@@ -524,7 +594,7 @@ export function DealDiscoveryMap() {
   const shown = activeDeal ?? {
     id: "",
     address: inventoryNote,
-    area: "Cleveland window",
+    area: windowLabel,
     source: "Listings",
     sourceKey: "listing" as const,
     signal: "No pin",
@@ -551,30 +621,37 @@ export function DealDiscoveryMap() {
       data-scanning={scanState === "playing" ? "true" : "false"}
       data-scan-state={scanState}
       role="region"
-      aria-label="Interactive Cleveland opportunity map"
+      aria-label={`Interactive ${windowLabel.toLowerCase()} opportunity map`}
       className="opportunity-atlas relative w-full overflow-hidden rounded-[18px] border border-[#D9E2EC] bg-[#EAF1F6]"
     >
       <div className="opportunity-atlas__map relative h-[390px] overflow-hidden sm:h-[480px] lg:h-[620px]">
         <div aria-hidden="true" className="opportunity-atlas__fallback-map absolute inset-0 z-0 overflow-hidden bg-[#E8EDF1]">
-          <div className="absolute left-1/2 top-1/2 grid aspect-[5/3] min-h-full min-w-full -translate-x-1/2 -translate-y-1/2 grid-cols-5 grid-rows-3">
-            {FALLBACK_MAP_TILES.map(([x, y]) => (
-              <img
-                key={`${x}-${y}`}
-                src={`/cleveland-map-tiles/${x}-${y}.png`}
-                alt=""
-                width={256}
-                height={256}
-                draggable={false}
-                className="block h-full w-full select-none object-cover"
-              />
-            ))}
-          </div>
+          {isClevelandWindow ? (
+            <div className="absolute left-1/2 top-1/2 grid aspect-[5/3] min-h-full min-w-full -translate-x-1/2 -translate-y-1/2 grid-cols-5 grid-rows-3">
+              {FALLBACK_MAP_TILES.map(([x, y]) => (
+                <img
+                  key={`${x}-${y}`}
+                  src={`/cleveland-map-tiles/${x}-${y}.png`}
+                  alt=""
+                  width={256}
+                  height={256}
+                  draggable={false}
+                  className="block h-full w-full select-none object-cover"
+                />
+              ))}
+            </div>
+          ) : (
+            <div
+              data-fallback-mode="national-grid"
+              className="h-full w-full bg-[linear-gradient(to_right,rgba(148,163,184,0.18)_1px,transparent_1px),linear-gradient(to_bottom,rgba(148,163,184,0.18)_1px,transparent_1px)] bg-[size:32px_32px]"
+            />
+          )}
           <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(120deg,rgba(255,255,255,0.38),rgba(226,232,240,0.16))]" />
         </div>
         <div
           ref={mapContainerRef}
           data-testid="maplibre-map"
-          aria-label="Real street map of Cleveland"
+          aria-label="Interactive street map"
           className="opportunity-atlas__canvas absolute inset-0 z-[1]"
         />
 
@@ -587,10 +664,6 @@ export function DealDiscoveryMap() {
           </div>
         ) : null}
 
-        {/* Engine-failure fallback: if the map chunk never boots there are no
-            MapLibre-mounted markers in the DOM. Render projected buttons over
-            the static tile collage so every opportunity stays selectable and
-            keyboard/SR reachable even with the map engine fully offline. */}
         {engineFailed ? (
           <div className="absolute inset-0 z-10">
             {deals.map((deal, index) => {
@@ -646,7 +719,7 @@ export function DealDiscoveryMap() {
                 Map preview
               </p>
               <p className="truncate text-xs font-semibold text-[#111827]">
-                {deals.length ? `${deals.length} published in this window` : "Cleveland window"}
+                {deals.length ? `${deals.length} published in ${windowLabel.toLowerCase()}` : windowLabel}
               </p>
             </div>
           </div>

@@ -4,7 +4,7 @@
  * server/scrapers/selector-store.js
  *
  * Adaptive Presentation Selector Store (P1.8).
- * Manages fallback CSS/XPath selector candidates for non-identity presentation attributes
+ * Manages fallback CSS selector candidates for non-identity presentation attributes
  * (beds, baths, sqft, propertyType).
  *
  * ZERO-FABRICATION & NON-NEGOTIABLE SECURITY DIRECTIVE:
@@ -73,31 +73,31 @@ const DEFAULT_CANDIDATE_SELECTORS = {
     '.bedrooms',
     '[data-field="beds"]',
     '.prop-beds',
-    '//span[contains(text(),"Bed")]/following-sibling::text()',
-    '//td[contains(text(),"Bed")]/following-sibling::td'
+    '.bed-count',
+    '[data-field="bedrooms"]'
   ],
   baths: [
     '.baths',
     '.bathrooms',
     '[data-field="baths"]',
     '.prop-baths',
-    '//span[contains(text(),"Bath")]/following-sibling::text()',
-    '//td[contains(text(),"Bath")]/following-sibling::td'
+    '.bath-count',
+    '[data-field="bathrooms"]'
   ],
   sqft: [
     '.sqft',
     '.square-feet',
     '[data-field="sqft"]',
     '.prop-sqft',
-    '//span[contains(text(),"Sq Ft") or contains(text(),"Square Feet")]',
-    '//td[contains(text(),"Sq Ft") or contains(text(),"Square Feet")]/following-sibling::td'
+    '.sq-ft',
+    '[data-field="squareFeet"]'
   ],
   propertyType: [
     '.property-type',
     '.prop-type',
     '[data-field="propertyType"]',
-    '//span[contains(text(),"Property Type")]',
-    '//td[contains(text(),"Property Type")]/following-sibling::td'
+    '[data-field="propType"]',
+    '.home-type'
   ]
 };
 
@@ -164,6 +164,56 @@ class SelectorStore {
     return loaded;
   }
 
+  _sleepSync(ms) {
+    if (!(ms > 0)) return;
+    try {
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+    } catch (_) {
+      const until = Date.now() + ms;
+      while (Date.now() < until) { /* sync backoff fallback */ }
+    }
+  }
+
+  _withFileLockSync(filePath, fn) {
+    const lockPath = `${filePath}.lock`;
+    let lockFd = null;
+    const maxAttempts = 20;
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      try {
+        lockFd = fs.openSync(lockPath, 'wx');
+        break;
+      } catch (err) {
+        if (err && err.code === 'EEXIST') {
+          try {
+            const st = fs.statSync(lockPath);
+            if (Date.now() - st.mtimeMs > 5000) {
+              fs.unlinkSync(lockPath);
+              continue;
+            }
+          } catch (_) {
+            continue;
+          }
+          this._sleepSync(5 + Math.min(attempt * 2, 15));
+          continue;
+        }
+        if (err && (err.code === 'EPERM' || err.code === 'EACCES' || err.code === 'EBUSY')) {
+          this._sleepSync(5 + Math.min(attempt * 2, 15));
+          continue;
+        }
+        throw err;
+      }
+    }
+    if (lockFd === null) {
+      throw new Error(`Timed out acquiring selector store lock for ${filePath}`);
+    }
+    try {
+      return fn();
+    } finally {
+      try { fs.closeSync(lockFd); } catch (_) {}
+      try { fs.unlinkSync(lockPath); } catch (_) {}
+    }
+  }
+
   _saveSourceStore(sourceKey) {
     if (!this.persist) return;
     const key = this._getStoreKey(sourceKey);
@@ -173,7 +223,35 @@ class SelectorStore {
     try {
       fs.mkdirSync(this.cacheDir, { recursive: true });
       const filePath = this._getFilePath(sourceKey);
-      fs.writeFileSync(filePath, JSON.stringify(store, null, 2), 'utf8');
+      const payload = JSON.stringify(store, null, 2);
+      this._withFileLockSync(filePath, () => {
+        const suffix = `${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2, 8)}`;
+        const tmpPath = `${filePath}.tmp.${suffix}`;
+        try {
+          fs.writeFileSync(tmpPath, payload, 'utf8');
+          const retryable = new Set(['EPERM', 'EACCES', 'EBUSY']);
+          let renamed = false;
+          for (let attempt = 0; attempt < 5; attempt += 1) {
+            try {
+              fs.renameSync(tmpPath, filePath);
+              renamed = true;
+              break;
+            } catch (err) {
+              if (!err || !retryable.has(err.code) || attempt === 4) {
+                throw err;
+              }
+              this._sleepSync(5 * (attempt + 1));
+            }
+          }
+          if (!renamed) {
+            throw new Error(`Failed atomic rename for ${filePath}`);
+          }
+        } finally {
+          try {
+            if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+          } catch (_) {}
+        }
+      });
     } catch (_) {
       // Non-fatal persistence write failure
     }
@@ -269,7 +347,7 @@ class SelectorStore {
    *
    * @param {string} sourceKey - Scraper source.
    * @param {string} fieldName - Non-identity presentation field.
-   * @param {string} selector - CSS or XPath selector that succeeded.
+   * @param {string} selector - CSS selector that succeeded.
    * @throws {Error} If fieldName is an identity or valuation field.
    */
   recordSelectorSuccess(sourceKey, fieldName, selector) {

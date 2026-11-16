@@ -113,3 +113,14 @@ test("mergeMarketListings appends only unseen valid ids", () => {
   assert.equal(merged[0].address, "1 A");
   assert.equal(merged[1].id, "b");
 });
+
+test("buildMarketSuggestions preserves rendered/first-seen ranking among matching homonymous cities", () => {
+  const listings = [
+    { id: "nc-1", address: "2721 Briar Ridge Dr, Charlotte, NC 28270", city: "Charlotte", county: "Mecklenburg", state: "NC", zip: "28270" },
+    { id: "mi-1", address: "2110 McConnell Hwy, Charlotte, MI 48813", city: "Charlotte", county: "Eaton", state: "MI", zip: "48813" },
+  ];
+  const matches = buildMarketSuggestions("Charlotte", listings);
+  const cities = matches.filter((m) => m.kind === "city");
+  assert.equal(cities[0]?.label, "Charlotte, NC");
+  assert.equal(cities[1]?.label, "Charlotte, MI");
+});

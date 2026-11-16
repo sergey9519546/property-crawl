@@ -264,7 +264,11 @@ test('the production registry keeps every collector registered while gating run 
   for (const key of ['courtlistener', 'fl-dor-cadastral', 'ca-controller-tax-sale', 'hud-usps-vacancy', 'public-notices-email', 'government-land', 'local-surplus', 'fannie', 'freddie', 'va', 'marshals']) {
     assert.ok(!servingKeys.has(key), `${key} must not get a run slot while DISCOVERY_ONLY`);
   }
-  for (const key of ['servicelink', 'treasury', 'gsa', 'irs', 'usda', 'hud', 'civilview', 'bid4assets', 'landbank', 'sheriff']) {
+  for (const key of ['bid4assets', 'landbank']) {
+    assert.ok(!servingKeys.has(key), `${key} must not get a run slot while INCONCLUSIVE_BLOCKED`);
+    assert.ok(schedulerModule.realScraperKeys.has(key), `${key} must remain visible on realScrapers`);
+  }
+  for (const key of ['servicelink', 'treasury', 'gsa', 'irs', 'usda', 'hud', 'civilview', 'sheriff']) {
     assert.ok(servingKeys.has(key), `${key} must keep its run slot`);
   }
 });
@@ -286,4 +290,40 @@ test('the /sources evidence surfaces still list the gated sources and their reco
   assert.equal(counts.get('courtlistener')?.observedRecords, 1);
   assert.equal(counts.get('fl-dor-cadastral')?.observedRecords, 1);
   assert.equal(memoryDb.inMemoryData.listings.length, 4, 'the store is untouched');
+});
+
+test('admitListingsScrapers skips INCONCLUSIVE_BLOCKED sources with CAPTCHA/WAF log while keeping plain mock test doubles runnable', () => {
+  const realBid4Assets = schedulerModule.realScrapers.find((s) => s.sourceKey === 'bid4assets');
+  const realLandbank = schedulerModule.realScrapers.find((s) => s.sourceKey === 'landbank');
+  const realServicelink = schedulerModule.realScrapers.find((s) => s.sourceKey === 'servicelink');
+  assert.ok(realBid4Assets && realLandbank && realServicelink);
+
+  const logs = [];
+  const origLog = console.log;
+  console.log = (...args) => logs.push(args.join(' '));
+  try {
+    const admitted = schedulerModule.admitListingsScrapers([
+      { sourceKey: 'bid4assets' },
+      { sourceKey: 'landbank' },
+      { sourceKey: 'servicelink' },
+    ]);
+    assert.deepEqual(admitted.map((s) => s.sourceKey), ['servicelink']);
+
+    const customWithReal = new schedulerModule.IngestionScheduler({
+      realScrapers: [realBid4Assets, realLandbank, realServicelink],
+      networkEnabled: false,
+    });
+    assert.deepEqual(customWithReal.listingServingScrapers.map((s) => s.sourceKey), ['servicelink']);
+  } finally {
+    console.log = origLog;
+  }
+
+  assert.ok(logs.some((line) => line.includes('[Scheduler] Skipping bid4assets: INCONCLUSIVE_BLOCKED, publisher gated by CAPTCHA/WAF')));
+  assert.ok(logs.some((line) => line.includes('[Scheduler] Skipping landbank: INCONCLUSIVE_BLOCKED, publisher gated by CAPTCHA/WAF')));
+
+  const mockScheduler = new schedulerModule.IngestionScheduler({
+    realScrapers: [{ sourceKey: 'bid4assets', name: 'MockBid4Assets', scrapeFeed: async () => [] }],
+    networkEnabled: false,
+  });
+  assert.deepEqual(mockScheduler.listingServingScrapers.map((s) => s.sourceKey), ['bid4assets']);
 });

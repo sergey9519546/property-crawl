@@ -146,3 +146,12 @@ test('scraper power report covers every required end with a scheduled adapter', 
   assert.equal(report.guarantee.endCoverageWithScheduledAdapter, required.length);
   assert.equal(report.guarantee.endCoverageGaps.length, 0);
 });
+
+test('scraper power report keeps irs honest below P4_LIVE_STRONG with canary weakness', () => {
+  const report = buildReport();
+  const irs = report.sources.find((s) => s.adapterKey === 'irs');
+  assert.ok(irs, 'irs adapter present in report');
+  assert.notEqual(irs.power.tier, 'P4_LIVE_STRONG');
+  assert.equal(irs.power.tier, 'P3_LIVE_ADAPTER');
+  assert.match(irs.weakness || '', /NOT_CLEAN|sparse/i);
+});

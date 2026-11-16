@@ -34,6 +34,7 @@ before(async () => {
       await bootstrap.end();
     }
     pool = new Pool({ connectionString: databaseUrl, max: 1, options: `-c search_path=${scratchSchema}` });
+    await pool.query(`SET search_path TO "${scratchSchema}"`);
     return;
   }
   const { PGlite } = require('@electric-sql/pglite');
@@ -183,7 +184,7 @@ async function selectInPostgres(filter) {
 // than silently skipped here.
 const matrixFilters = [
   'q=phoenix', 'q=r-a', 'q=hud reo', 'q=oak',
-  'state=AZ', 'state=az', 'county=Maricopa', 'county=maricopa',
+  'state=AZ', 'state=az', 'state=AZ,IL', 'county=Maricopa', 'county=maricopa', 'county=Maricopa%20County', 'county=Maricopa,Cook%20County',
   'source=servicelink', 'type=Condo', 'type=condo', 'type=unknown',
   'program=TPS', 'program=HUD%20REO', 'program=unknown',
   'lifecycle=Status%3A%20Active', 'lifecycle=Scheduled', 'lifecycle=unknown',
@@ -234,7 +235,7 @@ test('every facet bucket the workbench offers can be selected and reproduces its
     deal_score int,
     state text, county text, city text, address text,
     source_key text, prop_type text, occupancy text,
-    auction_program text, lifecycle_status text, status text,
+    auction_program text, lifecycle_status text, status text, transaction_outcome text,
     has_documents boolean, provenance jsonb,
     sale_date date, opening_bid numeric, equity_spread numeric,
     senior_lien_risk text, redemption_days int,

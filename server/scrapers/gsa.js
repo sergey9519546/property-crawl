@@ -260,9 +260,13 @@ class GsaSurplusScraper extends BaseScraper {
 
       // Property cards link to /asset-details/?property_id=N.
       const idRe = /\/asset-details\/\?property_id=(\d+)/g;
-      const indexEvidence = this.useScrapling
-        ? await this.extract('gsa-index', { html: listHtml, url: `${this.baseUrl}/our-listing` }) : null;
-      const ids = indexEvidence ? indexEvidence.items.map(item => item.propertyId)
+      let indexEvidence = null;
+      if (this.useScrapling) {
+        if (typeof this.extract !== 'function') throw new Error('Scrapling extractor unavailable for gsa-index');
+        indexEvidence = await this.extract('gsa-index', { html: listHtml, url: `${this.baseUrl}/our-listing` });
+      }
+      const indexItems = Array.isArray(indexEvidence?.items) ? indexEvidence.items : null;
+      const ids = indexItems ? indexItems.map(item => item?.propertyId).filter(Boolean)
         : [...new Set([...listHtml.matchAll(idRe)].map(m => m[1]))];
 
       // The list page is the only place "Current Bid" appears as one clean
@@ -271,8 +275,8 @@ class GsaSurplusScraper extends BaseScraper {
       const bidRe = /\/asset-details\/\?property_id=(\d+)[\s\S]*?property-price">[\s\S]*?\$([\d,]+)/g;
       const listBids = new Map();
       let m;
-      if (indexEvidence) {
-        for (const item of indexEvidence.items) if (item.currentBid !== null) listBids.set(item.propertyId, item.currentBid);
+      if (indexItems) {
+        for (const item of indexItems) if (item?.propertyId && item.currentBid !== null && item.currentBid !== undefined) listBids.set(item.propertyId, item.currentBid);
       } else while ((m = bidRe.exec(listHtml)) !== null) {
         if (!listBids.has(m[1])) listBids.set(m[1], this.parseMoney(m[2]));
       }
@@ -407,12 +411,16 @@ class GsaSurplusScraper extends BaseScraper {
     const html = await this.fetchText(detailUrl);
 
     // --- Clean address from hidden tour_property_* inputs ---
-    const detailEvidence = this.useScrapling
-      ? await this.extract('gsa-detail', { html, url: detailUrl }) : null;
-    const street = detailEvidence ? detailEvidence.property.address : this.attrValue(html, 'tour_property_address');
-    const city = detailEvidence ? detailEvidence.property.city : this.attrValue(html, 'tour_property_city');
-    const stateName = detailEvidence ? detailEvidence.property.state : this.attrValue(html, 'tour_property_state');
-    const zip = detailEvidence ? detailEvidence.property.zipcode : this.attrValue(html, 'tour_property_zipcode');
+    let detailEvidence = null;
+    if (this.useScrapling) {
+      if (typeof this.extract !== 'function') throw new Error('Scrapling extractor unavailable for gsa-detail');
+      detailEvidence = await this.extract('gsa-detail', { html, url: detailUrl });
+    }
+    const evProp = detailEvidence?.property && typeof detailEvidence.property === 'object' ? detailEvidence.property : null;
+    const street = evProp?.address ?? this.attrValue(html, 'tour_property_address');
+    const city = evProp?.city ?? this.attrValue(html, 'tour_property_city');
+    const stateName = evProp?.state ?? this.attrValue(html, 'tour_property_state');
+    const zip = evProp?.zipcode ?? this.attrValue(html, 'tour_property_zipcode');
 
     if (!street || !/^\d/.test(street)) return null; // require a street number
     const state = STATE_NAME_TO_CODE[stateName] || (stateName && stateName.length === 2 ? stateName : 'US');
@@ -427,10 +435,13 @@ class GsaSurplusScraper extends BaseScraper {
     // strip whitespace from a window after "Current Bid" before matching. ---
     let currentBid = listBid;
     if (!currentBid) {
-      const win = html.slice(html.indexOf('Current Bid'), html.indexOf('Current Bid') + 400)
-        .replace(/\s+/g, '');
-      const bm = win.match(/\$(\d[\d,]*)/);
-      currentBid = bm ? this.parseMoney(bm[1]) : null;
+      const bidIdx = html.indexOf('Current Bid');
+      if (bidIdx !== -1) {
+        const win = html.slice(bidIdx, bidIdx + 400)
+          .replace(/\s+/g, '');
+        const bm = win.match(/\$(\d[\d,]*)/);
+        currentBid = bm ? this.parseMoney(bm[1]) : null;
+      }
     }
 
     // --- Photo ---

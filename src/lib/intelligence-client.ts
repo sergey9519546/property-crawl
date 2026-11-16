@@ -125,20 +125,92 @@ async function getJson<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-export async function listNeighborhoods(params: { state?: string; maxAgeDays?: number; limit?: number } = {}): Promise<NeighborhoodsResponse> {
+export type NeighborhoodDetailResponse = {
+  schema?: string;
+  maxAgeDays?: number;
+  scanned?: number;
+  availableTotal?: number | null;
+  truncated?: boolean;
+  neighborhood?: NeighborhoodBucket | null;
+  key?: string;
+  kind?: string;
+  label?: string;
+  count?: number;
+  medianOpeningBid?: number | null;
+  meanOpeningBid?: number | null;
+  medianSqft?: number | null;
+  medianDealScore?: number | null;
+  medianDiscount?: number | null;
+  sources?: Record<string, number>;
+  propTypes?: Record<string, number>;
+  bucket?: NeighborhoodBucket | null;
+  listings?: Array<{ id: string; address?: string; state?: string; county?: string; openingBid?: number | null; dealScore?: number | null }>;
+};
+
+export type IntelligenceFilterParams = {
+  state?: string;
+  county?: string;
+  source?: string;
+  type?: string;
+  q?: string;
+  maxBid?: number;
+  saleFrom?: string;
+  saleTo?: string;
+};
+
+function appendFilterParams(q: URLSearchParams, params: IntelligenceFilterParams) {
+  if (params.county) q.set("county", params.county);
+  if (params.source) q.set("source", params.source);
+  if (params.type) q.set("type", params.type);
+  if (params.q) q.set("q", params.q);
+  if (typeof params.maxBid === "number" && Number.isFinite(params.maxBid) && params.maxBid > 0) {
+    q.set("maxBid", String(params.maxBid));
+  }
+  if (params.saleFrom) q.set("saleFrom", params.saleFrom);
+  if (params.saleTo) q.set("saleTo", params.saleTo);
+}
+
+export async function listNeighborhoods(
+  params: IntelligenceFilterParams & { maxAgeDays?: number; limit?: number } = {}
+): Promise<NeighborhoodsResponse> {
   const q = new URLSearchParams();
   if (params.state) q.set("state", params.state);
   if (params.maxAgeDays) q.set("maxAgeDays", String(params.maxAgeDays));
   if (params.limit) q.set("limit", String(params.limit));
+  appendFilterParams(q, params);
   return getJson<NeighborhoodsResponse>(`/api/neighborhoods?${q.toString()}`);
 }
 
-export async function getAuctionCalendar(params: { windowDays?: number; states?: string; startMs?: number; sampleSize?: number } = {}): Promise<AuctionCalendarResponse> {
+export async function getNeighborhoodDetail(
+  keyOrKind: string,
+  bucketKey?: string
+): Promise<NeighborhoodDetailResponse> {
+  const raw = bucketKey !== undefined ? `${keyOrKind}:${bucketKey}` : keyOrKind;
+  if (raw.startsWith("county:") || keyOrKind === "county") {
+    const countySlug = bucketKey !== undefined ? bucketKey : raw.slice("county:".length);
+    return getJson<NeighborhoodDetailResponse>(`/api/neighborhoods/county/${encodeURIComponent(countySlug)}`);
+  }
+  if (raw.includes("::")) {
+    const [statePart, cityPart] = raw.split("::");
+    const prefix = keyOrKind === "city" || raw.startsWith("city:") ? "" : "city:";
+    return getJson<NeighborhoodDetailResponse>(
+      `/api/neighborhoods/${encodeURIComponent(`${prefix}${statePart}:${cityPart}`)}`
+    );
+  }
+  const routeKey = bucketKey && !raw.includes(":") ? `${keyOrKind}:${bucketKey}` : raw;
+  return getJson<NeighborhoodDetailResponse>(`/api/neighborhoods/${encodeURIComponent(routeKey)}`);
+}
+
+export async function getAuctionCalendar(
+  params: IntelligenceFilterParams & { windowDays?: number; states?: string; startMs?: number; sampleSize?: number } = {}
+): Promise<AuctionCalendarResponse> {
   const q = new URLSearchParams();
   if (params.windowDays) q.set("windowDays", String(params.windowDays));
-  if (params.states) q.set("states", params.states);
+  const statesParam = params.states || params.state;
+  if (statesParam) q.set("states", statesParam);
   if (params.startMs) q.set("startMs", String(params.startMs));
   if (params.sampleSize) q.set("sampleSize", String(params.sampleSize));
+  appendFilterParams(q, params);
   return getJson<AuctionCalendarResponse>(`/api/auction-calendar?${q.toString()}`);
 }
 

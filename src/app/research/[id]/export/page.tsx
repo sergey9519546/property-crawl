@@ -1,19 +1,20 @@
 import type { Metadata } from 'next';
 import { headers } from 'next/headers';
-import Link from 'next/link';
-import { ArrowLeft, AlertCircle } from 'lucide-react';
+import { notFound } from 'next/navigation';
 import { WorkspaceShell } from '@/components/workspace/workspace-shell';
 import { DecisionPacketView } from '@/components/research/decision-packet-view';
-import { readWorkspaceSession, workspaceSessionConfiguration } from '@/lib/workspace-session';
+import { hasPermission, readWorkspaceSession, workspaceSessionConfiguration } from '@/lib/workspace-session';
 import { buildDecisionPacket } from '@server/export/decision-packet';
 
 export const metadata: Metadata = {
   title: 'Foreclosure Decision Packet | PerfectProperty',
-  description: 'Auditable due diligence decision packet with title risk matrix and cash-to-close schedule'
+  description: 'Auditable due diligence decision packet with title risk matrix and cash-to-close schedule',
+  robots: { index: false, follow: false },
 };
 
 async function fetchListingOrCase(id: string) {
-  const decodedId = decodeURIComponent(id);
+  let decodedId = id;
+  try { decodedId = decodeURIComponent(id); } catch { /* retain raw param on malformed escape */ }
   const baseUrl = process.env.PROPERTY_API_URL || 'http://localhost:3000';
 
   let listing: any = null;
@@ -22,7 +23,8 @@ async function fetchListingOrCase(id: string) {
   // 1. Try to fetch as direct listing ID
   try {
     const res = await fetch(`${baseUrl}/api/listings/${encodeURIComponent(decodedId)}`, {
-      cache: 'no-store'
+      cache: 'no-store',
+      signal: AbortSignal.timeout(12_000),
     });
     if (res.ok) {
       const data = await res.json();
@@ -44,10 +46,11 @@ async function fetchListingOrCase(id: string) {
       });
       const configuration = workspaceSessionConfiguration();
       const session = readWorkspaceSession(sessionRequest);
-      if (configuration.configured && session.authenticated) {
+      if (configuration.configured && session.authenticated && hasPermission(session.role, 'canExportDossier')) {
         const caseListRes = await fetch(`${baseUrl}/api/workspace/cases?listingId=${encodeURIComponent(listing.id)}`, {
           cache: 'no-store',
-          headers: { 'x-operator-token': configuration.credential },
+          headers: { 'x-scraper-token': configuration.credential },
+          signal: AbortSignal.timeout(12_000),
         });
         if (caseListRes.ok) {
           const caseListData = await caseListRes.json();
@@ -55,7 +58,8 @@ async function fetchListingOrCase(id: string) {
           if (firstCase?.id) {
             const caseDetailRes = await fetch(`${baseUrl}/api/workspace/cases/${encodeURIComponent(firstCase.id)}`, {
               cache: 'no-store',
-              headers: { 'x-operator-token': configuration.credential },
+              headers: { 'x-scraper-token': configuration.credential },
+              signal: AbortSignal.timeout(12_000),
             });
             if (caseDetailRes.ok) {
               const caseDetailData = await caseDetailRes.json();
@@ -81,10 +85,11 @@ async function fetchListingOrCase(id: string) {
       });
       const configuration = workspaceSessionConfiguration();
       const session = readWorkspaceSession(sessionRequest);
-      if (configuration.configured && session.authenticated) {
+      if (configuration.configured && session.authenticated && hasPermission(session.role, 'canExportDossier')) {
         const caseRes = await fetch(`${baseUrl}/api/workspace/cases/${encodeURIComponent(decodedId)}`, {
           cache: 'no-store',
-          headers: { 'x-operator-token': configuration.credential },
+          headers: { 'x-scraper-token': configuration.credential },
+          signal: AbortSignal.timeout(12_000),
         });
         if (caseRes.ok) {
           const caseData = await caseRes.json();
@@ -92,7 +97,8 @@ async function fetchListingOrCase(id: string) {
             caseDecision = caseData.case;
             // Now fetch the listing for this case
             const res = await fetch(`${baseUrl}/api/listings/${encodeURIComponent(caseData.case.listingId)}`, {
-              cache: 'no-store'
+              cache: 'no-store',
+              signal: AbortSignal.timeout(12_000),
             });
             if (res.ok) {
               const data = await res.json();
@@ -117,33 +123,10 @@ export default async function DecisionPacketExportPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const { listing, caseDecision, decodedId } = await fetchListingOrCase(id);
+  const { listing, caseDecision } = await fetchListingOrCase(id);
 
   if (!listing) {
-    return (
-      <WorkspaceShell>
-        <main className="min-h-screen bg-slate-50 py-12 px-6">
-          <div className="max-w-2xl mx-auto rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
-            <AlertCircle className="mx-auto h-10 w-10 text-amber-600" />
-            <h1 className="mt-4 text-xl font-bold text-slate-900">Listing Record Not Found</h1>
-            <p className="mt-2 text-sm text-slate-600 leading-relaxed">
-              No active or verified source record could be found for identifier{' '}
-              <code className="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-xs text-slate-800">{decodedId}</code>.
-              Decision packets can only be generated from verified property records.
-            </p>
-            <div className="mt-6 flex justify-center gap-3">
-              <Link
-                href="/listings"
-                className="inline-flex items-center gap-2 rounded-xl bg-[#0F172A] px-5 py-2.5 text-xs font-bold text-white hover:bg-slate-800 transition"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                Return to listings
-              </Link>
-            </div>
-          </div>
-        </main>
-      </WorkspaceShell>
-    );
+    notFound();
   }
 
   const scenario = caseDecision?.underwriteScenario || null;
@@ -155,6 +138,10 @@ export default async function DecisionPacketExportPage({
     maxAllowableOffer?: number;
     rehabBudget?: number;
     targetMargin?: number;
+    customValuation?: number;
+    customOpeningBid?: number;
+    holdingMonths?: number;
+    isHomestead?: boolean;
     registrationFunds?: number;
     creditedDeposit?: number;
     buyersPremium?: number;
@@ -166,6 +153,16 @@ export default async function DecisionPacketExportPage({
     maxAllowableOffer: caseDecision?.decision?.maxOffer ?? scenario?.maxAllowableOffer ?? undefined,
     rehabBudget: scenario?.rehabBudget ?? undefined,
     targetMargin: scenario?.targetMargin ?? undefined,
+    customValuation: typeof scenario?.customValuation === 'number' && Number.isFinite(scenario.customValuation) && scenario.customValuation > 0
+      ? scenario.customValuation
+      : undefined,
+    customOpeningBid: typeof scenario?.customOpeningBid === 'number' && Number.isFinite(scenario.customOpeningBid) && scenario.customOpeningBid > 0
+      ? scenario.customOpeningBid
+      : undefined,
+    holdingMonths: typeof scenario?.holdingMonths === 'number' && Number.isFinite(scenario.holdingMonths) && scenario.holdingMonths > 0
+      ? scenario.holdingMonths
+      : undefined,
+    isHomestead: typeof scenario?.isHomestead === 'boolean' ? scenario.isHomestead : undefined,
   };
 
   if (caseDecision?.state === 'pursue') operatorInput.disposition = 'BID';
@@ -201,7 +198,7 @@ export default async function DecisionPacketExportPage({
 
   return (
     <WorkspaceShell>
-      <main className="min-h-screen bg-slate-50 py-8">
+      <main className="min-h-screen bg-paper py-8">
         <DecisionPacketView packet={decisionPacket} />
       </main>
     </WorkspaceShell>

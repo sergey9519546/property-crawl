@@ -31,7 +31,7 @@ function createPropertyIntelligenceHandler(dependencies = {}) {
         const snapshot = await evidenceStore.readSnapshot(database.pool, listing, snapshotId);
         return snapshot ? res.json(snapshot) : res.status(404).json({ error: 'Snapshot does not belong to this publisher record' });
       }
-      const verified = listing.provenance?.origin === 'live' && validateListingForIngestion(listing).isValid
+      const verified = (listing.provenance?.origin === 'live' || listing.provenance?.origin === 'email_notice') && validateListingForIngestion(listing).isValid
         && Date.parse(listing.sourceObservedAt || listing.provenance?.observedAt) <= Date.now() + 300_000;
       if (req.method === 'POST' && !verified) return res.status(422).json({ error: 'Public-record research requires a validated source-observed property record' });
       // Research belongs to this exact evidence and lookup input, even when an
@@ -73,11 +73,18 @@ function createPropertyIntelligenceHandler(dependencies = {}) {
       const authorized = requireWorkspaceIdentity.isAuthorized
         ? requireWorkspaceIdentity.isAuthorized(req, env)
         : Boolean(snapshotId || req.method === 'POST');
-      const publicPayload = buildPropertyDossier(listing, { observations: authorized ? observations : { records: {}, signals: [] }, publicRecords: authorized ? (evidence?.result || null) : null, historyUnavailable });
+      const scopedObservations = authorized ? observations : { records: {}, signals: [] };
+      const publicPayload = buildPropertyDossier(listing, { observations: scopedObservations, publicRecords: authorized ? (evidence?.result || null) : null, historyUnavailable });
       if (!authorized) {
         return res.json({ ...publicPayload, historyUnavailable, researchRestricted: true });
       }
-      const execution = await executeDag({...listing,property:listing,parcel:evidence?.result?.parcel || null},{allowNetwork:false});
+      const execution = await executeDag({
+        ...listing,
+        property: listing,
+        parcel: evidence?.result?.parcel || null,
+        countyParcel: evidence?.result?.countyParcel || null,
+        observations: scopedObservations,
+      }, { allowNetwork: false });
       return res.json({ ...publicPayload, ...extensions, historyUnavailable, enrichmentExecution:{success:execution.success,dossier:execution.context.dossier || null,telemetry:execution.telemetry} });
     } catch (error) {
       console.error('[Property Intelligence]', error.message);

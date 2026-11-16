@@ -34,7 +34,8 @@ const { collectionScope } = require('./collection-scope');
 // Listing-admission gate (server/sources/catalog.js): a DISCOVERY_ONLY
 // catalog source is discovery evidence, never an actionable sale listing,
 // so its collector never gets a run slot. Uncataloged keys fail closed too.
-const { listingSourceAdmission } = require('../sources/catalog');
+const BaseScraper = require('./base');
+const { listingSourceAdmission, SOURCE_CATALOG } = require('../sources/catalog');
 const { validateScraperAdapters } = require('./scraper-interface');
 const { hash: scopeHash } = require('../discovery/store');
 
@@ -113,11 +114,31 @@ async function mapWithConcurrency(items, concurrency, worker) {
  * catalog adapter join and Source Radar adapter view stay observable;
  * the gate controls run slots, not the catalog join.
  */
-function admitListingsScrapers(scrapers) {
+function isBlockedCatalogSource(sourceKey) {
+  const key = typeof sourceKey === 'string' ? sourceKey.trim().toLowerCase() : '';
+  if (!key) return false;
+  return SOURCE_CATALOG.some(
+    (entry) => entry
+      && entry.status === 'INCONCLUSIVE_BLOCKED'
+      && (
+        (entry.adapterKey && entry.adapterKey.toLowerCase() === key)
+        || (entry.id && entry.id.toLowerCase() === key)
+      )
+  );
+}
+
+function admitListingsScrapers(scrapers, options = {}) {
+  const gateBlocked = options.gateBlocked !== undefined ? Boolean(options.gateBlocked) : true;
   return (scrapers || []).filter((scraper) => {
     const key = (scraper && (scraper.sourceKey || scraper.name)) || '<unnamed>';
     const admission = listingSourceAdmission(scraper && scraper.sourceKey);
-    if (admission.serves) return true;
+    if (admission.serves) {
+      if (isBlockedCatalogSource(scraper && scraper.sourceKey) && (gateBlocked || scraper instanceof BaseScraper)) {
+        console.log(`[Scheduler] Skipping ${key}: INCONCLUSIVE_BLOCKED, publisher gated by CAPTCHA/WAF`);
+        return false;
+      }
+      return true;
+    }
     const reason = admission.reason === 'DISCOVERY_ONLY'
       ? 'DISCOVERY_ONLY, not a listing collector'
       : 'not in source catalog';
@@ -156,6 +177,68 @@ function declaredCadenceHours(sourceKey) {
     return Number.isFinite(hours) && hours > 0 ? hours : null;
   } catch (_) {
     return null;
+  }
+}
+
+function hasReportFailures(report) {
+  if (!report || typeof report !== 'object') return false;
+  if (report.outcome === 'partial_failure' || report.outcome === 'failed') return true;
+  if (report.coverage?.outcome === 'partial_failure' || report.coverage?.outcome === 'failed') return true;
+  if ((report.coverage?.jurisdictions?.failed || 0) > 0) return true;
+  if (Array.isArray(report.failures) && report.failures.length > 0) return true;
+  if (Array.isArray(report.statesFailed) && report.statesFailed.length > 0) return true;
+  if (Array.isArray(report.failedCounties) && report.failedCounties.length > 0) return true;
+  return false;
+}
+
+function isCountyFailedInReport(countyEntry, report) {
+  if (!countyEntry || !report || typeof report !== 'object') return false;
+  const county = String(countyEntry.county || '').trim().toLowerCase();
+  const state = String(countyEntry.state || '').trim().toUpperCase();
+  if (!county || !state) return false;
+  const countyBare = county.replace(/\s+county$/i, '').trim();
+  const unitMatches = (raw) => {
+    if (!raw) return false;
+    if (typeof raw === 'string') {
+      const normalized = raw.trim().toLowerCase();
+      return normalized === `${county},${state.toLowerCase()}`
+        || normalized === `${countyBare},${state.toLowerCase()}`
+        || normalized === `${county}, ${state.toLowerCase()}`
+        || normalized === `${countyBare}, ${state.toLowerCase()}`;
+    }
+    if (typeof raw === 'object') {
+      const c = String(raw.county || raw.unit || '').trim().toLowerCase();
+      const s = String(raw.state || '').trim().toUpperCase();
+      if (c && s && s === state && (c === county || c === countyBare)) return true;
+      if (typeof raw.unit === 'string') return unitMatches(raw.unit);
+    }
+    return false;
+  };
+  if (Array.isArray(report.statesFailed) && report.statesFailed.some(unitMatches)) return true;
+  if (Array.isArray(report.failedCounties) && report.failedCounties.some(unitMatches)) return true;
+  if (Array.isArray(report.failures) && report.failures.some(unitMatches)) return true;
+  return false;
+}
+
+function atomicWriteJsonSync(targetPath, payload) {
+  const dir = path.dirname(targetPath);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  const tmpFile = `${targetPath}.tmp.${process.pid}.${Date.now()}.${crypto.randomBytes(4).toString('hex')}`;
+  try {
+    fs.writeFileSync(tmpFile, JSON.stringify(payload), 'utf8');
+    for (let attempt = 0; attempt < 6; attempt++) {
+      try {
+        fs.renameSync(tmpFile, targetPath);
+        return;
+      } catch (err) {
+        const retryable = process.platform === 'win32' && ['EPERM', 'EACCES', 'EBUSY'].includes(err.code);
+        if (!retryable || attempt === 5) throw err;
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Math.min(150, 10 * (2 ** attempt)));
+      }
+    }
+  } catch (err) {
+    try { if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile); } catch (_) {}
+    throw err;
   }
 }
 
@@ -311,7 +394,8 @@ class IngestionScheduler {
     this.realScraperKeys = new Set(this.realScrapers.map(s => s.sourceKey || s.name));
     // Registration gate: only listing-serving collectors get run slots.
     // Logged once per scheduler construction.
-    this.listingServingScrapers = admitListingsScrapers(this.realScrapers);
+    this.gateBlockedSources = options.gateBlocked !== undefined ? Boolean(options.gateBlocked) : !options.realScrapers;
+    this.listingServingScrapers = admitListingsScrapers(this.realScrapers, { gateBlocked: this.gateBlockedSources });
     this.isRunning = false; this.inFlight = new Map(); this.sourceLastRun = new Map(); this.cadenceAware = options.cadenceAware === true; this.scraperTimeoutMs = (() => { const t = Number(options.scraperTimeoutMs ?? (options.env || process.env).SCRAPER_TIMEOUT_MS); return Number.isFinite(t) && t >= 0 ? t : DEFAULT_SCRAPER_TIMEOUT_MS; })();
     this.cycleStartedAt = null;
     this.lastCycleFinishedAt = null;
@@ -335,15 +419,20 @@ class IngestionScheduler {
     return due;
   }
 
+  validateRunOptions(options = {}) {
+    const requested = options.wave ? sourcesForWave(options.wave) : options.sourceIds;
+    if (requested && (!Array.isArray(requested) || !requested.length || requested.some((key) => !this.realScraperKeys.has(key)))) {
+      throw new Error('Choose registered live source collectors');
+    }
+    return requested;
+  }
+
   async runAll(options = {}) {
+    const requested = this.validateRunOptions(options);
     const allowNetwork = options.allowNetwork ?? this.networkEnabled;
     if (!allowNetwork) {
       console.log('[Scheduler] Real scraper execution disabled for this environment.');
       return { totalIngested: 0, totalRejected: 0, durationMs: 0, skipped: true };
-    }
-    const requested = options.wave ? sourcesForWave(options.wave) : options.sourceIds;
-    if (requested && (!Array.isArray(requested) || !requested.length || requested.some((key) => !this.realScraperKeys.has(key)))) {
-      throw new Error('Choose registered live source collectors');
     }
     if (this.isRunning) {
       console.log('[Scheduler] Scrape run already in progress, skipping...');
@@ -354,7 +443,7 @@ class IngestionScheduler {
     // requested key that fails the admission gate is skipped (and logged)
     // rather than run.
     const scrapers = requested
-      ? admitListingsScrapers(this.realScrapers.filter((scraper) => requested.includes(scraper.sourceKey)))
+      ? admitListingsScrapers(this.realScrapers.filter((scraper) => requested.includes(scraper.sourceKey)), { gateBlocked: this.gateBlockedSources })
       : this.dueScrapers(this.listingServingScrapers);
     let ownership = options.jobId && options.owner ? { jobId: options.jobId, owner: options.owner } : {};
     let leaseGuard = options.leaseGuard || null;
@@ -528,7 +617,7 @@ class IngestionScheduler {
                 listing[field] = next;
               }
             }
-            const persistedDerived = persistedListing.provenance?.derivedFields;
+            const persistedDerived = persistedListing.provenance?.derivedFields || persistedListing.derivedFields;
             if (persistedDerived && typeof persistedDerived === 'object' && !Array.isArray(persistedDerived)) {
               listing.provenance = listing.provenance || {};
               listing.provenance.derivedFields = { ...persistedDerived, ...(listing.provenance.derivedFields || {}) };
@@ -606,10 +695,8 @@ class IngestionScheduler {
             accepted.push(validation.listing);
             totalIngested++;
           }
-          const latency = Date.now() - scraperStart;
-
-          if (typeof err !== 'undefined') { const priorRetries = this.sourceLastRun.get(scraper.sourceKey)?.retries || 0; this.sourceLastRun.set(scraper.sourceKey, { at: Date.now(), partial: false, failed: true, retries: priorRetries + 1, error: err.message }); }
           await flushBulkPending();
+          const latency = Date.now() - scraperStart;
           const coverage = sanitizeRunReport(scraper.lastRunReport, { accepted: accepted.length, ingestionRejected: rejectedForScraper });
           const rawReport = (scraper.lastRunReport && typeof scraper.lastRunReport === 'object' ? scraper.lastRunReport : null)
             || (items && typeof items === 'object' && items.report && typeof items.report === 'object' ? items.report : null)
@@ -636,10 +723,11 @@ class IngestionScheduler {
           const nextContinuationToken = rawReport.nextContinuationToken ?? items?.nextContinuationToken ?? continuationToken;
           const partialSweep = Boolean(rawReport.partialSweep === true || items?.partialSweep === true);
           const truncated = Boolean(coverage.truncated === true || rawReport.truncated === true || items?.truncated === true || isPartial);
-          const complete = isPartial ? false : (coverage.complete === true || rawReport.complete === true);
-          const fullSweepComplete = isPartial ? false : (coverage.fullSweepComplete === true || rawReport.fullSweepComplete === true);
+          const hasFailures = hasReportFailures(rawReport);
+          const complete = (isPartial || hasFailures) ? false : (coverage.complete === true || rawReport.complete === true);
+          const fullSweepComplete = (isPartial || hasFailures) ? false : (coverage.fullSweepComplete === true || rawReport.fullSweepComplete === true);
           const report = (scraper.lastRunReport && typeof scraper.lastRunReport === 'object') || isPartial || items?.report || isListingEnvelope
-            ? { outcome: coverage.outcome || (isPartial ? 'partial' : null), truncated, complete, fullSweepComplete, partialSweep, nextCursor, continuationToken, nextContinuationToken, scope: coverage.acquisitionScope || null, coverage, ...(Array.isArray(rawReport.completedCounties) ? { completedCounties: rawReport.completedCounties } : {}), ...(Array.isArray(rawReport.completedStates) ? { completedStates: rawReport.completedStates } : {}), ...(rawReport.sweepStartedAt ? { sweepStartedAt: rawReport.sweepStartedAt } : {}), ...(driftAlarm && driftAlarm.hasDrift ? { driftAlarm } : {}) }
+            ? { outcome: coverage.outcome || (isPartial ? 'partial' : null), truncated, complete, fullSweepComplete, partialSweep, nextCursor, continuationToken, nextContinuationToken, scope: coverage.acquisitionScope || null, coverage, ...(rawReport.county ? { county: rawReport.county } : {}), ...(rawReport.state ? { state: rawReport.state } : {}), ...(Array.isArray(rawReport.completedCounties) ? { completedCounties: rawReport.completedCounties } : {}), ...(Array.isArray(rawReport.completedStates) ? { completedStates: rawReport.completedStates } : {}), ...(Array.isArray(rawReport.failures) && rawReport.failures.length ? { failures: rawReport.failures } : {}), ...(Array.isArray(rawReport.statesFailed) && rawReport.statesFailed.length ? { statesFailed: rawReport.statesFailed } : {}), ...(Array.isArray(rawReport.failedCounties) && rawReport.failedCounties.length ? { failedCounties: rawReport.failedCounties } : {}), ...(rawReport.sweepStartedAt ? { sweepStartedAt: rawReport.sweepStartedAt } : {}), ...(driftAlarm && driftAlarm.hasDrift ? { driftAlarm } : {}) }
             : (driftAlarm && driftAlarm.hasDrift ? { driftAlarm } : null);
           let observationError = null;
           try {
@@ -678,26 +766,24 @@ class IngestionScheduler {
               this.sourceCheckpoints.set(scraper.sourceKey, checkpointData);
               if (this.database?.isPg && this.database?.pool) {
                 const scope = collectionScope(scraper);
-                this.database.pool.query(
+                try { await this.database.pool.query(
                   `INSERT INTO discovery_checkpoints (source_key, cursor, scope_hash, updated_at)
                    VALUES ($1, to_jsonb($2::text), $3, NOW())
                    ON CONFLICT (source_key) DO UPDATE
                    SET cursor = EXCLUDED.cursor, scope_hash = EXCLUDED.scope_hash, updated_at = NOW()`,
                   [scraper.sourceKey, String(cursorToken), scopeHash(scope)]
-                ).catch((err) => {
-                  console.warn(`[Scheduler] Could not persist ${scraper.sourceKey} checkpoint to PostgreSQL:`, err?.message || err);
-                });
+                ); } catch (err) { console.warn(`[Scheduler] Could not persist ${scraper.sourceKey} checkpoint to PostgreSQL:`, err?.message || err); }
               } else {
                 try {
                   const cacheDir = path.resolve(process.cwd(), '.cache');
                   if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
-                  fs.writeFileSync(path.join(cacheDir, `${scraper.sourceKey}-checkpoint.json`), JSON.stringify(checkpointData));
+                  atomicWriteJsonSync(path.join(cacheDir, `${scraper.sourceKey}-checkpoint.json`), checkpointData);
                 } catch (_) {}
               }
-            } else if (report?.complete === true) {
+            } else if (report?.complete === true && !hasReportFailures(rawReport)) {
               this.sourceCheckpoints.delete(scraper.sourceKey);
               if (this.database?.isPg && this.database?.pool) {
-                this.database.pool.query('DELETE FROM discovery_checkpoints WHERE source_key = $1', [scraper.sourceKey]).catch(() => {});
+                try { await this.database.pool.query('DELETE FROM discovery_checkpoints WHERE source_key = $1', [scraper.sourceKey]); } catch (_) {}
               }
               try {
                 const file = path.resolve(process.cwd(), '.cache', `${scraper.sourceKey}-checkpoint.json`);
@@ -819,10 +905,10 @@ const fs = require('node:fs');
     }
     // PostgreSQL already committed listing projections and immutable evidence.
     // The bounded demo cache cannot represent a national or resumed sweep.
+    const reportForAbsence = run.report && typeof run.report === 'object' ? run.report : null;
+    const isPartialForDb = isPartialOrContinuationRun(reportForAbsence, run);
+    const runCompletedForDb = Boolean(reportForAbsence && reportForAbsence.complete === true && !isPartialForDb && !hasReportFailures(reportForAbsence));
     if (!run.error && run.listings.length) {
-      const reportForAbsence = run.report && typeof run.report === 'object' ? run.report : null;
-      const isPartialForDb = isPartialOrContinuationRun(reportForAbsence, run);
-      const runCompletedForDb = Boolean(reportForAbsence && reportForAbsence.complete === true && !isPartialForDb);
       const targetDb = (this && this.database) || scheduler?.database || db;
       if (runCompletedForDb && typeof targetDb.reconcilePublisherAbsence === 'function') {
         try {
@@ -840,11 +926,11 @@ const fs = require('node:fs');
         }
       }
     }
-    if (!run.error && Array.isArray(run.report?.completedCounties) && !run.report?.complete) {
+    if (!run.error && Array.isArray(run.report?.completedCounties) && !runCompletedForDb) {
       const targetDb = (this && this.database) || scheduler?.database || db;
       if (typeof targetDb.reconcilePublisherAbsence === 'function') {
         for (const countyEntry of run.report.completedCounties) {
-          if (!countyEntry?.county || !countyEntry?.state || !Array.isArray(countyEntry.seenIds) || countyEntry.seenIds.length === 0) continue;
+          if (!countyEntry?.county || !countyEntry?.state || !Array.isArray(countyEntry.seenIds) || countyEntry.seenIds.length === 0 || isCountyFailedInReport(countyEntry, run.report)) continue;
           try {
             await reconcileAbsenceBg(targetDb,
               sourceId,
@@ -877,7 +963,7 @@ const fs = require('node:fs');
       // not annotate. run.report.complete / run.report.truncated is the gate.
       const report = run.report && typeof run.report === 'object' ? run.report : null;
       const isPartialLive = isPartialOrContinuationRun(report, run);
-      const runCompleted = Boolean(report && report.complete === true && !isPartialLive);
+      const runCompleted = Boolean(report && report.complete === true && !isPartialLive && !hasReportFailures(report));
       try {
         mergeLiveRecords(
           process.env.PROPERTY_LIVE_CACHE_PATH || path.resolve(__dirname, '../../.cache/live-listings.json'),
@@ -1019,3 +1105,5 @@ module.exports.backgroundCollectionReason = backgroundCollectionReason;
 module.exports.collectionRuntimeStatus = collectionRuntimeStatus;
 module.exports.sourcesForWave = sourcesForWave;
 module.exports.isPartialOrContinuationRun = isPartialOrContinuationRun;
+module.exports.admitListingsScrapers = admitListingsScrapers;
+module.exports.isBlockedCatalogSource = isBlockedCatalogSource;

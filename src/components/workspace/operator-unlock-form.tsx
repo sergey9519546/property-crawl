@@ -74,20 +74,20 @@ export function OperatorUnlockForm() {
 
   if (authenticated) {
     return (
-      <div className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-6 text-sm text-emerald-950">
+      <div className="mt-6 rounded-card border border-go/30 bg-go-wash p-6 text-sm text-ink">
         <p className="font-semibold">Operator session is active.</p>
-        <Link href="/workspace" className="mt-3 inline-flex h-12 items-center rounded-xl bg-[#0F172A] px-5 text-sm font-semibold text-white hover:bg-[#1E293B]">Open the workspace</Link>
+        <Link href="/workspace" className="mt-3 inline-flex h-12 items-center rounded-control bg-ink px-5 text-sm font-semibold text-white hover:bg-ink-2">Open the workspace</Link>
       </div>
     );
   }
 
   return (
-    <form onSubmit={unlock} className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-      <label htmlFor="sign-in-operator-key" className="text-xs font-semibold text-slate-900">
+    <form onSubmit={unlock} className="mt-6 rounded-card border border-line bg-card p-6 shadow-sm">
+      <label htmlFor="sign-in-operator-key" className="text-xs font-semibold text-ink">
         Operator key <span className="sr-only">(Workspace access key)</span>
       </label>
-      <div className="mt-2 flex items-center gap-2 rounded-xl border border-slate-300 px-3">
-        <KeyRound size={16} className="text-slate-400" />
+      <div className="mt-2 flex items-center gap-2 rounded-control border border-line-strong bg-card px-3 focus-within:border-yours focus-within:ring-2 focus-within:ring-yours/20">
+        <KeyRound size={16} className="text-ink-3" />
         <input
           id="sign-in-operator-key"
           required
@@ -96,12 +96,12 @@ export function OperatorUnlockForm() {
           autoComplete="current-password"
           value={credential}
           onChange={(event) => setCredential(event.target.value)}
-          className="min-w-0 flex-1 bg-transparent py-3 text-sm outline-none"
+          className="min-w-0 flex-1 bg-transparent py-3 text-sm outline-none focus-visible:shadow-none"
         />
       </div>
-      {!configured ? <p className="mt-3 rounded-lg bg-amber-50 p-3 text-xs leading-5 text-amber-900">Set SCRAPER_ADMIN_TOKEN on both application processes before unlocking the workspace.</p> : null}
-      {error ? <p role="alert" className="mt-3 rounded-lg bg-amber-50 p-3 text-xs leading-5 text-amber-900">{error}</p> : null}
-      <button disabled={submitting || !configured} className="mt-4 w-full rounded-xl bg-[#0F172A] px-4 py-3 text-sm font-semibold text-white hover:bg-[#1E293B] disabled:opacity-50">
+      {!configured ? <p className="mt-3 rounded-control bg-catch-wash p-3 text-xs leading-5 text-catch-ink">Set SCRAPER_ADMIN_TOKEN on both application processes before unlocking the workspace.</p> : null}
+      {error ? <p role="alert" className="mt-3 rounded-control bg-catch-wash p-3 text-xs leading-5 text-catch-ink">{error}</p> : null}
+      <button disabled={submitting || !configured} className="mt-4 w-full rounded-control bg-ink px-4 py-3 text-sm font-semibold text-white hover:bg-ink-2 disabled:opacity-50">
         {submitting ? "Unlocking…" : "Unlock workspace"}
       </button>
     </form>

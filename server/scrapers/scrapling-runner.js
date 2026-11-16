@@ -1,5 +1,6 @@
-const { extractPresentationValue, isIdentityOrValuationField, isAdaptiveAllowed } = require('./selector-store');
 'use strict';
+
+const { extractPresentationValue, isIdentityOrValuationField, isAdaptiveAllowed } = require('./selector-store');
 
 /**
  * server/scrapers/scrapling-runner.js
@@ -31,12 +32,10 @@ const IDENTITY_FIELDS = new Set(spaProfileConfig.identityFields || [
 ]);
 
 const PRESENTATION_FIELDS = new Set(spaProfileConfig.presentationFields || [
-  'openingBid',
-  'currentBid',
-  'saleDateText',
-  'addressText',
-  'occupancyStatus',
-  'judgmentAmount',
+  'beds',
+  'baths',
+  'sqft',
+  'propertyType',
 ]);
 
 const DEFAULT_CACHE_DIR = path.resolve(__dirname, '..', '..', '.cache', 'scrapling-selectors');

@@ -18,6 +18,7 @@
 
 const https = require('https');
 const http = require('http');
+const { assertFetchableUrl } = require('../http');
 
 const GSA_API_BASE_URL =
   process.env.GSA_API_URL || 'https://api.gsa.gov/assets/gsaauctions/v2';
@@ -112,14 +113,18 @@ function parseGsaLocation(item = {}) {
   let zip = item.itemZip || item.zip || item.item_zip || item.zipcode || null;
   let street = item.itemStreet || item.street || item.street_address || item.address || null;
 
-  // Resolve state code
+  // Resolve state code (case-insensitive state name lookup)
   let state = null;
   if (rawState) {
     const cleanState = String(rawState).trim();
-    if (cleanState.length === 2) {
-      state = cleanState.toUpperCase();
-    } else if (STATE_NAME_TO_CODE[cleanState]) {
-      state = STATE_NAME_TO_CODE[cleanState];
+    if (/^[A-Za-z]{2}$/.test(cleanState)) {
+      const upper = cleanState.toUpperCase();
+      if (Object.values(STATE_NAME_TO_CODE).includes(upper)) state = upper;
+    } else {
+      const matchedEntry = Object.entries(STATE_NAME_TO_CODE).find(
+        ([name]) => name.toLowerCase() === cleanState.toLowerCase()
+      );
+      if (matchedEntry) state = matchedEntry[1];
     }
   }
 
@@ -215,10 +220,10 @@ function standardizeGsaAuctionItem(rawItem = {}, options = {}) {
     null;
 
   const loc = parseGsaLocation(rawItem);
-  const state = loc.state || 'US';
+  const state = loc.state || null;
   const city = loc.city;
   const zip = loc.zip;
-  const address = loc.street || (city && state ? `${city}, ${state} ${zip || ''}`.trim() : propertyDescription.slice(0, 80));
+  const address = loc.street || (city && state ? `${city}, ${state} ${zip || ''}`.trim() : null);
 
   // Extract square footage if mentioned in description: "3,500 sq ft" or "3500 SF"
   let sqft = null;
@@ -233,15 +238,19 @@ function standardizeGsaAuctionItem(rawItem = {}, options = {}) {
   const closingDate = parseGsaClosingDate(rawItem.closingDate ?? rawItem.closing_date ?? rawItem.endDate ?? rawItem.end_date);
 
   const cleanAuctionNum = String(auctionNumber).replace(/[^a-zA-Z0-9-_]/g, '');
-  const listingId = `GSA-${state}-${cleanAuctionNum}-${zip || '00000'}`.slice(0, 64);
+  const listingId = `GSA-${state || 'XX'}-${cleanAuctionNum}-${zip || '00000'}`.slice(0, 64);
 
   const rawAuctionUrl =
     rawItem.auctionUrl ||
     rawItem.auction_url ||
     rawItem.itemUrl ||
     rawItem.item_url ||
+    rawItem.detailUrl ||
+    rawItem.sourceUrl ||
+    rawItem.url ||
     null;
-  const auctionUrl = (rawAuctionUrl && !String(rawAuctionUrl).includes('/our-listing')) ? rawAuctionUrl : null;
+  const auctionUrlStr = rawAuctionUrl ? String(rawAuctionUrl).trim() : null;
+  const auctionUrl = (auctionUrlStr && !auctionUrlStr.includes('/our-listing')) ? auctionUrlStr : null;
 
   return {
     id: listingId,
@@ -250,7 +259,7 @@ function standardizeGsaAuctionItem(rawItem = {}, options = {}) {
     county: rawItem.county || null,
     city: city ? city.slice(0, 64) : null,
     zip: zip ? String(zip).slice(0, 10) : null,
-    address: address ? address.slice(0, 128) : `${city || 'Unknown'}, ${state} ${zip || ''}`.trim(),
+    address: address ? String(address).slice(0, 128) : null,
     propType: mapGsaPropertyType(propertyType),
     sqft,
     openingBid: openingBid !== null ? openingBid : null,
@@ -400,59 +409,111 @@ class GsaApiAdapter {
    * @returns {Promise<Array<Object>>} Standardized listings
    */
   async fetchAuctions(options = {}) {
-    const url = getGsaAuctionsApiUrl({
-      baseUrl: this.baseUrl,
-      apiKey: options.apiKey || this.apiKey,
-      status: options.status,
-      limit: options.limit,
-      page: options.page,
-      ...options,
-    });
+    const startPage = Number.isFinite(Number(options.page)) && Number(options.page) >= 1
+      ? Math.floor(Number(options.page))
+      : 1;
+    const maxPages = Number.isFinite(Number(options.maxPages))
+      ? Math.max(1, Math.min(25, Math.floor(Number(options.maxPages))))
+      : (options.page ? 1 : 5);
+    const timeoutMs = Number.isFinite(Number(options.timeoutMs)) && Number(options.timeoutMs) > 0
+      ? Number(options.timeoutMs)
+      : 30000;
+    const allItems = [];
+    const seenIds = new Set();
 
-    let jsonText;
-    if (typeof this.fetchImpl === 'function') {
-      jsonText = await this.fetchImpl(url, options);
-    } else if (typeof globalThis.fetch === 'function') {
-      const res = await globalThis.fetch(url, {
-        headers: {
-          'User-Agent': 'property-crawl-bot/1.0 (research; contact: ops@property-crawl.example)',
-          Accept: 'application/json',
-        },
+    for (let page = startPage; page < startPage + maxPages; page += 1) {
+      const url = getGsaAuctionsApiUrl({
+        baseUrl: this.baseUrl,
+        apiKey: options.apiKey || this.apiKey,
+        status: options.status,
+        limit: options.limit,
+        ...options,
+        ...(page > 1 || options.page ? { page } : {}),
       });
-      if (!res.ok) {
-        throw new Error(`GSA Auctions API request failed with HTTP ${res.status}: ${res.statusText}`);
+      const urlCheck = assertFetchableUrl(url);
+      if (!urlCheck.ok) {
+        const err = new Error(`Refused unfetchable GSA Auctions API URL (${urlCheck.reason}): ${url}`);
+        err.code = 'SSRF_BLOCKED';
+        throw err;
       }
-      jsonText = await res.text();
-    } else {
-      jsonText = await new Promise((resolve, reject) => {
-        const parsed = new URL(url);
-        const transport = parsed.protocol === 'https:' ? https : http;
-        const req = transport.get(
-          url,
-          {
-            headers: {
-              'User-Agent': 'property-crawl-bot/1.0',
-              Accept: 'application/json',
-            },
+
+      let jsonText;
+      if (typeof this.fetchImpl === 'function') {
+        jsonText = await this.fetchImpl(url, { ...options, page });
+      } else if (typeof globalThis.fetch === 'function') {
+        const timeoutSignal = typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
+          ? AbortSignal.timeout(timeoutMs)
+          : undefined;
+        const signal = options.signal
+          ? (timeoutSignal && typeof AbortSignal.any === 'function'
+              ? AbortSignal.any([options.signal, timeoutSignal])
+              : options.signal)
+          : timeoutSignal;
+        const res = await globalThis.fetch(url, {
+          headers: {
+            'User-Agent': 'property-crawl-bot/1.0 (research; contact: ops@property-crawl.example)',
+            Accept: 'application/json',
           },
-          (res) => {
-            if (res.statusCode >= 400) {
-              return reject(new Error(`GSA Auctions API HTTP ${res.statusCode}`));
-            }
-            let body = '';
-            res.on('data', (chunk) => { body += chunk; });
-            res.on('end', () => resolve(body));
-          }
-        );
-        req.on('error', reject);
-        req.setTimeout(options.timeoutMs || 30000, () => {
-          req.destroy(new Error('GSA Auctions API timeout'));
+          ...(signal ? { signal } : {}),
         });
-      });
+        if (!res.ok) {
+          throw new Error(`GSA Auctions API request failed with HTTP ${res.status}: ${res.statusText}`);
+        }
+        jsonText = await res.text();
+      } else {
+        jsonText = await new Promise((resolve, reject) => {
+          const parsedUrl = new URL(url);
+          const transport = parsedUrl.protocol === 'https:' ? https : http;
+          const req = transport.get(
+            url,
+            {
+              headers: {
+                'User-Agent': 'property-crawl-bot/1.0',
+                Accept: 'application/json',
+              },
+            },
+            (res) => {
+              if (res.statusCode >= 400) {
+                return reject(new Error(`GSA Auctions API HTTP ${res.statusCode}`));
+              }
+              let body = '';
+              res.on('data', (chunk) => { body += chunk; });
+              res.on('end', () => resolve(body));
+            }
+          );
+          req.on('error', reject);
+          req.setTimeout(timeoutMs, () => {
+            req.destroy(new Error('GSA Auctions API timeout'));
+          });
+        });
+      }
+
+      const rawObj = typeof jsonText === 'string' ? JSON.parse(jsonText) : jsonText;
+      const parsed = parseGsaAuctionsApiResponse(rawObj, options);
+      let addedThisPage = 0;
+      for (const item of parsed.items) {
+        const key = item.id || item.auctionNumber;
+        if (key && seenIds.has(key)) continue;
+        if (key) seenIds.add(key);
+        allItems.push(item);
+        addedThisPage += 1;
+      }
+
+      const totalPages = Number(rawObj?.totalPages ?? rawObj?.total_pages);
+      const totalCount = Number(rawObj?.totalCount ?? rawObj?.total_count ?? rawObj?.total);
+      if (
+        parsed.totalCount === 0 ||
+        addedThisPage === 0 ||
+        (Number.isFinite(totalPages) && page >= totalPages) ||
+        (Number.isFinite(totalCount) && allItems.length >= totalCount) ||
+        (options.limit && parsed.totalCount < Number(options.limit)) ||
+        (!options.limit && !options.maxPages && !Number.isFinite(totalPages) && !Number.isFinite(totalCount) && parsed.totalCount < 10)
+      ) {
+        break;
+      }
     }
 
-    const parsed = parseGsaAuctionsApiResponse(jsonText, options);
-    return parsed.items;
+    return allItems;
   }
 }
 

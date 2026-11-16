@@ -86,7 +86,7 @@ function isObservedSourceRecord(listing: PropertyListing) {
   const recordId = typeof provenance.recordId === "string" || typeof provenance.recordId === "number"
     ? String(provenance.recordId).trim()
     : "";
-  return provenance.origin === "live"
+  return (provenance.origin === "live" || provenance.origin === "email_notice")
     && provenance.observed === true
     && provenance.recordKind === "source_record"
     && publisher.length > 0
@@ -143,6 +143,7 @@ export function InteractiveTerminal() {
   const [isAdvancedOpen, setIsAdvancedOpen] = useState<boolean>(false);
   const [syncStatus, setSyncStatus] = useState<"loading" | "ready" | "refreshing" | "error">("loading");
   const [syncCount, setSyncCount] = useState(0);
+  const [syncTotal, setSyncTotal] = useState(0);
   const [observedCount, setObservedCount] = useState(0);
   const [inventoryNotice, setInventoryNotice] = useState("");
   const [workspaceRecords, setWorkspaceRecords] = useState<PropertyListing[]>([]);
@@ -204,10 +205,18 @@ export function InteractiveTerminal() {
       const nextListings = payload.listings;
       setListings(nextListings);
       try {
-        window.sessionStorage.setItem("perfectproperty:inventory-cache", JSON.stringify(nextListings));
+        window.sessionStorage.setItem(
+          "perfectproperty:inventory-cache",
+          JSON.stringify({
+            listings: nextListings,
+            total: payload.total,
+            truncated: payload.truncated,
+          }),
+        );
       } catch {}
       window.dispatchEvent(new CustomEvent("perfectproperty:inventory", { detail: nextListings }));
       setSyncCount(payload.listings.length);
+      setSyncTotal(payload.total);
       setObservedCount(nextListings.filter(isObservedSourceRecord).length);
       setInventoryNotice(payload.truncated ? `Showing ${nextListings.length} of ${payload.total} records. The local inventory safety limit was reached.` : "");
       hasLoadedInventory.current = true;
@@ -256,10 +265,23 @@ export function InteractiveTerminal() {
       const cached = window.sessionStorage.getItem("perfectproperty:inventory-cache");
       if (cached) {
         const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setListings(parsed);
-          setSyncCount(parsed.length);
-          setObservedCount(parsed.filter(isObservedSourceRecord).length);
+        const cachedListings = Array.isArray(parsed)
+          ? parsed
+          : parsed && typeof parsed === "object" && Array.isArray(parsed.listings)
+            ? parsed.listings
+            : null;
+        if (cachedListings && cachedListings.length > 0) {
+          setListings(cachedListings);
+          setSyncCount(cachedListings.length);
+          const cachedTotal =
+            !Array.isArray(parsed) && Number.isSafeInteger(parsed?.total) && parsed.total >= cachedListings.length
+              ? parsed.total
+              : cachedListings.length;
+          setSyncTotal(cachedTotal);
+          if (!Array.isArray(parsed) && parsed?.truncated) {
+            setInventoryNotice(`Showing ${cachedListings.length} of ${cachedTotal} records. The local inventory safety limit was reached.`);
+          }
+          setObservedCount(cachedListings.filter(isObservedSourceRecord).length);
           // Genuinely-loaded records, so a later failed refresh may honestly
           // tell the user their existing records remain.
           hasLoadedInventory.current = true;
@@ -474,6 +496,24 @@ export function InteractiveTerminal() {
     new Set(listings.map((listing) => listing.state).filter(Boolean)),
   ).sort((a, b) => (STATE_LABELS[a] ?? a).localeCompare(STATE_LABELS[b] ?? b));
 
+  const collectFilterOptions = (baseline: string[], values: Array<string | null | undefined>) => {
+    const seen = new Map<string, string>();
+    for (const raw of [...baseline, ...values]) {
+      const value = typeof raw === "string" ? raw.trim() : "";
+      if (!value) continue;
+      const key = value.toLowerCase();
+      if (!seen.has(key)) seen.set(key, value);
+    }
+    return Array.from(seen.values()).sort((a, b) => a.localeCompare(b));
+  };
+  const availablePropertyTypes = collectFilterOptions(
+    ["Single Family", "Multi-Family", "Condo", "Land"],
+    listings.map((l) => l.propType),
+  );
+  const availableOccupancies = collectFilterOptions(
+    ["Vacant", "Occupied", "Unknown"],
+    listings.map((l) => l.occupancy),
+  );
   const availableSources = Array.from(
     new Set([...Object.keys(SOURCES), ...listings.map((l) => l.source).filter(Boolean)]),
   );
@@ -492,7 +532,7 @@ export function InteractiveTerminal() {
 
           <div className="flex flex-wrap items-center gap-3">
             {/* View switcher segmented control (<=3 choices per Cowan working memory rule) */}
-            <div className="inline-flex p-1 bg-paper border border-line rounded-control shadow-xs" role="tablist" aria-label="Terminal views">
+            <div className="inline-flex max-w-full flex-wrap p-1 bg-paper border border-line rounded-control shadow-xs" role="tablist" aria-label="Terminal views">
               <button
                 onClick={() => dispatchFilters({ type: "setView", view: "grid" })}
                 aria-pressed={activeView === "grid"}
@@ -539,7 +579,7 @@ export function InteractiveTerminal() {
             </div>
 
             {/* Operator tools suite */}
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 onClick={() => setIsWatchlistOpen(true)}
                 className="px-3 py-1.5 bg-card border border-line hover:border-ink text-ink text-xs font-bold rounded-control transition flex items-center gap-1.5 shadow-xs"
@@ -589,23 +629,23 @@ export function InteractiveTerminal() {
           <>
             {/* Live Scraper Ingestion Banner */}
             <div className="mb-4 px-4 py-2.5 bg-card rounded-control border border-line text-ink flex flex-wrap items-center justify-between gap-3 text-meta shadow-sm">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className={cn("w-2 h-2 rounded-full", syncStatus === "ready" && observedCount > 0 ? "bg-go-fill" : "bg-catch")} />
                 <span className={cn("font-bold", syncStatus === "ready" && observedCount > 0 ? "text-ink" : "text-catch-ink")}>
                   {syncStatus === "error"
-                    ? "Demo fallback — data API unavailable"
+                    ? (syncCount > 0 ? "Refresh failed — showing previously loaded records" : "Data API unavailable — no unverified records substituted")
                     : observedCount === 0 && syncCount > 0
                       ? "Unverified or demo feed — no source-observed records"
                       : observedCount === syncCount && syncCount > 0
                         ? "Connected to source-observed property feed"
                         : "Mixed evidence feed — verify each record"}
                 </span>
-                <span className="text-ink-3 hidden sm:inline">· verified against statutory court filings</span>
+                <span className="text-ink-3 hidden sm:inline">· confirm title, liens, and sale terms with the source</span>
               </div>
               <div className="flex items-center gap-3 font-mono text-label text-ink-3">
                 {syncStatus === "ready" && <span className={cn("font-bold", observedCount > 0 ? "text-ink" : "text-catch-ink")}>{observedCount} observed · {syncCount - observedCount} demo/unverified</span>}
                 {syncStatus === "loading" && <span>Connecting to property API…</span>}
-                {syncStatus === "error" && <span>Last loaded inventory retained</span>}
+                {syncStatus === "error" && <span>{syncCount > 0 ? "Last loaded inventory retained" : "No inventory loaded"}</span>}
                 <button
                   disabled={syncStatus === "loading" || syncStatus === "refreshing"}
                   onClick={() => void loadListings(true)}
@@ -643,6 +683,9 @@ export function InteractiveTerminal() {
                   className="px-3 py-2 text-xs font-semibold rounded-control border border-line-strong bg-card text-ink-2 outline-none focus:outline-none focus:ring-2 focus:ring-ink/20"
                 >
                   <option value="all">All States</option>
+                  {selectedState !== "all" && !availableStates.includes(selectedState) && (
+                    <option value={selectedState}>{selectedState.split(",").join(" / ")}</option>
+                  )}
                   {availableStates.map((state) => (
                     <option key={state} value={state}>
                       {STATE_LABELS[state] ? `${STATE_LABELS[state]} (${state})` : state}
@@ -732,7 +775,7 @@ export function InteractiveTerminal() {
 
               {/* Advanced Underwriting Drawer Tray */}
               {isAdvancedOpen && (
-                <div className="pt-3 border-t border-line grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 animate-in fade-in duration-150">
+                <div className="pt-3 border-t border-line grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 animate-in fade-in duration-150">
                   {/* Min Deal Score */}
                   <div>
                     <label className="block text-label font-bold uppercase tracking-wider text-ink-3 mb-1">
@@ -797,10 +840,15 @@ export function InteractiveTerminal() {
                       className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-control border border-line-strong bg-card text-ink-2"
                     >
                       <option value="all">All Types</option>
-                      <option value="Single Family">Single Family</option>
-                      <option value="Multi-Family">Multi-Family</option>
-                      <option value="Condo">Condo / Townhome</option>
-                      <option value="Land">Land / Lot</option>
+                      {availablePropertyTypes.map((typeOption) => (
+                        <option key={typeOption} value={typeOption}>
+                          {typeOption}
+                        </option>
+                      ))}
+
+
+
+
                     </select>
                   </div>
 
@@ -820,6 +868,26 @@ export function InteractiveTerminal() {
                     </select>
                   </div>
 
+                  {/* Occupancy */}
+                  <div>
+                    <label htmlFor="terminal-occupancy-filter" className="block text-label font-bold uppercase tracking-wider text-ink-3 mb-1">
+                      Occupancy
+                    </label>
+                    <select
+                      id="terminal-occupancy-filter"
+                      aria-label="Occupancy filter"
+                      value={occupancy}
+                      onChange={(e) => dispatchFilters({ type: "set", key: "occupancy", value: e.target.value })}
+                      className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-control border border-line-strong bg-card text-ink-2"
+                    >
+                      <option value="all">All Occupancy</option>
+                      {availableOccupancies.map((occupancyOption) => (
+                        <option key={occupancyOption} value={occupancyOption}>
+                          {occupancyOption}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                   {/* Statutory Redemption */}
                   <div>
                     <label className="block text-label font-bold uppercase tracking-wider text-ink-3 mb-1">
@@ -891,6 +959,14 @@ export function InteractiveTerminal() {
                       </button>
                     </span>
                   )}
+                  {occupancy !== "all" && (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-ink text-white text-label font-semibold">
+                      Occupancy: {occupancy}
+                      <button type="button" onClick={() => dispatchFilters({ type: "set", key: "occupancy", value: "all" })} aria-label="Remove occupancy filter">
+                        <CloseIcon className="w-3 h-3 hover:text-white/60" />
+                      </button>
+                    </span>
+                  )}
                   {seniorLienFilter !== "all" && (
                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-ink text-white text-label font-semibold">
                       Title: {seniorLienFilter === "clean" ? "Low lien flag" : "High junior-lien flag"}
@@ -944,9 +1020,9 @@ export function InteractiveTerminal() {
               </div>
 
               {/* Interactive Deal Score Band Spectrum */}
-              <div className="flex flex-col justify-center">
+              <div className="col-span-2 flex flex-col justify-center md:col-span-1">
                 <p className="text-ink-3 text-label font-bold uppercase tracking-wider mb-1.5">Score Distribution</p>
-                <div className="flex items-center gap-1">
+                <div className="flex flex-wrap items-center gap-1">
                   {scoreBandCounts.map(({ band, count }) => (
                     <button
                       key={band.key}
@@ -1060,7 +1136,7 @@ export function InteractiveTerminal() {
                 return (
                   <div
                     key={listing.id}
-                    style={{ contentVisibility: "auto", containIntrinsicSize: "auto 460px" }}
+                    data-listing-id={listing.id}
                     className="bg-card rounded-card border border-line overflow-hidden shadow-card hover:shadow-raised transition duration-200 flex flex-col justify-between group"
                   >
                     <div>
@@ -1181,7 +1257,7 @@ export function InteractiveTerminal() {
             <div className="mt-10 rounded-card border border-line bg-card p-6 sm:p-8 text-center shadow-card flex flex-col items-center gap-4">
               <div className="max-w-xl space-y-1.5">
                 <span className="text-label font-mono font-bold tracking-wider text-ink-2 uppercase">
-                  INSTITUTIONAL WORKBENCH // {(syncCount || listings.length || 2000).toLocaleString()}+ DISPOSITIONS
+                  INSTITUTIONAL WORKBENCH // {syncTotal > 0 || syncCount > 0 || listings.length > 0 ? `${(syncTotal || syncCount || listings.length).toLocaleString()}+ DISPOSITIONS` : "LIVE DISPOSITION DESK"}
                 </span>
                 <h3 className="text-2xl font-bold text-ink">Need the full institutional triage desk?</h3>
                 <p className="text-xs text-ink-3">

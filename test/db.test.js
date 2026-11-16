@@ -442,6 +442,9 @@ async function run() {
         // so a shared dev database keeps its published listing count honest.
         if (db.isPg && db.pool) {
           await db.pool.query('DELETE FROM listings WHERE id = $1', [record.id]);
+          if (typeof db.pool.end === 'function') {
+            await db.pool.end().catch(() => {});
+          }
         }
       }
     });

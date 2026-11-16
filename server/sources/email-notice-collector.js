@@ -247,14 +247,14 @@ function parseNoticeEmail(email = {}, options = {}) {
 
   for (let i = 0; i < parcelSnippets.length; i++) {
     const snippet = parcelSnippets[i];
-    const parsed = deterministicParse(snippet);
+    const parsed = deterministicParse(snippet, { defaultState: state === 'UNKNOWN' ? null : state });
 
-    if (state === 'UNKNOWN' && parsed.state && parsed.state !== 'OH' && FEED_CONFIG[parsed.state]) {
+    if (state === 'UNKNOWN' && parsed.state && FEED_CONFIG[parsed.state]) {
       state = parsed.state;
       feedInfo = FEED_CONFIG[state] || null;
     }
 
-    if (state !== 'UNKNOWN' && (!parsed.state || parsed.state === 'OH')) {
+    if (state !== 'UNKNOWN' && !parsed.state) {
       parsed.state = state;
     }
 
@@ -313,6 +313,7 @@ function parseNoticeEmail(email = {}, options = {}) {
  * Route processed records into either the verified store or the operator review queue
  */
 function routeNoticeResult(batchResult = {}, options = {}) {
+  const sourceKey = options.source || 'public-notices-email';
   const confidentListings = [];
   const reviewQueueItems = [];
 
@@ -321,7 +322,7 @@ function routeNoticeResult(batchResult = {}, options = {}) {
       const portalUrl = record.feedInfo?.portalUrl || batchResult.feedInfo?.portalUrl || 'https://publicnotice.org';
       confidentListings.push({
         id: record.id,
-        source: 'email-notices',
+        source: sourceKey,
         sourceUrl: portalUrl,
         state: record.parsed.state || record.feedState,
         address: record.parsed.property_address,
@@ -340,7 +341,7 @@ function routeNoticeResult(batchResult = {}, options = {}) {
         reviewId: `rev-${record.id}`,
         id: record.id,
         listingId: record.id,
-        source: 'email-notices',
+        source: sourceKey,
         state: record.feedState,
         headline: record.emailSubject || `Legal Notice (${record.feedState})`,
         documentText: record.rawSnippet || record.parsed.property_address || '[Unextracted Notice]',

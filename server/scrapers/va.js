@@ -17,6 +17,7 @@ const {
 } = require('./run-report');
 const { spaXhrEnabled, captureSpaXhr, mapCapturedItems } = require('./spa-xhr');
 const { validateListingShape } = require('./listing-schema');
+const { normalizePostalAddress } = require('./embedded-extractor');
 
 class VaReoScraper extends BaseScraper {
   constructor(options = {}) {
@@ -56,10 +57,22 @@ class VaReoScraper extends BaseScraper {
         }
       });
 
-      const standardized = allListings
-        .filter(l => this.passesFilter(l))
-        .map(l => this.standardizeListing(l));
-      finalizeRunReport(report, { emitted: standardized.length });
+      const standardized = [];
+      let schemaRejected = 0;
+      for (const l of allListings) {
+        if (!this.passesFilter(l)) continue;
+        try {
+          standardized.push(this.standardizeListing(l));
+        } catch (err) {
+          if (err && err.code === 'LISTING_SCHEMA_INVALID') {
+            schemaRejected += 1;
+            console.warn(`[${this.name}] Dropped schema-invalid VA listing (${l?.id || 'unknown'}): ${err.message}`);
+            continue;
+          }
+          throw err;
+        }
+      }
+      finalizeRunReport(report, { emitted: standardized.length, rejected: schemaRejected });
       if (report.outcome === 'failed') {
         throw new Error(`VA_UPSTREAM_UNAVAILABLE: all ${topStates.length} VA REO state endpoints failed for ${this.baseUrl}`);
       }
@@ -212,7 +225,14 @@ class VaReoScraper extends BaseScraper {
   mapJsonItem(p, state) {
     const price = p.listPrice ?? p.price ?? p.openingBid ?? null;
     const propId = p.id || p.propertyId || p.vrmNumber;
-    const address = p.address || `${p.street || ''}, ${p.city || ''}, ${state} ${p.zip || ''}`.trim();
+    const street = String(p.street || p.streetAddress || '').trim();
+    const city = String(p.city || p.addressLocality || '').trim();
+    const addrState = String(p.state || p.addressRegion || state || '').trim();
+    const zip = String(p.zip || p.postalCode || '').trim();
+    let address = normalizePostalAddress(p.address);
+    if (!address && (street || city)) {
+      address = [street, city, [addrState, zip].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+    }
 
     if (!propId || !address || !address.replace(/[\s,]/g, '')) return null;
 
@@ -253,22 +273,32 @@ class VaReoScraper extends BaseScraper {
     const listings = [];
     for (const item of (jsonLdList || [])) {
       if (!item || !item.address) continue;
-      const idMatch = item.url ? item.url.match(/property\/([A-Za-z0-9_-]+)/i) : null;
-      const propId = idMatch ? idMatch[1] : (item.name ? item.name.replace(/[^A-Za-z0-9-]/g, '') : null);
+      const rawAddr = Array.isArray(item.address) ? item.address[0] : item.address;
+      const addrObj = rawAddr && typeof rawAddr === 'object' ? rawAddr : null;
+      const address = normalizePostalAddress(rawAddr);
+      if (!address) continue;
+      const idMatch = item.url ? String(item.url).match(/property\/([A-Za-z0-9_-]+)/i) : null;
+      const propId = idMatch ? idMatch[1] : (item.name ? String(item.name).replace(/[^A-Za-z0-9-]/g, '') : null);
       if (!propId) continue;
+      const city = addrObj
+        ? (String(addrObj.addressLocality || addrObj.city || '').trim() || null)
+        : (address.split(',')[1]?.trim() || null);
+      const zipRaw = addrObj ? String(addrObj.postalCode || addrObj.zip || '').trim() : address;
+      const zip = zipRaw.match(/\b\d{5}\b/)?.[0] || (addrObj && zipRaw ? zipRaw : null);
+      const resolvedState = (addrObj && String(addrObj.addressRegion || addrObj.state || '').trim()) || state;
       listings.push({
         id: `VA-${propId}`,
-        state,
+        state: resolvedState,
         county: null,
-        city: item.address.split(',')[1]?.trim() || null,
-        zip: item.address.match(/\b\d{5}\b/)?.[0] || null,
-        address: item.address,
-        lat: item.lat || null,
-        lng: item.lng || null,
-        beds: item.beds || null,
-        baths: item.baths || null,
-        sqft: item.sqft || null,
-        openingBid: item.price || null,
+        city,
+        zip,
+        address,
+        lat: item.lat ?? item.geo?.latitude ?? null,
+        lng: item.lng ?? item.geo?.longitude ?? null,
+        beds: item.beds ?? item.numberOfBedrooms ?? null,
+        baths: item.baths ?? item.numberOfBathroomsTotal ?? null,
+        sqft: item.sqft ?? item.floorSize?.value ?? null,
+        openingBid: item.price ?? item.offers?.price ?? null,
         estLow: null,
         estHigh: null,
         assessed: null,
