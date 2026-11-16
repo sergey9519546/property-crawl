@@ -206,4 +206,12 @@ test('runtime grid vs detail split strips sourceFacts/raw on grid while preservi
   assert.equal(detail.status, 200);
   assert.equal(detail.body.raw, 'LONG_RAW_NOTICE_PAYLOAD');
   assert.equal(detail.body.provenance.sourceFacts.auctionMethod, 'Online');
+
+  const summary = await runGet('/api/listings?limit=48&summary=1');
+  assert.equal(summary.status, 200);
+  assert.equal(summary.body.listings.length, 1);
+  assert.equal(summary.body.listings[0].id, sample.id);
+  assert.equal(Object.hasOwn(summary.body.listings[0], 'provenance'), false);
+  assert.equal(Object.hasOwn(summary.body.listings[0], 'raw'), false);
+  assert.equal(Object.hasOwn(summary.body, 'pipeline'), false);
 });

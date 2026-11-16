@@ -115,13 +115,18 @@ function parseDistressStage(v) {
   throw new DiscoveryQueryError(400, "Invalid distressStage");
 }
 const DISTRESS_STAGE_SOURCE_EXPR = "lower(btrim(coalesce(source_key,'')))";
-// Mirrors server/scrapers/normalization.js mapDistressStage(source, saleDate)
+const DISTRESS_STAGE_PROGRAM_EXPR = "lower(btrim(coalesce(nullif(auction_program,''), provenance->'sourceFacts'->>'auctionProgram', '')))";
+// Mirrors server/scrapers/normalization.js mapDistressStage(source, saleDate, auctionProgram)
 // so PostgreSQL and in-memory filtering agree on every sale-type bucket.
 const DISTRESS_STAGE_SQL =
   `(CASE `
   + `WHEN ${DISTRESS_STAGE_SOURCE_EXPR} IN ('hud','fannie','freddie','va','fdic','treasury','irs','gsa','landbank','landbanksearch','usda','hud-homestore','fannie-homepath','freddie-homesteps','va-vrm','fdic-asset-sales','usda-resales','treasury-forfeiture','irs-auctions','gsa-real-estate-sales') THEN 'reo' `
   + `WHEN ${DISTRESS_STAGE_SOURCE_EXPR} IN ('trustee','county-trustee-sale','bid4assets') THEN 'scheduled' `
   + `WHEN ${DISTRESS_STAGE_SOURCE_EXPR} IN ('sheriff','civilview','ohio-sheriff-sale') THEN `
+    + `(CASE WHEN sale_date IS NOT NULL AND (sale_date::timestamp AT TIME ZONE 'UTC') <= (NOW() + INTERVAL '30 days') THEN 'scheduled' ELSE 'pre_foreclosure' END) `
+  + `WHEN ${DISTRESS_STAGE_SOURCE_EXPR} = 'servicelink' AND ${DISTRESS_STAGE_PROGRAM_EXPR} IN ('traditional','reo','hud reo','bank owned') THEN 'reo' `
+  + `WHEN ${DISTRESS_STAGE_SOURCE_EXPR} = 'servicelink' AND ${DISTRESS_STAGE_PROGRAM_EXPR} = 'short sale' THEN 'pre_foreclosure' `
+  + `WHEN ${DISTRESS_STAGE_SOURCE_EXPR} = 'servicelink' AND (${DISTRESS_STAGE_PROGRAM_EXPR} IN ('tps','cwcot') OR ${DISTRESS_STAGE_PROGRAM_EXPR} ~ 'trustee|third[- ]party|foreclosure') THEN `
     + `(CASE WHEN sale_date IS NOT NULL AND (sale_date::timestamp AT TIME ZONE 'UTC') <= (NOW() + INTERVAL '30 days') THEN 'scheduled' ELSE 'pre_foreclosure' END) `
   + `WHEN ${DISTRESS_STAGE_SOURCE_EXPR} = 'tax_sale' OR ${DISTRESS_STAGE_SOURCE_EXPR} ~ 'tax[-_]{0,1}sale|tax[-_]{0,1}deed' THEN 'tax_sale' `
   + `ELSE 'unknown' END)`;
@@ -370,7 +375,7 @@ function matches(row, f) {
     return false;
   if (f.freshness && f.freshness !== "all" && d.freshness !== f.freshness)
     return false;
-  if (f.distressStage && mapDistressStage(row.source, row.saleDate) !== f.distressStage)
+  if (f.distressStage && mapDistressStage(row.source, row.saleDate, derived(row).program) !== f.distressStage)
     return false;
   if (f.saleFrom && (!row.saleDate || row.saleDate < f.saleFrom)) return false;
   if (f.saleTo && (!row.saleDate || row.saleDate > f.saleTo)) return false;
@@ -531,7 +536,7 @@ function buildFacets(rows, fields) {
     lifecycle: (r) => derived(r).lifecycle,
     occupancy: (r) => r.occupancy,
     freshness: (r) => derived(r).freshness,
-    distressStage: (r) => mapDistressStage(r.source, r.saleDate),
+    distressStage: (r) => mapDistressStage(r.source, r.saleDate, derived(r).program),
   };
   return Object.fromEntries(
     fields

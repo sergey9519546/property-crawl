@@ -420,23 +420,26 @@ test('distressStage filter and facets achieve strict Postgres and in-memory pari
       { id: 's-prefc-civilview-null', source: 'civilview', state: 'NJ', saleDate: null, provenance: { origin: 'live' } },
       { id: 's-tax-harris', source: 'harris-county-tax-sale', state: 'TX', saleDate: isoOffset(10), provenance: { origin: 'live' } },
       { id: 's-tax-orange', source: 'tax-orange-realtaxdeed', state: 'FL', saleDate: null, provenance: { origin: 'live' } },
+      { id: 's-sl-tps-soon', source: 'servicelink', auctionProgram: 'TPS', state: 'OH', saleDate: isoOffset(10), provenance: { origin: 'live', sourceFacts: { auctionProgram: 'TPS' } } },
+      { id: 's-sl-cwcot-far', source: 'servicelink', state: 'MO', saleDate: isoOffset(60), provenance: { origin: 'live', sourceFacts: { auctionProgram: 'CWCOT' } } },
+      { id: 's-sl-trad-reo', source: 'servicelink', auctionProgram: 'Traditional', state: 'TX', saleDate: null, provenance: { origin: 'live', sourceFacts: { auctionProgram: 'Traditional' } } },
       { id: 's-unknown-sl', source: 'servicelink', state: 'AZ', saleDate: isoOffset(5), provenance: { origin: 'live' } },
     ];
 
     for (const r of stageRows) {
       await pglite.query(
-        'INSERT INTO listings (id, source_key, state, sale_date, provenance) VALUES ($1, $2, $3, $4::date, $5::jsonb)',
-        [r.id, r.source, r.state, r.saleDate, JSON.stringify(r.provenance)],
+        'INSERT INTO listings (id, source_key, state, auction_program, sale_date, provenance) VALUES ($1, $2, $3, $4, $5::date, $6::jsonb)',
+        [r.id, r.source, r.state, r.auctionProgram || null, r.saleDate, JSON.stringify(r.provenance)],
       );
     }
 
-    const pgDb = { isPg: true, pool: pglite, listingSelect: 'id, source_key AS source, state, sale_date::text AS "saleDate", provenance' };
+    const pgDb = { isPg: true, pool: pglite, listingSelect: 'id, source_key AS source, state, auction_program AS "auctionProgram", sale_date::text AS "saleDate", provenance' };
     const memDb = { isPg: false, getListings: async () => ({ total: stageRows.length, listings: stageRows }) };
 
     const expectedByStage = {
-      reo: ['s-reo-hud', 's-reo-treasury'],
-      scheduled: ['s-sched-sheriff-soon', 's-sched-trustee'],
-      pre_foreclosure: ['s-prefc-civilview-null', 's-prefc-sheriff-far'],
+      reo: ['s-reo-hud', 's-reo-treasury', 's-sl-trad-reo'],
+      scheduled: ['s-sched-sheriff-soon', 's-sched-trustee', 's-sl-tps-soon'],
+      pre_foreclosure: ['s-prefc-civilview-null', 's-prefc-sheriff-far', 's-sl-cwcot-far'],
       tax_sale: ['s-tax-harris', 's-tax-orange'],
       unknown: ['s-unknown-sl'],
     };

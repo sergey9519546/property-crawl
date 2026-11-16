@@ -22,6 +22,7 @@ const {
   normalizeApn,
   buildParcelKey,
   mapDistressStage,
+  standardizeListingRecord,
 } = require('../../server/scrapers/normalization');
 
 // --- normalizeApn -----------------------------------------------------
@@ -249,4 +250,25 @@ test('standardizeListingRecord preserves explicit boolean hasDocuments and leave
   }
   assert.equal(deriveHasDocuments({}, {}), null);
   assert.equal(deriveHasDocuments({ documents: [{}] }, {}), null);
+});
+
+test('mapDistressStage and computeTriage classify ServiceLink programs (TPS, CWCOT, Traditional, Short Sale)', () => {
+  const soon = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10);
+  const far = new Date(Date.now() + 60 * 86_400_000).toISOString().slice(0, 10);
+  assert.equal(mapDistressStage('servicelink', soon, 'TPS'), 'scheduled');
+  assert.equal(mapDistressStage('servicelink', far, 'CWCOT'), 'pre_foreclosure');
+  assert.equal(mapDistressStage('servicelink', soon, 'Traditional'), 'reo');
+  assert.equal(mapDistressStage('servicelink', soon, 'Short Sale'), 'pre_foreclosure');
+  assert.equal(mapDistressStage('servicelink', soon, null), 'unknown');
+
+  const rec = standardizeListingRecord({
+    id: 'sl-triage-cwcot',
+    source: 'servicelink',
+    state: 'OH',
+    address: '10 Main St',
+    saleDate: far,
+    sourceUrl: 'https://www.servicelinkauction.com/listing/sl-triage-cwcot',
+    provenance: { origin: 'live', observed: true, publisher: 'ServiceLink Auction', recordId: 'sl-triage-cwcot', sourceFacts: { auctionProgram: 'CWCOT' } },
+  });
+  assert.equal(rec.triage.distressStage, 'pre_foreclosure');
 });

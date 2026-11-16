@@ -551,8 +551,30 @@ async function handleListings(req, res, dbOverride = null, options = {}) {
       }
     }
 
-    const entries = mediaEntries();
     const page = result.page || { nextCursor: null, hasMore: filters.offset + result.listings.length < result.total };
+    const isSummaryRequest = url.searchParams.get('summary') === '1' || url.searchParams.get('summary') === 'true';
+    const isIntelligenceView = INTELLIGENCE_SORTS.has(String(filters.sort)) || (Number(filters.minQuality) || 0) > 0;
+    // Fast summary path (used by sitemap pagination): skips media disk scans,
+    // bake-off, intelligence scoring, and full provenance serialization.
+    if (isSummaryRequest && !isIntelligenceView && sinceMs === null) {
+      return res.json({
+        ...result,
+        page,
+        revision: result.revision || null,
+        facets: result.facets || {},
+        listings: result.listings.map(({ id, source, state, county, saleDate, status }) => ({
+          id,
+          source,
+          state,
+          county: county ?? null,
+          saleDate: saleDate ?? null,
+          status: status ?? null,
+        })),
+        dataMode: typeof db.dataMode === 'function' ? db.dataMode() : (db.isPg ? 'postgres' : 'unavailable'),
+        postgresReachable: db.postgresReachable === true,
+      });
+    }
+    const entries = mediaEntries();
     // Cross-source bake-off: detect parcelKey collisions from different
     // publishers on this page and annotate each listing with its matches +
     // a per-listing bake-off descriptor (preferredSource / reason / confidence).
@@ -591,7 +613,7 @@ async function handleListings(req, res, dbOverride = null, options = {}) {
       });
     // Post-annotation intelligence view: quality/opportunity sort + minQuality.
     const viewListingsAll = applyIntelligenceView(presentedListings, filters);
-    const isIntelligenceView = INTELLIGENCE_SORTS.has(String(filters.sort)) || (Number(filters.minQuality) || 0) > 0;
+    // `isIntelligenceView` was computed above the summary fast-path check.
     const viewListings = (filters.offset === 0 && !filters.cursor && isIntelligenceView && viewListingsAll.length > filters.limit)
       ? viewListingsAll.slice(0, filters.limit)
       : viewListingsAll;

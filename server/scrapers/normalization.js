@@ -183,7 +183,7 @@ const REO_SOURCES = new Set([
 const SCHEDULED_SOURCES = new Set(['trustee', 'county-trustee-sale', 'bid4assets']);
 const SALE_PROXIMITY_SOURCES = new Set(['sheriff', 'civilview', 'ohio-sheriff-sale']);
 
-function mapDistressStage(source, saleDate) {
+function mapDistressStage(source, saleDate, auctionProgram = null) {
   const key = typeof source === 'string' ? source.trim().toLowerCase() : '';
   if (REO_SOURCES.has(key)) return 'reo';
   if (SCHEDULED_SOURCES.has(key)) return 'scheduled';
@@ -194,6 +194,19 @@ function mapDistressStage(source, saleDate) {
       return daysUntilSale <= 30 ? 'scheduled' : 'pre_foreclosure';
     }
     return 'pre_foreclosure';
+  }
+  const program = typeof auctionProgram === 'string' ? auctionProgram.trim().toLowerCase() : '';
+  if (key === 'servicelink' && program) {
+    if (['traditional', 'reo', 'hud reo', 'bank owned'].includes(program)) return 'reo';
+    if (program === 'short sale') return 'pre_foreclosure';
+    if (['tps', 'cwcot'].includes(program) || /trustee|third[- ]?party|foreclosure/.test(program)) {
+      const saleTime = saleDate ? Date.parse(saleDate) : NaN;
+      if (Number.isFinite(saleTime)) {
+        const daysUntilSale = (saleTime - Date.now()) / 86_400_000;
+        return daysUntilSale <= 30 ? 'scheduled' : 'pre_foreclosure';
+      }
+      return 'pre_foreclosure';
+    }
   }
   if (key === 'tax_sale' || /tax[-_]?sale|tax[-_]?deed/.test(key)) return 'tax_sale';
   return 'unknown';
@@ -268,7 +281,7 @@ function computeTriage(listing = {}, options = {}) {
     staleDays: stale === null ? -1 : stale,
     hasDocs,
     occupancyKnown,
-    distressStage: mapDistressStage(listing.source, listing.saleDate)
+    distressStage: mapDistressStage(listing.source, listing.saleDate, listing.auctionProgram ?? listing.provenance?.sourceFacts?.auctionProgram)
   };
 }
 
