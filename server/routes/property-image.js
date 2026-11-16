@@ -48,10 +48,11 @@ class PropertyImageError extends Error {
 }
 
 class ProviderCircuit {
-  constructor({ failureThreshold = 3, cooldownMs = 60_000, now = Date.now } = {}) {
+  constructor({ failureThreshold = 3, cooldownMs = 60_000, now = Date.now, unavailableMessage = 'Street View is temporarily unavailable.' } = {}) {
     this.failureThreshold = clampInteger(failureThreshold, 1, 10, 3);
     this.cooldownMs = clampInteger(cooldownMs, 1_000, 15 * 60_000, 60_000);
     this.now = now;
+    this.unavailableMessage = unavailableMessage;
     this.failures = 0;
     this.openedUntil = 0;
   }
@@ -59,7 +60,7 @@ class ProviderCircuit {
   assertAvailable() {
     const timestamp = this.now();
     if (this.openedUntil > timestamp) {
-      throw new PropertyImageError(503, 'circuit_open', 'Street View is temporarily unavailable.', {
+      throw new PropertyImageError(503, 'circuit_open', this.unavailableMessage, {
         retryAfterSeconds: Math.max(1, Math.ceil((this.openedUntil - timestamp) / 1000)),
       });
     }
@@ -359,7 +360,12 @@ function sourceObservedAddress(listing) {
   if (derived && typeof derived === 'object' && (derived.address || derived.streetAddress)) return null;
 
   const fullAddress = safeText(listing?.address, 256);
-  const address = fullAddress?.split(',')[0].trim();
+  const rawStreetPart = fullAddress?.split(',')[0].trim();
+  // Recover numbered street addresses that carry a lot/parcel label prefix (e.g.
+  // "LOT 2: 139-B Farless Road"), while still rejecting bare lot/parcel/vacant labels.
+  const address = rawStreetPart
+    ? rawStreetPart.replace(/^(?:lot|parcel)\s+[A-Za-z0-9-]+\s*[:,-]\s*(?=\d+[A-Za-z]?(?:-[A-Za-z0-9]+)?\s+[A-Za-z])/i, '').trim()
+    : null;
   const city = safeText(listing?.city, 128);
   const state = safeText(listing?.state, 2)?.toUpperCase();
   const zip = safeText(listing?.zip, 10);
@@ -367,12 +373,14 @@ function sourceObservedAddress(listing) {
     return null;
   }
   if (/^(?:p\.?\s*o\.?\s*box|lot\b|parcel\b|vacant\b)/i.test(address)) return null;
-  const streetMatch = address.match(/^\s*(\d+[A-Za-z]?(?:-\d+[A-Za-z]?)?)\s+(.{2,})$/);
+  const streetMatch = address.match(/^\s*(\d+[A-Za-z]?(?:-[A-Za-z0-9]+)?)\s+(.{2,})$/);
   if (!streetMatch) return null;
   const streetNumber = normalizeAddressToken(streetMatch[1]);
   const route = normalizeRouteName(streetMatch[2]);
   if (!streetNumber || !route) return null;
   return {
+    street: address,
+    city,
     query: `${address}, ${city}, ${state} ${zip}`,
     streetNumber,
     route,
@@ -629,6 +637,68 @@ async function resolveEphemeralCoordinates({ fetchImpl, config, listing, circuit
       persisted: false,
     },
   };
+}
+
+function exactCensusGeocode(match, expected) {
+  if (!match || typeof match !== 'object') return null;
+  const matchedAddress = safeText(match.matchedAddress, 256);
+  const numberMatch = matchedAddress?.match(/^\s*(\d+[A-Za-z]?(?:-[A-Za-z0-9]+)?)\b/);
+  if (!numberMatch) return null;
+  const returnedStreetNumber = normalizeAddressToken(numberMatch[1]);
+  const comps = match.addressComponents && typeof match.addressComponents === 'object' ? match.addressComponents : {};
+  const componentStreet = [comps.preDirection, comps.streetName, comps.suffixType, comps.postDirection].filter(Boolean).join(' ');
+  const matchedStreet = matchedAddress.split(',')[0].replace(/^\s*\d+[A-Za-z]?(?:-[A-Za-z0-9]+)?\s+/, '');
+  const returnedRoutes = [componentStreet, matchedStreet].map(normalizeRouteName).filter(Boolean);
+  const returnedState = String(comps.state || '').trim().toUpperCase();
+  const returnedZip5 = String(comps.zip || '').trim().slice(0, 5);
+  if (returnedStreetNumber !== expected.streetNumber
+      || !returnedRoutes.includes(expected.route)
+      || returnedState !== expected.state
+      || returnedZip5 !== expected.zip5) {
+    return null;
+  }
+  const lat = validCoordinate(match?.coordinates?.y, -90, 90);
+  const lng = validCoordinate(match?.coordinates?.x, -180, 180);
+  if (lat === null || lng === null || (lat === 0 && lng === 0)) return null;
+  return { lat, lng };
+}
+
+async function resolveCensusCoordinates({ fetchImpl, observedAddress, timeoutMs = 5_000 }) {
+  if (!observedAddress || typeof fetchImpl !== 'function') return null;
+  const url = new URL('https://geocoding.geo.census.gov/geocoder/locations/address');
+  url.search = new URLSearchParams({
+    street: observedAddress.street,
+    city: observedAddress.city,
+    state: observedAddress.state,
+    zip: observedAddress.zip5,
+    benchmark: 'Public_AR_Current',
+    format: 'json',
+  }).toString();
+  try {
+    const response = await fetchWithTimeout(
+      fetchImpl,
+      url,
+      { method: 'GET', redirect: 'error', headers: { Accept: 'application/json' } },
+      timeoutMs
+    );
+    if (!response || !response.ok) return null;
+    const payload = JSON.parse(await readBoundedText(response, MAX_METADATA_BYTES));
+    const matches = Array.isArray(payload?.result?.addressMatches) ? payload.result.addressMatches : [];
+    const verified = matches.map((m) => exactCensusGeocode(m, observedAddress)).filter(Boolean);
+    if (verified.length !== 1) return null;
+    return {
+      ...verified[0],
+      basis: 'source_observed_address_census_geocode',
+      resolution: {
+        origin: 'us_census_geocoder_ephemeral',
+        locationType: 'RANGE_INTERPOLATED',
+        partialMatch: false,
+        persisted: false,
+      },
+    };
+  } catch (_) {
+    return null;
+  }
 }
 
 function classifyMetadataStatus(status, circuit) {
@@ -892,13 +962,15 @@ function createPropertyImageService(options = {}) {
     failureThreshold: env.GOOGLE_GEOCODING_CIRCUIT_THRESHOLD || env.GOOGLE_STREETVIEW_CIRCUIT_THRESHOLD,
     cooldownMs: env.GOOGLE_GEOCODING_CIRCUIT_COOLDOWN_MS || env.GOOGLE_STREETVIEW_CIRCUIT_COOLDOWN_MS,
     now,
+    unavailableMessage: 'Address verification is temporarily unavailable.',
   });
   const limiter = options.limiter || new FixedWindowRateLimiter({
-    maxRequests: env.PROPERTY_IMAGE_RATE_LIMIT,
+    maxRequests: env.PROPERTY_IMAGE_RATE_LIMIT ?? 60,
     windowMs: env.PROPERTY_IMAGE_RATE_WINDOW_MS,
     now,
     trustedProxyCount: env.TRUSTED_PROXY_COUNT,
   });
+  const censusFallbackEnabled = env.PROPERTY_IMAGE_CENSUS_GEOCODER_FALLBACK === '1';
   const trustedProxyCount = Math.max(0, Math.floor(Number(env.TRUSTED_PROXY_COUNT) || 0));
   const gate = options.gate || new BoundedConcurrencyGate({
     concurrency: env.PROPERTY_IMAGE_CONCURRENCY,
@@ -1044,20 +1116,69 @@ function createPropertyImageService(options = {}) {
       limiter.consume(FixedWindowRateLimiter.clientIp(req, trustedProxyCount));
       const listing = await database.getListingById(listingId);
       if (!listing) throw new PropertyImageError(404, 'listing_not_found', 'Listing not found.');
+      const geocodingOutageCodes = new Set([
+        'geocoding_denied',
+        'geocoding_rate_limited',
+        'circuit_open',
+        'geocoding_unavailable',
+        'upstream_unavailable',
+      ]);
+      const googleFallbackTriggerCodes = new Set([
+        'street_view_unavailable',
+        'panorama_mismatch',
+        'upstream_denied',
+        'circuit_open',
+        'upstream_unavailable',
+        'upstream_rate_limited',
+      ]);
+
+      async function resolveAlternativeCoordinates({ identityBasis, observedAddress, geocodeConfig }) {
+        if (geocodeConfig) {
+          try {
+            return await resolveEphemeralCoordinates({ fetchImpl, config: geocodeConfig, listing, circuit: geocodingCircuit });
+          } catch (error) {
+            if (!geocodingOutageCodes.has(error?.code) || env.PROPERTY_IMAGE_CENSUS_GEOCODER_FALLBACK === '0') {
+              throw error;
+            }
+            const census = await resolveCensusCoordinates({ fetchImpl, observedAddress, timeoutMs: geocodeConfig.timeoutMs });
+            if (census) return census;
+            throw error;
+          }
+        }
+        if (identityBasis === 'current_source_record' && censusFallbackEnabled) {
+          const timeoutMs = clampInteger(env.GOOGLE_STREETVIEW_TIMEOUT_MS, 500, 10_000, 5_000);
+          const census = await resolveCensusCoordinates({ fetchImpl, observedAddress, timeoutMs });
+          if (census) return census;
+        }
+        return resolveGeocodingConfig(env);
+      }
+
       if (mode === 'alternatives') {
-        validateListingForStreetView(listing, 'alternatives');
+        const altIdentity = validateListingForStreetView(listing, 'alternatives');
         const localCoordinates = sourceCoordinates(listing);
-        if (!localCoordinates && !sourceObservedAddress(listing)) {
+        const observedAddress = localCoordinates ? null : sourceObservedAddress(listing);
+        if (!localCoordinates && !observedAddress) {
           throw new PropertyImageError(
             422,
             'exact_location_unavailable',
             'Alternative imagery requires validated source coordinates or a complete source-observed street address with state and ZIP.'
           );
         }
-        const geocodeConfig = localCoordinates ? null : resolveGeocodingConfig(env);
+        let geocodeConfig = null;
+        if (!localCoordinates) {
+          if (safeText(env?.GOOGLE_GEOCODING_API_KEY, 1024) || safeText(env?.GOOGLE_MAPS_API_KEY, 1024)) {
+            geocodeConfig = resolveGeocodingConfig(env);
+          } else if (!(altIdentity.identityBasis === 'current_source_record' && censusFallbackEnabled)) {
+            throw new PropertyImageError(503, 'not_configured', 'Street View fallback is not configured.');
+          }
+        }
         return await gate.run(async () => {
           const coordinates = localCoordinates
-            || await resolveEphemeralCoordinates({ fetchImpl, config: geocodeConfig, listing, circuit: geocodingCircuit });
+            || await resolveAlternativeCoordinates({
+              identityBasis: altIdentity.identityBasis,
+              observedAddress,
+              geocodeConfig,
+            });
           // Panoramax and Mapillary run in parallel; each provider has its
           // own cache (provider-keyed) so the lookups do not duplicate work
           // across the two surfaces. A failure of one provider is isolated —
@@ -1137,7 +1258,7 @@ function createPropertyImageService(options = {}) {
         });
       }
       const identity=validateListingForStreetView(listing, mode);
-      const fallbackEnabled = mode === 'metadata' && (
+      const fallbackEnabled = (mode === 'metadata' || mode === 'walkthrough') && (
         env.PROPERTY_IMAGE_GOOGLE_PANORAMAX_FALLBACK === '1'
         || env.PROPERTY_IMAGE_GOOGLE_MAPILLARY_FALLBACK === '1'
       );
@@ -1145,9 +1266,16 @@ function createPropertyImageService(options = {}) {
         const localCoordinates = ['current_source_record', 'archived_source_record'].includes(identity.identityBasis)
           ? sourceCoordinates(listing)
           : null;
-        if (localCoordinates) {
+        const observedAddress = !localCoordinates && identity.identityBasis === 'current_source_record' && censusFallbackEnabled
+          ? sourceObservedAddress(listing)
+          : null;
+        if (localCoordinates || observedAddress) {
           return await gate.run(async () => {
-            const fallback = await tryMetadataFallbacks({ coordinates: localCoordinates, primaryUnavailableReason: 'not_configured' });
+            const timeoutMs = clampInteger(env.GOOGLE_STREETVIEW_TIMEOUT_MS, 500, 10_000, 5_000);
+            const fallbackCoords = localCoordinates || await resolveCensusCoordinates({ fetchImpl, observedAddress, timeoutMs });
+            const fallback = fallbackCoords
+              ? await tryMetadataFallbacks({ coordinates: fallbackCoords, primaryUnavailableReason: 'not_configured' })
+              : null;
             if (fallback) {
               return { status: 200, headers: { ...baseHeaders(), 'Content-Type': 'application/json; charset=utf-8' }, body: fallback };
             }
@@ -1158,27 +1286,68 @@ function createPropertyImageService(options = {}) {
       const config = runtimeConfig(env);
 
       return await gate.run(async () => {
-        const coordinates = (identity.identityBasis==='current_source_record'?sourceCoordinates(listing):null)
-          || await resolveEphemeralCoordinates({ fetchImpl, config, listing, circuit: geocodingCircuit });
+        let coordinates = identity.identityBasis === 'current_source_record' ? sourceCoordinates(listing) : null;
+        if (!coordinates) {
+          try {
+            coordinates = await resolveEphemeralCoordinates({ fetchImpl, config, listing, circuit: geocodingCircuit });
+          } catch (error) {
+            if (mode !== 'image' && fallbackEnabled && identity.identityBasis === 'current_source_record'
+                && geocodingOutageCodes.has(error?.code) && env.PROPERTY_IMAGE_CENSUS_GEOCODER_FALLBACK !== '0') {
+              const census = await resolveCensusCoordinates({
+                fetchImpl,
+                observedAddress: sourceObservedAddress(listing),
+                timeoutMs: config.timeoutMs,
+              });
+              if (census) {
+                const fallback = await tryMetadataFallbacks({ coordinates: census, primaryUnavailableReason: error.code });
+                if (fallback) {
+                  return {
+                    status: 200,
+                    headers: { ...baseHeaders(), 'Content-Type': 'application/json; charset=utf-8' },
+                    body: fallback,
+                  };
+                }
+              }
+            }
+            throw error;
+          }
+        }
         let panorama;
         try { panorama = await coalescedPanorama(listing, coordinates, config); }
         catch (error) {
           const retryable = ['street_view_unavailable', 'panorama_mismatch'].includes(error.code);
-          if (retryable && fallbackEnabled && coordinates) {
-            const fallback = await tryMetadataFallbacks({ coordinates, primaryUnavailableReason: error.code });
-            if (fallback) {
-              return {
-                status: 200,
-                headers: { ...baseHeaders(), 'Content-Type': 'application/json; charset=utf-8' },
-                body: fallback,
-              };
+          if (mode === 'walkthrough' && retryable) {
+            try {
+              // A street tour may start farther away; static property imagery keeps
+              // its stricter gate. The response discloses this distinction.
+              const radius = clampInteger(env.GOOGLE_WALKTHROUGH_RADIUS_METERS, 100, 500, 500);
+              panorama = await coalescedPanorama(listing, coordinates, { ...config, radiusMeters: radius, maximumDistanceMeters: radius });
+            } catch (walkthroughError) {
+              if (fallbackEnabled && googleFallbackTriggerCodes.has(walkthroughError?.code) && coordinates) {
+                const fallback = await tryMetadataFallbacks({ coordinates, primaryUnavailableReason: walkthroughError.code });
+                if (fallback) {
+                  return {
+                    status: 200,
+                    headers: { ...baseHeaders(), 'Content-Type': 'application/json; charset=utf-8' },
+                    body: fallback,
+                  };
+                }
+              }
+              throw walkthroughError;
             }
+          } else {
+            if (fallbackEnabled && googleFallbackTriggerCodes.has(error?.code) && coordinates) {
+              const fallback = await tryMetadataFallbacks({ coordinates, primaryUnavailableReason: error.code });
+              if (fallback) {
+                return {
+                  status: 200,
+                  headers: { ...baseHeaders(), 'Content-Type': 'application/json; charset=utf-8' },
+                  body: fallback,
+                };
+              }
+            }
+            throw error;
           }
-          if (mode !== 'walkthrough' || !retryable) throw error;
-          // A street tour may start farther away; static property imagery keeps
-          // its stricter gate. The response discloses this distinction.
-          const radius = clampInteger(env.GOOGLE_WALKTHROUGH_RADIUS_METERS, 100, 500, 500);
-          panorama = await coalescedPanorama(listing, coordinates, {...config, radiusMeters: radius, maximumDistanceMeters: radius});
         }
         if (mode === 'metadata' || mode === 'walkthrough') {
           const { _panoId, ...publicMetadata } = panorama;
@@ -1243,10 +1412,12 @@ module.exports.ProviderCircuit = ProviderCircuit;
 module.exports.bearingDegrees = bearingDegrees;
 module.exports.createPropertyImageService = createPropertyImageService;
 module.exports.distanceMeters = distanceMeters;
+module.exports.exactCensusGeocode = exactCensusGeocode;
 module.exports.exactRooftopGeocode = exactRooftopGeocode;
 module.exports.hasSourceObservedProvenance = hasSourceObservedProvenance;
 module.exports.hasSourceIdentifiedArchive = hasSourceIdentifiedArchive;
 module.exports.hasUsablePublisherPhoto = hasUsablePublisherPhoto;
+module.exports.resolveCensusCoordinates = resolveCensusCoordinates;
 module.exports.resolveEphemeralCoordinates = resolveEphemeralCoordinates;
 module.exports.resolveRequest = defaultService.resolve;
 module.exports.sourceCoordinates = sourceCoordinates;

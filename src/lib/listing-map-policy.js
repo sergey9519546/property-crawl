@@ -2,6 +2,7 @@
 // also exercised by raw `node --test`, which does not resolve Next.js webpack
 // aliases. Next.js still loads this file fine via its own resolver.
 const { inspectSourceRecordUrl } = require('../../server/scrapers/source-policy');
+const { hasParcelBoundaryCoverage } = require('./parcel-boundary-coverage');
 
 function object(value) {
   return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
@@ -135,6 +136,19 @@ function inspectParcelBoundaryInputs(listing) {
       eligible: false,
       code: 'EXACT_COORDINATES_REQUIRED',
       message: 'Exact source coordinates are required for parcel geometry lookup.',
+      state,
+      county,
+      apn,
+      lat,
+      lng,
+    };
+  }
+
+  if (state && !hasParcelBoundaryCoverage(state, county)) {
+    return {
+      eligible: false,
+      code: 'PARCEL_SOURCE_UNAVAILABLE',
+      message: `No parcel geometry source is configured for ${state.toUpperCase()}.`,
       state,
       county,
       apn,

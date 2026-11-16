@@ -86,7 +86,7 @@ const filterLabels: Record<string, string> = {
   q: "Search", state: "State", county: "County", source: "Source", type: "Property type",
   program: "Program", lifecycle: "Sale status", occupancy: "Occupancy", freshness: "Freshness",
   saleFrom: "From", saleTo: "Until", maxBid: "Max opening bid", minScore: "Min Deal Score",
-  minEquity: "Min equity (value minus bid)", hasDocuments: "Documents", seniorLien: "Senior lien", redemption: "Redemption period",
+  minEquity: "Min equity (value minus bid)", hasDocuments: "Documents", hasPhoto: "Photos", seniorLien: "Senior lien", redemption: "Redemption period",
   distressStage: "Sale type", minQuality: "Min listing detail",
 };
 // The search box owns the text being typed. While it lived in
@@ -544,11 +544,74 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
       return true;
     });
   }, [payload?.listings, watchlistListings, triageFilters, anyTriageActive, distressStageFilter, showSavedOnly, saved]);
+  const normalizeFacetKey = (field: keyof DiscoveryFilters, value: string) => {
+    const trimmed = String(value || "").trim().toLowerCase();
+    if (!trimmed || trimmed === "unknown" || (field === "type" && ["n/a", "none", "-"].includes(trimmed))) return "unknown";
+    if (field === "county") return trimmed.replace(/\s+(?:county|parish|borough)$/, "").trim() || "unknown";
+    if (field === "type" && ["single family", "single-family", "single family residence", "single family residential", "sfr"].includes(trimmed)) {
+      return "single family home";
+    }
+    if (field === "type" && ["multi-family", "multi family dwelling", "multi-family dwelling"].includes(trimmed)) {
+      return "multi family";
+    }
+    if (field === "type" && ["townhouse", "town home", "townhome"].includes(trimmed)) {
+      return "town house";
+    }
+    return trimmed;
+  };
+  const preferredFacetValue = (field: keyof DiscoveryFilters, raw: string, existing?: string) => {
+    const key = normalizeFacetKey(field, raw);
+    if (key === "unknown") return "unknown";
+    if (field === "type" && key === "single family home") return "Single Family Home";
+    if (field === "type" && key === "multi family") return "Multi Family";
+    if (field === "type" && key === "town house") return "Town House";
+    if (field === "county") {
+      const stripped = raw.trim().replace(/\s+(?:county|parish|borough)$/i, "").trim();
+      const base = stripped || raw.trim();
+      if (existing && !/\b(?:county|parish|borough)$/i.test(existing) && existing !== existing.toUpperCase()) return existing;
+      return base;
+    }
+    if (!existing) return raw.trim();
+    const isAllCaps = (text: string) => text.length > 2 && text === text.toUpperCase();
+    return isAllCaps(existing) && !isAllCaps(raw.trim()) ? raw.trim() : existing;
+  };
   const facetOptions = (field: keyof DiscoveryFilters) => {
-    const options = facets[field] || [];
+    const rawOptions = facets[field] || [];
+    const merged = new Map<string, { value: string; count: number | null }>();
+    for (const option of rawOptions) {
+      const key = normalizeFacetKey(field, option.value);
+      const current = merged.get(key);
+      const nextCount = typeof option.count === "number" ? option.count : null;
+      if (!current) {
+        merged.set(key, {
+          value: preferredFacetValue(field, option.value),
+          count: nextCount,
+        });
+      } else {
+        merged.set(key, {
+          value: preferredFacetValue(field, option.value, current.value),
+          count: current.count !== null && nextCount !== null ? current.count + nextCount : current.count ?? nextCount,
+        });
+      }
+    }
+    const options = Array.from(merged.values()).sort(
+      (a, b) => (b.count ?? 0) - (a.count ?? 0) || a.value.localeCompare(b.value),
+    );
     const selected = filters[field];
-    return selected && selected !== "all" && !options.some((option) => option.value === selected)
-      ? [{ value: selected, count: payload ? 0 : null }, ...options] : options;
+    if (selected && selected !== "all") {
+      const selectedKey = normalizeFacetKey(field, selected);
+      if (!options.some((option) => normalizeFacetKey(field, option.value) === selectedKey)) {
+        return [{ value: selected, count: payload ? 0 : null }, ...options];
+      }
+    }
+    return options;
+  };
+  const selectedFacetValue = (field: keyof DiscoveryFilters) => {
+    const selected = filters[field];
+    if (!selected || selected === "all") return "all";
+    const key = normalizeFacetKey(field, selected);
+    const options = facetOptions(field);
+    return options.find((option) => normalizeFacetKey(field, option.value) === key)?.value || selected;
   };
   const hasFilters = Object.entries(filters).some(
     ([key, value]) => key !== "view" && key !== "sort" && value,
@@ -638,6 +701,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
     quality: "most complete listing",
     date: "sale date",
     "bid-asc": "opening bid, low to high",
+    images: "most photos",
   } as Record<string, string>)[filters.sort ?? ""] ?? "Deal Score, highest first"}.`;
 
   return (
@@ -653,7 +717,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
             <select
               key={field}
               aria-label={filterLabels[field]}
-              value={filters[field] || "all"}
+              value={selectedFacetValue(field)}
               onChange={(event) => selectValue(field, event.target.value)}
               className={`min-h-10 w-full rounded-lg border border-line-strong bg-card px-3 py-2 text-sm ${field === "type" ? "col-span-2 sm:col-span-1" : ""}`}
             >
@@ -672,7 +736,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
         {moreFiltersOpen && (
           <div className="mt-3 grid gap-3 rounded-xl bg-paper p-3 sm:grid-cols-2 lg:grid-cols-4">
             {(["source", "program", "lifecycle", "occupancy", "freshness"] as const).map((field) => (
-              <select key={field} aria-label={filterLabels[field]} value={filters[field] || "all"} onChange={(event) => selectValue(field, event.target.value)} className="min-h-10 rounded-lg border border-line-strong bg-card px-3 text-sm">
+              <select key={field} aria-label={filterLabels[field]} value={selectedFacetValue(field)} onChange={(event) => selectValue(field, event.target.value)} className="min-h-10 rounded-lg border border-line-strong bg-card px-3 text-sm">
                 <option value="all">{defaults[field]}</option>
                 {facetOptions(field).map((facet) => <option key={facet.value} value={facet.value}>{facet.value === "unknown" ? "Unknown" : sourceDisplayText(facet.value).replace(/_/g, " ")}{facet.count !== null ? ` (${facet.count})` : ""}</option>)}
               </select>
@@ -692,6 +756,9 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
             <label className="rounded-control border border-line-strong bg-card px-3 py-2 text-xs font-semibold focus-within:border-yours focus-within:ring-2 focus-within:ring-yours/20">Min equity (value minus bid) ($)<input type="number" min={0} value={filters.minEquity || ""} onChange={(event) => setFilters({ minEquity: event.target.value || undefined })} placeholder="0" className="mt-1 block w-full bg-transparent text-sm outline-none focus-visible:shadow-none" /></label>
             <select aria-label="Documents" value={filters.hasDocuments || "all"} onChange={(event) => selectValue("hasDocuments", event.target.value)} className="min-h-10 rounded-lg border border-line-strong bg-card px-3 text-sm">
               <option value="all">Any documents</option><option value="true">Documents available</option><option value="false">No documents posted</option><option value="unknown">Not stated</option>
+            </select>
+            <select aria-label="Property photos" value={filters.hasPhoto || "all"} onChange={(event) => selectValue("hasPhoto", event.target.value)} className="min-h-10 rounded-lg border border-line-strong bg-card px-3 text-sm">
+              <option value="all">Any photo status</option><option value="true">Has publisher photo</option><option value="false">No publisher photo</option>
             </select>
             <select aria-label="Senior lien risk" value={filters.seniorLien || "all"} onChange={(event) => selectValue("seniorLien", event.target.value)} className="min-h-10 rounded-lg border border-line-strong bg-card px-3 text-sm">
               <option value="all">Any senior lien status</option><option value="clean">No senior-lien flag posted</option><option value="risk">High senior lien risk</option>
@@ -716,7 +783,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
                   }
                   className="inline-flex items-center gap-1 rounded-full bg-line px-2.5 py-1 text-label font-semibold text-ink"
                 >
-                  {filterLabels[key] || key}: {key === "hasDocuments" ? value === "true" ? "Available" : value === "false" ? "None posted" : "Not stated" : key === "seniorLien" ? value === "clean" ? "No senior-lien flag" : "High risk" : key === "redemption" ? value === "immediate" ? "Immediate deed" : "Active redemption" : sourceDisplayText(value!).replace(/_/g, " ")}
+                  {filterLabels[key] || key}: {key === "hasDocuments" ? value === "true" ? "Available" : value === "false" ? "None posted" : "Not stated" : key === "hasPhoto" ? value === "true" ? "Has photo" : "No photo" : key === "seniorLien" ? value === "clean" ? "No senior-lien flag" : "High risk" : key === "redemption" ? value === "immediate" ? "Immediate deed" : "Active redemption" : sourceDisplayText(value!).replace(/_/g, " ")}
                   <X size={12} />
                 </button>
               ))}
@@ -852,6 +919,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
             <option value="equity">Bid spread / equity</option>
             <option value="date">Sale date</option>
             <option value="bid-asc">Opening bid, low to high</option>
+            <option value="images">Most photos</option>
           </select>
           <select
             aria-label="Minimum listing detail"

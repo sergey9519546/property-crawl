@@ -739,3 +739,156 @@ test('alternatives mode supports archived_source_record and falls back to roofto
   assert.equal(noKeyRes.status, 503);
   assert.equal(noKeyRes.body.error, 'not_configured');
 });
+
+
+test('geocoding circuit reports address verification errors separately and LOT-prefixed street addresses resolve', async () => {
+  const { sourceObservedAddress } = require('../server/routes/property-image');
+  const recovered = sourceObservedAddress({
+    address: 'LOT 2: 139-B Farless Road, Merry Hill, NC 27957',
+    city: 'Merry Hill',
+    state: 'NC',
+    zip: '27957',
+  });
+  assert.ok(recovered);
+  assert.equal(recovered.streetNumber, '139b');
+  assert.equal(recovered.route, 'farless rd');
+  assert.equal(sourceObservedAddress({ address: 'Vacant parcel', city: 'Merry Hill', state: 'NC', zip: '27957' }), null);
+  assert.equal(sourceObservedAddress({ address: 'Lot 5, Main St', city: 'Merry Hill', state: 'NC', zip: '27957' }), null);
+
+  const deniedNoCoords = liveListing({
+    id: 'TRSY-27-66-813',
+    source: 'treasury',
+    sourceUrl: 'https://www.treasury.gov/auctions/treasury/rp/realprop.shtml?id=813',
+    address: 'LOT 2: 139-B Farless Road',
+    city: 'Merry Hill',
+    state: 'NC',
+    zip: '27957',
+    lat: null,
+    lng: null,
+  });
+  const svc = serviceFor({
+    listing: deniedNoCoords,
+    fetchImpl: async (url) => {
+      if (String(url).includes('/maps/api/geocode/json')) {
+        return geocodeResponse({}, { status: 'REQUEST_DENIED', results: [] });
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+  const firstDenied = await svc.resolve(request(`listingId=${deniedNoCoords.id}&mode=metadata`));
+  assert.equal(firstDenied.status, 503);
+  assert.equal(firstDenied.body.error, 'geocoding_denied');
+  const secondCircuit = await svc.resolve(request(`listingId=${deniedNoCoords.id}&mode=metadata`));
+  assert.equal(secondCircuit.status, 503);
+  assert.equal(secondCircuit.body.error, 'circuit_open');
+  assert.equal(secondCircuit.body.reason, 'Address verification is temporarily unavailable.');
+});
+
+test('alternatives mode falls back to US Census Geocoder for current_source_record when Google Geocoding fails or is unset, and stays strict', async () => {
+  const noCoordLive = liveListing({ lat: null, lng: null, address: '19 West Park Avenue', city: 'Park Ridge', state: 'NJ', zip: '07656' });
+  const censusOkPayload = {
+    result: {
+      addressMatches: [{
+        matchedAddress: '19 WEST PARK AVE, PARK RIDGE, NJ, 07656',
+        coordinates: { x: -74.0301, y: 40.9501 },
+        addressComponents: { streetName: 'WEST PARK', suffixType: 'AVE', state: 'NJ', zip: '07656' },
+      }],
+    },
+  };
+  const panoramaxCollection = {
+    type: 'FeatureCollection',
+    features: [{
+      id: 'pnx-census-1',
+      collection: 'seq-1',
+      geometry: { type: 'Point', coordinates: [-74.0301, 40.9501] },
+      properties: { datetime: '2025-10-01T12:00:00Z', license: 'CC-BY-SA-4.0', field_of_view: 360 },
+      links: [{ rel: 'license', href: 'https://spdx.org/licenses/CC-BY-SA-4.0.html' }],
+    }],
+  };
+
+  // 1. Google Geocoding returns REQUEST_DENIED -> Census Geocoder recovers coords for alternatives
+  const deniedToCensus = serviceFor({
+    listing: noCoordLive,
+    fetchImpl: async (url) => {
+      if (String(url).includes('/maps/api/geocode/json')) return geocodeResponse({}, { status: 'REQUEST_DENIED', results: [] });
+      if (String(url).includes('geocoding.geo.census.gov')) return new Response(JSON.stringify(censusOkPayload), { status: 200, headers: { 'content-type': 'application/json' } });
+      if (String(url).includes('api.panoramax.xyz')) return new Response(JSON.stringify(panoramaxCollection), { status: 200, headers: { 'content-type': 'application/geo+json' } });
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+  const recovered = await deniedToCensus.resolve(request(`listingId=${noCoordLive.id}&mode=alternatives`));
+  assert.equal(recovered.status, 200);
+  assert.equal(recovered.body.available, true);
+  assert.equal(recovered.body.coordinateBasis, 'source_observed_address_census_geocode');
+  assert.equal(recovered.body.candidate?.pictureId, 'pnx-census-1');
+
+  // 2. Census state mismatch rejects cleanly and surfaces the Google denial
+  const censusMismatch = serviceFor({
+    listing: noCoordLive,
+    fetchImpl: async (url) => {
+      if (String(url).includes('/maps/api/geocode/json')) return geocodeResponse({}, { status: 'REQUEST_DENIED', results: [] });
+      if (String(url).includes('geocoding.geo.census.gov')) {
+        return new Response(JSON.stringify({
+          result: {
+            addressMatches: [{
+              matchedAddress: '19 WEST PARK AVE, PARK RIDGE, NY, 07656',
+              coordinates: { x: -74.0301, y: 40.9501 },
+              addressComponents: { streetName: 'WEST PARK', suffixType: 'AVE', state: 'NY', zip: '07656' },
+            }],
+          },
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+  const rejected = await censusMismatch.resolve(request(`listingId=${noCoordLive.id}&mode=alternatives`));
+  assert.equal(rejected.status, 503);
+  assert.equal(rejected.body.error, 'geocoding_denied');
+
+  // 3. Opt-in Census fallback works with missing Google keys on current_source_record
+  const unsetKeyLive = serviceFor({
+    listing: noCoordLive,
+    env: { GOOGLE_MAPS_API_KEY: '', GOOGLE_GEOCODING_API_KEY: '', PROPERTY_IMAGE_CENSUS_GEOCODER_FALLBACK: '1' },
+    fetchImpl: async (url) => {
+      if (String(url).includes('geocoding.geo.census.gov')) return new Response(JSON.stringify(censusOkPayload), { status: 200, headers: { 'content-type': 'application/json' } });
+      if (String(url).includes('api.panoramax.xyz')) return new Response(JSON.stringify(panoramaxCollection), { status: 200, headers: { 'content-type': 'application/geo+json' } });
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+  const okWithoutGoogle = await unsetKeyLive.resolve(request(`listingId=${noCoordLive.id}&mode=alternatives`));
+  assert.equal(okWithoutGoogle.status, 200);
+  assert.equal(okWithoutGoogle.body.candidate?.pictureId, 'pnx-census-1');
+});
+
+test('walkthrough falls back to Panoramax on Google denial or miss only when opt-in fallback is enabled', async () => {
+  const panoramaxCollection = {
+    type: 'FeatureCollection',
+    features: [{
+      id: 'pnx-walk-1',
+      collection: 'seq-1',
+      geometry: { type: 'Point', coordinates: [-74.0301, 40.9501] },
+      properties: { datetime: '2025-10-01T12:00:00Z', license: 'CC-BY-SA-4.0', field_of_view: 360 },
+      links: [{ rel: 'license', href: 'https://spdx.org/licenses/CC-BY-SA-4.0.html' }],
+    }],
+  };
+  let googleCalls = 0;
+  const walkthroughFallback = serviceFor({
+    env: { PROPERTY_IMAGE_GOOGLE_PANORAMAX_FALLBACK: '1' },
+    fetchImpl: async (url) => {
+      if (String(url).includes('maps.googleapis.com')) {
+        googleCalls += 1;
+        return metadataResponse({ status: 'REQUEST_DENIED', pano_id: undefined, location: undefined });
+      }
+      if (String(url).includes('api.panoramax.xyz')) {
+        return new Response(JSON.stringify(panoramaxCollection), { status: 200, headers: { 'content-type': 'application/geo+json' } });
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+  const res = await walkthroughFallback.resolve(request('listingId=CIV-NJ-7-53&mode=walkthrough'));
+  assert.equal(googleCalls, 1, 'must not retry Google Street View after REQUEST_DENIED');
+  assert.equal(res.status, 200);
+  assert.equal(res.body.provider, 'panoramax_fallback');
+  assert.equal(res.body.primaryUnavailableReason, 'upstream_denied');
+  assert.equal(res.body.candidate?.pictureId, 'pnx-walk-1');
+});

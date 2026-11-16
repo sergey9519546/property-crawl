@@ -342,7 +342,7 @@ class IrsSeizedScraper extends BaseScraper {
         origin: 'live', observed: true, publisher: 'Internal Revenue Service', recordId: slug,
         sourceFacts: { publisherTitle: publisherTitle || null, addressQualification: /^\d/.test(street) ? 'numbered_street' : 'positive_land_evidence', publisherParcelLabel: parcelPrefixedLand ? addrLines[0] : null, redemptionPeriodDays: 180, statutoryRedemption: '26 U.S.C. § 6337 (180 days)', deposit, apn },
         media: gallery.length ? {
-          photo: { sourceRecordUrl: detailUrl, extraction: { selector: gallery[0].selector, association: 'exact_detail_page' } },
+          photo: { url: gallery[0].url, origin: 'publisher_record', verification: 'source_extracted', sourceRecordUrl: detailUrl, extraction: { selector: gallery[0].selector, association: 'exact_detail_page' } },
           gallery
         } : {}
       }

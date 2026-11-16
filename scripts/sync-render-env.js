@@ -59,7 +59,9 @@ async function syncRenderEnv() {
 
   const candidateKeys = [
     'GOOGLE_MAPS_API_KEY',
+    'NEXT_PUBLIC_GOOGLE_MAPS_API_KEY',
     'NEXT_PUBLIC_GOOGLE_MAPS_EMBED_API_KEY',
+    'MAPILLARY_ACCESS_TOKEN',
     'GOOGLE_API_KEY',
     'SCRAPER_ADMIN_TOKEN',
     'WORKSPACE_SESSION_SECRET',

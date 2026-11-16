@@ -117,3 +117,35 @@ test('media telemetry counts accepted images and reports rejected candidates', (
   assert.equal(report.yieldMetrics.photoYieldPct, '50%');
   assert.equal(report.media.reasons.stock_image, 1);
 });
+
+
+test('presentListing hydrates verified images array from provenance media gallery and secondary media', () => {
+  const { presentListing } = require('../server/routes/listings');
+  const hydrated = presentListing({
+    id: 'IRS-WA-TEST-1',
+    source: 'irs',
+    state: 'WA',
+    address: '100 Main St, Cheney, WA 99004',
+    photo: 'https://www.irsauctions.gov/sites/default/files/100/front.jpg',
+    images: null,
+    sourceUrl: 'https://www.irsauctions.gov/node/100',
+    sourceObservedAt: '2026-10-01T00:00:00.000Z',
+    provenance: {
+      origin: 'live',
+      observed: true,
+      publisher: 'Internal Revenue Service',
+      recordId: '100',
+      media: {
+        gallery: [
+          { url: 'https://www.irsauctions.gov/sites/default/files/100/front.jpg' },
+          { url: 'https://www.irsauctions.gov/sites/default/files/100/back.jpg' },
+          { url: 'https://images.unsplash.com/bad-stock.jpg' },
+        ],
+      },
+    },
+  });
+  assert.deepEqual(hydrated.images, [
+    'https://www.irsauctions.gov/sites/default/files/100/front.jpg',
+    'https://www.irsauctions.gov/sites/default/files/100/back.jpg',
+  ]);
+});

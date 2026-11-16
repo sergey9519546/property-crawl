@@ -8,6 +8,7 @@ import {
   type AlternativeImageryPayload,
 } from '@/lib/panoramax-client';
 import { loadPanoramaxViewer, mountPanoramaxViewer, type ViewerState } from '@/lib/panoramax-viewer';
+import { useNonce } from '@/components/security/nonce-context';
 
 type State =
   | { status: 'loading' }
@@ -15,6 +16,7 @@ type State =
   | { status: 'available'; data: AlternativeImageryPayload; selectedProvider: 'panoramax' | 'mapillary' };
 
 export function AlternativeStreetView({ listingId, address }: { listingId: string; address: string }) {
+  const nonce = useNonce();
   const [state, setState] = useState<State>({ status: 'loading' });
   const [attempt, setAttempt] = useState(0);
   const viewerHost = useRef<HTMLDivElement>(null);
@@ -77,7 +79,7 @@ export function AlternativeStreetView({ listingId, address }: { listingId: strin
     let dispose: (() => void) | undefined;
     setViewerState('loading');
     setSelectedPicture(activeCandidate.pictureId);
-    void loadPanoramaxViewer()
+    void loadPanoramaxViewer(nonce)
       .then(() => {
         if (active && viewerHost.current) {
           dispose = mountPanoramaxViewer(viewerHost.current, activeCandidate, setViewerState, setSelectedPicture);
@@ -90,7 +92,7 @@ export function AlternativeStreetView({ listingId, address }: { listingId: strin
       active = false;
       dispose?.();
     };
-  }, [activeCandidate]);
+  }, [activeCandidate, nonce]);
 
   if (state.status !== 'available' || !activeCandidate) {
     return (

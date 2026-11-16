@@ -16,8 +16,10 @@ const ARCGIS_REGISTRY = Object.freeze({
     endpoint: 'https://ca.dep.state.fl.us/arcgis/rest/services/OpenData/PARCELS/MapServer/0/query'
   },
   TX: {
-    name: 'Texas StratMap Parcels / TNRIS',
-    endpoint: 'https://feature.geographic.texas.gov/arcgis/rest/services/Cadastral/Parcels/MapServer/0/query'
+    name: 'Texas Geographic Information Office (TxGIO) StratMap Land Parcels',
+    endpoint: 'https://feature.geographic.texas.gov/arcgis/rest/services/Parcels/stratmap_land_parcels_48_most_recent/MapServer/identify',
+    operation: 'identify',
+    apnField: 'PROP_ID'
   },
   NJ: {
     name: 'New Jersey Office of GIS (NJGIN) Parcel Data',
@@ -134,12 +136,12 @@ function computePolygonMetrics(geometry) {
 
 function observedProperties(properties, serviceInfo, geometry = null) {
   const source = properties && typeof properties === 'object' ? properties : {};
-  const keys = ['PARCEL_ID', 'PARCELID', 'PARCELNO', 'PARCEL_NO', 'PIN', 'APN', 'PAMS_PIN', 'PROP_ID', 'PARCELPIN', 'parcelid', 'parno', 'TAXPIN', 'UPI'];
+  const keys = ['PARCEL_ID', 'PARCELID', 'PARCELNO', 'PARCEL_NO', 'PIN', 'APN', 'PAMS_PIN', 'PROP_ID', 'prop_id', 'PARCELPIN', 'parcelid', 'parno', 'TAXPIN', 'UPI'];
   if (serviceInfo && serviceInfo.apnField && !keys.includes(serviceInfo.apnField)) {
     keys.unshift(serviceInfo.apnField);
   }
   const parcelId = firstValue(source, keys, textValue);
-  const observedAcres = firstValue(source, ['CALCULATED_ACRES', 'CALC_ACRES', 'LOT_ACRES', 'ACRES', 'GIS_ACRES'], numberValue);
+  const observedAcres = firstValue(source, ['CALCULATED_ACRES', 'CALC_ACRES', 'LOT_ACRES', 'ACRES', 'GIS_ACRES', 'GIS_AREA', 'LEGAL_AREA'], numberValue);
   const observedSqft = firstValue(source, ['LOT_SQFT', 'LOT_SF', 'LAND_SQFT', 'SQFT'], numberValue);
   const lotSqft = observedSqft ?? (observedAcres === null ? null : Math.round(observedAcres * 43560));
   const lotAcres = observedAcres ?? (observedSqft === null ? null : Number((observedSqft / 43560).toFixed(4)));
@@ -229,6 +231,15 @@ async function queryArcGisRest(lat, lng, state, apn = null, county = null) {
 
   const hasCoords = coordinate(lat, -90, 90) !== null && coordinate(lng, -180, 180) !== null;
 
+  const isIdentifyService = serviceInfo.operation === 'identify' || /\/identify$/i.test(serviceInfo.endpoint);
+  if (isIdentifyService && !hasCoords) {
+    throw new ParcelBoundaryError(
+      422,
+      'EXACT_COORDINATES_REQUIRED',
+      'Exact source coordinates are required for statewide parcel geometry lookup.'
+    );
+  }
+
   // Helper to run query with given search params
   const runQuery = async (params) => {
     const queryUrl = new URL(serviceInfo.endpoint);
@@ -257,16 +268,39 @@ async function queryArcGisRest(lat, lng, state, apn = null, county = null) {
     let geojson = null;
 
     if (hasCoords) {
-      geojson = await runQuery({
-        geometry: `${lng},${lat}`,
-        geometryType: 'esriGeometryPoint',
-        inSR: '4326',
-        spatialRel: 'esriSpatialRelIntersects',
-        outFields: '*',
-        returnGeometry: 'true',
-        outSR: '4326',
-        f: 'geojson'
-      });
+      if (isIdentifyService) {
+        const delta = 0.002;
+        const identifyPayload = await runQuery({
+          geometry: `${lng},${lat}`,
+          geometryType: 'esriGeometryPoint',
+          sr: '4326',
+          layers: 'top:0',
+          tolerance: '0',
+          mapExtent: `${lng - delta},${lat - delta},${lng + delta},${lat + delta}`,
+          imageDisplay: '400,400,96',
+          returnGeometry: 'true',
+          f: 'json'
+        });
+        geojson = {
+          features: Array.isArray(identifyPayload?.results)
+            ? identifyPayload.results.map((item) => ({
+                geometry: item?.geometry,
+                properties: item?.attributes || {}
+              }))
+            : []
+        };
+      } else {
+        geojson = await runQuery({
+          geometry: `${lng},${lat}`,
+          geometryType: 'esriGeometryPoint',
+          inSR: '4326',
+          spatialRel: 'esriSpatialRelIntersects',
+          outFields: '*',
+          returnGeometry: 'true',
+          outSR: '4326',
+          f: 'geojson'
+        });
+      }
     }
 
     // Check if spatial match succeeded
@@ -278,7 +312,7 @@ async function queryArcGisRest(lat, lng, state, apn = null, county = null) {
     let feature = features.find(candidate => isCadastralGeometry(candidate?.geometry));
 
     // If point query yielded no polygon but APN is available, try searching by APN
-    if (!feature && apn) {
+    if (!feature && apn && !isIdentifyService) {
       const cleanApn = normalizeApn(apn);
       if (cleanApn) {
         let whereClause = `UPPER(${apnField}) LIKE '%${cleanApn}%'`;

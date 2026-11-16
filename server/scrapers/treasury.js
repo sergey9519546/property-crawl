@@ -275,7 +275,7 @@ class TreasuryForfeitureScraper extends BaseScraper {
         recordId: String(saleNumber || baseName),
         sourceFacts,
         media: gallery.length ? {
-          photo: { sourceRecordUrl: detailUrl, extraction: { selector: gallery[0].selector, association: 'exact_detail_page' } },
+          photo: { url: gallery[0].url, origin: 'publisher_record', verification: 'source_extracted', sourceRecordUrl: detailUrl, extraction: { selector: gallery[0].selector, association: 'exact_detail_page' } },
           gallery
         } : {}
       }

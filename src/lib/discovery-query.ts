@@ -3,11 +3,12 @@ export type DiscoveryFilters = {
   program?: string; lifecycle?: string; saleFrom?: string; saleTo?: string;
   maxBid?: string; occupancy?: string; freshness?: string; hasDocuments?: string;
   minScore?: string; minEquity?: string; seniorLien?: string; redemption?: string;
+  hasPhoto?: string;
   distressStage?: string; minQuality?: string;
   sort?: string; view?: string;
 };
 
-const keys = ["q", "state", "county", "source", "type", "program", "lifecycle", "saleFrom", "saleTo", "maxBid", "minScore", "minEquity", "occupancy", "freshness", "hasDocuments", "seniorLien", "redemption", "distressStage", "minQuality", "sort", "view"] as const;
+const keys = ["q", "state", "county", "source", "type", "program", "lifecycle", "saleFrom", "saleTo", "maxBid", "minScore", "minEquity", "occupancy", "freshness", "hasDocuments", "hasPhoto", "seniorLien", "redemption", "distressStage", "minQuality", "sort", "view"] as const;
 
 // The server is the authority for this vocabulary; this mirrors it and must not
 // invent values. server/discovery/query.js raises a 400 for an unrecognised
@@ -26,7 +27,8 @@ const keys = ["q", "state", "county", "source", "type", "program", "lifecycle", 
 export const DISCOVERY_FILTER_VALUES = Object.freeze({
   freshness: Object.freeze(["all", "observed", "unverified"]),
   hasDocuments: Object.freeze(["true", "false", "unknown"]),
-  sort: Object.freeze(["score", "quality", "opportunity", "triage", "date", "bid-asc", "equity", "bid"]),
+  hasPhoto: Object.freeze(["true", "false"]),
+  sort: Object.freeze(["score", "quality", "opportunity", "triage", "date", "bid-asc", "equity", "images", "bid"]),
   seniorLien: Object.freeze(["all", "clean", "risk"]),
   redemption: Object.freeze(["all", "immediate", "redemption_active"]),
 });
@@ -91,7 +93,7 @@ export function terminalFiltersToDiscovery(
   if (filters.occupancy && filters.occupancy !== "all") discoveryFilters.occupancy = filters.occupancy;
   if (filters.seniorLienFilter && filters.seniorLienFilter !== "all") discoveryFilters.seniorLien = filters.seniorLienFilter;
   if (filters.redemptionFilter && filters.redemptionFilter !== "all") discoveryFilters.redemption = filters.redemptionFilter;
-  if (filters.sortBy && ["score", "quality", "opportunity", "triage", "date", "bid-asc", "equity", "bid"].includes(filters.sortBy)) {
+  if (filters.sortBy && ["score", "quality", "opportunity", "triage", "date", "bid-asc", "equity", "images", "bid"].includes(filters.sortBy)) {
     discoveryFilters.sort = filters.sortBy;
   }
   const params = discoverySearchParams(discoveryFilters, extras);

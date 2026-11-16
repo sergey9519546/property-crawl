@@ -86,3 +86,24 @@ test('one pinned script is shared, script errors allow retry, and registration i
   assert.equal(scripts.length, 3);
   assert.equal(maps.length, 1);
 });
+
+
+test('loadPanoramaxViewer attaches CSP nonce when supplied', async () => {
+  const created = [];
+  let loadedReady = false;
+  globalThis.window = { setTimeout: callback => setTimeout(callback, 50), clearTimeout };
+  globalThis.customElements = { get: () => undefined, whenDefined: () => Promise.resolve(Element) };
+  globalThis.document = {
+    createElement: () => { const e = new Element(); created.push(e); return e; },
+    head: { appendChild: s => { if (s.type === 'module') setTimeout(() => s.onload?.(), 1); } },
+  };
+  // Force module state check on nonce propagation using a fresh import query parameter.
+  const freshMod = await import(`../src/lib/panoramax-viewer.ts?nonce-check=${Date.now()}`);
+  await freshMod.loadPanoramaxViewer('test-csp-nonce');
+  const mapEl = created.find(el => el.type === 'importmap');
+  const modEl = created.find(el => el.type === 'module');
+  assert.equal(mapEl?.nonce, 'test-csp-nonce');
+  assert.equal(modEl?.nonce, 'test-csp-nonce');
+  loadedReady = Boolean(mapEl && modEl);
+  assert.equal(loadedReady, true);
+});

@@ -329,3 +329,46 @@ test('county filter strips optional trailing County/Parish/Borough suffix across
   assert.equal(matches(rowPlain, filterPlain), true);
   assert.equal(matches(rowWithSuffix, filterPlain), true);
 });
+
+
+test('hasPhoto filter parses booleans and applies SQL/memory filtering without shifting positional params', async () => {
+  const { database, queries } = fakePg();
+  const filter = queryFromUrl(url('state=FL&hasPhoto=true'));
+  assert.equal(filter.hasPhoto, true);
+  await search(database, filter);
+  const where = pgWhere(filter);
+  assert.deepEqual(where.params, ['fl']);
+  assert.match(where.sql, /nullif\(photo_url,''\) IS NOT NULL/);
+
+  assert.throws(() => queryFromUrl(url('hasPhoto=maybe')), (err) => err.status === 400);
+  const withPhoto = { ...ROWS[0], state: 'FL', photo: 'https://example.org/p.jpg' };
+  const withoutPhoto = { ...ROWS[1], state: 'FL', photo: null, images: [] };
+  assert.equal(matches(withPhoto, filter), true);
+  assert.equal(matches(withoutPhoto, filter), false);
+});
+
+test('propType facet and filter unify Unknown literals and Single Family aliases across memory and SQL', async () => {
+  const typeRows = [
+    { id: '1', source: 'hud', state: 'FL', propType: 'Single Family', status: 'active', provenance: { origin: 'live' } },
+    { id: '2', source: 'hud', state: 'FL', propType: 'Single Family Home', status: 'active', provenance: { origin: 'live' } },
+    { id: '3', source: 'hud', state: 'FL', propType: 'Unknown', status: 'active', provenance: { origin: 'live' } },
+    { id: '4', source: 'hud', state: 'FL', propType: null, status: 'active', provenance: { origin: 'live' } },
+  ];
+  const res = await search({ isPg: false, getListings: async () => ({ total: 4, listings: typeRows }) }, queryFromUrl(url('facets=type')));
+  assert.deepEqual(res.facets.type, [
+    { value: 'Single Family Home', count: 2 },
+    { value: 'unknown', count: 2 },
+  ]);
+
+  const sfFilter = queryFromUrl(url('type=Single%20Family%20Home'));
+  assert.equal(matches(typeRows[0], sfFilter), true);
+  assert.equal(matches(typeRows[1], sfFilter), true);
+  const sfWhere = pgWhere(sfFilter);
+  assert.match(sfWhere.sql, /lower\(prop_type\)=\$\d+/);
+  assert.match(sfWhere.sql, /'single family'/);
+
+  const unkFilter = queryFromUrl(url('type=Unknown'));
+  assert.equal(matches(typeRows[2], unkFilter), true);
+  assert.equal(matches(typeRows[3], unkFilter), true);
+  assert.match(pgWhere(unkFilter).sql, /lower\(btrim\(prop_type\)\) IN \('unknown','n\/a','none','-'\)/);
+});

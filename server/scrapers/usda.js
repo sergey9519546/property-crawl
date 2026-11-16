@@ -310,11 +310,16 @@ class UsdaResalesScraper extends BaseScraper {
         sourceFacts: { listingType: listingType || null },
         media: photo ? {
           photo: {
+            url: photo,
+            origin: 'publisher_record',
+            verification: 'source_extracted',
             sourceRecordUrl: sourceUrl,
             extraction: { selector: '#propertySummariesTable td:first-child img', association: 'exact_detail_record' }
           },
           gallery: [{
             url: photo,
+            origin: 'publisher_record',
+            verification: 'source_extracted',
             sourceRecordUrl: sourceUrl,
             selector: '#propertySummariesTable td:first-child img',
             association: 'exact_detail_record'

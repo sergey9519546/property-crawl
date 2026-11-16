@@ -54,6 +54,12 @@ const nextConfig = {
   },
   // Security: do not advertise the framework in headers.
   poweredByHeader: false,
+  async redirects() {
+    return [
+      { source: '/watchlists', destination: '/hunts', permanent: false },
+      { source: '/map', destination: '/listings?view=map', permanent: false },
+    ];
+  },
   // Canonical UI security headers (production). Document CSP is set per request
   // in src/proxy.ts so script-src can use a nonce instead of 'unsafe-inline'.
   async headers() {

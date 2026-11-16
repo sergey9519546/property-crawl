@@ -132,6 +132,48 @@ function extractRawApn(listing) {
   return null;
 }
 
+const PROP_TYPE_CANONICAL = new Map([
+  ['single-family', 'Single Family'],
+  ['single family residence', 'Single Family'],
+  ['single-family residence', 'Single Family'],
+  ['single family residential', 'Single Family'],
+  ['single-family residential', 'Single Family'],
+  ['sfr', 'Single Family'],
+  ['multi family', 'Multi Family'],
+  ['multi-family', 'Multi Family'],
+  ['multi family dwelling', 'Multi Family'],
+  ['multi-family dwelling', 'Multi Family'],
+  ['townhouse', 'Town House'],
+  ['town home', 'Town House'],
+  ['townhome', 'Town House'],
+]);
+
+function normalizePropType(value) {
+  const cleaned = cleanText(value, ['Unknown', 'N/A', 'None', 'Unspecified', '-']);
+  if (!cleaned) return null;
+  return PROP_TYPE_CANONICAL.get(cleaned.toLowerCase()) || cleaned;
+}
+
+function collectVerifiedImages({ photo = null, gallery = [], inputImages = [], sourceValid = true } = {}) {
+  if (!sourceValid) return [];
+  const raw = [
+    photo,
+    ...(Array.isArray(gallery) ? gallery.map((item) => (typeof item === 'string' ? item : item?.url)) : []),
+    ...(Array.isArray(inputImages) ? inputImages : []),
+  ];
+  const out = [];
+  const seen = new Set();
+  for (const candidate of raw) {
+    if (typeof candidate !== 'string' || !candidate.trim()) continue;
+    const inspected = inspectImageUrl(candidate);
+    if (!inspected.accepted || seen.has(inspected.url)) continue;
+    seen.add(inspected.url);
+    out.push(inspected.url);
+    if (out.length === 12) break;
+  }
+  return out;
+}
+
 const REO_SOURCES = new Set([
   'hud', 'fannie', 'freddie', 'va', 'fdic', 'treasury', 'irs', 'gsa',
   'landbank', 'landbanksearch', 'usda', 'hud-homestore', 'fannie-homepath',
@@ -379,7 +421,7 @@ function standardizeListingRecord(raw = {}, options = {}) {
     baths: numberOrNull(input.baths, { min: 0 }),
     sqft: numberOrNull(input.sqft, { min: 0 }),
     year: numberOrNull(input.year, { min: 1000, max: new Date().getFullYear() + 2, integer: true }),
-    propType: cleanText(input.propType, ['Unknown']),
+    propType: normalizePropType(input.propType),
     openingBid,
     estLow,
     estHigh,
@@ -403,6 +445,12 @@ function standardizeListingRecord(raw = {}, options = {}) {
     occupancy: cleanText(input.occupancy, ['Unknown']),
     deposit: cleanText(input.deposit, ['Unknown']),
     photo,
+    images: collectVerifiedImages({
+      photo,
+      gallery: existingMedia.gallery,
+      inputImages: input.images,
+      sourceValid: sourceInspection.isValid && provenance.observed === true && provenance.origin === 'live',
+    }),
     sourceUrl,
     raw: rawNotice,
     price: numberOrNull(input.price, { min: 0 }),
@@ -439,5 +487,7 @@ module.exports = {
   buildParcelKey,
   attachParcelIdentity,
   computeTriage,
-  mapDistressStage
+  mapDistressStage,
+  normalizePropType,
+  collectVerifiedImages
 };

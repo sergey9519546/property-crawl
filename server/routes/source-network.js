@@ -50,6 +50,13 @@ function createSourceNetworkHandler(dependencies = {}) {
   }
   const evidenceCollectors = dependencies.evidenceCollectors || { 'federal-register': (options) => require('../sources/federal-register').collectFederalNotices(options) };
   const evidenceJobs = new Set();
+  const networkCacheTtlMs = Number.isFinite(dependencies.cacheTtlMs) ? dependencies.cacheTtlMs : 45_000;
+  let cachedNetwork = null;
+  let inflightNetworkBuild = null;
+  const invalidateNetworkCache = () => {
+    cachedNetwork = null;
+    inflightNetworkBuild = null;
+  };
   return async function handleSourceNetwork(req, res) {
     const url = new URL(req.url, 'http://localhost');
     res.setHeader('Cache-Control', 'no-store');
@@ -58,30 +65,68 @@ function createSourceNetworkHandler(dependencies = {}) {
     const env = dependencies.env || process.env;
     try {
       if (req.method === 'GET' && url.pathname === '/api/source-network') {
-        let countsMap = null;
-        let inventory = [];
-        let inventoryTruncated = false;
-        if (database.isPg && typeof database.getSourceInventoryAggregatesNative === 'function') {
-          countsMap = await database.getSourceInventoryAggregatesNative();
-        } else {
-          const scanned = await scanAllListings(database, {}, { pageSize: 10000 });
-          inventory = scanned.pool;
-          inventoryTruncated = scanned.truncated;
+        const allowCache = networkCacheTtlMs > 0 && (env.NODE_ENV !== 'test' || dependencies.enableCacheInTest === true);
+        const bypassCache = url.searchParams.get('refresh') === '1' || url.searchParams.get('fresh') === '1';
+        const collectionRunning = collector.isRunning || evidenceJobs.size > 0;
+        const poolRef = database.pool ?? null;
+        if (allowCache && !bypassCache && cachedNetwork && cachedNetwork.expiresAt > Date.now() && cachedNetwork.poolRef === poolRef && cachedNetwork.running === collectionRunning) {
+          res.setHeader('Cache-Control', 'public, max-age=30, stale-while-revalidate=60');
+          return res.json(cachedNetwork.payload);
         }
-        let packets = [], evidenceQueueError = false, historyUnavailable = false;
-        const completeEvidenceSummaries = typeof intake.listEvidenceSummaries === 'function';
-        let history;
-        try {
-          packets = completeEvidenceSummaries ? intake.listEvidenceSummaries() : intake.listEvidence({ limit: 200 });
-          if (!Array.isArray(packets)) throw new Error('Evidence summaries are unavailable');
-        } catch (_) { packets = []; evidenceQueueError = true; }
-        try { history = await readStore(database.pool); } catch (_) { historyUnavailable = true; history = { runs: {}, records: {}, signals: [], trackedRecords: 0 }; }
-        const evidenceSummary = {};
-        for (const packet of packets) { evidenceSummary[packet.sourceId] ||= { count: 0 }; evidenceSummary[packet.sourceId].count++; }
-        const network = buildSourceNetwork({ catalog: [...catalog, ...enrolledSources(packets, catalog)], adapters: collector.realScrapers, observations: history, listings: inventory, countsMap, evidenceCollectors: Object.keys(evidenceCollectors), evidenceSummary });
-        if (historyUnavailable) for (const source of network.sources) { if (source.automated) source.status = 'history_unavailable'; }
-        const discoveryNetwork = await attachDiscoveryCoverage(network, database, env);
-        return res.json({ ...discoveryNetwork, inventoryTruncated, evidenceSummaryLimited: !completeEvidenceSummaries && packets.length === 200, evidenceQueueError, historyUnavailable, collectionRunning: collector.isRunning || evidenceJobs.size > 0 });
+        const buildPayload = async () => {
+          let countsMap = null;
+          let inventory = [];
+          let inventoryTruncated = false;
+          if (database.isPg && typeof database.getSourceInventoryAggregatesNative === 'function') {
+            countsMap = await database.getSourceInventoryAggregatesNative();
+          } else {
+            const scanned = await scanAllListings(database, {}, { pageSize: 10000 });
+            inventory = scanned.pool;
+            inventoryTruncated = scanned.truncated;
+          }
+          let packets = [], evidenceQueueError = false, historyUnavailable = false;
+          const completeEvidenceSummaries = typeof intake.listEvidenceSummaries === 'function';
+          let history;
+          try {
+            packets = completeEvidenceSummaries ? intake.listEvidenceSummaries() : intake.listEvidence({ limit: 200 });
+            if (!Array.isArray(packets)) throw new Error('Evidence summaries are unavailable');
+          } catch (_) { packets = []; evidenceQueueError = true; }
+          try { history = await readStore(database.pool); } catch (_) { historyUnavailable = true; history = { runs: {}, records: {}, signals: [], trackedRecords: 0 }; }
+          const evidenceSummary = {};
+          for (const packet of packets) { evidenceSummary[packet.sourceId] ||= { count: 0 }; evidenceSummary[packet.sourceId].count++; }
+          const network = buildSourceNetwork({ catalog: [...catalog, ...enrolledSources(packets, catalog)], adapters: collector.realScrapers, observations: history, listings: inventory, countsMap, evidenceCollectors: Object.keys(evidenceCollectors), evidenceSummary });
+          if (historyUnavailable) for (const source of network.sources) { if (source.automated) source.status = 'history_unavailable'; }
+          const discoveryNetwork = await attachDiscoveryCoverage(network, database, env);
+          return {
+            ...discoveryNetwork,
+            inventoryTruncated,
+            evidenceSummaryLimited: !completeEvidenceSummaries && packets.length === 200,
+            evidenceQueueError,
+            historyUnavailable,
+            collectionRunning: collector.isRunning || evidenceJobs.size > 0,
+          };
+        };
+        if (allowCache && !bypassCache) {
+          if (!inflightNetworkBuild) {
+            inflightNetworkBuild = buildPayload()
+              .then((payload) => {
+                cachedNetwork = {
+                  payload,
+                  poolRef,
+                  running: Boolean(payload.collectionRunning),
+                  expiresAt: Date.now() + networkCacheTtlMs,
+                };
+                return payload;
+              })
+              .finally(() => {
+                inflightNetworkBuild = null;
+              });
+          }
+          const payload = await inflightNetworkBuild;
+          res.setHeader('Cache-Control', 'public, max-age=30, stale-while-revalidate=60');
+          return res.json(payload);
+        }
+        return res.json(await buildPayload());
       }
       if (req.method === 'GET' && url.pathname === '/api/source-network/jobs') {
         if (!requireWorkspaceIdentity(req, res, env)) return;
@@ -103,6 +148,7 @@ function createSourceNetworkHandler(dependencies = {}) {
       const configuredToken = resolveOperatorToken(env);
       if (!configuredToken) return res.status(503).json({ error: 'Source operations need SCRAPER_ADMIN_TOKEN on the API server. Public coverage remains available.' });
       if (!tokensMatch(presentedRunToken(req), configuredToken)) return res.status(401).json({ error: 'Source operator credential required' });
+      if (req.method !== 'GET') invalidateNetworkCache();
       if (url.pathname === '/api/source-network/intake') {
         if (req.method === 'GET') return res.json({ items: intake.listEvidence({ sourceId: url.searchParams.get('sourceId') || undefined, includeContent: url.searchParams.get('includeContent') === 'true', limit: 50 }) });
         if (req.method === 'POST') {

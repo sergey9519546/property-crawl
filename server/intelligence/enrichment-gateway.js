@@ -34,6 +34,7 @@
 
 const { applyCrossSourceBakeOff } = require('../db/client');
 const { scanAllListings } = require('../db/listings-scan');
+const { buildParcelKey, extractRawApn, extractCountyFips } = require('../scrapers/normalization');
 const courtlistener = require('../scrapers/courtlistener');
 const flDor = require('../scrapers/fl-dor-cadastral');
 const caController = require('../scrapers/ca-controller-tax-sale');
@@ -152,11 +153,34 @@ function confidenceBand(confidence) {
 // to a single round trip today while still reading to the end if the store
 // ever exceeds it.
 async function loadListingsForParcelKey(parcelKey, database) {
+  let matched;
   if (database && typeof database.getListingsByParcelKeyNative === 'function') {
-    return database.getListingsByParcelKeyNative(parcelKey);
+    matched = await database.getListingsByParcelKeyNative(parcelKey);
+  } else {
+    const { pool } = await scanAllListings(database, {}, { pageSize: 100000 });
+    matched = pool.filter((listing) => {
+      if (!listing) return false;
+      if (listing.parcelKey === parcelKey || listing.provenance?.parcelKey === parcelKey) return true;
+      return buildParcelKey({
+        apn: extractRawApn(listing),
+        countyFips: extractCountyFips(listing),
+      }) === parcelKey;
+    });
   }
-  const { pool } = await scanAllListings(database, {}, { pageSize: 100000 });
-  return pool.filter((listing) => listing && listing.parcelKey === parcelKey);
+  return (Array.isArray(matched) ? matched : []).map((listing) => {
+    if (!listing || typeof listing !== 'object') return listing;
+    const resolvedApn = listing.apn || listing.parcelNumber || listing.parcelId || extractRawApn(listing) || null;
+    const resolvedKey = buildParcelKey({
+      apn: resolvedApn,
+      countyFips: extractCountyFips(listing),
+    }) || listing.parcelKey || parcelKey;
+    if (listing.parcelKey === resolvedKey && (listing.apn || !resolvedApn)) return listing;
+    return {
+      ...listing,
+      parcelKey: resolvedKey,
+      ...(resolvedApn && !listing.apn ? { apn: resolvedApn } : {}),
+    };
+  });
 }
 
 function buildView(parcelKey, listings) {

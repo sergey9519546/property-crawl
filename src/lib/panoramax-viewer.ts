@@ -33,12 +33,13 @@ export const PANORAMAX_IMPORTS = Object.fromEntries(Object.entries({
 let libraryLoad: Promise<void> | null = null;
 let importMapInstalled = false;
 
-export function loadPanoramaxViewer(): Promise<void> {
+export function loadPanoramaxViewer(nonce?: string | null): Promise<void> {
   if (customElements.get('pnx-photo-viewer')) return Promise.resolve();
   if (libraryLoad) return libraryLoad;
   libraryLoad = new Promise<void>((resolve, reject) => {
     if (!importMapInstalled) {
       const map = document.createElement('script');
+      if (nonce) map.nonce = nonce;
       map.type = 'importmap';
       // Scope bare-name resolution to this provider's CDN module graph.
       map.textContent = JSON.stringify({ scopes: { 'https://cdn.jsdelivr.net/npm/': PANORAMAX_IMPORTS } });
@@ -55,6 +56,7 @@ export function loadPanoramaxViewer(): Promise<void> {
     };
     const timer = window.setTimeout(() => finish(new Error('Street viewer timed out')), 20000);
     script.type = 'module'; script.async = true; script.src = PANORAMAX_SCRIPT;
+    if (nonce) script.nonce = nonce;
     script.referrerPolicy = 'no-referrer';
     script.onload = () => {
       // A module load event can precede custom-element registration. Keep the

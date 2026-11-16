@@ -3,7 +3,7 @@ const Validator = require('../security/validation');
 const { readMediaStore, attachMedia } = require('../db/property-media-store');
 const discovery = require('../discovery/query');
 const { buildDocumentEvidence } = require('../intelligence/document-evidence');
-const { computeTriage, buildParcelKey, extractRawApn, extractCountyFips } = require('../scrapers/normalization');
+const { computeTriage, buildParcelKey, extractRawApn, extractCountyFips, collectVerifiedImages } = require('../scrapers/normalization');
 const { applyCrossSourceBakeOff } = defaultDb;
 const { annotateListing, summarizeInventory } = require('../scrapers/listing-intelligence');
 const { resolveCountyKey, resolveCountyEndpoint, queryArcgisParcel } = require('../enrichment/arcgis-parcels');
@@ -131,6 +131,21 @@ function presentListing(listing) {
     };
   }
   // Research quality + opportunity rank (10x listing intelligence layer).
+  if (!Array.isArray(presented.images) || presented.images.length === 0) {
+    const gallery = presented.provenance?.media?.gallery;
+    const secondary = presented.provenance?.media?.secondary?.images;
+    const hydratedImages = collectVerifiedImages({
+      photo: presented.photo,
+      gallery: [...(Array.isArray(gallery) ? gallery : []), ...(Array.isArray(secondary) ? secondary : [])],
+      inputImages: presented.images,
+      sourceValid: Boolean(presented.sourceUrl && presented.provenance?.observed !== false),
+    });
+    if (hydratedImages.length > 0) {
+      presented.images = hydratedImages;
+    } else if (!Array.isArray(presented.images)) {
+      presented.images = [];
+    }
+  }
   return annotateListing(presented);
 }
 

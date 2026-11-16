@@ -130,3 +130,31 @@ test('mapDistressStage: source comparison is case-insensitive', () => {
   assert.equal(mapDistressStage('HUD'), 'reo');
   assert.equal(mapDistressStage('Sheriff', new Date(Date.now() + 1 * 86_400_000).toISOString()), 'scheduled');
 });
+
+
+test('normalizePropType and standardizeListingRecord preserve Single Family, clear Unknown, and populate images', () => {
+  const { standardizeListingRecord, normalizePropType } = require('../../server/scrapers/normalization');
+  assert.equal(normalizePropType('Single Family'), 'Single Family');
+  assert.equal(normalizePropType('Single Family Home'), 'Single Family Home');
+  assert.equal(normalizePropType('single-family residential'), 'Single Family');
+  assert.equal(normalizePropType('Unknown'), null);
+  assert.equal(normalizePropType('N/A'), null);
+
+  const normalized = standardizeListingRecord({
+    id: 'TRSY-TEST-1',
+    source: 'treasury',
+    state: 'NC',
+    address: '139-B Farless Road',
+    propType: 'Unknown',
+    photo: 'https://www.treasury.gov/auctions/treasury/rp/images/house1.gif',
+    images: ['https://www.treasury.gov/auctions/treasury/rp/images/house2.gif', 'https://images.unsplash.com/fake.jpg'],
+    sourceUrl: 'https://www.treasury.gov/auctions/treasury/rp/139farless.shtml',
+    sourceObservedAt: '2026-10-01T00:00:00.000Z',
+    provenance: { origin: 'live', observed: true, publisher: 'U.S. Department of the Treasury', recordId: '1' },
+  });
+  assert.equal(normalized.propType, null);
+  assert.deepEqual(normalized.images, [
+    'https://www.treasury.gov/auctions/treasury/rp/images/house1.gif',
+    'https://www.treasury.gov/auctions/treasury/rp/images/house2.gif',
+  ]);
+});

@@ -11,6 +11,7 @@ import {
 } from "@/lib/street-view-client";
 
 type Props = {
+  listingId?: string | null;
   address: string;
   sourceLabel?: string | null;
   metadata: StreetViewMetadata;
@@ -22,7 +23,8 @@ type PanoramaHandle = {
   unbindAll?(): void;
 };
 
-export function InteractiveStreetView({ address, sourceLabel, metadata, onUnavailable }: Props) {
+export function InteractiveStreetView({ listingId, address, sourceLabel, metadata, onUnavailable }: Props) {
+  const [staticImageFailed, setStaticImageFailed] = React.useState(false);
   const container = React.useRef<HTMLDivElement>(null);
   const panorama = React.useRef<PanoramaHandle | null>(null);
   const iframeTimer = React.useRef<number | null>(null);
@@ -36,6 +38,16 @@ export function InteractiveStreetView({ address, sourceLabel, metadata, onUnavai
     () => (configured ? "loading" : hasPanoramaTarget ? "unconfigured" : "error"),
   );
   const [attempt, setAttempt] = React.useState(0);
+  const canStaticPreview = Boolean(
+    listingId
+    && hasPanoramaTarget
+    && metadata.coverage !== "nearby_street"
+    && !staticImageFailed
+  );
+
+  React.useEffect(() => {
+    setStaticImageFailed(false);
+  }, [listingId, metadata.panoramaId]);
 
   React.useEffect(() => {
     if (!configured) {
@@ -139,6 +151,19 @@ export function InteractiveStreetView({ address, sourceLabel, metadata, onUnavai
       ) : null}
 
       {state === "unconfigured" ? (
+        canStaticPreview && listingId ? (
+          <div className="relative h-full w-full bg-paper">
+            <img
+              src={`/api/property-image?listingId=${encodeURIComponent(listingId)}&mode=image`}
+              alt={`Street-level capture near ${address}`}
+              className="h-full w-full object-contain"
+              onError={() => setStaticImageFailed(true)}
+            />
+            <a href={launch} target="_blank" rel="noopener noreferrer" className="absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-control bg-ink/90 px-3 py-2 text-xs font-bold text-white shadow hover:bg-ink">
+              Open interactive walkthrough <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+            </a>
+          </div>
+        ) : (
         <div className="absolute inset-0 grid place-items-center bg-paper px-5 text-center">
           <div>
             <p className="text-sm font-bold text-ink">Interactive Street View stays on Google Maps</p>
@@ -148,6 +173,7 @@ export function InteractiveStreetView({ address, sourceLabel, metadata, onUnavai
             </a>
           </div>
         </div>
+        )
       ) : null}
 
       {state === "error" ? (

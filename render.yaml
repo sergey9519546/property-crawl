@@ -58,6 +58,19 @@ services:
         sync: false
       - key: DEPLOY_SMOKE_URL
         sync: false
+      # Property Imagery & Geocoding Providers (Pillar: Media & Street-Level Context)
+      - key: GOOGLE_MAPS_API_KEY
+        sync: false
+      - key: NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+        sync: false
+      - key: MAPILLARY_ACCESS_TOKEN
+        sync: false
+      - key: PROPERTY_IMAGE_GOOGLE_PANORAMAX_FALLBACK
+        value: "1"
+      - key: PROPERTY_IMAGE_GOOGLE_MAPILLARY_FALLBACK
+        value: "1"
+      - key: PROPERTY_IMAGE_CENSUS_GEOCODER_FALLBACK
+        value: "1"
       # Stripe Payments & Webhooks (Pillar 6)
       - key: STRIPE_SECRET_KEY
         sync: false

@@ -4,6 +4,7 @@ const { hash } = require("./store");
 // cadastral parcels) is discovery evidence, never an actionable sale listing.
 // The catalog is the single source of truth; import the gate, never re-derive it.
 const { servesListings, listingServingSourceSqlList } = require("../sources/catalog");
+const { resolveStateQuery } = require("../db/us-state-query");
 const MAX_SCAN = Math.max(50000, Number(process.env.DISCOVERY_MAX_SCAN) || 50000),
   MAX_LIMIT = 1000;
 class DiscoveryQueryError extends Error {
@@ -16,6 +17,35 @@ const text = (v) =>
   String(v ?? "")
     .trim()
     .toLowerCase();
+const PROP_TYPE_SYNONYMS = Object.freeze({
+  'single family': 'Single Family Home',
+  'single-family': 'Single Family Home',
+  'single family home': 'Single Family Home',
+  'single family residence': 'Single Family Home',
+  'single family residential': 'Single Family Home',
+  'sfr': 'Single Family Home',
+  'multi family': 'Multi Family',
+  'multi-family': 'Multi Family',
+  'multi family dwelling': 'Multi Family',
+  'multi-family dwelling': 'Multi Family',
+  'townhouse': 'Town House',
+  'town home': 'Town House',
+  'townhome': 'Town House',
+});
+const PROP_TYPE_UNKNOWN_LITERALS = new Set(['', 'unknown', 'n/a', 'none', '-']);
+const normalizeTypeValue = (v) => {
+  const cleaned = String(v ?? '').trim();
+  const lowered = cleaned.toLowerCase();
+  if (PROP_TYPE_UNKNOWN_LITERALS.has(lowered)) return null;
+  return PROP_TYPE_SYNONYMS[lowered] || cleaned;
+};
+const PROP_TYPE_ALIAS_SQL = Object.freeze({
+  'single family home': "('single family','single-family','single family home','single family residence','single-family residence','single family residential','single-family residential','sfr')",
+  'single family': "('single family','single-family','single family home','single family residence','single-family residence','single family residential','single-family residential','sfr')",
+  'multi family': "('multi family','multi-family','multi family dwelling','multi-family dwelling')",
+  'town house': "('town house','townhouse','town home','townhome')",
+});
+const hasPhotoEvidence = (row) => Boolean(row?.photo) || (Array.isArray(row?.images) && row.images.length > 0);
 const stripCountySuffix = (v) =>
   text(v)
     .replace(/\s+(?:county|parish|borough)$/, "")
@@ -133,7 +163,7 @@ function queryFromUrl(url) {
   if (!Number.isFinite(radiusKm) || radiusKm <= 0 || radiusKm > 20000)
     throw new DiscoveryQueryError(400, "radiusKm must be between 0 and 20000");
   const sort = get("sort") === "bid" ? "bid-asc" : (get("sort") || "score");
-  if (!['score', 'date', 'bid-asc', 'equity', 'opportunity', 'triage'].includes(sort)) throw new DiscoveryQueryError(400, "Invalid sort");
+  if (!['score', 'date', 'bid-asc', 'equity', 'opportunity', 'triage', 'images'].includes(sort)) throw new DiscoveryQueryError(400, "Invalid sort");
   // Also dropped by the a58f76f refactor. A zoom outside the map's usable range
   // silently produces a query the map layer cannot render; an offset combined
   // with a cursor is ambiguous, because the two describe different positions
@@ -179,6 +209,7 @@ function queryFromUrl(url) {
     seniorLien: text(get("seniorLien")),
     redemption: text(get("redemption")),
     hasDocuments: parseTristateBool(get("hasDocuments"), "hasDocuments"),
+    hasPhoto: parseBool(get("hasPhoto"), "hasPhoto"),
     bbox: parseBbox(get("bbox")),
     sort,
     cursor,
@@ -189,6 +220,7 @@ function queryFromUrl(url) {
     radiusKm,
     zoom,
     mode: rawMode || "default",
+    ...(get("summary") === "1" || get("summary") === "true" ? { summary: true } : {}),
     facets: (get("facets") || "").split(",").filter(Boolean),
   };
 }
@@ -239,6 +271,7 @@ function publishedRedemptionDays(row) {
   return Number.isFinite(days) ? days : null;
 }
 function matches(row, f) {
+  const stateMatch = f.q ? resolveStateQuery(f.q) : null;
   // Admission gate. A record whose declared source is a DISCOVERY_ONLY
   // catalog entry (court docket, cadastral parcel) is never an actionable
   // sale listing, so the in-memory matcher refuses it before any filter
@@ -261,7 +294,8 @@ function matches(row, f) {
         row.provenance?.recordId,
         d.program,
       ].join(" "),
-    ).includes(f.q)
+    ).includes(f.q) &&
+    !(stateMatch && text(row.state).toUpperCase() === stateMatch.stateCode)
   )
     return false;
   for (const [k, v] of [
@@ -272,20 +306,30 @@ function matches(row, f) {
     ["occupancy", f.occupancy],
   ]) {
     if (!v || v === "all") continue;
+    const rowFieldVal = (val) => {
+      if (k === "county") return stripCountySuffix(val);
+      if (k === "propType") return text(normalizeTypeValue(val) || "");
+      return text(val);
+    };
+    const filterFieldVal = (val) => {
+      if (k === "county") return stripCountySuffix(val);
+      if (k === "propType") return text(normalizeTypeValue(val) || "");
+      return text(val);
+    };
     // "unknown" is the canonical sentinel for "this field was never determined",
     // not a literal a publisher wrote. It must match a blank field, otherwise
     // selecting Unknown in the workbench can never return the records it describes.
     if (v === "unknown") {
-      if (text(row[k]) !== "") return false;
+      if (rowFieldVal(row[k]) !== "") return false;
       continue;
     }
     if (v.includes(",")) {
-      const parts = v.split(",").map((p) => (k === "county" ? stripCountySuffix(p) : text(p))).filter(Boolean);
-      const rowVal = k === "county" ? stripCountySuffix(row[k]) : text(row[k]);
-      if (parts.length > 0 && !parts.some((p) => (p === "unknown" ? text(row[k]) === "" : rowVal === p))) return false;
+      const parts = v.split(",").map(filterFieldVal).filter(Boolean);
+      const rowVal = rowFieldVal(row[k]);
+      if (parts.length > 0 && !parts.some((p) => (p === "unknown" ? rowVal === "" : rowVal === p))) return false;
       continue;
     }
-    if ((k === "county" ? stripCountySuffix(row[k]) : text(row[k])) !== (k === "county" ? stripCountySuffix(v) : v)) return false;
+    if (rowFieldVal(row[k]) !== filterFieldVal(v)) return false;
   }
   // "unknown" is the canonical sentinel for "this field was never determined",
   // and it applies to the derived fields too. Without it, program=unknown
@@ -317,6 +361,7 @@ function matches(row, f) {
     if (d.hasDocuments !== null && d.hasDocuments !== undefined) return false;
   } else if (f.hasDocuments != null && d.hasDocuments !== f.hasDocuments)
     return false;
+  if (f.hasPhoto !== null && hasPhotoEvidence(row) !== f.hasPhoto) return false;
   if (f.bbox) {
     const [w, s, e, n] = f.bbox,
       lat = Number(row.lat),
@@ -371,7 +416,12 @@ function actionableEvidenceTier(row) {
     && Number.isFinite(Number(lat)) && Number.isFinite(Number(lng));
   return (hasPriceOrRoll ? 2 : 0) + (hasCoords ? 1 : 0);
 }
-function compare(a, b, sort) {
+function compare(a, b, sort, resolvedState = null) {
+  if (resolvedState && (sort === "score" || sort === "opportunity" || sort === "triage" || !sort)) {
+    const aStateMatch = text(a.state).toUpperCase() === resolvedState;
+    const bStateMatch = text(b.state).toUpperCase() === resolvedState;
+    if (aStateMatch !== bStateMatch) return aStateMatch ? -1 : 1;
+  }
   let av,
     bv,
     asc = false;
@@ -394,6 +444,10 @@ function compare(a, b, sort) {
     av = a.openingBid;
     bv = b.openingBid;
     asc = true;
+  } else if (sort === "images") {
+    const galleryCount = (row) => (Array.isArray(row?.images) ? row.images.length : 0);
+    av = galleryCount(a) * 2 + (a?.photo ? 1 : 0);
+    bv = galleryCount(b) * 2 + (b?.photo ? 1 : 0);
   } else if (sort === "equity") {
     av = a.equity;
     bv = b.equity;
@@ -443,7 +497,7 @@ function buildFacets(rows, fields) {
     state: (r) => r.state,
     county: (r) => r.county,
     source: (r) => r.source,
-    type: (r) => r.propType,
+    type: (r) => normalizeTypeValue(r.propType),
     program: (r) => derived(r).program,
     lifecycle: (r) => derived(r).lifecycle,
     occupancy: (r) => r.occupancy,
@@ -512,14 +566,23 @@ function pgWhere(f, start = 1, options = {}) {
     // Mirrors the in-memory matcher: "unknown" selects records whose field was
     // never determined, so it must test for NULL/blank rather than the literal.
     if (v === "unknown") {
-      w.push(`coalesce(${sqlCol},'')=''`);
+      if (col === "prop_type") {
+        w.push("(coalesce(prop_type,'')='' OR lower(btrim(prop_type)) IN ('unknown','n/a','none','-'))");
+      } else {
+        w.push(`coalesce(${sqlCol},'')=''`);
+      }
       continue;
     }
     const isCountyCol = col === "county";
+    const isTypeCol = col === "prop_type";
     const colExpr = isCountyCol
       ? "btrim(regexp_replace(btrim(lower(coalesce(county,''))), '\\s+(county|parish|borough)$', ''))"
       : `lower(${sqlCol})`;
-    const normFilterPart = (part) => (isCountyCol ? stripCountySuffix(part) : part.trim().toLowerCase());
+    const normFilterPart = (part) => {
+      if (isCountyCol) return stripCountySuffix(part);
+      if (isTypeCol) return text(normalizeTypeValue(part) || part);
+      return part.trim().toLowerCase();
+    };
     if (v.includes(",")) {
       const parts = v.split(",").map(normFilterPart).filter(Boolean);
       if (parts.length > 0) {
@@ -539,6 +602,16 @@ function pgWhere(f, start = 1, options = {}) {
       const idx = start + p.length;
       p.push(normFilterPart(v));
       w.push(`(lower(${sqlCol})=$${idx} OR ${colExpr}=$${idx})`);
+    } else if (isTypeCol) {
+      const normalizedType = normFilterPart(v);
+      const aliasList = PROP_TYPE_ALIAS_SQL[normalizedType];
+      if (aliasList) {
+        const idx = start + p.length;
+        p.push(normalizedType);
+        w.push(`(lower(prop_type)=$${idx} OR lower(btrim(prop_type)) IN ${aliasList})`);
+      } else {
+        add(`lower(${sqlCol})=?`, normalizedType);
+      }
     } else {
       add(`lower(${sqlCol})=?`, normFilterPart(v));
     }
@@ -557,7 +630,14 @@ function pgWhere(f, start = 1, options = {}) {
     const qExpr = accel
       ? "discovery_search_text"
       : "(coalesce(id,'')||' '||coalesce(address,'')||' '||coalesce(city,'')||' '||coalesce(county,'')||' '||coalesce(source_key,'')||' '||coalesce(auction_program, provenance->'sourceFacts'->>'auctionProgram','')||' '||coalesce(provenance->>'recordId',''))";
-    add(`${qExpr} ILIKE ? ESCAPE '\\'`, `%${literalQuery}%`);
+    const stateMatch = resolveStateQuery(f.q);
+    if (stateMatch) {
+      const first = start + p.length;
+      p.push(`%${literalQuery}%`, stateMatch.stateCode);
+      w.push(`(${qExpr} ILIKE $${first} ESCAPE '\\' OR upper(state) = $${first + 1})`);
+    } else {
+      add(`${qExpr} ILIKE ? ESCAPE '\\'`, `%${literalQuery}%`);
+    }
   }
   if (f.saleFrom) add("sale_date>=?", f.saleFrom);
   if (f.saleTo) add("sale_date<=?", f.saleTo);
@@ -601,6 +681,8 @@ function pgWhere(f, start = 1, options = {}) {
   if (f.hasDocuments === "unknown") w.push(`NOT ${docsTrue} AND NOT ${docsFalse}`);
   else if (f.hasDocuments === true) w.push(docsTrue);
   else if (f.hasDocuments === false) w.push(docsFalse);
+  if (f.hasPhoto === true) w.push("(nullif(photo_url,'') IS NOT NULL OR COALESCE(array_length(images,1),0) > 0)");
+  else if (f.hasPhoto === false) w.push("(nullif(photo_url,'') IS NULL AND COALESCE(array_length(images,1),0) = 0)");
   if (f.freshness && f.freshness !== "all") {
     if (f.freshness === "observed") w.push(accel ? "discovery_is_live IS TRUE" : "provenance->>'origin' IN ('live', 'email_notice')");
     else if (f.freshness === "unverified")
@@ -634,6 +716,10 @@ function sortDirection(sort) {
   return sort === "date" || sort === "bid-asc" ? "ASC" : "DESC";
 }
 function pgSort(f, options = {}) {
+  const stateMatch = f.q ? resolveStateQuery(f.q) : null;
+  const stateBoostSql = stateMatch
+    ? ` + (CASE WHEN upper(state) = '${stateMatch.stateCode}' THEN 2e14::float8 ELSE 0::float8 END)`
+    : "";
   const accel = options.accelerated === true;
   // "Date" means soonest opportunity first, not oldest record first. Ascending
   // sale_date put every concluded auction ahead of every upcoming one - and
@@ -669,14 +755,19 @@ function pgSort(f, options = {}) {
   // -1 sorts last for both, matching compare()'s value-before-null: a real
   // equity spread is >= 0 (GREATEST(0, ...)) and deal_score is constrained to
   // 1..99, so nothing real collides with the sentinel.
+  if (f.sort === "images")
+    return {
+      expr: "(COALESCE(array_length(images, 1), 0) * 2 + (CASE WHEN nullif(photo_url, '') IS NOT NULL THEN 1 ELSE 0 END))::float8",
+      dir: sortDirection("images"),
+    };
   if (f.sort === "equity")
     return { expr: `coalesce(${derivedEquity},-1)`, dir: sortDirection("equity") };
   if (f.sort === "triage")
     return {
-      expr: "(CASE "
+      expr: "((CASE "
         + "WHEN triage_priority IS NOT NULL THEN (triage_priority * 1e8) + (CASE WHEN sale_date >= CURRENT_DATE THEN 1e6 - LEAST(1e6, GREATEST(0, (sale_date - CURRENT_DATE))) ELSE 0 END) "
         + "WHEN sale_date >= CURRENT_DATE THEN 1e6 - LEAST(1e6, GREATEST(0, (sale_date - CURRENT_DATE))) "
-        + "ELSE -1 END)",
+        + "ELSE -1 END)" + stateBoostSql + ")",
       dir: sortDirection("triage"),
     };
   if (f.sort === "score" || f.sort === "opportunity") {
@@ -706,7 +797,7 @@ function pgSort(f, options = {}) {
     return {
       expr: `((CASE WHEN ${terminalSql} THEN -1e14::float8 ELSE 0::float8 END) + (CASE `
         + `WHEN ${derivedScore} IS NOT NULL THEN 1e13 + (${derivedScore} * 1e10) + (${actionTierSql} * 1e8) + floor(${dateTriageSql} / 1e4) `
-        + `ELSE (${actionTierSql} * 1e12) + ${dateTriageSql} END))`,
+        + `ELSE (${actionTierSql} * 1e12) + ${dateTriageSql} END)${stateBoostSql})`,
       dir: sortDirection("score"),
     };
   }
@@ -846,7 +937,9 @@ async function pgSearch(database, f, options = {}) {
     cursorClause = `${where.sql ? " AND" : " WHERE"} (${sort.expr},id) ${sort.dir === "ASC" ? ">" : "<"} ($${params.length - 1},$${params.length})`;
   }
   params.push(f.limit + 1, f.offset || 0);
-  const select = database.listingSelect;
+  const select = (f.summary && database.summaryListingSelect)
+    ? database.summaryListingSelect
+    : database.listingSelect;
   if (!select)
     throw new DiscoveryQueryError(
       503,
@@ -886,7 +979,7 @@ async function pgSearch(database, f, options = {}) {
       // a facet that leaves '' as its own bucket advertises a chip the sentinel
       // can never select. Real Postgres exposed this - the embedded engine
       // never ran these {skip: !databaseUrl} parity tests.
-      type: "nullif(prop_type,'')",
+      type: "CASE WHEN lower(btrim(coalesce(prop_type,''))) IN ('', 'unknown', 'n/a', 'none', '-') THEN NULL WHEN lower(btrim(prop_type)) IN ('single family', 'single-family', 'single family residence', 'single family residential', 'sfr') THEN 'Single Family Home' WHEN lower(btrim(prop_type)) IN ('multi-family', 'multi family dwelling', 'multi-family dwelling') THEN 'Multi Family' WHEN lower(btrim(prop_type)) IN ('townhouse', 'town home', 'townhome') THEN 'Town House' ELSE btrim(prop_type) END",
       // Program is derived too - auction_program falling back to
       // provenance.sourceFacts.auctionProgram, exactly as matches() reads it and
       // exactly as pgWhere filters it. Grouping by the bare column put any
@@ -1090,7 +1183,7 @@ async function search(database, f, options = {}) {
   // pgSearch's `expr ${dir}, id ${dir}` without a second comparator here.
   const filtered = all
     .filter((r) => matches(r, f))
-    .sort((a, b) => compare(a, b, f.sort));
+    .sort((a, b) => compare(a, b, f.sort, resolveStateQuery(f.q)?.stateCode || null));
   let start = after ? filtered.findIndex((r) => r.id === after) + 1 : 0;
   if (after && start === 0)
     throw new DiscoveryQueryError(409, "Cursor is stale; restart the search");

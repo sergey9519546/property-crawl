@@ -121,7 +121,7 @@ const getListing = cache(async (id: string): Promise<ListingFetchResult> => {
   try {
     const apiUrl = process.env.PROPERTY_API_URL || "http://localhost:3000";
     const res = await fetch(`${apiUrl}/api/listings/${encodeURIComponent(listingId)}`, {
-      cache: "no-store", signal: AbortSignal.timeout(5_000)
+      cache: "no-store", signal: AbortSignal.timeout(15_000)
     });
     if (res.ok) {
       return { status: "ok", listing: (await res.json()) as Listing };

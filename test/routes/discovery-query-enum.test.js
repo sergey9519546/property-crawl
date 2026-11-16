@@ -87,11 +87,26 @@ test("view is client-only UI state and is not filtered as an enum", async () => 
 });
 
 test("the exported vocabulary mirrors the server's accepted values", async () => {
-  const { DISCOVERY_FILTER_VALUES } = await load();
+  const { DISCOVERY_FILTER_VALUES, readDiscoveryFilters, discoverySearchParams } = await load();
   assert.deepEqual([...DISCOVERY_FILTER_VALUES.freshness], ["all", "observed", "unverified"]);
   assert.deepEqual([...DISCOVERY_FILTER_VALUES.hasDocuments], ["true", "false", "unknown"]);
   assert.ok(DISCOVERY_FILTER_VALUES.sort.includes("quality"), "route-layer intelligence sort");
   assert.ok(DISCOVERY_FILTER_VALUES.sort.includes("opportunity"), "route-layer intelligence sort");
   assert.ok(DISCOVERY_FILTER_VALUES.sort.includes("equity"), "discovery sort allowlist");
+  assert.ok(DISCOVERY_FILTER_VALUES.sort.includes("images"), "photo-density sort allowlist");
+  assert.equal(readDiscoveryFilters(new URLSearchParams("sort=images")).sort, "images");
+  assert.equal(discoverySearchParams({ sort: "images" }).get("sort"), "images");
   assert.ok(!DISCOVERY_FILTER_VALUES.sort.includes("relevance"));
+});
+
+
+test("valid hasPhoto values round-trip and invalid hasPhoto drops on read and write", async () => {
+  const { readDiscoveryFilters, discoverySearchParams, DISCOVERY_FILTER_VALUES } = await load();
+  assert.deepEqual([...DISCOVERY_FILTER_VALUES.hasPhoto], ["true", "false"]);
+  const valid = readDiscoveryFilters(new URLSearchParams("hasPhoto=true"));
+  assert.equal(valid.hasPhoto, "true");
+  assert.equal(discoverySearchParams(valid).get("hasPhoto"), "true");
+  const invalid = readDiscoveryFilters(new URLSearchParams("hasPhoto=maybe"));
+  assert.equal("hasPhoto" in invalid, false);
+  assert.equal(discoverySearchParams({ hasPhoto: "maybe" }).has("hasPhoto"), false);
 });

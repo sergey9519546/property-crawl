@@ -4,7 +4,8 @@ const { randomUUID: cryptoRandomUUID } = require('crypto');
 const { seedProvenance } = require('./seed-provenance');
 const { loadLiveRecords } = require('./live-record-store');
 const { createAiCacheStore } = require('./ai-cache-store');
-const { computeTriage, buildParcelKey } = require('../scrapers/normalization');
+const { computeTriage, buildParcelKey, extractRawApn, extractCountyFips, normalizePropType, collectVerifiedImages } = require('../scrapers/normalization');
+const { resolveStateQuery } = require('./us-state-query');
 // Listing-admission gate (server/sources/catalog.js): a DISCOVERY_ONLY
 // catalog source is discovery evidence, never an actionable sale listing.
 // The catalog is the single source of truth; import the gate, never re-derive it.
@@ -153,6 +154,40 @@ const SUMMARY_LISTING_SELECT = `
 // rather than as a fresh ranking (migration 026 contract). Applied in the
 // ORDER BY itself: stale or never-refreshed rows rank last via NULLS LAST,
 // never as fresh.
+// Shared ON CONFLICT provenance merge across createListing and createListingsBulk:
+// preserves accumulated derivedFields and authoritative cadastral parcelKey when
+// a subsequent raw scraper sweep refreshes the same record.
+const PROVENANCE_UPSERT_SQL = `CASE
+          WHEN EXCLUDED.provenance IS NULL THEN listings.provenance
+          WHEN listings.provenance IS NULL THEN EXCLUDED.provenance
+          ELSE (
+            CASE
+              WHEN jsonb_typeof(listings.provenance->'derivedFields') = 'object'
+               AND jsonb_typeof(EXCLUDED.provenance->'derivedFields') = 'object' THEN
+                jsonb_set(
+                  (listings.provenance - 'publisherAbsence') || EXCLUDED.provenance,
+                  '{derivedFields}',
+                  (listings.provenance->'derivedFields') || (EXCLUDED.provenance->'derivedFields'),
+                  true
+                )
+              WHEN jsonb_typeof(listings.provenance->'derivedFields') = 'object' THEN
+                jsonb_set(
+                  (listings.provenance - 'publisherAbsence') || EXCLUDED.provenance,
+                  '{derivedFields}',
+                  listings.provenance->'derivedFields',
+                  true
+                )
+              ELSE (listings.provenance - 'publisherAbsence') || EXCLUDED.provenance
+            END
+          ) || CASE
+            WHEN listings.provenance->'derivedFields'->>'parcelKey' = 'true'
+             AND NULLIF(listings.provenance->>'parcelKey', '') IS NOT NULL
+             AND EXCLUDED.provenance->'derivedFields'->>'parcelKey' IS DISTINCT FROM 'true'
+            THEN jsonb_build_object('parcelKey', listings.provenance->>'parcelKey')
+            ELSE '{}'::jsonb
+          END
+        END`;
+
 const TRIAGE_PRIORITY_STALE_DAYS = 7;
 
 function optionalFiniteNumber(value, { positive = false, nonNegative = false } = {}) {
@@ -289,7 +324,7 @@ function prepareListingForPersistence(listing = {}) {
     county: optionalText(listing.county),
     city: optionalText(listing.city),
     zip: optionalText(listing.zip),
-    propType: optionalText(listing.propType),
+    propType: normalizePropType(optionalText(listing.propType)),
     saleDate: normalizeDate(listing.saleDate),
     listingDate: normalizeDate(listing.listingDate),
     beds: optionalFiniteNumber(listing.beds, { nonNegative: true }),
@@ -307,6 +342,15 @@ function prepareListingForPersistence(listing = {}) {
     defendant: optionalText(listing.defendant),
     attorney: optionalText(listing.attorney),
     photo: optionalText(listing.photo),
+    images: (() => {
+      const derived = collectVerifiedImages({
+        photo: optionalText(listing.photo),
+        gallery: listing.provenance?.media?.gallery,
+        inputImages: listing.images,
+        sourceValid: Boolean(listing.sourceUrl),
+      });
+      return derived.length > 0 ? derived : null;
+    })(),
     seniorLienRisk,
     auctionProgram: optionalText(listing.auctionProgram ?? listing.provenance?.sourceFacts?.auctionProgram),
     lifecycleStatus: optionalText(listing.lifecycleStatus ?? listing.status),
@@ -324,9 +368,11 @@ function prepareListingForPersistence(listing = {}) {
   const sourceFacts = normalized.provenance?.sourceFacts || {};
   if (normalized.parcelKey === undefined || normalized.parcelKey === null) {
     normalized.parcelKey = buildParcelKey({
-      apn: listing.apn ?? listing.parcelNumber ?? listing.parcelId
+      apn: extractRawApn(listing)
+        ?? listing.apn ?? listing.parcelNumber ?? listing.parcelId
         ?? sourceFacts.apn ?? sourceFacts.parcelNumber ?? sourceFacts.parcelId,
-      countyFips: listing.countyFips ?? sourceFacts.countyFips ?? listing.provenance?.countyFips
+      countyFips: extractCountyFips(listing)
+        ?? listing.countyFips ?? sourceFacts.countyFips ?? listing.provenance?.countyFips
     });
   }
   if (normalized.parcelKey && normalized.provenance && !normalized.provenance.parcelKey) {
@@ -510,6 +556,7 @@ class DatabaseClient {
     this.externalPool = Boolean(options.pool);
     this.readPool = options.readPool || null;
     this.listingSelect = LISTING_SELECT;
+    this.summaryListingSelect = SUMMARY_LISTING_SELECT;
     const explicitLiveCachePath = Object.prototype.hasOwnProperty.call(options, 'liveCachePath')
       ? options.liveCachePath
       : this.env.PROPERTY_LIVE_CACHE_PATH;
@@ -1706,23 +1753,53 @@ class DatabaseClient {
    * Avoids scanning 100,000 listings into memory when looking up a specific parcel.
    */
   async getListingsByParcelKeyNative(parcelKey) {
-    if (!this.isPg || !this.pool || !parcelKey) {
+    const key = typeof parcelKey === 'string' ? parcelKey.trim() : '';
+    const fipsMatch = key.match(/^(\d{5})-(.+)$/);
+    const fips5 = fipsMatch ? fipsMatch[1] : null;
+    const rawApnPart = fipsMatch ? fipsMatch[2] : key;
+    const cleanApn = rawApnPart.toUpperCase().replace(/[^A-Z0-9]/g, '') || null;
+
+    if (!this.isPg || !this.pool || !key) {
+      if (!key) return [];
       const { scanAllListings } = require('./listings-scan');
       const { pool } = await scanAllListings(this, {}, { pageSize: 100000 });
-      return pool.filter((listing) => listing && listing.parcelKey === parcelKey);
+      return pool.filter((listing) => {
+        if (!listing) return false;
+        if (listing.parcelKey === key || listing.provenance?.parcelKey === key) return true;
+        const derivedKey = buildParcelKey({
+          apn: extractRawApn(listing),
+          countyFips: extractCountyFips(listing),
+        });
+        return derivedKey === key;
+      });
     }
 
     const sql = `
       SELECT ${LISTING_SELECT}
       FROM listings
-      WHERE (status = 'active' OR status IS NULL)
-        AND (
+      WHERE (
           provenance->>'parcelKey' = $1
           OR (state = split_part($1, ':', 1) AND id = $1)
+          OR (
+            $2::text IS NOT NULL AND $3::text IS NOT NULL
+            AND COALESCE(
+              provenance->'derivedFields'->'assessorRoll'->'parcel'->>'countyFips',
+              provenance->>'countyFips',
+              provenance->'sourceFacts'->>'countyFips',
+              ''
+            ) = $2
+            AND (
+              UPPER(regexp_replace(COALESCE(provenance->'derivedFields'->'assessorRoll'->'parcel'->>'canonicalApn', ''), '[^A-Za-z0-9]', '', 'g')) = $3
+              OR UPPER(regexp_replace(COALESCE(provenance->'derivedFields'->'assessorRoll'->>'apn', ''), '[^A-Za-z0-9]', '', 'g')) = $3
+              OR UPPER(regexp_replace(COALESCE(provenance->'derivedFields'->'assessorRoll'->'parcel'->>'rawApn', ''), '[^A-Za-z0-9]', '', 'g')) = $3
+              OR UPPER(regexp_replace(COALESCE(provenance->'sourceFacts'->>'apn', ''), '[^A-Za-z0-9]', '', 'g')) = $3
+              OR UPPER(regexp_replace(COALESCE(provenance->>'parcelNumber', ''), '[^A-Za-z0-9]', '', 'g')) = $3
+            )
+          )
         )
       ORDER BY id ASC;
     `;
-    const res = await this.getReadPool().query(sql, [parcelKey]);
+    const res = await this.getReadPool().query(sql, [key, fips5, cleanApn]);
     return res.rows.map(mapPgListingRow);
   }
 
@@ -2089,11 +2166,14 @@ class DatabaseClient {
       } else if (redemption === 'redemption_active') {
         sql += ` AND redemption_days > 0 AND provenance #> '{derivedFields,redemption}' IS NULL`;
       }
+      const stateQuery = q ? resolveStateQuery(q) : null;
       if (q) {
         const literalQuery = q.replace(/[\\%_]/g, (ch) => '\\' + ch);
-        sql += ` AND (address ILIKE $${paramIdx} ESCAPE '\\' OR city ILIKE $${paramIdx} ESCAPE '\\' OR county ILIKE $${paramIdx} ESCAPE '\\' OR state ILIKE $${paramIdx} ESCAPE '\\' OR plaintiff ILIKE $${paramIdx} ESCAPE '\\' OR defendant ILIKE $${paramIdx} ESCAPE '\\' OR attorney ILIKE $${paramIdx} ESCAPE '\\' OR occupancy ILIKE $${paramIdx} ESCAPE '\\' OR deposit_terms ILIKE $${paramIdx} ESCAPE '\\' OR EXISTS (SELECT 1 FROM sources s WHERE s.key = listings.source_key AND s.label ILIKE $${paramIdx} ESCAPE '\\'))`;
+        const qParamIdx = paramIdx++;
         params.push(`%${literalQuery}%`);
-        paramIdx++;
+        const stateClause = stateQuery ? ` OR UPPER(state) = $${paramIdx++}` : '';
+        if (stateQuery) params.push(stateQuery.stateCode);
+        sql += ` AND (address ILIKE $${qParamIdx} ESCAPE '\\' OR city ILIKE $${qParamIdx} ESCAPE '\\' OR county ILIKE $${qParamIdx} ESCAPE '\\' OR state ILIKE $${qParamIdx} ESCAPE '\\' OR plaintiff ILIKE $${qParamIdx} ESCAPE '\\' OR defendant ILIKE $${qParamIdx} ESCAPE '\\' OR attorney ILIKE $${qParamIdx} ESCAPE '\\' OR occupancy ILIKE $${qParamIdx} ESCAPE '\\' OR deposit_terms ILIKE $${qParamIdx} ESCAPE '\\' OR EXISTS (SELECT 1 FROM sources s WHERE s.key = listings.source_key AND s.label ILIKE $${qParamIdx} ESCAPE '\\')${stateClause})`;
       }
       if (filters.hasDocuments) {
         sql += ` AND has_documents = TRUE`;
@@ -2103,6 +2183,11 @@ class DatabaseClient {
         params.push(lng, lat, radiusKm * 1000);
       }
 
+      let statePriorityPrefix = '';
+      if (stateQuery && (!sort || sort === 'score' || sort === 'opportunity' || sort === 'triage')) {
+        statePriorityPrefix = `CASE WHEN UPPER(state) = $${paramIdx++} THEN 0 ELSE 1 END ASC, `;
+        params.push(stateQuery.stateCode);
+      }
       if (sort === 'equity') sql += ' ORDER BY equity_spread DESC NULLS LAST, id ASC';
       else if (sort === 'bid-asc') sql += ' ORDER BY opening_bid ASC NULLS LAST, id ASC';
       else if (sort === 'date') sql += ' ORDER BY sale_date ASC NULLS LAST, id ASC';
@@ -2111,8 +2196,9 @@ class DatabaseClient {
       // triage_priority column (migration 025 + 026). The staleness guard
       // ranks never-refreshed or older-than-TRIAGE_PRIORITY_STALE_DAYS rows
       // last: a stale score must never read as a fresh ranking.
+      else if (sort === 'triage' && statePriorityPrefix) sql += ` ORDER BY ${statePriorityPrefix}(CASE WHEN triage_priority_refreshed_at >= NOW() - INTERVAL '${TRIAGE_PRIORITY_STALE_DAYS} days' THEN triage_priority END) DESC NULLS LAST, id ASC`;
       else if (sort === 'triage') sql += ` ORDER BY (CASE WHEN triage_priority_refreshed_at >= NOW() - INTERVAL '${TRIAGE_PRIORITY_STALE_DAYS} days' THEN triage_priority END) DESC NULLS LAST, id ASC`;
-      else sql += ' ORDER BY deal_score DESC NULLS LAST, id ASC';
+      else sql += ` ORDER BY ${statePriorityPrefix}deal_score DESC NULLS LAST, id ASC`;
 
       sql += ` LIMIT $${paramIdx++} OFFSET $${paramIdx++}`;
       params.push(Number(limit), Number(offset));
@@ -2125,6 +2211,7 @@ class DatabaseClient {
     }
 
     this.refreshLiveCache();
+    const stateQuery = q ? resolveStateQuery(q) : null;
     let results = this.inMemoryData.listings.filter(l => {
       // Admission gate: a record whose declared source is DISCOVERY_ONLY or
       // unknown to the catalog is discovery evidence, not a sale listing.
@@ -2156,7 +2243,8 @@ class DatabaseClient {
       if (q) {
         const needle = q.toLowerCase();
         const hay = [l.address, l.city, l.county, l.state, l.plaintiff, l.defendant, l.attorney, l.occupancy, l.deposit, this.inMemoryData.sources[l.source]?.label || ''].join(' ').toLowerCase();
-        if (!hay.includes(needle)) return false;
+        const exactStateMatch = stateQuery && String(l.state || '').toUpperCase() === stateQuery.stateCode;
+        if (!hay.includes(needle) && !exactStateMatch) return false;
       }
       if (filters.hasDocuments && l.hasDocuments !== true) return false;
       return true;
@@ -2174,6 +2262,18 @@ class DatabaseClient {
     // deterministic and self-consistent across pages.
     const thenId = (cmp) => (a, b) => cmp(a, b) || String(a.id).localeCompare(String(b.id));
 
+    const withStateBoost = (cmp) => {
+      if (!stateQuery || (sort && sort !== 'score' && sort !== 'opportunity' && sort !== 'triage')) {
+        return thenId(cmp);
+      }
+      return (a, b) => {
+        const aMatch = String(a.state || '').toUpperCase() === stateQuery.stateCode ? 0 : 1;
+        const bMatch = String(b.state || '').toUpperCase() === stateQuery.stateCode ? 0 : 1;
+        if (aMatch !== bMatch) return aMatch - bMatch;
+        return thenId(cmp)(a, b);
+      };
+    };
+
     if (sort === 'equity') results.sort(thenId((a, b) => compareNumbersUnknownLast(a.equity, b.equity)));
     else if (sort === 'bid-asc') results.sort(thenId((a, b) => compareNumbersUnknownLast(a.openingBid, b.openingBid, false)));
     else if (sort === 'date') {
@@ -2185,8 +2285,8 @@ class DatabaseClient {
       // priority is computed here: listings sort by any carried value and
       // unknowns rank last. The real ranking lives in Postgres, where the
       // evaluator writes triage_priority at ingest (migration 025 + 026).
-      results.sort(thenId((a, b) => compareNumbersUnknownLast(a.triagePriority, b.triagePriority)));
-    } else results.sort(thenId((a, b) => compareNumbersUnknownLast(a.dealScore, b.dealScore)));
+      results.sort(withStateBoost((a, b) => compareNumbersUnknownLast(a.triagePriority, b.triagePriority)));
+    } else results.sort(withStateBoost((a, b) => compareNumbersUnknownLast(a.dealScore, b.dealScore)));
 
     const total = results.length;
     const paginated = results.slice(Number(offset), Number(offset) + Number(limit));
@@ -2306,7 +2406,7 @@ class DatabaseClient {
         baths = COALESCE(EXCLUDED.baths, listings.baths),
         sqft = COALESCE(EXCLUDED.sqft, listings.sqft),
         year_built = COALESCE(EXCLUDED.year_built, listings.year_built),
-        prop_type = COALESCE(NULLIF(NULLIF(EXCLUDED.prop_type, ''), 'Unknown'), listings.prop_type, EXCLUDED.prop_type),
+        prop_type = COALESCE(CASE WHEN lower(btrim(coalesce(EXCLUDED.prop_type,''))) IN ('', 'unknown', 'n/a', 'none') THEN NULL ELSE btrim(EXCLUDED.prop_type) END, CASE WHEN lower(btrim(coalesce(listings.prop_type,''))) IN ('', 'unknown', 'n/a', 'none') THEN NULL ELSE listings.prop_type END),
         opening_bid = COALESCE(EXCLUDED.opening_bid, listings.opening_bid),
         est_low = CASE WHEN EXCLUDED.est_low IS NOT NULL AND EXCLUDED.est_high IS NOT NULL THEN EXCLUDED.est_low ELSE listings.est_low END,
         est_high = CASE WHEN EXCLUDED.est_low IS NOT NULL AND EXCLUDED.est_high IS NOT NULL THEN EXCLUDED.est_high ELSE listings.est_high END,
@@ -2328,29 +2428,10 @@ class DatabaseClient {
         occupancy = COALESCE(EXCLUDED.occupancy, listings.occupancy),
         deposit_terms = COALESCE(EXCLUDED.deposit_terms, listings.deposit_terms),
         photo_url = EXCLUDED.photo_url,
-        images = COALESCE(EXCLUDED.images, listings.images),
+        images = CASE WHEN EXCLUDED.photo_url IS NULL AND EXCLUDED.images IS NULL THEN NULL ELSE COALESCE(EXCLUDED.images, listings.images) END,
         source_url = COALESCE(EXCLUDED.source_url, listings.source_url),
         raw_notice = COALESCE(EXCLUDED.raw_notice, listings.raw_notice),
-        provenance = CASE
-          WHEN EXCLUDED.provenance IS NULL THEN listings.provenance
-          WHEN listings.provenance IS NULL THEN EXCLUDED.provenance
-          WHEN jsonb_typeof(listings.provenance->'derivedFields') = 'object'
-           AND jsonb_typeof(EXCLUDED.provenance->'derivedFields') = 'object' THEN
-            jsonb_set(
-              (listings.provenance - 'publisherAbsence') || EXCLUDED.provenance,
-              '{derivedFields}',
-              (listings.provenance->'derivedFields') || (EXCLUDED.provenance->'derivedFields'),
-              true
-            )
-          WHEN jsonb_typeof(listings.provenance->'derivedFields') = 'object' THEN
-            jsonb_set(
-              (listings.provenance - 'publisherAbsence') || EXCLUDED.provenance,
-              '{derivedFields}',
-              listings.provenance->'derivedFields',
-              true
-            )
-          ELSE (listings.provenance - 'publisherAbsence') || EXCLUDED.provenance
-        END,
+        provenance = ${PROVENANCE_UPSERT_SQL},
         source_observed_at = COALESCE(EXCLUDED.source_observed_at, listings.source_observed_at),
         fetched_at = EXCLUDED.fetched_at,
         price = COALESCE(EXCLUDED.price, listings.price),
@@ -2506,7 +2587,7 @@ class DatabaseClient {
         baths = COALESCE(EXCLUDED.baths, listings.baths),
         sqft = COALESCE(EXCLUDED.sqft, listings.sqft),
         year_built = COALESCE(EXCLUDED.year_built, listings.year_built),
-        prop_type = COALESCE(NULLIF(NULLIF(EXCLUDED.prop_type, ''), 'Unknown'), listings.prop_type, EXCLUDED.prop_type),
+        prop_type = COALESCE(CASE WHEN lower(btrim(coalesce(EXCLUDED.prop_type,''))) IN ('', 'unknown', 'n/a', 'none') THEN NULL ELSE btrim(EXCLUDED.prop_type) END, CASE WHEN lower(btrim(coalesce(listings.prop_type,''))) IN ('', 'unknown', 'n/a', 'none') THEN NULL ELSE listings.prop_type END),
         opening_bid = COALESCE(EXCLUDED.opening_bid, listings.opening_bid),
         est_low = ${resolvedEstLowSql},
         est_high = ${resolvedEstHighSql},
@@ -2528,29 +2609,10 @@ class DatabaseClient {
         occupancy = COALESCE(EXCLUDED.occupancy, listings.occupancy),
         deposit_terms = COALESCE(EXCLUDED.deposit_terms, listings.deposit_terms),
         photo_url = EXCLUDED.photo_url,
-        images = COALESCE(EXCLUDED.images, listings.images),
+        images = CASE WHEN EXCLUDED.photo_url IS NULL AND EXCLUDED.images IS NULL THEN NULL ELSE COALESCE(EXCLUDED.images, listings.images) END,
         source_url = COALESCE(EXCLUDED.source_url, listings.source_url),
         raw_notice = COALESCE(EXCLUDED.raw_notice, listings.raw_notice),
-        provenance = CASE
-          WHEN EXCLUDED.provenance IS NULL THEN listings.provenance
-          WHEN listings.provenance IS NULL THEN EXCLUDED.provenance
-          WHEN jsonb_typeof(listings.provenance->'derivedFields') = 'object'
-           AND jsonb_typeof(EXCLUDED.provenance->'derivedFields') = 'object' THEN
-            jsonb_set(
-              (listings.provenance - 'publisherAbsence') || EXCLUDED.provenance,
-              '{derivedFields}',
-              (listings.provenance->'derivedFields') || (EXCLUDED.provenance->'derivedFields'),
-              true
-            )
-          WHEN jsonb_typeof(listings.provenance->'derivedFields') = 'object' THEN
-            jsonb_set(
-              (listings.provenance - 'publisherAbsence') || EXCLUDED.provenance,
-              '{derivedFields}',
-              listings.provenance->'derivedFields',
-              true
-            )
-          ELSE (listings.provenance - 'publisherAbsence') || EXCLUDED.provenance
-        END,
+        provenance = ${PROVENANCE_UPSERT_SQL},
         source_observed_at = COALESCE(EXCLUDED.source_observed_at, listings.source_observed_at),
         fetched_at = EXCLUDED.fetched_at,
         price = COALESCE(EXCLUDED.price, listings.price),

@@ -284,12 +284,30 @@ export function ListingMedia({ listingId, address, photo, gallery = [], lat, lng
               </div>
             </div>
           ) : <img src={photos[photoIndex] || publisherPhoto || undefined} alt={`${photoLabel} ${photoIndex + 1} of ${address}`} className="h-full w-full object-contain" onError={handlePhotoError} />}
-          {canShowPhoto && !publisherGalleryUnavailable ? <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between gap-3">
-            <span className="rounded-control bg-ink/80 px-3 py-2 text-label font-bold text-white backdrop-blur">{photoLabel}{photos.length > 1 ? ` ${photoIndex + 1} / ${photos.length}` : ""}{photoOrigin === "secondary" ? " · Exact-address matched" : ""}</span>
-            {photos.length > 1 ? <div className="flex gap-2">
-              <button type="button" aria-label="Previous property photo" className="rounded-control bg-card px-3 py-2 text-xs font-bold shadow focus-visible:ring-2 focus-visible:ring-ink" onClick={() => movePhoto(-1)}>Previous</button>
-              <button type="button" aria-label="Next property photo" className="rounded-control bg-card px-3 py-2 text-xs font-bold shadow focus-visible:ring-2 focus-visible:ring-ink" onClick={() => movePhoto(1)}>Next</button>
-            </div> : null}
+          {canShowPhoto && !publisherGalleryUnavailable ? <div className="absolute bottom-4 left-4 right-4 flex flex-col gap-2">
+            {photos.length > 1 ? (
+              <div className="flex items-center gap-1.5 overflow-x-auto rounded-control bg-ink/75 p-1.5 backdrop-blur" aria-label="Property gallery thumbnails">
+                {photos.map((thumbUrl, idx) => (
+                  <button
+                    key={thumbUrl}
+                    type="button"
+                    aria-label={`Show photo ${idx + 1} of ${photos.length}`}
+                    aria-current={photoIndex === idx ? "true" : undefined}
+                    onClick={() => setPhotoIndex(idx)}
+                    className={`relative h-9 w-12 shrink-0 overflow-hidden rounded border transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white ${photoIndex === idx ? "border-white ring-1 ring-white" : "border-white/30 opacity-75 hover:opacity-100"}`}
+                  >
+                    <img src={thumbUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            <div className="flex items-center justify-between gap-3">
+              <span className="rounded-control bg-ink/80 px-3 py-2 text-label font-bold text-white backdrop-blur">{photoLabel}{photos.length > 1 ? ` ${photoIndex + 1} / ${photos.length}` : ""}{photoOrigin === "secondary" ? " · Exact-address matched" : ""}</span>
+              {photos.length > 1 ? <div className="flex gap-2">
+                <button type="button" aria-label="Previous property photo" className="rounded-control bg-card px-3 py-2 text-xs font-bold shadow focus-visible:ring-2 focus-visible:ring-ink" onClick={() => movePhoto(-1)}>Previous</button>
+                <button type="button" aria-label="Next property photo" className="rounded-control bg-card px-3 py-2 text-xs font-bold shadow focus-visible:ring-2 focus-visible:ring-ink" onClick={() => movePhoto(1)}>Next</button>
+              </div> : null}
+            </div>
           </div> : null}
           {photoOrigin === "secondary" && photoSourceUrl ? <a href={photoSourceUrl} target="_blank" rel="noreferrer" className="absolute bottom-16 right-4 z-10 rounded-control bg-card/90 px-3 py-2 text-label font-semibold text-ink underline shadow-sm hover:text-ink-2">Source record</a> : null}
         </div>
@@ -303,7 +321,7 @@ export function ListingMedia({ listingId, address, photo, gallery = [], lat, lng
         >
           {streetView.status === "available" ? <>
             <div className="relative min-h-0 flex-1">
-              <InteractiveStreetView address={address} sourceLabel={sourceLabel} metadata={streetView.metadata} onUnavailable={() => setStreetView({ status: "unavailable", reason: "Google Street View could not be opened." })} />
+              <InteractiveStreetView listingId={normalizedListingId} address={address} sourceLabel={sourceLabel} metadata={streetView.metadata} onUnavailable={() => setStreetView({ status: "unavailable", reason: "Google Street View could not be opened." })} />
             </div>
             <div data-testid="street-view-disclosure" className="shrink-0 border-t border-white/10 bg-ink px-4 py-3 text-white">
               <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-label">

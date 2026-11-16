@@ -29,9 +29,9 @@ function buildAlternativeMetadata(chosen: AlternativeCandidate): StreetViewMetad
   };
 }
 
-type Props = { listingId: string; address: string; photo?: string | null; observed: boolean; photoProvider?: string | null; photoSourceUrl?: string | null; layout?: "fill" | "card" };
+type Props = { listingId: string; address: string; photo?: string | null; photoCount?: number; observed: boolean; photoProvider?: string | null; photoSourceUrl?: string | null; layout?: "fill" | "card" };
 
-export function ListingThumbnail({ listingId, address, photo, observed, photoProvider, photoSourceUrl, layout = "fill" }: Props) {
+export function ListingThumbnail({ listingId, address, photo, photoCount, observed, photoProvider, photoSourceUrl, layout = "fill" }: Props) {
   const publisherPhoto = safeImageUrl(photo);
   const [photoFailed, setPhotoFailed] = useState(false);
   const [altImageFailed, setAltImageFailed] = useState(false);
@@ -121,12 +121,19 @@ export function ListingThumbnail({ listingId, address, photo, observed, photoPro
     }
   }
 
-  if (publisherPhoto && !photoFailed) return (
-    <div className="flex h-full w-full flex-col">
-      <div className={frame}><img src={publisherPhoto} alt={`${photoProvider || "Publisher"} photo of ${address}`} loading="lazy" decoding="async" className="absolute inset-0 h-full w-full object-cover" onError={() => setPhotoFailed(true)} /></div>
-      {layout === "card" || (photoProvider && photoSourceUrl) ? <div className={caption}>{photoProvider && photoSourceUrl ? <a href={photoSourceUrl} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2">{photoProvider} · Address-matched photo</a> : <span>Publisher photo</span>}<span className="text-ink-3">Review all photos in property details</span></div> : null}
-    </div>
-  );
+  if (publisherPhoto && !photoFailed) {
+    const countLabel = typeof photoCount === "number" && photoCount > 1
+      ? `${photoCount} photos · Review gallery in property details`
+      : typeof photoCount === "number" && photoCount === 1
+        ? "1 publisher photo · Open details for street view & map"
+        : "Open property details for media & map";
+    return (
+      <div className="flex h-full w-full flex-col">
+        <div className={frame}><img src={publisherPhoto} alt={`${photoProvider || "Publisher"} photo of ${address}`} loading="lazy" decoding="async" className="absolute inset-0 h-full w-full object-cover" onError={() => setPhotoFailed(true)} /></div>
+        {layout === "card" || (photoProvider && photoSourceUrl) ? <div className={caption}>{photoProvider && photoSourceUrl ? <a href={photoSourceUrl} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2">{photoProvider} · Address-matched photo</a> : <span>Publisher photo</span>}<span className="text-ink-3">{countLabel}</span></div> : null}
+      </div>
+    );
+  }
 
   if ((status === "image" || status === "loaded") && metadata && alternative) {
     const thumb = alternative.provider === "mapillary" && !altImageFailed ? alternative.thumbUrl : null;

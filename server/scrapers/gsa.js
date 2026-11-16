@@ -498,7 +498,7 @@ class GsaSurplusScraper extends BaseScraper {
           rejectedIdentifierCandidates: identifiers.rejectedCandidates
         },
         ...(detailEvidence ? { extraction: this.extractionEvidence(detailEvidence) } : {}),
-        media: { gallery, photo: gallery[0] ? { sourceRecordUrl: detailUrl, extraction: gallery[0] } : null }
+        media: { gallery, photo: gallery[0] ? { url: gallery[0].url, origin: 'publisher_record', verification: 'source_extracted', sourceRecordUrl: detailUrl, extraction: gallery[0] } : null }
       }
     };
   }

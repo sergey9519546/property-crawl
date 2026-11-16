@@ -27,12 +27,13 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 
-const {
+  const {
   hasObservedListingCoordinates,
   isCadastralGeometry,
   observedProperties,
   ARCGIS_REGISTRY,
   computePolygonMetrics,
+  queryArcGisRest,
 } = require('../../server/routes/parcel-boundary');
 
 // --- coordinate / textValue / numberValue are private; exercise through ---
@@ -283,4 +284,43 @@ test('computePolygonMetrics: calculates perimeter and coordinate count for valid
   assert.equal(out.coordinatesCount, 5);
   assert.equal(out.perimeterFt, metrics.perimeterFt);
   assert.equal(out.lotAcres, 0.5);
+});
+
+test('TX statewide registry points to live TxGIO StratMap identify service and parses identify rings', async () => {
+  assert.equal(ARCGIS_REGISTRY.TX.operation, 'identify');
+  assert.match(ARCGIS_REGISTRY.TX.endpoint, /stratmap_land_parcels_48_most_recent\/MapServer\/identify$/);
+
+  const originalFetch = global.fetch;
+  let capturedUrl = '';
+  global.fetch = async (url) => {
+    capturedUrl = String(url);
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        results: [{
+          attributes: { PROP_ID: '468776', GIS_AREA: '0.161463' },
+          geometry: {
+            rings: [[[-98.426, 29.328], [-98.425, 29.328], [-98.425, 29.329], [-98.426, 29.329], [-98.426, 29.328]]],
+          },
+        }],
+      }),
+    };
+  };
+
+  try {
+    const feature = await queryArcGisRest(29.328126, -98.426009, 'TX', null, null);
+    assert.match(capturedUrl, /stratmap_land_parcels_48_most_recent\/MapServer\/identify/);
+    assert.equal(feature.type, 'Feature');
+    assert.equal(feature.geometry.type, 'Polygon');
+    assert.equal(feature.properties.parcelId, '468776');
+    assert.equal(feature.properties.lotAcres, 0.161463);
+
+    await assert.rejects(
+      () => queryArcGisRest(null, null, 'TX', '468776', null),
+      (err) => err && err.status === 422 && err.code === 'EXACT_COORDINATES_REQUIRED',
+    );
+  } finally {
+    global.fetch = originalFetch;
+  }
 });

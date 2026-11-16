@@ -109,4 +109,45 @@ test('inspectParcelBoundaryInputs matches /api/parcel-boundary preflight eligibi
   assert.equal(validApnOnly.apn, '0123-456');
   assert.equal(validApnOnly.lat, null);
   assert.equal(validApnOnly.lng, null);
+
+  const unsupportedState = inspectParcelBoundaryInputs({
+    ...base,
+    state: 'MO',
+    county: 'Dallas',
+  });
+  assert.equal(unsupportedState.eligible, false);
+  assert.equal(unsupportedState.code, 'PARCEL_SOURCE_UNAVAILABLE');
+
+  const enrolledCounty = inspectParcelBoundaryInputs({
+    ...base,
+    state: 'CA',
+    county: 'Los Angeles County',
+  });
+  assert.equal(enrolledCounty.eligible, true);
+
+  const unenrolledCounty = inspectParcelBoundaryInputs({
+    ...base,
+    state: 'CA',
+    county: 'Modoc',
+  });
+  assert.equal(unenrolledCounty.eligible, false);
+  assert.equal(unenrolledCounty.code, 'PARCEL_SOURCE_UNAVAILABLE');
+});
+
+test('parcel-boundary coverage manifest stays in sync with server GIS registries', () => {
+  const { STATEWIDE_BOUNDARY_STATES, ENROLLED_BOUNDARY_COUNTY_KEYS, hasParcelBoundaryCoverage } = require('../src/lib/parcel-boundary-coverage');
+  const { COUNTY_ARCGIS_REGISTRY, STATEWIDE_ARCGIS_REGISTRY } = require('../server/enrichment/arcgis-parcels');
+  const { ARCGIS_REGISTRY } = require('../server/routes/parcel-boundary');
+
+  for (const state of [...Object.keys(STATEWIDE_ARCGIS_REGISTRY), ...Object.keys(ARCGIS_REGISTRY)]) {
+    assert.equal(STATEWIDE_BOUNDARY_STATES.has(state), true, `${state} must be in STATEWIDE_BOUNDARY_STATES`);
+  }
+  for (const key of Object.keys(COUNTY_ARCGIS_REGISTRY)) {
+    const state = key.split('-')[0];
+    if (!STATEWIDE_BOUNDARY_STATES.has(state)) {
+      assert.equal(ENROLLED_BOUNDARY_COUNTY_KEYS.has(key), true, `${key} must be in ENROLLED_BOUNDARY_COUNTY_KEYS`);
+    }
+  }
+  assert.equal(hasParcelBoundaryCoverage('TX', ''), true);
+  assert.equal(hasParcelBoundaryCoverage('MO', 'Dallas'), false);
 });
