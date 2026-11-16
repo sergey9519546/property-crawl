@@ -262,3 +262,66 @@ test('UI surfaces honest data-mode banner and schema has document_reviews', () =
   assert.match(server, /collectionRuntimeStatus/);
 });
 
+
+test('production orchestrator distinguishes embedded PGLite from demo/in-memory mode', async () => {
+  const {
+    resolveDefaultDbEnv,
+    resolveBackendBootMode,
+    awaitBackendReady,
+  } = require('../scripts/start-production');
+
+  // Default empty env and explicit PROPERTY_DB=embedded resolve to embedded Postgres.
+  assert.deepStrictEqual(resolveDefaultDbEnv({}), { PROPERTY_DB: 'embedded' });
+  assert.equal(resolveBackendBootMode({}), 'embedded');
+  assert.equal(resolveBackendBootMode({ PROPERTY_DB: 'embedded' }), 'embedded');
+  assert.equal(resolveBackendBootMode({ PROPERTY_PG_DATA_DIR: '/tmp/pgdata' }), 'embedded');
+
+  // Explicit memory opt-in or DATABASE_URL must not resolve to embedded.
+  assert.deepStrictEqual(resolveDefaultDbEnv({ PROPERTY_INVENTORY_BACKEND: 'memory' }), {});
+  assert.equal(resolveBackendBootMode({ PROPERTY_INVENTORY_BACKEND: 'memory' }), 'memory');
+  assert.equal(resolveBackendBootMode({ PROPERTY_DB: 'embedded', PROPERTY_INVENTORY_BACKEND: 'memory' }), 'memory');
+  assert.equal(resolveBackendBootMode({ DATABASE_URL: 'postgres://localhost/db', PROPERTY_DB: 'embedded' }), 'postgres');
+
+  // Runtime control test: embedded PGLite boot never logs Demo/in-memory warnings or ready error noise.
+  const embeddedLogs = [];
+  const embeddedErrors = [];
+  const embeddedTimeouts = [];
+  const embeddedOk = await awaitBackendReady({
+    env: { PROPERTY_DB: 'embedded' },
+    port: 3702,
+    log: (msg) => embeddedLogs.push(msg),
+    error: (msg) => embeddedErrors.push(msg),
+    waitForHealth: async (url, timeoutMs, opts = {}) => {
+      embeddedTimeouts.push({ url, timeoutMs });
+      if (url.endsWith('/api/health/ready')) {
+        if (typeof opts.onFailure === 'function') opts.onFailure('ECONNREFUSED');
+        return false;
+      }
+      return true;
+    },
+  });
+  assert.equal(embeddedOk, true);
+  assert.equal(embeddedErrors.length, 0);
+  assert.ok(embeddedLogs.some((line) => /Embedded PostgreSQL mode detected/.test(line)));
+  assert.ok(embeddedLogs.some((line) => /Embedded PostgreSQL still initializing \(ECONNREFUSED\)/.test(line)));
+  assert.ok(embeddedLogs.every((line) => !/Demo\/in-memory/.test(line)));
+  assert.equal(embeddedTimeouts[1].timeoutMs, 120000);
+
+  // Negative control: explicit memory mode retains Demo/in-memory logs before liveness fallback.
+  const memoryLogs = [];
+  const memoryTimeouts = [];
+  const memoryOk = await awaitBackendReady({
+    env: { PROPERTY_INVENTORY_BACKEND: 'memory' },
+    port: 3702,
+    log: (msg) => memoryLogs.push(msg),
+    error: () => {},
+    waitForHealth: async (url, timeoutMs) => {
+      memoryTimeouts.push({ url, timeoutMs });
+      return !url.endsWith('/api/health/ready');
+    },
+  });
+  assert.equal(memoryOk, true);
+  assert.ok(memoryLogs.some((line) => /Demo\/in-memory mode detected/.test(line)));
+  assert.ok(memoryLogs.some((line) => /Advanced discovery readiness failed/.test(line)));
+  assert.equal(memoryTimeouts[1].timeoutMs, 25000);
+});

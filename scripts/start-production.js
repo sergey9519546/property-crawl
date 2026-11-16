@@ -62,6 +62,32 @@ function resolveNodeOptions(existingOptions, defaultLimit = '4096') {
   return existingOptions ? `${existingOptions} --max-old-space-size=${defaultLimit}` : `--max-old-space-size=${defaultLimit}`;
 }
 
+function resolveDefaultDbEnv(env = bootEnv) {
+  // Embedded only when nothing else is configured. Never inject it over
+  // DATABASE_URL: on Render that hid the live Postgres inventory.
+  if (
+    !env.DATABASE_URL &&
+    !env.PROPERTY_DB &&
+    !env.PROPERTY_PG_DATA_DIR &&
+    !env.PROPERTY_INVENTORY_BACKEND
+  ) {
+    return { PROPERTY_DB: 'embedded' };
+  }
+  return {};
+}
+
+function resolveBackendBootMode(env = bootEnv) {
+  const effectiveEnv = { ...env, ...resolveDefaultDbEnv(env), NODE_ENV: 'production' };
+  if (effectiveEnv.DATABASE_URL) return 'postgres';
+  if (
+    effectiveEnv.PROPERTY_INVENTORY_BACKEND !== 'memory' &&
+    (effectiveEnv.PROPERTY_DB === 'embedded' || Boolean(effectiveEnv.PROPERTY_PG_DATA_DIR))
+  ) {
+    return 'embedded';
+  }
+  return effectiveEnv.PROPERTY_INVENTORY_BACKEND === 'memory' ? 'memory' : 'unconfigured';
+}
+
 const hasDatabase = Boolean(bootEnv.DATABASE_URL);
 const children = [];
 let closing = false;
@@ -99,56 +125,81 @@ process.on('uncaughtException', (err) => {
   shutdown(1);
 });
 
-async function waitForHealth(url, timeoutMs = 120000) {
+async function waitForHealth(url, timeoutMs = 120000, options = {}) {
+  const onFailure = typeof options.onFailure === 'function'
+    ? options.onFailure
+    : (reason => console.error(`[Production] Health deadline exceeded (${reason}) for ${url}`));
   return require('./production-health').waitForHealth(url, {
-    timeoutMs, closing:() => closing,
-    onFailure:reason => console.error(`[Production] Health deadline exceeded (${reason}) for ${url}`),
+    timeoutMs, closing: () => closing,
+    onFailure,
   });
 }
 
 /**
  * Backend readiness strategy:
  * - With DATABASE_URL: wait on advanced readiness (/api/health/ready).
- * - Without DATABASE_URL: Demo/in-memory mode detected — advanced discovery
- *   readiness may fail; fall back to liveness (/api/health) after a short wait.
+ * - With embedded PostgreSQL (PGLite): allow initialization and fall back to
+ *   liveness (/api/health) without logging Demo/in-memory warnings.
+ * - Without DATABASE_URL or embedded PostgreSQL: Demo/in-memory mode detected —
+ *   advanced discovery readiness may fail; fall back to liveness (/api/health)
+ *   after a short wait.
  */
-async function awaitBackendReady() {
-  const readyUrl = `http://127.0.0.1:${internalApiPort}/api/health/ready`;
-  const liveUrl = `http://127.0.0.1:${internalApiPort}/api/health`;
+async function awaitBackendReady(options = {}) {
+  const env = options.env || bootEnv;
+  const port = options.port || internalApiPort;
+  const readyUrl = options.readyUrl || `http://127.0.0.1:${port}/api/health/ready`;
+  const liveUrl = options.liveUrl || `http://127.0.0.1:${port}/api/health`;
+  const log = typeof options.log === 'function' ? options.log : console.log;
+  const errorLog = typeof options.error === 'function' ? options.error : console.error;
+  const probeHealth = typeof options.waitForHealth === 'function' ? options.waitForHealth : null;
+  const backendMode = resolveBackendBootMode(env);
+  const hasDatabase = backendMode === 'postgres';
+  const usesEmbeddedPostgres = backendMode === 'embedded';
 
-  if (!hasDatabase) {
-    console.log('[Production] Demo/in-memory mode detected (DATABASE_URL unset).');
+  if (usesEmbeddedPostgres) {
+    log('[Production] Embedded PostgreSQL mode detected (PGLite; DATABASE_URL unset).');
+  } else if (!hasDatabase) {
+    log('[Production] Demo/in-memory mode detected (DATABASE_URL unset).');
   }
 
   // Cloud platforms (Render, Fly, Koyeb) require public port binding in < 25s.
   // Never block for 45s on advanced discovery readiness before falling back to
   // liveness; probe readiness for up to 3s, then fall back immediately.
-  const ready = await waitForHealth(readyUrl, 3000);
+  let readyFailureReason = null;
+  const readyOpts = { onFailure: (reason) => { readyFailureReason = reason; } };
+  const ready = probeHealth
+    ? await probeHealth(readyUrl, 3000, readyOpts)
+    : await waitForHealth(readyUrl, 3000, readyOpts);
   if (ready) {
-    console.log(`[Production] Backend Listing API is healthy on port ${internalApiPort}.`);
+    log(`[Production] Backend Listing API is healthy on port ${port}.`);
     return true;
   }
 
   if (hasDatabase) {
-    console.log('[Production] Database discovery readiness still initializing — falling back to /api/health liveness check.');
+    log('[Production] Database discovery readiness still initializing — falling back to /api/health liveness check.');
+  } else if (usesEmbeddedPostgres) {
+    const reasonSuffix = readyFailureReason ? ` (${readyFailureReason})` : '';
+    log(`[Production] Embedded PostgreSQL still initializing${reasonSuffix} — falling back to /api/health liveness check.`);
   } else {
-    console.log('[Production] Advanced discovery readiness failed — continuing in Demo/in-memory mode.');
+    log('[Production] Advanced discovery readiness failed — continuing in Demo/in-memory mode.');
   }
 
   // Startup database migrations (e.g. column backfills + GIN index creation)
   // run synchronously before server.listen(), so a 10s budget can SIGTERM an
   // active migration on resource-constrained hosts.
-  const configuredTimeout = Number(bootEnv.BACKEND_HEALTH_TIMEOUT_MS);
+  const configuredTimeout = Number(env.BACKEND_HEALTH_TIMEOUT_MS);
   const liveTimeoutMs = Number.isFinite(configuredTimeout) && configuredTimeout > 0
     ? configuredTimeout
-    : (hasDatabase ? 240000 : 25000);
-  const live = await waitForHealth(liveUrl, liveTimeoutMs);
+    : (hasDatabase ? 240000 : (usesEmbeddedPostgres ? 120000 : 25000));
+  const live = probeHealth
+    ? await probeHealth(liveUrl, liveTimeoutMs)
+    : await waitForHealth(liveUrl, liveTimeoutMs);
   if (live) {
-    console.log(`[Production] Backend Listing API is live on port ${internalApiPort} (liveness /api/health).`);
+    log(`[Production] Backend Listing API is live on port ${port} (liveness /api/health).`);
     return true;
   }
 
-  console.error('[Production] Backend Listing API failed health check in time.');
+  errorLog('[Production] Backend Listing API failed health check in time.');
   return false;
 }
 
@@ -157,15 +208,8 @@ async function boot() {
   console.log(`[Production] Bootstrapping Property-Crawl production runtime...`);
   console.log(`[Production] Public Port: ${publicPort} | Internal API Port: ${internalApiPort}`);
 
-  // Embedded only when nothing else is configured. Never inject it over
-  // DATABASE_URL: on Render that hid the live Postgres inventory.
-  const defaultDbEnv =
-    !hasDatabase &&
-    !bootEnv.PROPERTY_DB &&
-    !bootEnv.PROPERTY_PG_DATA_DIR &&
-    !bootEnv.PROPERTY_INVENTORY_BACKEND
-      ? { PROPERTY_DB: 'embedded' }
-      : {};
+  const defaultDbEnv = resolveDefaultDbEnv(bootEnv);
+  const usesEmbeddedPostgres = resolveBackendBootMode(bootEnv) === 'embedded';
 
   const apiEnv = {
     ...bootEnv,
@@ -239,11 +283,13 @@ async function boot() {
       const healthRes = await fetch(`http://127.0.0.1:${publicPort}/api/health`, { signal: AbortSignal.timeout(2000) });
       if (healthRes.ok) {
         const health = await healthRes.json();
-        console.log(`[Production] Active Data Mode: ${health.dataMode || (hasDatabase ? 'postgres' : 'memory')}`);
+        console.log(`[Production] Active Data Mode: ${health.dataMode || ((hasDatabase || usesEmbeddedPostgres) ? 'postgres' : 'memory')}`);
         console.log(`[Production] Document Review Store: ${health.documentReviewStore || 'memory'}`);
       }
     } catch {
-      if (!hasDatabase) {
+      if (usesEmbeddedPostgres) {
+        console.log('[Production] Data mode: Embedded PostgreSQL (PGLite).');
+      } else if (!hasDatabase) {
         console.log(`[Production] Data mode: Demo/in-memory (seeded from data.js).`);
       }
     }
@@ -259,4 +305,11 @@ if (require.main === module) boot().catch((err) => {
   shutdown(1);
 });
 
-module.exports = { resolveNodeOptions, detectAvailableMemoryMb, awaitBackendReady, boot };
+module.exports = {
+  resolveNodeOptions,
+  detectAvailableMemoryMb,
+  resolveDefaultDbEnv,
+  resolveBackendBootMode,
+  awaitBackendReady,
+  boot,
+};

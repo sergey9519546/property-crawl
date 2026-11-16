@@ -176,8 +176,8 @@ function isObservedStateHpiSnapshot(snapshot) {
 function readSnapshotFromDisk() {
   const snapshotPath = process.env[SNAPSHOT_PATH_ENV] || DEFAULT_SNAPSHOT_PATH;
   try {
-    if (!fs.existsSync(snapshotPath)) return null;
-    const parsed = JSON.parse(fs.readFileSync(snapshotPath, 'utf8'));
+    if (!fs.existsSync(/*turbopackIgnore: true*/ snapshotPath)) return null;
+    const parsed = JSON.parse(fs.readFileSync(/*turbopackIgnore: true*/ snapshotPath, 'utf8'));
     return isObservedStateHpiSnapshot(parsed) ? parsed : null;
   } catch {
     return null;

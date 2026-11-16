@@ -22,7 +22,7 @@ const DEFAULT_LEDGER_PATH = path.resolve(__dirname, '../../.cache/evidence-ledge
 
 function defaultSnapshotLedgerPath() {
   const dir = process.env.PROPERTY_EVIDENCE_DIR || path.resolve(__dirname, '../../.cache/discovery-snapshots');
-  return path.resolve(dir, 'evidence-ledger.jsonl');
+  return path.resolve(/*turbopackIgnore: true*/ dir, 'evidence-ledger.jsonl');
 }
 
 let _anchorPool = null;
@@ -39,13 +39,13 @@ function attachLedgerAnchorPool(pool, targetPath = null) {
     _anchoredEntryCount = 0;
     _lastAnchoredHash = null;
   } else if (targetPath) {
-    _anchorTargetPath = path.resolve(targetPath);
+    _anchorTargetPath = path.resolve(/*turbopackIgnore: true*/ targetPath);
   }
 }
 
 function isAnchoredPath(targetPath) {
   if (!_anchorPool || !_anchorTargetPath || !targetPath) return false;
-  return path.resolve(targetPath) === _anchorTargetPath;
+  return path.resolve(/*turbopackIgnore: true*/ targetPath) === _anchorTargetPath;
 }
 
 function getLedgerAnchorStatus(targetPath = defaultSnapshotLedgerPath()) {
@@ -64,7 +64,7 @@ async function persistEntryToAnchor(entry, targetPath) {
     `INSERT INTO discovery_legacy_imports (content_sha256, kind, original_path, payload, imported_at)
      VALUES ($1, 'evidence_ledger_block', $2, $3::jsonb, COALESCE($4::timestamptz, NOW()))
      ON CONFLICT (content_sha256, kind) DO NOTHING`,
-    [entry.entryHash, path.resolve(targetPath), JSON.stringify(entry), entry.timestamp || null]
+    [entry.entryHash, path.resolve(/*turbopackIgnore: true*/ targetPath), JSON.stringify(entry), entry.timestamp || null]
   );
   _anchoredEntryCount = Math.max(_anchoredEntryCount, Number(entry.index ?? 0) + 1);
   _lastAnchoredHash = entry.entryHash;
@@ -314,7 +314,7 @@ const verifiedLedgerCache = new Map();
 
 function statSignature(target) {
   try {
-    const st = fs.statSync(target, { bigint: true });
+    const st = fs.statSync(/*turbopackIgnore: true*/ target, { bigint: true });
     return {
       ino: st.ino,
       size: st.size,
@@ -338,7 +338,7 @@ function sameStatSignature(a, b) {
 }
 
 function updateVerifiedLedgerCache(target, sig, chain, isJsonArray) {
-  const resolved = path.resolve(target);
+  const resolved = path.resolve(/*turbopackIgnore: true*/ target);
   if (!sig || isJsonArray) {
     verifiedLedgerCache.delete(resolved);
     return;
@@ -355,7 +355,7 @@ function updateVerifiedLedgerCache(target, sig, chain, isJsonArray) {
 
 function loadLedgerFromFile(filePath) {
   const target = filePath || DEFAULT_LEDGER_PATH;
-  const resolved = path.resolve(target);
+  const resolved = path.resolve(/*turbopackIgnore: true*/ target);
   try {
     const sig = statSignature(target);
     if (!sig) {
@@ -386,7 +386,7 @@ function loadLedgerFromFile(filePath) {
  */
 function getLedgerHealth(filePath) {
   const target = filePath || DEFAULT_LEDGER_PATH;
-  const resolved = path.resolve(target);
+  const resolved = path.resolve(/*turbopackIgnore: true*/ target);
   const sig = statSignature(target);
   if (!sig) {
     verifiedLedgerCache.delete(resolved);
@@ -407,7 +407,7 @@ function getLedgerHealth(filePath) {
 const STALE_LEDGER_LOCK_MS = 30_000;
 
 function withLedgerLock(target, fn) {
-  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.mkdirSync(/*turbopackIgnore: true*/ path.dirname(target), { recursive: true });
   const lockPath = `${target}.lock`;
   let lockHandle;
   try {
@@ -448,14 +448,14 @@ function persistSuffix(target, chain, existing) {
   }
   const suffix = chain.slice(existing.length);
   if (!suffix.length) return;
-  if (fs.existsSync(target) && fs.readFileSync(target, 'utf8').trimStart().startsWith('[')) {
+  if (fs.existsSync(/*turbopackIgnore: true*/ target) && fs.readFileSync(/*turbopackIgnore: true*/ target, 'utf8').trimStart().startsWith('[')) {
     throw ledgerError('Legacy ledger is read-only; migrate explicitly before appending');
   }
-  const fd = fs.openSync(target, 'a', 0o600);
+  const fd = fs.openSync(/*turbopackIgnore: true*/ target, 'a', 0o600);
   try {
     fs.writeFileSync(fd, suffix.map(entry => JSON.stringify(entry)).join('\n') + '\n', 'utf8');
   } finally { fs.closeSync(fd); }
-  verifiedLedgerCache.delete(path.resolve(target));
+  verifiedLedgerCache.delete(path.resolve(/*turbopackIgnore: true*/ target));
 }
 
 function saveLedgerToFile(filePath, chain) {
@@ -465,7 +465,7 @@ function saveLedgerToFile(filePath, chain) {
 
 async function appendLedgerToFile(filePath, entryData, { timeoutMs = 5000 } = {}) {
   const target = filePath || DEFAULT_LEDGER_PATH;
-  const resolved = path.resolve(target);
+  const resolved = path.resolve(/*turbopackIgnore: true*/ target);
   const deadline = Date.now() + timeoutMs;
   for (;;) {
     try {
@@ -520,7 +520,7 @@ async function appendLedgerToFile(filePath, entryData, { timeoutMs = 5000 } = {}
           metadata: entryData.metadata || {}
         });
 
-        const fd = fs.openSync(target, 'a', 0o600);
+        const fd = fs.openSync(/*turbopackIgnore: true*/ target, 'a', 0o600);
         try {
           fs.writeFileSync(fd, JSON.stringify(block) + '\n', 'utf8');
         } finally {
@@ -559,7 +559,7 @@ async function syncEvidenceLedgerWithPostgres(pool, filePath = defaultSnapshotLe
     attachLedgerAnchorPool(null);
     return { synced: false, hydratedFromPostgres: 0, anchoredEntries: 0, headHash: null };
   }
-  const target = path.resolve(filePath || defaultSnapshotLedgerPath());
+  const target = path.resolve(/*turbopackIgnore: true*/ filePath || defaultSnapshotLedgerPath());
   attachLedgerAnchorPool(pool, target);
 
   const res = await pool.query(
@@ -631,7 +631,7 @@ async function syncEvidenceLedgerWithPostgres(pool, filePath = defaultSnapshotLe
       const tempPath = `${target}.${process.pid}.${crypto.randomUUID()}.tmp`;
       const content = remoteEntries.map((entry) => JSON.stringify(entry)).join('\n') + '\n';
       try {
-        const fd = fs.openSync(tempPath, 'wx', 0o600);
+        const fd = fs.openSync(/*turbopackIgnore: true*/ tempPath, 'wx', 0o600);
         try {
           fs.writeFileSync(fd, content, 'utf8');
           fs.fsyncSync(fd);
@@ -641,7 +641,7 @@ async function syncEvidenceLedgerWithPostgres(pool, filePath = defaultSnapshotLe
         replaceFileWithRetry(tempPath, target);
         verifiedLedgerCache.delete(target);
       } finally {
-        try { if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath); } catch (_) {}
+        try { if (fs.existsSync(/*turbopackIgnore: true*/ tempPath)) fs.unlinkSync(/*turbopackIgnore: true*/ tempPath); } catch (_) {}
       }
     });
     localEntries = loadLedgerFromFile(target);

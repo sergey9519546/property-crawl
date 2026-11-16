@@ -6,14 +6,33 @@ const { resolveCountyEndpoint, normalizeApn, STATEWIDE_ARCGIS_REGISTRY } = requi
 // Public cadastral reference layers. Their polygons are assessor/GIS records,
 // not boundary surveys, and are returned only when the upstream service supplies
 // an actual feature intersecting the requested point.
+// FL and NJ keep dedicated parcel polygon layers here because the FL entry in
+// STATEWIDE_ARCGIS_REGISTRY is a centroid-only service (Points, not Polygons).
+const STATEWIDE_POLYGON_REGISTRIES = Object.fromEntries(
+  Object.entries(STATEWIDE_ARCGIS_REGISTRY)
+    .filter(([state]) => state !== 'FL' && state !== 'NJ')
+    .map(([state, config]) => [
+      state,
+      {
+        name: config.name,
+        endpoint: config.endpoint,
+        apnField: config.apnField,
+        ...(config.countyFilterField ? { countyFilterField: config.countyFilterField } : {}),
+      }
+    ])
+);
+
 const ARCGIS_REGISTRY = Object.freeze({
+  ...STATEWIDE_POLYGON_REGISTRIES,
   OH: {
     name: 'Ohio Geographically Referenced Information Program (OGRIP)',
-    endpoint: 'https://gis5.oit.ohio.gov/arcgis/rest/services/LBRS/MapServer/0/query'
+    endpoint: 'https://gis5.oit.ohio.gov/arcgis/rest/services/LBRS/MapServer/0/query',
+    apnField: 'PARCELID'
   },
   FL: {
     name: 'Florida Geographic Data Library / FDEP Open Data Parcels',
-    endpoint: 'https://ca.dep.state.fl.us/arcgis/rest/services/OpenData/PARCELS/MapServer/0/query'
+    endpoint: 'https://ca.dep.state.fl.us/arcgis/rest/services/OpenData/PARCELS/MapServer/0/query',
+    apnField: 'PARCEL_ID'
   },
   TX: {
     name: 'Texas Geographic Information Office (TxGIO) StratMap Land Parcels',
@@ -23,7 +42,8 @@ const ARCGIS_REGISTRY = Object.freeze({
   },
   NJ: {
     name: 'New Jersey Office of GIS (NJGIN) Parcel Data',
-    endpoint: 'https://maps.nj.gov/arcgis/rest/services/Basemap/Parcels/MapServer/0/query'
+    endpoint: 'https://maps.nj.gov/arcgis/rest/services/Basemap/Parcels/MapServer/0/query',
+    apnField: 'PAMS_PIN'
   }
 });
 
@@ -177,60 +197,54 @@ function hasObservedListingCoordinates(listing) {
   return !derived.geocode && !derived.coordinates && !derived.location;
 }
 
-async function queryArcGisRest(lat, lng, state, apn = null, county = null) {
-  const normalizedState = textValue(state)?.toUpperCase() || null;
-  let serviceInfo = null;
-  let apnField = 'PARCEL_ID';
-  let countyFilterField = null;
+function isArcGisGeometryEndpoint(config) {
+  return Boolean(
+    config
+    && typeof config.endpoint === 'string'
+    && config.source !== 'wparcels'
+    && /\/(?:query|identify)$/i.test(config.endpoint)
+  );
+}
 
-  if (county && normalizedState) {
+function resolveBoundaryEndpoints(state, county = null) {
+  const normalizedState = textValue(state)?.toUpperCase() || null;
+  if (!normalizedState) return [];
+
+  const candidates = [];
+  const seenEndpoints = new Set();
+  const pushCandidate = (config) => {
+    if (!isArcGisGeometryEndpoint(config) || seenEndpoints.has(config.endpoint)) return;
+    seenEndpoints.add(config.endpoint);
+    candidates.push({
+      name: config.name,
+      endpoint: config.endpoint,
+      apnField: config.apnField || 'PARCEL_ID',
+      ...(config.countyFilterField ? { countyFilterField: config.countyFilterField } : {}),
+      ...(config.operation ? { operation: config.operation } : {}),
+    });
+  };
+
+  if (county) {
     const resolved = resolveCountyEndpoint(normalizedState, county);
-    if (resolved && resolved.endpoint) {
-      serviceInfo = {
-        name: resolved.name,
-        endpoint: resolved.endpoint
-      };
-      if (resolved.apnField) apnField = resolved.apnField;
-      if (resolved.countyFilterField) countyFilterField = resolved.countyFilterField;
+    // FL entries in STATEWIDE_ARCGIS_REGISTRY point to a centroid layer
+    // (Points, not Polygons); skip them so FL falls through to ARCGIS_REGISTRY.FL.
+    if (resolved && resolved.statewideService !== 'FL') {
+      pushCandidate(resolved);
     }
   }
 
-  if (!serviceInfo && normalizedState) {
-    serviceInfo = ARCGIS_REGISTRY[normalizedState] || null;
-    if (normalizedState === 'OH') apnField = 'PARCELID';
-    else if (normalizedState === 'TX') apnField = 'PROP_ID';
-    else if (normalizedState === 'NJ') apnField = 'PAMS_PIN';
-    else if (normalizedState === 'FL') apnField = 'PARCEL_ID';
+  if (ARCGIS_REGISTRY[normalizedState]) {
+    pushCandidate(ARCGIS_REGISTRY[normalizedState]);
+  } else if (normalizedState !== 'FL' && STATEWIDE_ARCGIS_REGISTRY[normalizedState]) {
+    pushCandidate(STATEWIDE_ARCGIS_REGISTRY[normalizedState]);
   }
 
-  if (!serviceInfo && normalizedState && STATEWIDE_ARCGIS_REGISTRY[normalizedState]) {
-    const statewide = STATEWIDE_ARCGIS_REGISTRY[normalizedState];
-    serviceInfo = {
-      name: statewide.name,
-      endpoint: statewide.endpoint
-    };
-    if (statewide.apnField) apnField = statewide.apnField;
-    if (statewide.countyFilterField) countyFilterField = statewide.countyFilterField;
-  }
+  return candidates;
+}
 
-  if (!serviceInfo) {
-    throw new ParcelBoundaryError(
-      404,
-      'PARCEL_SOURCE_UNAVAILABLE',
-      normalizedState
-        ? `No parcel geometry source is configured for ${normalizedState}.`
-        : 'State is required to select a parcel geometry source.'
-    );
-  }
-  if (!serviceInfo.apnField && apnField) {
-    serviceInfo = { ...serviceInfo, apnField };
-  }
-  if (typeof fetch !== 'function') {
-    throw new ParcelBoundaryError(503, 'PARCEL_SOURCE_UNAVAILABLE', 'Parcel geometry service is unavailable.');
-  }
-
-  const hasCoords = coordinate(lat, -90, 90) !== null && coordinate(lng, -180, 180) !== null;
-
+async function querySingleArcGisEndpoint(serviceInfo, lat, lng, apn, county, hasCoords) {
+  const apnField = serviceInfo.apnField || 'PARCEL_ID';
+  const countyFilterField = serviceInfo.countyFilterField || null;
   const isIdentifyService = serviceInfo.operation === 'identify' || /\/identify$/i.test(serviceInfo.endpoint);
   if (isIdentifyService && !hasCoords) {
     throw new ParcelBoundaryError(
@@ -365,6 +379,49 @@ async function queryArcGisRest(lat, lng, state, apn = null, county = null) {
   }
 }
 
+async function queryArcGisRest(lat, lng, state, apn = null, county = null) {
+  const normalizedState = textValue(state)?.toUpperCase() || null;
+  const candidates = resolveBoundaryEndpoints(normalizedState, county);
+
+  if (candidates.length === 0) {
+    throw new ParcelBoundaryError(
+      404,
+      'PARCEL_SOURCE_UNAVAILABLE',
+      normalizedState
+        ? `No parcel geometry source is configured for ${normalizedState}.`
+        : 'State is required to select a parcel geometry source.'
+    );
+  }
+  if (typeof fetch !== 'function') {
+    throw new ParcelBoundaryError(503, 'PARCEL_SOURCE_UNAVAILABLE', 'Parcel geometry service is unavailable.');
+  }
+
+  const hasCoords = coordinate(lat, -90, 90) !== null && coordinate(lng, -180, 180) !== null;
+  let notFoundError = null;
+  let lastError = null;
+
+  for (const serviceInfo of candidates) {
+    const isIdentifyService = serviceInfo.operation === 'identify' || /\/identify$/i.test(serviceInfo.endpoint);
+    if (isIdentifyService && !hasCoords && notFoundError) {
+      continue;
+    }
+    try {
+      return await querySingleArcGisEndpoint(serviceInfo, lat, lng, apn, county, hasCoords);
+    } catch (error) {
+      if (error instanceof ParcelBoundaryError && error.code === 'EXACT_COORDINATES_REQUIRED') {
+        throw error;
+      }
+      if (error instanceof ParcelBoundaryError && error.code === 'PARCEL_GEOMETRY_NOT_FOUND') {
+        notFoundError = error;
+      } else {
+        lastError = error;
+      }
+    }
+  }
+
+  throw notFoundError || lastError;
+}
+
 function sendError(res, error) {
   const status = error instanceof ParcelBoundaryError ? error.status : 500;
   const code = error instanceof ParcelBoundaryError ? error.code : 'PARCEL_BOUNDARY_ERROR';
@@ -433,4 +490,5 @@ module.exports.hasObservedListingCoordinates = hasObservedListingCoordinates;
 module.exports.isCadastralGeometry = isCadastralGeometry;
 module.exports.observedProperties = observedProperties;
 module.exports.queryArcGisRest = queryArcGisRest;
+module.exports.resolveBoundaryEndpoints = resolveBoundaryEndpoints;
 module.exports.computePolygonMetrics = computePolygonMetrics;

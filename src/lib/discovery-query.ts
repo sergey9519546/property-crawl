@@ -19,11 +19,11 @@ const keys = ["q", "state", "county", "source", "type", "program", "lifecycle", 
 // of turning the results page into an error.
 //
 // Values are matched exactly after trimming, because the server folds case only
-// for `freshness`; an exact test can never be more permissive than the server.
+// for `freshness` and `distressStage`; an exact test can never be more permissive than the server.
 // Absent on purpose: state/county/source/type/program/lifecycle/occupancy are
 // facet values derived from the data and so have no enumerable vocabulary,
-// `view` is client-only UI state the server never reads, and distressStage and
-// minQuality are not parsed by the discovery query at all.
+// `view` is client-only UI state the server never reads, and `minQuality` is
+// applied post-annotation by the listing route rather than the discovery query.
 export const DISCOVERY_FILTER_VALUES = Object.freeze({
   freshness: Object.freeze(["all", "observed", "unverified"]),
   hasDocuments: Object.freeze(["true", "false", "unknown"]),
@@ -31,6 +31,7 @@ export const DISCOVERY_FILTER_VALUES = Object.freeze({
   sort: Object.freeze(["score", "quality", "opportunity", "triage", "date", "bid-asc", "equity", "images", "bid"]),
   seniorLien: Object.freeze(["all", "clean", "risk"]),
   redemption: Object.freeze(["all", "immediate", "redemption_active"]),
+  distressStage: Object.freeze(["all", "reo", "pre_foreclosure", "scheduled", "tax_sale", "unknown"]),
 });
 
 const acceptedValues: Readonly<Record<string, readonly string[]>> = DISCOVERY_FILTER_VALUES;

@@ -110,3 +110,21 @@ test("valid hasPhoto values round-trip and invalid hasPhoto drops on read and wr
   assert.equal("hasPhoto" in invalid, false);
   assert.equal(discoverySearchParams({ hasPhoto: "maybe" }).has("hasPhoto"), false);
 });
+
+test("valid distressStage values round-trip and invalid distressStage drops on read and write", async () => {
+  const { readDiscoveryFilters, discoverySearchParams, DISCOVERY_FILTER_VALUES } = await load();
+  assert.deepEqual(
+    [...DISCOVERY_FILTER_VALUES.distressStage],
+    ["all", "reo", "pre_foreclosure", "scheduled", "tax_sale", "unknown"],
+  );
+  for (const stage of ["all", "reo", "pre_foreclosure", "scheduled", "tax_sale", "unknown"]) {
+    const valid = readDiscoveryFilters(new URLSearchParams(`distressStage=${stage}`));
+    assert.equal(valid.distressStage, stage);
+    assert.equal(discoverySearchParams(valid).get("distressStage"), stage);
+  }
+  const invalid = readDiscoveryFilters(new URLSearchParams("distressStage=bogus&state=OH"));
+  assert.equal("distressStage" in invalid, false);
+  assert.equal(invalid.state, "OH");
+  assert.equal(discoverySearchParams({ distressStage: "bogus", state: "OH" }).has("distressStage"), false);
+  assert.equal(discoverySearchParams({ distressStage: "foreclosure" }).has("distressStage"), false);
+});

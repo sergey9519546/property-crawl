@@ -149,3 +149,61 @@ test('presentListing hydrates verified images array from provenance media galler
     'https://www.irsauctions.gov/sites/default/files/100/back.jpg',
   ]);
 });
+
+test('presentListing deduplicates verified images and rejects unverified or stock URLs', () => {
+  const { presentListing } = require('../server/routes/listings');
+  const hydrated = presentListing({
+    id: 'USDA-MEDIA-DUP',
+    source: 'usda',
+    state: 'OH',
+    address: '100 Main St, Columbus, OH 43215',
+    photo: 'https://www.resales.usda.gov/property/12345.jpg',
+    images: null,
+    sourceUrl: 'https://www.resales.usda.gov/resales/public/SFHPropertyDetail?id=12345',
+    sourceObservedAt: '2026-10-01T00:00:00.000Z',
+    provenance: {
+      origin: 'live',
+      observed: true,
+      publisher: 'USDA',
+      recordId: '12345',
+      media: {
+        gallery: [
+          { url: 'https://www.resales.usda.gov/property/12345.jpg', sourceRecordUrl: 'https://www.resales.usda.gov/resales/public/SFHPropertyDetail?id=12345' },
+          { url: 'https://www.resales.usda.gov/property/12345.jpg', sourceRecordUrl: 'https://www.resales.usda.gov/resales/public/SFHPropertyDetail?id=12345' },
+          { url: 'https://www.resales.usda.gov/property/12345-back.jpg', sourceRecordUrl: 'https://www.resales.usda.gov/resales/public/SFHPropertyDetail?id=12345' },
+          { url: 'https://www.resales.usda.gov/No_Image.jpg', sourceRecordUrl: 'https://www.resales.usda.gov/resales/public/SFHPropertyDetail?id=12345' },
+        ],
+      },
+    },
+  });
+  assert.deepEqual(hydrated.images, [
+    'https://www.resales.usda.gov/property/12345.jpg',
+    'https://www.resales.usda.gov/property/12345-back.jpg',
+  ]);
+
+  const unverified = presentListing({
+    id: 'USDA-MEDIA-UNVERIFIED',
+    source: 'usda',
+    state: 'OH',
+    address: '100 Main St, Columbus, OH 43215',
+    photo: 'https://www.resales.usda.gov/property/12345.jpg',
+    images: null,
+    sourceUrl: null,
+    provenance: { origin: 'snapshot', observed: false },
+  });
+  assert.deepEqual(unverified.images, []);
+});
+
+test('detail page gallery hydration keeps strict record proof, host-gates images[] fallback, and surfaces benchmark hints when unrated', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const pageSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'app', 'listings', '[id]', 'page.tsx'), 'utf8');
+
+  assert.match(pageSrc, /function resolveVerifiedPublisherGallery\(/);
+  assert.match(pageSrc, /if \(record !== exactSourceUrl\)\s*\{\s*rejectedGalleryUrls\.add\(url\);\s*continue;\s*\}/);
+  assert.match(pageSrc, /isAllowedPublisherImageHost\(url, listing, publisherPhoto, exactSourceUrl\)/);
+  assert.match(pageSrc, /hostnameMatches\(candidateHost, pageHost\)/);
+  assert.match(pageSrc, /sourceKey === "gsa" && hostnameMatches\(candidateHost, "cloudfront\.net"\)/);
+  assert.match(pageSrc, /data-testid="benchmark-context-summary"/);
+  assert.match(pageSrc, /Public benchmarks below \(not an appraisal\):/);
+});

@@ -34,6 +34,7 @@ const test = require('node:test');
   ARCGIS_REGISTRY,
   computePolygonMetrics,
   queryArcGisRest,
+  resolveBoundaryEndpoints,
 } = require('../../server/routes/parcel-boundary');
 
 // --- coordinate / textValue / numberValue are private; exercise through ---
@@ -319,6 +320,134 @@ test('TX statewide registry points to live TxGIO StratMap identify service and p
     await assert.rejects(
       () => queryArcGisRest(null, null, 'TX', '468776', null),
       (err) => err && err.status === 422 && err.code === 'EXACT_COORDINATES_REQUIRED',
+    );
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('ARCGIS_REGISTRY and resolveBoundaryEndpoints cover all statewide boundary states (CO, NC, NY, WI, CT, AR + OH, FL, TX, NJ)', () => {
+  for (const state of ['OH', 'FL', 'TX', 'NJ', 'CO', 'NC', 'NY', 'WI', 'CT', 'AR']) {
+    assert.ok(ARCGIS_REGISTRY[state]?.endpoint, `${state} must be registered in ARCGIS_REGISTRY`);
+    const candidates = resolveBoundaryEndpoints(state, null);
+    assert.equal(candidates.length, 1, `${state} must resolve 1 statewide boundary candidate`);
+    assert.equal(candidates[0].endpoint, ARCGIS_REGISTRY[state].endpoint);
+  }
+
+  // FL counties without a dedicated polygon layer must skip the Florida centroid-only statewide endpoint
+  const flCollier = resolveBoundaryEndpoints('FL', 'Collier');
+  assert.equal(flCollier.length, 1);
+  assert.equal(flCollier[0].endpoint, ARCGIS_REGISTRY.FL.endpoint);
+  assert.doesNotMatch(flCollier[0].endpoint, /Centroid/i);
+
+  // Enrolled county registries (e.g. Maricopa AZ, Cook IL) resolve even without a statewide layer
+  const azMaricopa = resolveBoundaryEndpoints('AZ', 'Maricopa');
+  assert.equal(azMaricopa.length, 1);
+  assert.match(azMaricopa[0].endpoint, /gis\.maricopa\.gov/);
+
+  const ilCook = resolveBoundaryEndpoints('IL', 'Cook');
+  assert.equal(ilCook.length, 1);
+  assert.match(ilCook[0].endpoint, /datacatalog\.cookcountyil\.gov/);
+
+  // Negative controls: uncovered states, unenrolled counties, and non-ArcGIS CKAN registries resolve empty
+  assert.deepEqual(resolveBoundaryEndpoints('WY', null), []);
+  assert.deepEqual(resolveBoundaryEndpoints('CA', 'Modoc'), []);
+  assert.deepEqual(resolveBoundaryEndpoints('PA', 'Allegheny'), []);
+});
+
+test('queryArcGisRest queries statewide CO/NC/NY/WI/CT/AR and enrolled county endpoints and fails closed on non-polygon or uncovered requests', async () => {
+  const originalFetch = global.fetch;
+  const requests = [];
+  const sampleRing = [[[-104.991, 39.739], [-104.990, 39.739], [-104.990, 39.740], [-104.991, 39.740], [-104.991, 39.739]]];
+
+  global.fetch = async (url) => {
+    const parsed = new URL(String(url));
+    requests.push(parsed);
+    if (parsed.hostname.includes('cagisonline.hamilton-co.org')) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          type: 'FeatureCollection',
+          features: [{ type: 'Feature', geometry: { type: 'Point', coordinates: [-84.512, 39.103] }, properties: { PARCELID: 'HAM-1' } }],
+        }),
+      };
+    }
+    if (parsed.hostname.includes('gis.colorado.gov')) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          features: [{
+            attributes: { parcel_id: 'CO-DEN-1', ACRES: 0.2 },
+            geometry: { rings: sampleRing },
+          }],
+        }),
+      };
+    }
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        type: 'FeatureCollection',
+        features: [{
+          type: 'Feature',
+          geometry: { type: 'Polygon', coordinates: sampleRing },
+          properties: { parcelid: 'PARCEL-OK', PARCELID: 'OH-FALLBACK-1', PIN: 'COOK-1', APN: 'MARICOPA-1', ACRES: 0.25 },
+        }],
+      }),
+    };
+  };
+
+  try {
+    // Positive: statewide CO with ArcGIS rings normalization and standard query parameters
+    const coFeature = await queryArcGisRest(39.7392, -104.9903, 'CO', null, null);
+    assert.equal(coFeature.geometry.type, 'Polygon');
+    assert.equal(coFeature.properties.parcelId, 'CO-DEN-1');
+    const coUrl = requests[0];
+    assert.equal(coUrl.searchParams.get('geometryType'), 'esriGeometryPoint');
+    assert.equal(coUrl.searchParams.get('returnGeometry'), 'true');
+    assert.equal(coUrl.searchParams.get('outSR'), '4326');
+    assert.equal(coUrl.searchParams.get('f'), 'geojson');
+
+    // Positive: statewide NC, WI, CT, AR and enrolled counties AZ-MARICOPA, IL-COOK
+    for (const [lat, lng, state, county] of [
+      [35.7796, -78.6382, 'NC', null],
+      [43.0731, -89.4012, 'WI', null],
+      [41.7658, -72.6734, 'CT', null],
+      [34.7465, -92.2896, 'AR', null],
+      [33.4484, -112.0740, 'AZ', 'Maricopa'],
+      [41.8781, -87.6298, 'IL', 'Cook'],
+    ]) {
+      const feature = await queryArcGisRest(lat, lng, state, null, county);
+      assert.equal(feature.geometry.type, 'Polygon');
+    }
+
+    // Positive: centroid-only county endpoint (OH-HAMILTON) falls back to OGRIP statewide polygons
+    const ohFallback = await queryArcGisRest(39.1031, -84.5120, 'OH', null, 'Hamilton');
+    assert.equal(ohFallback.geometry.type, 'Polygon');
+    assert.equal(ohFallback.properties.serviceEndpoint, ARCGIS_REGISTRY.OH.endpoint);
+
+    // Negative: uncovered state, unenrolled county, and non-ArcGIS registry reject 404 PARCEL_SOURCE_UNAVAILABLE
+    for (const [state, county] of [['WY', null], ['CA', 'Modoc'], ['PA', 'Allegheny']]) {
+      await assert.rejects(
+        () => queryArcGisRest(40.0, -80.0, state, null, county),
+        (err) => err && err.status === 404 && err.code === 'PARCEL_SOURCE_UNAVAILABLE',
+      );
+    }
+
+    // Negative: Point-only response in a state without statewide polygon fallback throws PARCEL_GEOMETRY_NOT_FOUND
+    global.fetch = async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        type: 'FeatureCollection',
+        features: [{ type: 'Feature', geometry: { type: 'Point', coordinates: [-112.074, 33.448] }, properties: {} }],
+      }),
+    });
+    await assert.rejects(
+      () => queryArcGisRest(33.4484, -112.0740, 'AZ', null, 'Maricopa'),
+      (err) => err && err.status === 404 && err.code === 'PARCEL_GEOMETRY_NOT_FOUND',
     );
   } finally {
     global.fetch = originalFetch;

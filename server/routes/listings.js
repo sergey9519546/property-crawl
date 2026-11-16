@@ -574,8 +574,8 @@ async function handleListings(req, res, dbOverride = null, options = {}) {
     // stripping evidence from a product whose entire value is provenance is
     // not a payload optimisation.
     const presentedListings = result.listings
-      .map(listing => presentListing(attachMedia(listing, entries)))
-      .map(({ raw, provenance, ...rest }) => {
+      .map(listing => presentListing(attachMedia(listing, entries)));
+    const stripGridListings = (items) => items.map(({ raw, provenance, ...rest }) => {
         if (!provenance || typeof provenance !== 'object') return rest;
         // Two more fields with no reader, same reasoning as `raw` above:
         //   sourceFields   67.0 KB of the page (24.7%) -- the publisher's
@@ -585,7 +585,8 @@ async function handleListings(req, res, dbOverride = null, options = {}) {
         // alachua-second-chance.tsx, and that renders a purchase record's
         // history, not a listing's provenance. `sourceFields` has no reader
         // anywhere under src/.
-        const { sourceFields, statusHistory, ...kept } = provenance;
+        //   sourceFacts    ~1.3-3.5 KB per card -- publisher facts only read by the detail page (/listings/[id]) and SaleMechanics.
+        const { sourceFields, statusHistory, sourceFacts, ...kept } = provenance;
         return { ...rest, provenance: kept };
       });
     // Post-annotation intelligence view: quality/opportunity sort + minQuality.
@@ -601,7 +602,7 @@ async function handleListings(req, res, dbOverride = null, options = {}) {
       facets: result.facets || {},
       intelligence: intelligenceScope(presentedListings.length, viewListingsAll.length, filters),
       pipeline: summarizeInventory(viewListings),
-      listings: viewListings,
+      listings: stripGridListings(viewListings),
       total: isIntelligenceView
         ? viewListings.length
         : result.total,

@@ -21,6 +21,8 @@ import { PropertyIntelligence } from "@/components/listings/property-intelligenc
 import { ListingMedia } from "@/components/listings/listing-media";
 import { ListingWatchlistToggle } from "@/components/listings/listing-watchlist-toggle";
 import { inspectSecondaryMedia } from "@server/scrapers/secondary-property-media";
+import { SOURCE_HOSTS, hostnameMatches } from "@server/scrapers/source-policy";
+import { hasParcelBoundaryCoverage } from "@/lib/parcel-boundary-coverage";
 import { arbitrateTitleRisk } from "@server/intelligence/title-risk-engine";
 import { AssessorReading } from "@/components/listings/assessor-reading";
 import { inspectMapLocation } from "@/lib/listing-map-policy";
@@ -107,6 +109,74 @@ function verifiedPublisherPhoto(listing: Listing) {
   if (!evidenceRecord || evidenceRecord !== getExactSourceListingUrl(listing)) return undefined;
   if (evidence.url && safeImageUrl(evidence.url) !== safeImageUrl(listing.photo)) return undefined;
   return safeImageUrl(listing.photo);
+}
+
+function isAllowedPublisherImageHost(candidateUrl: string, listing: Listing, publisherPhoto: string, exactSourceUrl: string | null) {
+  try {
+    const candidateHost = new URL(candidateUrl).hostname;
+    const photoHost = new URL(publisherPhoto).hostname;
+    if (candidateHost.toLowerCase() === photoHost.toLowerCase()) return true;
+    if (exactSourceUrl) {
+      const pageHost = new URL(exactSourceUrl).hostname;
+      if (hostnameMatches(candidateHost, pageHost)) return true;
+    }
+    const sourceKey = listing.source?.trim().toLowerCase() ?? "";
+    const allowedRoots = (SOURCE_HOSTS as Record<string, readonly string[] | undefined>)[sourceKey] ?? [];
+    if (allowedRoots.some((root) => hostnameMatches(candidateHost, root))) return true;
+    if (sourceKey === "gsa" && hostnameMatches(candidateHost, "cloudfront.net")) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function resolveVerifiedPublisherGallery(listing: Listing, publisherPhoto: string | undefined, exactSourceUrl: string | null): string[] {
+  if (!publisherPhoto || !exactSourceUrl) return [];
+  const provenance = listing.provenance && typeof listing.provenance === "object" ? listing.provenance : {};
+  const media = provenance.media && typeof provenance.media === "object" ? (provenance.media as Record<string, unknown>) : {};
+  const gallery: string[] = [];
+  const seen = new Set<string>();
+  const rejectedGalleryUrls = new Set<string>();
+
+  if (Array.isArray(media.gallery)) {
+    for (const entry of media.gallery) {
+      if (!entry || typeof entry !== "object") continue;
+      const item = entry as Record<string, unknown>;
+      const url = safeImageUrl(item.url);
+  
+  
+      if (!url) continue;
+      const record = getExactSourceListingUrl({
+        ...listing,
+        sourceUrl: typeof item.sourceRecordUrl === "string" ? item.sourceRecordUrl : null,
+      });
+      if (record !== exactSourceUrl) {
+        rejectedGalleryUrls.add(url);
+        continue;
+      }
+      if (!seen.has(url)) {
+        seen.add(url);
+        gallery.push(url);
+        if (gallery.length === 12) return gallery;
+      }
+    }
+  }
+
+  // When verified publisher photo proof passed and listing.images was hydrated
+  // from persisted images[], append host-verified publisher URLs while keeping
+  // mismatched media.gallery items and unverified external hosts excluded.
+  if (Array.isArray(listing.images) && (gallery.length === 0 || listing.images.length > gallery.length)) {
+    for (const candidate of listing.images) {
+      const url = safeImageUrl(candidate);
+      if (!url || seen.has(url) || rejectedGalleryUrls.has(url)) continue;
+      if (!isAllowedPublisherImageHost(url, listing, publisherPhoto, exactSourceUrl)) continue;
+      seen.add(url);
+      gallery.push(url);
+      if (gallery.length === 12) break;
+    }
+  }
+
+  return gallery;
 }
 
 // Share one bounded lookup between metadata and content in this render only.
@@ -259,14 +329,14 @@ export default async function ListingPage({ params, searchParams }: Props) {
     ["Parcel", provenance.parcelNumber],
     ["Amount source", provenance.openingBidSource],
   ].filter((entry): entry is [string, string | number] => typeof entry[1] === "string" || typeof entry[1] === "number");
-  const media = provenance.media && typeof provenance.media === "object" ? provenance.media as Record<string, unknown> : {};
-  const gallery = publisherPhoto && Array.isArray(media.gallery) ? media.gallery.flatMap((entry: unknown) => {
-    if (!entry || typeof entry !== "object") return [];
-    const item = entry as Record<string, unknown>;
-    const url = safeImageUrl(item.url);
-    const record = getExactSourceListingUrl({ ...listing, sourceUrl: typeof item.sourceRecordUrl === "string" ? item.sourceRecordUrl : null });
-    return url && record === exactSourceUrl ? [url] : [];
-  }).slice(0, 12) : [];
+  const gallery = resolveVerifiedPublisherGallery(listing, publisherPhoto, exactSourceUrl);
+
+
+
+
+
+
+
   const detailPhoto = publisherPhoto ?? (secondaryMedia.accepted ? secondaryMedia.url : undefined);
   const detailGallery = publisherPhoto ? gallery : (secondaryMedia.accepted ? secondaryMedia.gallery : []);
   const mapLocation = inspectMapLocation(listing);
@@ -309,6 +379,23 @@ export default async function ListingPage({ params, searchParams }: Props) {
     : null;
 
   const scoreBand = bandForScore(listing.dealScore);
+  const assessedValue = positiveNumber(listing.assessed);
+  const safmrRent = positiveNumber(listing.hudSafmr?.fairMarketRent);
+  const hasAssessorEnrollment = hasParcelBoundaryCoverage(listing.state, listing.county);
+  const stateCode = optionalPublishedText(listing.state)?.toUpperCase() ?? null;
+  const hasStateHpi = Boolean(stateCode && /^[A-Z]{2}$/.test(stateCode) && !["PR", "VI", "GU", "MP", "AS"].includes(stateCode));
+  const benchmarkHints: string[] = [];
+  if (assessedValue !== null) {
+    benchmarkHints.push(`Assessed value ${formatMoney(assessedValue)}`);
+  } else if (hasAssessorEnrollment) {
+    benchmarkHints.push("County assessor roll lookup available");
+  }
+  if (safmrRent !== null) {
+    benchmarkHints.push(`HUD SAFMR ${formatMoney(safmrRent)}/mo${listing.hudSafmr?.zip ? ` (ZIP ${listing.hudSafmr.zip})` : ""}`);
+  }
+  if (hasStateHpi && stateCode) {
+    benchmarkHints.push(`FHFA ${stateCode} HPI context`);
+  }
   const catchSummary = listingCatch(listing, (titleRules?.titleWarnings ?? []).filter((w): w is string => typeof w === "string" && w.length > 0));
 
   const jsonLd = {
@@ -374,6 +461,21 @@ export default async function ListingPage({ params, searchParams }: Props) {
               )}
               <span className="text-xs text-ink-3">{scoreBand ? scoreBand.desc : "Needs a published opening amount and value range."} {DEAL_SCORE_MEANING}</span>
             </div>
+            {!scoreBand && (
+              <p data-testid="benchmark-context-summary" className="mt-2.5 text-xs leading-relaxed text-ink-2">
+                {benchmarkHints.length > 0 ? (
+                  <>
+                    <span className="font-semibold text-ink">Public benchmarks below (not an appraisal):</span>{" "}
+                    {benchmarkHints.join(" · ")}.{" "}
+                    <a href="#market-evidence" className="font-semibold text-ink underline hover:text-ink-2">Market evidence</a>
+                    {" · "}
+                    <a href="#evidence-dossier" className="font-semibold text-ink underline hover:text-ink-2">Dossier &amp; benchmarks</a>
+                  </>
+                ) : (
+                  <>No stored Assessor, FHFA HPI, or HUD SAFMR benchmark is attached to this record yet; see <a href="#market-evidence" className="font-semibold text-ink underline hover:text-ink-2">Market evidence</a> and <a href="#evidence-dossier" className="font-semibold text-ink underline hover:text-ink-2">Research &amp; history</a> below.</>
+                )}
+              </p>
+            )}
             <h2 className="mt-4 text-base font-bold text-ink">{catchSummary.flags.length ? `The catch: ${catchSummary.flags.length} thing${catchSummary.flags.length === 1 ? "" : "s"} to check before bidding` : "Nothing flagged in what this listing publishes. Title, liens and condition are still unchecked."}</h2>
             {catchSummary.notes.length ? <p className="mt-2 text-sm leading-relaxed text-ink-2">{catchSummary.notes.join(" ")}</p> : null}
             {catchSummary.flags.length ? <ul className="mt-2 list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-ink-2 marker:text-catch">{catchSummary.flags.map((flag, i) => <li key={i}>{flag}</li>)}</ul> : null}

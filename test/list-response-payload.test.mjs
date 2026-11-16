@@ -44,24 +44,24 @@ test('the grid response strips raw and the unread provenance mass', () => {
     /\.map\(\s*\(\{\s*raw\s*,\s*provenance\s*,\s*\.\.\.rest\s*\}\)/.test(code),
     'the grid must destructure raw and provenance away',
   );
-  for (const field of ['sourceFields', 'statusHistory']) {
+  for (const field of ['sourceFields', 'statusHistory', 'sourceFacts']) {
     assert.ok(
       new RegExp(`const\\s*\\{[^}]*\\b${field}\\b[^}]*\\}\\s*=\\s*provenance`).test(code),
-      `the grid must drop provenance.${field} -- it is 25% of the page and nothing reads it`,
+      `the grid must drop provenance.${field} -- it is unread on the grid and nothing outside detail renders it`,
     );
   }
 });
 
 test('the provenance the client actually reads is not stripped', () => {
-  // The strip removes two keys from `provenance`. If it ever removed the whole
-  // object, or these, the cards would lose their live/archive badge and the
-  // publisher name -- which is the entire visible provenance story.
+  // The strip removes unread keys from `provenance`. If it ever removed the whole
+  // object, or these, the cards would lose their live/archive badge, publisher name,
+  // map coordinates, and derivedFields origin indicators.
   const strip = /const\s*\{([^}]*)\}\s*=\s*provenance/.exec(code);
   assert.ok(strip, 'could not locate the provenance destructuring');
-  for (const keep of ['sourceFields', 'statusHistory']) {
+  for (const keep of ['sourceFields', 'statusHistory', 'sourceFacts']) {
     assert.ok(strip[1].includes(keep), `${keep} should be dropped by the strip`);
   }
-  assert.doesNotMatch(strip[1], /\borigin\b|\bpublisher\b|\bmedia\b|\brecordId\b/,
+  assert.doesNotMatch(strip[1], /\borigin\b|\bpublisher\b|\bmedia\b|\brecordId\b|\bderivedFields\b|\bcoordinates\b/,
     'the strip must not remove fields the client renders');
 });
 
@@ -99,24 +99,111 @@ test('no client code reads the fields the grid strips, which is why it is safe',
     /(?<![\w.$])listing\.raw\b/g,
     /provenance\.sourceFields\b/g,
     /listing\.provenance\?\.statusHistory\b/g,
+    /provenance\.sourceFacts\b/g,
   ];
+  const saleMechanicsImporters = [];
   for (const f of clientFiles) {
     const src = fs.readFileSync(f, 'utf8');
+    const rel = path.relative(ROOT, f).replace(/\\/g, '/');
+    if (/sale-mechanics/.test(src) && rel !== 'src/components/listings/sale-mechanics.tsx') {
+      saleMechanicsImporters.push(rel);
+    }
     for (const re of patterns) {
       for (const _ of src.matchAll(re)) {
-        readers.push(`${path.relative(ROOT, f).replace(/\\/g, '/')}  (${re.source})`);
+        readers.push(`${rel}  (${re.source})`);
       }
     }
   }
-  // The grid strips raw. The listing detail page is not a grid client: it
-  // loads /api/listings/:id, and that route still returns raw so title
-  // arbitration can read the published record. Any other reader means the
-  // strip is hiding data.
+  // The grid strips raw and sourceFacts. The listing detail page is not a grid
+  // client: it loads /api/listings/:id, and that route still returns raw and
+  // sourceFacts so title arbitration and SaleMechanics can read the published
+  // record. Any other reader means the strip is hiding data.
   const detailRaw = 'src/app/listings/[id]/page.tsx';
+  const detailSaleMechanics = 'src/components/listings/sale-mechanics.tsx';
+  assert.deepEqual(saleMechanicsImporters, [detailRaw],
+    'SaleMechanics reads provenance.sourceFacts and may only be imported by the detail page');
   const unexpected = readers.filter((line) => {
     const file = line.split('  ')[0];
-    return !(file === detailRaw && line.includes('listing\\.raw'));
+    if (file === detailRaw && (line.includes('listing\\.raw') || line.includes('provenance\\.sourceFacts'))) return false;
+    if (file === detailSaleMechanics && line.includes('provenance\\.sourceFacts')) return false;
+    return true;
   });
   assert.deepEqual(unexpected, [],
     'client code now reads a field the grid strips; the strip is hiding data and must be revisited');
+});
+
+test('runtime grid vs detail split strips sourceFacts/raw on grid while preserving detail and pipeline', async () => {
+  const { default: handleListings } = await import('../server/routes/listings.js');
+  const sample = {
+    id: 'SERVICELINK-TEST-1',
+    source: 'servicelink',
+    state: 'OH',
+    county: 'Cuyahoga',
+    city: 'Cleveland',
+    zip: '44114',
+    address: '100 Public Square',
+    lat: 41.4993,
+    lng: -81.6944,
+    propType: 'Single Family',
+    openingBid: 75000,
+    status: 'Active',
+    sourceUrl: 'https://www.servicelinkauction.com/property-details/100-public-square',
+    sourceObservedAt: '2026-10-01T00:00:00.000Z',
+    raw: 'LONG_RAW_NOTICE_PAYLOAD',
+    provenance: {
+      origin: 'live',
+      observed: true,
+      recordKind: 'source_record',
+      publisher: 'ServiceLink Auction',
+      recordId: 'sl-1',
+      observedAt: '2026-10-01T00:00:00.000Z',
+      media: { photo: null },
+      coordinates: { lat: 41.4993, lng: -81.6944 },
+      derivedFields: { redemption: { days: 0 } },
+      sourceFields: { Address: '100 Public Square' },
+      statusHistory: [{ status: 'Active', at: '2026-10-01T00:00:00.000Z' }],
+      sourceFacts: {
+        auctionMethod: 'Online',
+        approximateUpsetPrice: { amount: 75000 },
+        documents: [{ title: 'Notice', url: 'https://www.servicelinkauction.com/doc.pdf' }],
+      },
+    },
+  };
+  const fakeDb = {
+    isPg: false,
+    dataMode: () => 'memory',
+    getListings: async () => ({ total: 1, listings: [sample] }),
+    getListingById: async (id) => (id === sample.id ? sample : null),
+  };
+  const runGet = async (reqUrl) => {
+    let payload;
+    const res = {
+      statusCode: 200,
+      status(c) { this.statusCode = c; return this; },
+      json(body) { payload = body; return this; },
+      on() {},
+      off() {},
+    };
+    await handleListings({ method: 'GET', url: reqUrl, headers: { host: 'localhost' } }, res, fakeDb);
+    return { status: res.statusCode, body: payload };
+  };
+
+  const grid = await runGet('/api/listings?limit=48');
+  assert.equal(grid.status, 200);
+  assert.equal(grid.body.listings.length, 1);
+  const card = grid.body.listings[0];
+  assert.equal(Object.hasOwn(card, 'raw'), false);
+  assert.equal(Object.hasOwn(card.provenance, 'sourceFields'), false);
+  assert.equal(Object.hasOwn(card.provenance, 'statusHistory'), false);
+  assert.equal(Object.hasOwn(card.provenance, 'sourceFacts'), false);
+  assert.equal(card.provenance.origin, 'live');
+  assert.equal(card.provenance.publisher, 'Public Auction Network');
+  assert.deepEqual(card.provenance.derivedFields, { redemption: { days: 0 } });
+  assert.deepEqual(card.provenance.coordinates, { lat: 41.4993, lng: -81.6944 });
+  assert.equal(grid.body.pipeline.avgResearchQuality, card.researchQuality.score);
+
+  const detail = await runGet(`/api/listings/${encodeURIComponent(sample.id)}`);
+  assert.equal(detail.status, 200);
+  assert.equal(detail.body.raw, 'LONG_RAW_NOTICE_PAYLOAD');
+  assert.equal(detail.body.provenance.sourceFacts.auctionMethod, 'Online');
 });

@@ -372,3 +372,98 @@ test('propType facet and filter unify Unknown literals and Single Family aliases
   assert.equal(matches(typeRows[3], unkFilter), true);
   assert.match(pgWhere(unkFilter).sql, /lower\(btrim\(prop_type\)\) IN \('unknown','n\/a','none','-'\)/);
 });
+
+test('distressStage query validation accepts canonical stages, folds all->null, and 400s on invalid enum values', () => {
+  assert.equal(queryFromUrl(url('')).distressStage, null);
+  assert.equal(queryFromUrl(url('distressStage=')).distressStage, null);
+  assert.equal(queryFromUrl(url('distressStage=all')).distressStage, null);
+  for (const stage of ['reo', 'pre_foreclosure', 'scheduled', 'tax_sale', 'unknown']) {
+    assert.equal(queryFromUrl(url(`distressStage=${stage}`)).distressStage, stage);
+  }
+  assert.equal(queryFromUrl(url('distressStage=%20REO%20')).distressStage, 'reo');
+  for (const bad of ['bogus', 'foreclosure', 'government_reo', 'invalid']) {
+    assert.throws(
+      () => queryFromUrl(url(`distressStage=${bad}`)),
+      (err) => err.status === 400 && /Invalid distressStage/.test(err.message),
+      `expected 400 for invalid distressStage=${bad}`,
+    );
+  }
+});
+
+test('distressStage filter and facets achieve strict Postgres and in-memory parity across all sale types', async () => {
+  const { PGlite } = require('@electric-sql/pglite');
+  const pglite = new PGlite();
+  try {
+    await pglite.query(`CREATE TABLE listings (
+      id text PRIMARY KEY,
+      updated_at timestamptz DEFAULT now(),
+      deal_score int,
+      state text, county text, city text, address text,
+      source_key text, prop_type text, occupancy text,
+      auction_program text, lifecycle_status text, status text, transaction_outcome text,
+      has_documents boolean, provenance jsonb,
+      sale_date date, opening_bid numeric, equity_spread numeric,
+      senior_lien_risk text, redemption_days int,
+      est_low numeric, est_high numeric,
+      triage_priority int,
+      latitude float8, longitude float8
+    )`);
+
+    const now = Date.now();
+    const isoOffset = (days) => new Date(now + days * 86_400_000).toISOString().slice(0, 10);
+    const stageRows = [
+      { id: 's-reo-hud', source: 'hud', state: 'FL', saleDate: null, provenance: { origin: 'live' } },
+      { id: 's-reo-treasury', source: 'treasury', state: 'TX', saleDate: isoOffset(15), provenance: { origin: 'live' } },
+      { id: 's-sched-trustee', source: 'trustee', state: 'CA', saleDate: isoOffset(90), provenance: { origin: 'live' } },
+      { id: 's-sched-sheriff-soon', source: 'sheriff', state: 'OH', saleDate: isoOffset(5), provenance: { origin: 'live' } },
+      { id: 's-prefc-sheriff-far', source: 'sheriff', state: 'OH', saleDate: isoOffset(90), provenance: { origin: 'live' } },
+      { id: 's-prefc-civilview-null', source: 'civilview', state: 'NJ', saleDate: null, provenance: { origin: 'live' } },
+      { id: 's-tax-harris', source: 'harris-county-tax-sale', state: 'TX', saleDate: isoOffset(10), provenance: { origin: 'live' } },
+      { id: 's-tax-orange', source: 'tax-orange-realtaxdeed', state: 'FL', saleDate: null, provenance: { origin: 'live' } },
+      { id: 's-unknown-sl', source: 'servicelink', state: 'AZ', saleDate: isoOffset(5), provenance: { origin: 'live' } },
+    ];
+
+    for (const r of stageRows) {
+      await pglite.query(
+        'INSERT INTO listings (id, source_key, state, sale_date, provenance) VALUES ($1, $2, $3, $4::date, $5::jsonb)',
+        [r.id, r.source, r.state, r.saleDate, JSON.stringify(r.provenance)],
+      );
+    }
+
+    const pgDb = { isPg: true, pool: pglite, listingSelect: 'id, source_key AS source, state, sale_date::text AS "saleDate", provenance' };
+    const memDb = { isPg: false, getListings: async () => ({ total: stageRows.length, listings: stageRows }) };
+
+    const expectedByStage = {
+      reo: ['s-reo-hud', 's-reo-treasury'],
+      scheduled: ['s-sched-sheriff-soon', 's-sched-trustee'],
+      pre_foreclosure: ['s-prefc-civilview-null', 's-prefc-sheriff-far'],
+      tax_sale: ['s-tax-harris', 's-tax-orange'],
+      unknown: ['s-unknown-sl'],
+    };
+
+    for (const [stage, expectedIds] of Object.entries(expectedByStage)) {
+      const f = queryFromUrl(url(`distressStage=${stage}&limit=50`));
+      const memRes = await search(memDb, f);
+      const pgRes = await search(pgDb, f);
+      assert.deepEqual(
+        memRes.listings.map((l) => l.id).sort(),
+        expectedIds,
+        `in-memory distressStage=${stage} mismatch`,
+      );
+      assert.deepEqual(
+        pgRes.listings.map((l) => l.id).sort(),
+        expectedIds,
+        `postgres distressStage=${stage} mismatch`,
+      );
+      assert.equal(pgRes.total, memRes.total, `total mismatch for distressStage=${stage}`);
+    }
+
+    const allResMem = await search(memDb, queryFromUrl(url('distressStage=all&facets=distressStage&limit=50')));
+    const allResPg = await search(pgDb, queryFromUrl(url('distressStage=all&facets=distressStage&limit=50')));
+    assert.equal(allResMem.total, stageRows.length);
+    assert.equal(allResPg.total, stageRows.length);
+    assert.deepEqual(allResPg.facets.distressStage, allResMem.facets.distressStage);
+  } finally {
+    await pglite.close();
+  }
+});

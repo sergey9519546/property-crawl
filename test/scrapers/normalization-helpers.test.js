@@ -158,3 +158,95 @@ test('normalizePropType and standardizeListingRecord preserve Single Family, cle
     'https://www.treasury.gov/auctions/treasury/rp/images/house2.gif',
   ]);
 });
+
+// --- deriveHasDocuments / standardizeListingRecord hasDocuments ----------
+
+test('standardizeListingRecord derives hasDocuments=true from valid document arrays when unset', () => {
+  const { standardizeListingRecord, deriveHasDocuments } = require('../../server/scrapers/normalization');
+  const base = {
+    id: 'SL-DOC-1',
+    source: 'servicelink',
+    state: 'PA',
+    address: '100 Main Street',
+    sourceUrl: 'https://www.servicelinkauction.com/property-details/100-main-st',
+    sourceObservedAt: '2026-11-01T00:00:00.000Z',
+    provenance: { origin: 'live', observed: true, publisher: 'ServiceLink Auction', recordId: '1' },
+  };
+
+  // Positive control 1: provenance.sourceFacts.documents
+  const fromSourceFacts = standardizeListingRecord({
+    ...base,
+    hasDocuments: null,
+    provenance: {
+      ...base.provenance,
+      sourceFacts: { documents: [{ title: 'PA Consumer Notice', fileUrl: 'https://www.servicelinkauction.com/doc.pdf' }] },
+    },
+  });
+  assert.equal(fromSourceFacts.hasDocuments, true);
+  assert.equal(fromSourceFacts.triage.hasDocs, true);
+
+  // Positive control 2: provenance.media.documents
+  const fromMedia = standardizeListingRecord({
+    ...base,
+    provenance: {
+      ...base.provenance,
+      media: { documents: [{ id: 'media-doc-1' }] },
+    },
+  });
+  assert.equal(fromMedia.hasDocuments, true);
+  assert.equal(fromMedia.triage.hasDocs, true);
+
+  // Positive control 3: top-level input.documents with a mix of invalid + valid entries
+  const fromInputDocs = standardizeListingRecord({
+    ...base,
+    documents: [null, {}, { title: 'Bid Packet' }],
+  });
+  assert.equal(fromInputDocs.hasDocuments, true);
+  assert.equal(deriveHasDocuments({ documents: [{ title: 'Notice' }] }, {}), true);
+});
+
+test('standardizeListingRecord preserves explicit boolean hasDocuments and leaves unknown as null', () => {
+  const { standardizeListingRecord, deriveHasDocuments } = require('../../server/scrapers/normalization');
+  const base = {
+    id: 'SL-DOC-2',
+    source: 'servicelink',
+    state: 'PA',
+    address: '200 Main Street',
+    sourceUrl: 'https://www.servicelinkauction.com/property-details/200-main-st',
+    sourceObservedAt: '2026-11-01T00:00:00.000Z',
+    provenance: { origin: 'live', observed: true, publisher: 'ServiceLink Auction', recordId: '2' },
+  };
+
+  // Explicit boolean must be preserved verbatim even when arrays disagree or are absent.
+  const explicitFalse = standardizeListingRecord({
+    ...base,
+    hasDocuments: false,
+    provenance: { ...base.provenance, sourceFacts: { documents: [{ title: 'Ignored' }] } },
+  });
+  assert.equal(explicitFalse.hasDocuments, false);
+  assert.equal(explicitFalse.triage.hasDocs, false);
+
+  const explicitTrue = standardizeListingRecord({ ...base, hasDocuments: true });
+  assert.equal(explicitTrue.hasDocuments, true);
+
+  // Negative controls: unset + missing/empty/malformed document arrays must remain null (never fabricated false).
+  for (const variant of [
+    {},
+    { documents: [] },
+    { provenance: { ...base.provenance, sourceFacts: { documents: [] } } },
+    { provenance: { ...base.provenance, media: { documents: [] } } },
+    { documents: [null, undefined, {}, { title: '   ', url: null }, '', 123, []] },
+    { provenance: { ...base.provenance, sourceFacts: { documents: { id: 'not-an-array' } }, media: { documents: 'bad' } } },
+    { provenance: { ...base.provenance, sourceFacts: { documents: [{ kind: 'parcel', url: 'https://egis.hud.gov/query' }, { kind: 'feature', url: 'https://services9.arcgis.com/0/1' }] } } },
+  ]) {
+    const out = standardizeListingRecord({
+      ...base,
+      ...variant,
+      provenance: variant.provenance || base.provenance,
+    });
+    assert.equal(out.hasDocuments, null);
+    assert.equal(out.triage.hasDocs, false);
+  }
+  assert.equal(deriveHasDocuments({}, {}), null);
+  assert.equal(deriveHasDocuments({ documents: [{}] }, {}), null);
+});

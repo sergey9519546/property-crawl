@@ -205,6 +205,37 @@ function daysSince(timestamp, now = Date.now()) {
   return Math.max(0, Math.floor((now - time) / 86_400_000));
 }
 
+function isValidDocumentEntry(entry) {
+  if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return false;
+  const kind = typeof entry.kind === 'string' ? entry.kind.trim().toLowerCase() : '';
+  // ArcGIS parcel/feature API links are lookup pointers, not downloadable property documents.
+  if (kind === 'parcel' || kind === 'feature') return false;
+  return Object.values(entry).some((value) => {
+    if (value === null || value === undefined) return false;
+    if (typeof value === 'string') return value.trim().length > 0;
+    if (typeof value === 'number') return Number.isFinite(value);
+    if (typeof value === 'boolean') return true;
+    return typeof value === 'object' && Object.keys(value).length > 0;
+  });
+}
+
+function hasValidDocumentList(list) {
+  return Array.isArray(list) && list.some(isValidDocumentEntry);
+}
+
+/**
+ * Derive tri-state document availability from observed document containers
+ * without fabricating `false` when no document evidence was collected.
+ */
+function deriveHasDocuments(input = {}, provenance = {}) {
+  const candidates = [
+    input?.documents,
+    provenance?.sourceFacts?.documents,
+    provenance?.media?.documents,
+  ];
+  return candidates.some(hasValidDocumentList) ? true : null;
+}
+
 function computeTriage(listing = {}, options = {}) {
   const now = options.now ?? Date.now();
   const firstSeenCandidate = listing.firstSeenAt ?? listing.updatedAt
@@ -218,10 +249,10 @@ function computeTriage(listing = {}, options = {}) {
     ?? listing.provenance?.observedAt;
   const stale = daysSince(lastObservedCandidate, now);
 
-  const documents = listing.documents ?? listing.provenance?.sourceFacts?.documents;
-  const hasDocs = typeof listing.hasDocuments === 'boolean'
-    ? listing.hasDocuments
-    : Array.isArray(documents) ? documents.length > 0 : false;
+  const hasDocs = typeof listing.hasDocuments === 'boolean' ? listing.hasDocuments : deriveHasDocuments(listing, listing.provenance) === true;
+
+
+
 
   const occupancy = cleanText(listing.occupancy);
   const occupancyKnown = Boolean(occupancy);
@@ -363,7 +394,7 @@ function standardizeListingRecord(raw = {}, options = {}) {
   const auctionProgram = cleanText(input.auctionProgram);
   const lifecycleStatus = cleanText(input.lifecycleStatus);
   const transactionOutcome = cleanText(input.transactionOutcome);
-  const hasDocuments = typeof input.hasDocuments === 'boolean' ? input.hasDocuments : null;
+  const hasDocuments = typeof input.hasDocuments === 'boolean' ? input.hasDocuments : deriveHasDocuments(input, baseProvenance);
   const provenance = {
     origin: 'live',
     observed: true,
@@ -489,5 +520,6 @@ module.exports = {
   computeTriage,
   mapDistressStage,
   normalizePropType,
-  collectVerifiedImages
+  collectVerifiedImages,
+  deriveHasDocuments
 };

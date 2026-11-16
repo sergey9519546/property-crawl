@@ -5,6 +5,7 @@ const { hash } = require("./store");
 // The catalog is the single source of truth; import the gate, never re-derive it.
 const { servesListings, listingServingSourceSqlList } = require("../sources/catalog");
 const { resolveStateQuery } = require("../db/us-state-query");
+const { mapDistressStage } = require("../scrapers/normalization");
 const MAX_SCAN = Math.max(50000, Number(process.env.DISCOVERY_MAX_SCAN) || 50000),
   MAX_LIMIT = 1000;
 class DiscoveryQueryError extends Error {
@@ -99,6 +100,31 @@ function parseFreshness(v) {
     return bucket;
   throw new DiscoveryQueryError(400, "Invalid freshness");
 }
+const DISTRESS_STAGE_VALUES = new Set([
+  "reo",
+  "pre_foreclosure",
+  "scheduled",
+  "tax_sale",
+  "unknown",
+]);
+function parseDistressStage(v) {
+  if (v == null || v === "") return null;
+  const stage = String(v).trim().toLowerCase();
+  if (stage === "all") return null;
+  if (DISTRESS_STAGE_VALUES.has(stage)) return stage;
+  throw new DiscoveryQueryError(400, "Invalid distressStage");
+}
+const DISTRESS_STAGE_SOURCE_EXPR = "lower(btrim(coalesce(source_key,'')))";
+// Mirrors server/scrapers/normalization.js mapDistressStage(source, saleDate)
+// so PostgreSQL and in-memory filtering agree on every sale-type bucket.
+const DISTRESS_STAGE_SQL =
+  `(CASE `
+  + `WHEN ${DISTRESS_STAGE_SOURCE_EXPR} IN ('hud','fannie','freddie','va','fdic','treasury','irs','gsa','landbank','landbanksearch','usda','hud-homestore','fannie-homepath','freddie-homesteps','va-vrm','fdic-asset-sales','usda-resales','treasury-forfeiture','irs-auctions','gsa-real-estate-sales') THEN 'reo' `
+  + `WHEN ${DISTRESS_STAGE_SOURCE_EXPR} IN ('trustee','county-trustee-sale','bid4assets') THEN 'scheduled' `
+  + `WHEN ${DISTRESS_STAGE_SOURCE_EXPR} IN ('sheriff','civilview','ohio-sheriff-sale') THEN `
+    + `(CASE WHEN sale_date IS NOT NULL AND (sale_date::timestamp AT TIME ZONE 'UTC') <= (NOW() + INTERVAL '30 days') THEN 'scheduled' ELSE 'pre_foreclosure' END) `
+  + `WHEN ${DISTRESS_STAGE_SOURCE_EXPR} = 'tax_sale' OR ${DISTRESS_STAGE_SOURCE_EXPR} ~ 'tax[-_]{0,1}sale|tax[-_]{0,1}deed' THEN 'tax_sale' `
+  + `ELSE 'unknown' END)`;
 function parseDate(v, name) {
   if (!v) return null;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(v) || !Number.isFinite(Date.parse(v)))
@@ -210,6 +236,7 @@ function queryFromUrl(url) {
     redemption: text(get("redemption")),
     hasDocuments: parseTristateBool(get("hasDocuments"), "hasDocuments"),
     hasPhoto: parseBool(get("hasPhoto"), "hasPhoto"),
+    distressStage: parseDistressStage(get("distressStage")),
     bbox: parseBbox(get("bbox")),
     sort,
     cursor,
@@ -342,6 +369,8 @@ function matches(row, f) {
       && (f.lifecycle === "unknown" ? text(d.lifecycle) !== "" : text(d.lifecycle) !== f.lifecycle))
     return false;
   if (f.freshness && f.freshness !== "all" && d.freshness !== f.freshness)
+    return false;
+  if (f.distressStage && mapDistressStage(row.source, row.saleDate) !== f.distressStage)
     return false;
   if (f.saleFrom && (!row.saleDate || row.saleDate < f.saleFrom)) return false;
   if (f.saleTo && (!row.saleDate || row.saleDate > f.saleTo)) return false;
@@ -502,6 +531,7 @@ function buildFacets(rows, fields) {
     lifecycle: (r) => derived(r).lifecycle,
     occupancy: (r) => r.occupancy,
     freshness: (r) => derived(r).freshness,
+    distressStage: (r) => mapDistressStage(r.source, r.saleDate),
   };
   return Object.fromEntries(
     fields
@@ -689,6 +719,7 @@ function pgWhere(f, start = 1, options = {}) {
       w.push(accel ? "discovery_is_live IS NOT TRUE" : "coalesce(provenance->>'origin','') NOT IN ('live', 'email_notice')");
     else throw new DiscoveryQueryError(400, "Invalid freshness");
   }
+  if (f.distressStage) add(`${DISTRESS_STAGE_SQL} = ?`, f.distressStage);
   if (f.bbox) {
     const [west, south, east, north] = f.bbox;
     add("latitude>=?", south);
@@ -1024,6 +1055,7 @@ async function pgSearch(database, f, options = {}) {
       // can never yield the "unknown" sentinel the freshness parser rejects.
       freshness:
         "CASE WHEN provenance->>'origin' IN ('live', 'email_notice') THEN 'observed' ELSE 'unverified' END",
+      distressStage: DISTRESS_STAGE_SQL,
     },
     facets = {};
   const queryAllowed = accelerated

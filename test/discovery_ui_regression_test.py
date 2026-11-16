@@ -201,12 +201,18 @@ class DiscoveryUiRegression(unittest.TestCase):
         card.wait_for()
 
         fail_requests = True
-        page.get_by_role("button", name="Refresh", exact=True).click()
+        main = page.get_by_role("main")
+        self.assertEqual(main.count(), 1, "more than one main landmark is exposed")
+        main.get_by_role("button", name="Refresh", exact=True).click()
         page.get_by_text("Showing previously loaded results. Refresh to check for updates.", exact=True).wait_for()
         self.assertTrue(card.is_visible())
 
-        page.get_by_placeholder("Address, parcel, court case, or keyword").fill("different parcel")
-        page.get_by_role("button", name="Search", exact=True).click()
+        main = page.get_by_role("main")
+        self.assertEqual(main.count(), 1, "more than one main landmark is exposed")
+        search_box = main.get_by_role("textbox", name="Search properties", exact=True)
+        self.assertEqual(search_box.count(), 1, "more than one Search properties input is exposed in the active page")
+        search_box.fill("different parcel")
+        main.get_by_role("button", name="Search", exact=True).click()
         page.wait_for_url(re.compile(r"[?&]q=different(?:\+|%20)parcel(?:&|$)"))
         page.get_by_role("alert").filter(
             has_text=re.compile(r"Fixture search failure|Property search could not be reached")

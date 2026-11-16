@@ -15,7 +15,7 @@ function emptyStore() {
 }
 
 function resolveStorePath(filePath) {
-  return path.resolve(filePath || process.env.PROPERTY_RESEARCH_WORKSPACE_PATH || DEFAULT_STORE_PATH);
+  return path.resolve(/*turbopackIgnore: true*/ filePath || process.env.PROPERTY_RESEARCH_WORKSPACE_PATH || DEFAULT_STORE_PATH);
 }
 
 function assertStoreShape(store) {
@@ -64,19 +64,19 @@ function assertStoreShape(store) {
 
 function loadStore(filePath) {
   const resolved = resolveStorePath(filePath);
-  if (!fs.existsSync(resolved)) return emptyStore();
-  const stats = fs.statSync(resolved);
+  if (!fs.existsSync(/*turbopackIgnore: true*/ resolved)) return emptyStore();
+  const stats = fs.statSync(/*turbopackIgnore: true*/ resolved);
   if (!stats.isFile() || stats.size > MAX_STORE_BYTES) {
     throw new Error('Research-workspace store exceeds its safe size limit');
   }
-  return assertStoreShape(JSON.parse(fs.readFileSync(resolved, 'utf8')));
+  return assertStoreShape(JSON.parse(fs.readFileSync(/*turbopackIgnore: true*/ resolved, 'utf8')));
 }
 
 function replaceFileWithRetry(temporary,resolved,options={}) {
   const attempts=Math.max(1,Math.min(10,Number(options.attempts)||9));
   const wait=typeof options.wait==='function'?options.wait:(milliseconds)=>Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,milliseconds);
   for(let attempt=0;attempt<attempts;attempt+=1){
-    try{fs.renameSync(temporary,resolved);return;}
+    try{fs.renameSync(/*turbopackIgnore: true*/ temporary,resolved);return;}
     catch(error){const retryable=(options.platform||process.platform)==='win32'&&['EPERM','EACCES','EBUSY'].includes(error.code);if(!retryable||attempt===attempts-1)throw error;wait(Math.min(250,10*(2**attempt)));}
   }
 }
@@ -84,14 +84,14 @@ function replaceFileWithRetry(temporary,resolved,options={}) {
 function acquireOwnedLock(lockPath, options = {}) {
   const token = `${process.pid}:${crypto.randomUUID()}`;
   const openWithToken = () => {
-    const fd = fs.openSync(lockPath, 'wx', 0o600);
+    const fd = fs.openSync(/*turbopackIgnore: true*/ lockPath, 'wx', 0o600);
     try {
       fs.writeSync(fd, token, 0, 'utf8');
     } catch (writeErr) {
       try { fs.closeSync(fd); } catch (_) {}
       try {
-        const current = fs.readFileSync(lockPath, 'utf8');
-        if (current === '' || current === token) fs.unlinkSync(lockPath);
+        const current = fs.readFileSync(/*turbopackIgnore: true*/ lockPath, 'utf8');
+        if (current === '' || current === token) fs.unlinkSync(/*turbopackIgnore: true*/ lockPath);
       } catch (_) {}
       throw writeErr;
     }
@@ -106,13 +106,13 @@ function acquireOwnedLock(lockPath, options = {}) {
     let stale = false;
     let staleContent = null;
     try {
-      staleContent = fs.readFileSync(lockPath, 'utf8');
-      stale = Date.now() - fs.statSync(lockPath).mtimeMs > staleLockMs;
+      staleContent = fs.readFileSync(/*turbopackIgnore: true*/ lockPath, 'utf8');
+      stale = Date.now() - fs.statSync(/*turbopackIgnore: true*/ lockPath).mtimeMs > staleLockMs;
     } catch (_) {}
     if (stale) {
       try {
-        if (staleContent !== null && fs.readFileSync(lockPath, 'utf8') === staleContent) {
-          fs.unlinkSync(lockPath);
+        if (staleContent !== null && fs.readFileSync(/*turbopackIgnore: true*/ lockPath, 'utf8') === staleContent) {
+          fs.unlinkSync(/*turbopackIgnore: true*/ lockPath);
         }
       } catch (_) {}
       try { fd = openWithToken(); } catch (_) {}
@@ -129,8 +129,8 @@ function releaseOwnedLock(handle) {
     try { fs.closeSync(fd); } catch (_) {}
   }
   try {
-    if (fs.readFileSync(lockPath, 'utf8') === token) {
-      fs.unlinkSync(lockPath);
+    if (fs.readFileSync(/*turbopackIgnore: true*/ lockPath, 'utf8') === token) {
+      fs.unlinkSync(/*turbopackIgnore: true*/ lockPath);
       return true;
     }
   } catch (_) {}
@@ -140,7 +140,7 @@ function releaseOwnedLock(handle) {
 function mutateStore(filePath, mutate, options = {}) {
   if (typeof mutate !== 'function') throw new TypeError('Research-workspace mutation must be a function');
   const resolved = resolveStorePath(filePath);
-  fs.mkdirSync(path.dirname(resolved), { recursive: true });
+  fs.mkdirSync(/*turbopackIgnore: true*/ path.dirname(resolved), { recursive: true });
   const lockPath = `${resolved}.lock`;
   let lockHandle;
   try {
@@ -161,11 +161,11 @@ function mutateStore(filePath, mutate, options = {}) {
     assertStoreShape(store);
     const body = JSON.stringify(store);
     if (Buffer.byteLength(body, 'utf8') > MAX_STORE_BYTES) throw new Error('Research workspace exceeds its safe size limit');
-    fs.writeFileSync(temporary, body, { flag: 'wx', mode: 0o600 });
+    fs.writeFileSync(/*turbopackIgnore: true*/ temporary, body, { flag: 'wx', mode: 0o600 });
     replaceFileWithRetry(temporary, resolved, options.replaceOptions);
     return result.value;
   } finally {
-    try { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); } catch (_) {}
+    try { if (fs.existsSync(/*turbopackIgnore: true*/ temporary)) fs.unlinkSync(/*turbopackIgnore: true*/ temporary); } catch (_) {}
     releaseOwnedLock(lockHandle);
   }
 }

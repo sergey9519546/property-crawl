@@ -247,6 +247,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
       }
       if (filters.saleFrom && (!listing.saleDate || listing.saleDate < filters.saleFrom)) return false;
       if (filters.saleTo && (!listing.saleDate || listing.saleDate > filters.saleTo)) return false;
+      if (filters.distressStage && filters.distressStage !== "all" && (listing.triage?.distressStage || "unknown") !== filters.distressStage) return false;
       if (filters.q) {
         const hay = `${listing.id} ${listing.address || ""} ${listing.city || ""} ${listing.county || ""} ${listing.state || ""} ${listing.zip || ""}`.toLowerCase();
         if (!hay.includes(filters.q.toLowerCase())) return false;
@@ -523,15 +524,11 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
   }, [session]);
   const facets = payload?.facets || {};
   const anyTriageActive = Object.values(triageFilters).some(Boolean);
-  const distressStageFilter = filters.distressStage;
   const filteredListings = React.useMemo(() => {
     if (!showSavedOnly && !payload?.listings) return [];
     const sourceListings = showSavedOnly && watchlistListings !== null ? watchlistListings : (payload?.listings || []);
     return sourceListings.filter((listing) => {
       if (showSavedOnly && !saved.has(listing.id)) return false;
-      if (distressStageFilter && distressStageFilter !== "all") {
-        if ((listing.triage?.distressStage || "unknown") !== distressStageFilter) return false;
-      }
       if (!anyTriageActive) return true;
       const t = listing.triage;
       if (!t) return false;
@@ -543,7 +540,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
       if (triageFilters.occupancyKnown && !t.occupancyKnown) return false;
       return true;
     });
-  }, [payload?.listings, watchlistListings, triageFilters, anyTriageActive, distressStageFilter, showSavedOnly, saved]);
+  }, [payload?.listings, watchlistListings, triageFilters, anyTriageActive, showSavedOnly, saved]);
   const normalizeFacetKey = (field: keyof DiscoveryFilters, value: string) => {
     const trimmed = String(value || "").trim().toLowerCase();
     if (!trimmed || trimmed === "unknown" || (field === "type" && ["n/a", "none", "-"].includes(trimmed))) return "unknown";
@@ -617,12 +614,9 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
     ([key, value]) => key !== "view" && key !== "sort" && value,
   );
   const pageLength = payload?.listings?.length ?? 0;
-  // The triage chips and distressStage are applied by this page only, never by
-  // the search: the server does not parse either (see discovery-query.ts), so
-  // they run against the records already in payload.listings.
-  const localFilterActive = anyTriageActive
-    || Boolean(distressStageFilter && distressStageFilter !== "all")
-;
+  // The triage chips are applied by this page only, never by the search;
+  // distressStage is filtered server-side across the full catalog.
+  const localFilterActive = anyTriageActive;
   // A minimum on a DERIVED field (deal score, bid spread) excludes every record
   // that lacks one. When the inventory carries none, the filter can only ever
   // return nothing, and the empty state has to say so.
