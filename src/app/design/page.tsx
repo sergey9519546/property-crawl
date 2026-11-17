@@ -84,8 +84,9 @@ function Swatch({ name, cls, use }: { name: string; cls: string; use: string }) 
 
 export default function DesignPage() {
   return (
-    <main className="min-h-screen bg-paper text-ink">
+    <div className="min-h-screen bg-paper text-ink">
       <SiteHeader />
+      <main id="main-content" tabIndex={-1} className="outline-none">
       <div className="mx-auto max-w-[1040px] space-y-16 px-5 pb-24 pt-28 lg:px-8">
         <header>
           <p className={kicker}>Design system</p>
@@ -347,7 +348,10 @@ export default function DesignPage() {
           </div>
         </section>
       </div>
+  
+      </main>
       <SiteFooter />
-    </main>
+    </div>
+
   );
 }

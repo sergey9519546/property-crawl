@@ -121,8 +121,9 @@ export default async function InformationPage({ params }: { params: Promise<{ sl
   const isLegal = slug === "security";
 
   return (
-    <main className="relative min-h-screen max-w-full overflow-x-hidden bg-paper text-ink">
+    <div className="relative min-h-screen max-w-full overflow-x-hidden bg-paper text-ink">
       <SiteHeader />
+      <main id="main-content" tabIndex={-1} className="outline-none">
 
       <section className="relative px-5 pt-40 pb-10 sm:pt-48 sm:pb-14">
         <div className="mx-auto max-w-3xl">
@@ -200,7 +201,10 @@ export default async function InformationPage({ params }: { params: Promise<{ sl
         </div>
       </section>
 
+  
+      </main>
       <SiteFooter />
-    </main>
+    </div>
+
   );
 }

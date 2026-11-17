@@ -179,6 +179,26 @@ function resolveVerifiedPublisherGallery(listing: Listing, publisherPhoto: strin
   return gallery;
 }
 
+// Page-title noun for the sale type. Sheriff Sale stays the default so the
+// title still matches the Sheriff Sale | PerfectProperty contract; other
+// programs get their own label instead of being mislabeled as sheriff sales.
+function saleTitleKind(listing: Listing): string {
+  const program = String((listing as { auctionProgram?: unknown }).auctionProgram ?? "");
+  switch (listing.source) {
+    case "hud": return "HUD REO Sale";
+    case "gsa": return "Federal Surplus Property";
+    case "irs": return "IRS Seizure Auction";
+    case "treasury": return "Treasury Auction";
+    case "usda": return "USDA REO Sale";
+    case "fdic": return "FDIC Property Sale";
+    case "fannie": case "freddie": return "Agency REO Sale";
+    case "trustee": return "Trustee Sale";
+    case "landbank": return "Land Bank Sale";
+    case "servicelink": return /short sale/i.test(program) ? "Short Sale Auction" : "Bank-Owned Auction";
+    default: return "Sheriff Sale";
+  }
+}
+
 // Share one bounded lookup between metadata and content in this render only.
 type ListingFetchResult =
   | { status: "ok"; listing: Listing }
@@ -220,7 +240,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   }
 
   const location = [publishedText(listing.county, ""), listing.state].filter(Boolean).join(", ");
-  const title = `${listing.address}${location ? ` (${location})` : ""} Sheriff Sale | PerfectProperty`;
+  const title = `${listing.address}${location ? ` (${location})` : ""} ${saleTitleKind(listing)} | PerfectProperty`;
   const isDemo = !isObservedSourceRecord(listing);
   const publisherPhoto = verifiedPublisherPhoto(listing);
   const description = [
@@ -311,9 +331,9 @@ export default async function ListingPage({ params, searchParams }: Props) {
   const modeledRedemptionDays = derivedRedemption
     ? finiteNumber(derivedRedemption.days) ?? redemptionDays
     : null;
-  const showRedemptionReview = Boolean(derivedRedemption)
+  const showRedemptionReview = !(["hud", "gsa", "usda", "fannie", "freddie", "fdic"].includes(listing.source) && !/internal revenue|federal tax lien/i.test(`${listing.seniorLienWarning ?? ""} ${listing.redemptionWarning ?? ""}`)) && (Boolean(derivedRedemption)
     || Boolean(listing.redemptionWarning)
-    || (redemptionDays !== null && redemptionDays > 0);
+    || (redemptionDays !== null && redemptionDays > 0));
   const sourceFacts = provenance.sourceFacts && typeof provenance.sourceFacts === "object" ? provenance.sourceFacts as Record<string, unknown> : {};
   const isDemo = !isObservedSourceRecord(listing);
   const publisherPhoto = verifiedPublisherPhoto(listing);
@@ -396,7 +416,10 @@ export default async function ListingPage({ params, searchParams }: Props) {
   if (hasStateHpi && stateCode) {
     benchmarkHints.push(`FHFA ${stateCode} HPI context`);
   }
-  const catchSummary = listingCatch(listing, (titleRules?.titleWarnings ?? []).filter((w): w is string => typeof w === "string" && w.length > 0));
+  // Federal/agency REO dispositions are not mortgage or tax foreclosures, so a
+  // state redemption baseline would misstate them. An IRS lien is the exception.
+  const noStateRedemption = ["hud", "gsa", "usda", "fannie", "freddie", "fdic"].includes(listing.source) && !/internal revenue|federal tax lien/i.test(`${listing.seniorLienWarning ?? ""} ${listing.redemptionWarning ?? ""}`);
+  const catchSummary = listingCatch(noStateRedemption ? { ...listing, redemptionDays: null, redemptionWarning: null } : listing, (titleRules?.titleWarnings ?? []).filter((w): w is string => typeof w === "string" && w.length > 0));
 
   const jsonLd = {
     "@context": "https://schema.org",

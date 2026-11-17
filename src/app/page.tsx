@@ -26,9 +26,10 @@ import { WorkspaceSessionProvider } from "@/components/workspace/workspace-shell
 export default function PerfectPropertyPage() {
   return (
     <WorkspaceSessionProvider>
-    <main id="main-content" tabIndex={-1} className="relative min-h-screen max-w-full overflow-x-hidden bg-paper text-ink outline-none">
+    <div className="relative min-h-screen max-w-full overflow-x-hidden bg-paper text-ink">
       <GrainOverlay />
       <SiteHeader />
+      <main id="main-content" tabIndex={-1} className="outline-none">
 
       <Hero />
       <SocialProof />
@@ -60,9 +61,10 @@ export default function PerfectPropertyPage() {
       <Faq />
 
       <FinalCta />
+      </main>
       <SiteFooter />
       <BottomBlur />
-    </main>
+    </div>
     </WorkspaceSessionProvider>
   );
 }

@@ -251,7 +251,70 @@ function summarize() {
   };
 }
 
+// Postgres-backed live coverage. In production the listings live in Postgres and
+// the on-disk live store does not exist, so the file-based path above would report
+// an honest-looking but wrong zero. Same output shape as buildLiveStateSourceCoverage.
+async function buildLiveStateSourceCoverageFromPool(pool) {
+  const result = await pool.query(
+    `SELECT UPPER(TRIM(state)) AS state, NULLIF(TRIM(county), '') AS county, source_key AS source,
+            MAX(COALESCE(source_observed_at, fetched_at)) AS observed, COUNT(*)::int AS count
+       FROM listings
+      WHERE (status = 'active' OR status IS NULL)
+      GROUP BY 1, 2, 3`
+  );
+  const byStateSource = {};
+  const byStateTotal = {};
+  const countyBuckets = new Map();
+  const excludedByState = {};
+  let total = 0;
+  for (const row of result.rows || []) {
+    const count = Number(row.count) || 0;
+    total += count;
+    const state = row.state || null;
+    if (!state) { excludedByState['<no state>'] = (excludedByState['<no state>'] || 0) + count; continue; }
+    if (!US_STATE_SET.has(state)) { excludedByState[state] = (excludedByState[state] || 0) + count; continue; }
+    const source = row.source || 'unknown';
+    byStateSource[state] ||= {};
+    const cell = byStateSource[state][source] ||= { live: 0, observed: null };
+    cell.live += count;
+    const observed = row.observed ? new Date(row.observed).toISOString() : null;
+    if (observed && (!cell.observed || observed > cell.observed)) cell.observed = observed;
+    byStateTotal[state] = (byStateTotal[state] || 0) + count;
+    const county = acceptedCountyName(row.county);
+    if (county) {
+      const key = `${state}\n${county.toLowerCase()}`;
+      const bucket = countyBuckets.get(key) || { state, county, count: 0, sources: new Set() };
+      bucket.count += count;
+      bucket.sources.add(source);
+      countyBuckets.set(key, bucket);
+    }
+  }
+  const byCounty = {};
+  for (const b of countyBuckets.values()) {
+    (byCounty[b.state] ||= []).push({ county: b.county, count: b.count, sources: [...b.sources].sort() });
+  }
+  for (const rows of Object.values(byCounty)) rows.sort((l, r) => r.count - l.count || l.county.localeCompare(r.county));
+  const excludedRecords = Object.values(excludedByState).reduce((a, n) => a + n, 0);
+  return {
+    byStateSource, byStateTotal, byCounty,
+    totalRecords: total, countedRecords: total - excludedRecords,
+    storeStatus: 'postgres', readError: null, excludedRecords, excludedByState,
+  };
+}
+
+async function summarizeWithDatabase(database) {
+  const base = summarize();
+  if (!database || !database.isPg || !database.pool || typeof database.pool.query !== 'function') return base;
+  try {
+    return { ...base, liveByState: await buildLiveStateSourceCoverageFromPool(database.pool) };
+  } catch (error) {
+    return { ...base, liveByState: { ...base.liveByState, storeStatus: 'unreadable', readError: describeLiveStoreError(error) } };
+  }
+}
+
 module.exports = {
+  summarizeWithDatabase,
+  buildLiveStateSourceCoverageFromPool,
   summarize,
   extractStateAbbrs,
   statesFromEntry,
