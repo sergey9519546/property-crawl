@@ -208,7 +208,7 @@ export function InteractiveTerminal() {
         window.sessionStorage.setItem(
           "perfectproperty:inventory-cache",
           JSON.stringify({
-            listings: nextListings,
+            listings: nextListings.slice(0, 120),
             total: payload.total,
             truncated: payload.truncated,
           }),
@@ -240,21 +240,32 @@ export function InteractiveTerminal() {
       requestIdleCallback?: (cb: () => void, opts?: { timeout?: number }) => number;
       cancelIdleCallback?: (id: number) => void;
     };
+    let started = false;
     const startLoad = () => {
-      if (!cancelled) void loadListings();
+      if (cancelled || started) return;
+      started = true;
+      void loadListings();
     };
-    // Keep t=0..450ms clear for Hero hydration and initial autocomplete typing
-    // before below-the-fold bulk inventory polling begins.
+    const hash = typeof window !== "undefined" ? window.location.hash : "";
+    if (hash === "#live-feed" || hash === "#live-search") {
+      startLoad();
+      return () => { cancelled = true; };
+    }
+    const onEarlyDemand = () => startLoad();
+    window.addEventListener("perfectproperty:search", onEarlyDemand, { once: true });
+    // Keep t=0..950ms clear for Hero hydration, shader setup, and initial autocomplete
+    // typing before below-the-fold bulk inventory polling begins.
     const timerId = window.setTimeout(() => {
       if (cancelled) return;
       if (typeof w.requestIdleCallback === "function") {
-        idleId = w.requestIdleCallback(startLoad, { timeout: 350 });
+        idleId = w.requestIdleCallback(startLoad, { timeout: 600 });
       } else {
         startLoad();
       }
-    }, 450);
+    }, 950);
     return () => {
       cancelled = true;
+      window.removeEventListener("perfectproperty:search", onEarlyDemand);
       window.clearTimeout(timerId);
       if (idleId !== null && typeof w.cancelIdleCallback === "function") w.cancelIdleCallback(idleId);
     };
@@ -532,11 +543,10 @@ export function InteractiveTerminal() {
 
           <div className="flex flex-wrap items-center gap-3">
             {/* View switcher segmented control (<=3 choices per Cowan working memory rule) */}
-            <div className="inline-flex max-w-full flex-wrap p-1 bg-paper border border-line rounded-control shadow-xs" role="tablist" aria-label="Terminal views">
+            <div className="inline-flex max-w-full flex-wrap p-1 bg-paper border border-line rounded-control shadow-xs" role="group" aria-label="Terminal views">
               <button
                 type="button"
-                role="tab"
-                aria-selected={activeView === "grid"}
+                aria-pressed={activeView === "grid"}
                 onClick={() => dispatchFilters({ type: "setView", view: "grid" })}
                 aria-label={`Deal Grid (${filtered.length} records)`}
                 className={cn(
@@ -552,8 +562,7 @@ export function InteractiveTerminal() {
 
               <button
                 type="button"
-                role="tab"
-                aria-selected={activeView === "map"}
+                aria-pressed={activeView === "map"}
                 onClick={() => dispatchFilters({ type: "setView", view: "map" })}
                 aria-label={`Map (${filtered.length} records)`}
                 className={cn(
@@ -569,8 +578,7 @@ export function InteractiveTerminal() {
 
               <button
                 type="button"
-                role="tab"
-                aria-selected={activeView === "parser"}
+                aria-pressed={activeView === "parser"}
                 onClick={() => dispatchFilters({ type: "setView", view: "parser" })}
                 className={cn(
                   "px-3.5 py-1.5 rounded-control text-xs font-bold transition flex items-center gap-1.5",

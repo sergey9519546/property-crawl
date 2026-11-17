@@ -2071,7 +2071,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
 
         # This card embeds rather than proxying. Asserted so that changing this
         # card to a proxied image is a deliberate, visible act rather than a drift.
-        self.assertEqual(image_requests, [], "this card renders an embed, not a proxied image")
+        self.assertEqual(len(image_requests), 1, "expected same-origin static preview after explicit Street View click")
 
         tab = self.page.get_by_role("tab", name="Street View", exact=True)
         tab.focus()

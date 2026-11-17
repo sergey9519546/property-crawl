@@ -274,7 +274,6 @@ export function Hero() {
             backdropFilter: "blur(20px) saturate(180%)",
             WebkitBackdropFilter: "blur(20px) saturate(180%)",
             border: "1px solid rgba(255,255,255,0.8)",
-            willChange: "backdrop-filter",
           }}
         >
           <input

@@ -17,7 +17,10 @@ test('compare proxy route: static /api/listings/compare handler delegates to pro
 
 test('social proof: derives active source badges from /api/health without dropping disclaimer', () => {
   const src = read('src/components/site/social-proof.tsx');
-  assert.match(src, /fetch\(["']\/api\/health["']/);
+  assert.match(src, /(?:fetch\(["']\/api\/health["']|fetchHealthSnapshot\()/);
+  if (/fetchHealthSnapshot/.test(src)) {
+    assert.match(read('src/lib/health-client.ts'), /fetch\(["']\/api\/health["']/);
+  }
   assert.match(src, /inventoryFreshness\?\.bySource/);
   assert.match(src, /\.filter\(\(item\) => item\.count > 0\)/);
   assert.match(src, /SOURCE_TAXONOMY\[key\]\?\.label \|\| key/);
@@ -26,7 +29,10 @@ test('social proof: derives active source badges from /api/health without droppi
 
 test('workspace settings: surfaces /api/health/ready and /api/scrapers/health diagnostics', () => {
   const src = read('src/app/workspace/settings/settings-view.tsx');
-  assert.match(src, /fetch\(["']\/api\/health["']/);
+  assert.match(src, /(?:fetch\(["']\/api\/health["']|fetchHealthSnapshot\()/);
+  if (/fetchHealthSnapshot/.test(src)) {
+    assert.match(read('src/lib/health-client.ts'), /fetch\(["']\/api\/health["']/);
+  }
   assert.match(src, /fetch\(["']\/api\/health\/ready["']/);
   assert.match(src, /fetch\(["']\/api\/scrapers\/health["']/);
   assert.match(src, /Persistence &amp; Discovery Readiness/);

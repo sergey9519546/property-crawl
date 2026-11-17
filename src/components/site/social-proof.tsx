@@ -4,6 +4,7 @@ import * as React from "react";
 import { GsapReveal } from "./gsap-reveal";
 import { SOURCES as SOURCE_TAXONOMY } from "@/components/terminal/property-data";
 import { sourceDisplayText } from "@/lib/source-display";
+import { fetchHealthSnapshot } from "@/lib/health-client";
 
 // Fallback labels shown before /api/health resolves or when the API is unavailable.
 const DEFAULT_SOURCES: string[] = [
@@ -52,8 +53,7 @@ function useLiveCounts(): { counts: Count[]; activeSources: ActiveSourceItem[] }
       .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then((d: { catalog?: { total?: number } }) => !cancelled && setSources(format(d.catalog?.total)))
       .catch(() => !cancelled && setSources("—"));
-    fetch("/api/health", { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : Promise.reject()))
+    fetchHealthSnapshot()
       .then((d: { inventoryFreshness?: { bySource?: Record<string, unknown> } }) => {
         if (cancelled) return;
         const bySource = d?.inventoryFreshness?.bySource;

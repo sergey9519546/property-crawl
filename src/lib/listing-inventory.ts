@@ -38,6 +38,9 @@ async function loadPages<T extends RecordIdentity>(fetchImpl: typeof fetch, sign
     offset += payload.listings.length;
     if (offset >= total) return { listings: [...records.values()], total, truncated: false };
     if (!payload.listings.length) throw new Error("Inventory changed during pagination. Refresh to retry.");
+    if (typeof window !== "undefined") {
+      await new Promise((resolve) => window.setTimeout(resolve, 40));
+    }
   }
   return { listings: [...records.values()], total, truncated: true };
 }

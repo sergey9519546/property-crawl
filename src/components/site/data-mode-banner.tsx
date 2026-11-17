@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { fetchHealthSnapshot } from "@/lib/health-client";
 
 type InventoryFreshness = {
   listings?: number | null;
@@ -34,10 +35,9 @@ export function DataModeBanner() {
 
   React.useEffect(() => {
     let cancelled = false;
-    void fetch("/api/health", { cache: "no-store", credentials: "same-origin" })
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`health ${r.status}`))))
-      .then((data: Health) => {
-        if (!cancelled) setHealth(data);
+    void fetchHealthSnapshot()
+      .then((data) => {
+        if (!cancelled) setHealth(data as Health);
       })
       .catch(() => {
         if (!cancelled) setHealth(null);

@@ -29,7 +29,21 @@ declare global {
 
 export function UnicornHeroBg() {
   const containerRef = React.useRef<HTMLDivElement>(null);
+  const [inView, setInView] = React.useState(true);
   const nonce = useNonce();
+
+  React.useEffect(() => {
+    const el = containerRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        setInView(entries.some((entry) => entry.isIntersecting));
+      },
+      { rootMargin: "120px" },
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
 
   // Load the UMD script exactly like arcade does (inline script that appends to head)
   React.useEffect(() => {
@@ -96,8 +110,9 @@ export function UnicornHeroBg() {
     <div
       ref={containerRef}
       className="unicorn-hero-bg absolute inset-0 z-[1]"
+      style={{ visibility: inView ? "visible" : "hidden" }}
       data-us-project-src="/arcade-us-project.json"
-      data-us-dpi="1.5"
+      data-us-dpi="1"
       data-us-scale="1"
       data-us-production="true"
       aria-hidden

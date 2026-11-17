@@ -1,4 +1,5 @@
 const http = require('http');
+const zlib = require('zlib');
 const fs = require('fs');
 const path = require('path');
 const db = require('./db/client');
@@ -181,10 +182,22 @@ function parseJsonBody(req) {
   });
 }
 
-function decorateResponse(res) {
+function decorateResponse(res, req) {
+  const acceptsGzip = Boolean(req && /\bgzip\b/i.test(String(req.headers?.['accept-encoding'] || '')));
   res.json = (data) => {
+    const json = JSON.stringify(data);
     res.setHeader('Content-Type', 'application/json');
-    res.end(JSON.stringify(data));
+    if (acceptsGzip && req.method !== 'HEAD' && Buffer.byteLength(json) >= 1024 && !res.headersSent) {
+      try {
+        const compressed = zlib.gzipSync(json, { level: 1 });
+        res.setHeader('Content-Encoding', 'gzip');
+        res.setHeader('Vary', 'Origin, Accept-Encoding');
+        return res.end(compressed);
+      } catch {
+        // Fall back to uncompressed JSON on compression error
+      }
+    }
+    res.end(json);
   };
   res.status = (code) => {
     res.statusCode = code;
@@ -206,7 +219,7 @@ const MIME_TYPES = {
 };
 
 async function handleRequest(req, res) {
-  decorateResponse(res);
+  decorateResponse(res, req);
 
   // Security Headers (modern Helmet-style)
   res.setHeader('X-Content-Type-Options', 'nosniff');

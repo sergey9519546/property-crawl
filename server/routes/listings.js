@@ -11,7 +11,15 @@ const { queryLocalParcelIndex } = require('../enrichment/local-parcel-index');
 // Listing-admission gate (server/sources/catalog.js): a DISCOVERY_ONLY
 // catalog source is discovery evidence, never an actionable sale listing,
 // so its records answer the same 404 an absent record answers.
-const { servesListings } = require('../sources/catalog');
+const { servesListings, SOURCE_CATALOG } = require('../sources/catalog');
+const SOURCE_CADENCE_BY_KEY = new Map();
+if (Array.isArray(SOURCE_CATALOG)) {
+  for (const s of SOURCE_CATALOG) {
+    if (s && s.adapterKey && !SOURCE_CADENCE_BY_KEY.has(s.adapterKey)) {
+      SOURCE_CADENCE_BY_KEY.set(s.adapterKey, s.workflow?.cadenceHours || 24);
+    }
+  }
+}
 const { interpretAssessorParcel } = require('../enrichment/assessor-reading');
 const { isWorkspaceAuthorized } = require('../security/workspace-identity');
 const { getHudSafmrBenchmark } = require('../enrichment/hud-safmr');
@@ -60,7 +68,7 @@ function presentListing(listing) {
   const presented = { ...listing };
   const timestamp = listing.sourceObservedAt || listing.provenance?.observedAt;
   const time = Date.parse(timestamp || '');
-  const cadenceHours = require('../sources/catalog').SOURCE_CATALOG.find(source => source.adapterKey === listing.source)?.workflow.cadenceHours || 24;
+  const cadenceHours = SOURCE_CADENCE_BY_KEY.get(listing.source) || 24;
   const origin = listing.provenance?.origin;
   const ageHours = Number.isFinite(time) ? Math.max(0,(Date.now()-time)/3600000) : null;
   presented.sourceFreshness = { observedAt: timestamp || null, ageHours, cadenceHours,
@@ -596,7 +604,7 @@ async function handleListings(req, res, dbOverride = null, options = {}) {
     // stripping evidence from a product whose entire value is provenance is
     // not a payload optimisation.
     const presentedListings = result.listings
-      .map(listing => presentListing(attachMedia(listing, entries)));
+      .map(listing => presentListing(entries.length ? attachMedia(listing, entries) : listing));
     const stripGridListings = (items) => items.map(({ raw, provenance, ...rest }) => {
         if (!provenance || typeof provenance !== 'object') return rest;
         // Two more fields with no reader, same reasoning as `raw` above:
@@ -609,6 +617,22 @@ async function handleListings(req, res, dbOverride = null, options = {}) {
         // anywhere under src/.
         //   sourceFacts    ~1.3-3.5 KB per card -- publisher facts only read by the detail page (/listings/[id]) and SaleMechanics.
         const { sourceFields, statusHistory, sourceFacts, ...kept } = provenance;
+        // Trim multi-KB duplicated sub-arrays inside `media` and `derivedFields.assessorRoll` on grid cards
+        // (top-level `images` already carries normalized gallery URLs; detail routes still return full provenance).
+        if (kept.media && typeof kept.media === 'object') {
+          const compactMedia = { ...kept.media };
+          if (Array.isArray(compactMedia.gallery)) compactMedia.galleryCount = compactMedia.gallery.length;
+          delete compactMedia.gallery;
+          if (compactMedia.secondary && typeof compactMedia.secondary === 'object') {
+            const { images: _secImages, ...secRest } = compactMedia.secondary;
+            compactMedia.secondary = secRest;
+          }
+          kept.media = compactMedia;
+        }
+        if (kept.derivedFields && typeof kept.derivedFields === 'object' && 'assessorRoll' in kept.derivedFields) {
+          const { assessorRoll: _assessorRoll, ...derivedRest } = kept.derivedFields;
+          kept.derivedFields = derivedRest;
+        }
         return { ...rest, provenance: kept };
       });
     // Post-annotation intelligence view: quality/opportunity sort + minQuality.

@@ -10,7 +10,10 @@ function parseCoordinate(value, min, max) {
 }
 
 function createFederalHazardsHandler({ database = db, assess = assessFederalHazards } = {}) {
-return async function handleFederalHazards(req, res) {
+  const coordCache = new Map();
+  const CACHE_TTL_MS = 15 * 60 * 1000;
+  const MISS_TTL_MS = 2 * 60 * 1000;
+  return async function handleFederalHazards(req, res) {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed. GET only.' });
   }
@@ -43,8 +46,26 @@ return async function handleFederalHazards(req, res) {
   }
 
 
+  const cacheKey = `${lat.toFixed(3)}:${lng.toFixed(3)}`;
+  const forceRefresh = url.searchParams.get('refresh') === '1';
+  if (!forceRefresh) {
+    const cached = coordCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      res.setHeader('Cache-Control', cached.assessment.status === 'success' ? 'public, max-age=86400, stale-while-revalidate=604800' : 'no-store');
+      return res.status(cached.assessment.status === 'unavailable' ? 503 : 200).json(cached.assessment);
+    }
+  }
+
   try {
     const assessment = await assess({ lat, lng });
+    if (coordCache.size >= 500) {
+      const oldestKey = coordCache.keys().next().value;
+      if (oldestKey !== undefined) coordCache.delete(oldestKey);
+    }
+    coordCache.set(cacheKey, {
+      assessment,
+      expiresAt: Date.now() + (assessment.status === 'unavailable' ? MISS_TTL_MS : CACHE_TTL_MS),
+    });
     res.setHeader('Cache-Control', assessment.status === 'success' ? 'public, max-age=86400, stale-while-revalidate=604800' : 'no-store');
     return res.status(assessment.status === 'unavailable' ? 503 : 200).json(assessment);
   } catch (err) {

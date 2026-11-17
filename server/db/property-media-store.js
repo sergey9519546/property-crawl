@@ -6,11 +6,23 @@ const { exactAddress, inspectSecondaryMedia } = require('../scrapers/secondary-p
 const { acquireOwnedLock, releaseOwnedLock, replaceFileWithRetry } = require('../intelligence/research-store');
 const defaultPath = () => process.env.PROPERTY_MEDIA_CACHE_PATH || path.resolve(__dirname, '../../.cache/property-media.json');
 
+const mediaStoreReadCache = new Map();
+
 function readMediaStore(file = defaultPath()) {
-  if (!fs.existsSync(file)) return [];
-  if (fs.statSync(file).size > 5_000_000) throw new Error('Property media store exceeds size limit');
+  if (!fs.existsSync(file)) {
+    mediaStoreReadCache.delete(file);
+    return [];
+  }
+  const stat = fs.statSync(file);
+  if (stat.size > 5_000_000) throw new Error('Property media store exceeds size limit');
+  const cached = mediaStoreReadCache.get(file);
+  if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
+    return cached.entries;
+  }
   const data = JSON.parse(fs.readFileSync(file, 'utf8'));
   if (data.version !== 1 || !Array.isArray(data.entries) || data.entries.length > 1000) throw new Error('Invalid property media store');
+  if (mediaStoreReadCache.size >= 16) mediaStoreReadCache.clear();
+  mediaStoreReadCache.set(file, { mtimeMs: stat.mtimeMs, size: stat.size, entries: data.entries });
   return data.entries;
 }
 
@@ -44,6 +56,7 @@ function saveMedia(listing, media, file = defaultPath(), options = {}) {
     if (Buffer.byteLength(body, 'utf8') > maxBytes) throw new Error('Property media store exceeds size limit');
     fs.writeFileSync(temporary, body, { flag: 'wx', mode: 0o600 });
     replaceFileWithRetry(temporary, file, options.replaceOptions);
+    mediaStoreReadCache.delete(file);
   } finally {
     try { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); } catch (_) {}
     releaseOwnedLock(lockHandle);
