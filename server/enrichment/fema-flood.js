@@ -5,7 +5,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const DEFAULT_CACHE_PATH = path.resolve(__dirname, '../../.cache/fema-flood-cache.json');
-const FEMA_NFHL_ENDPOINT = 'https://hazards.fema.gov/gis/nfhl/rest/services/public/NFHL/MapServer/28/query';
+const FEMA_NFHL_ENDPOINT = 'https://hazards.fema.gov/arcgis/rest/services/public/NFHL/MapServer/28/query';
 
 /**
  * Standard High-Risk Special Flood Hazard Area (SFHA) zones.

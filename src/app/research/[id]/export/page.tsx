@@ -199,7 +199,7 @@ export default async function DecisionPacketExportPage({
 
   return (
     <WorkspaceShell>
-      <main className="min-h-screen bg-paper py-8">
+      <main id="main-content" tabIndex={-1} className="min-h-screen bg-paper py-8 outline-none">
         <DecisionPacketView packet={decisionPacket} />
       </main>
     </WorkspaceShell>

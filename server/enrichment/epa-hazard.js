@@ -6,6 +6,46 @@ const crypto = require('crypto');
 
 const DEFAULT_CACHE_PATH = path.resolve(__dirname, '../../.cache/epa-hazard-cache.json');
 const EPA_FRS_ENDPOINT = 'https://data.epa.gov/efservice/frs_rest_services.get_facilities';
+const EPA_EMEF_MAPSERVER = 'https://geopub.epa.gov/arcgis/rest/services/EMEF/efpoints/MapServer';
+const EPA_EMEF_LAYERS = [0, 1, 4, 5]; // Superfund (SEMS), TRI, Hazardous Waste (RCRAInfo), Brownfields (ACRES)
+
+async function fetchEpaArcgisFallback(coords, radiusMiles, fetchFn, signal) {
+  const layerResults = await Promise.all(
+    EPA_EMEF_LAYERS.map(async (layerId) => {
+      const q = new URL(`${EPA_EMEF_MAPSERVER}/${layerId}/query`);
+      q.searchParams.set('geometry', `${coords.lng},${coords.lat}`);
+      q.searchParams.set('geometryType', 'esriGeometryPoint');
+      q.searchParams.set('inSR', '4326');
+      q.searchParams.set('spatialRel', 'esriSpatialRelIntersects');
+      q.searchParams.set('distance', String(radiusMiles));
+      q.searchParams.set('units', 'esriSRUnit_StatuteMile');
+      q.searchParams.set('outFields', 'registry_id,primary_name,location_address,city_name,state_code,postal_code,latitude,longitude,pgm_sys_acrnm');
+      q.searchParams.set('returnGeometry', 'false');
+      q.searchParams.set('f', 'json');
+      const res = await fetchFn(q.toString(), {
+        signal,
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': 'PropertyCrawl/1.0 (Zero-Cost Federal Hazard GIS)'
+        }
+      });
+      if (!res.ok) throw new Error(`epa_arcgis_http_${res.status}`);
+      const json = await res.json();
+      if (!json || json.error || !Array.isArray(json.features)) {
+        throw new Error('epa_arcgis_invalid_response');
+      }
+      return json.features.map((f) => f.attributes).filter(Boolean);
+    })
+  );
+  const byId = new Map();
+  for (const list of layerResults) {
+    for (const attr of list) {
+      const key = `${attr.registry_id || ''}:${attr.pgm_sys_acrnm || ''}:${attr.primary_name || ''}`;
+      if (!byId.has(key)) byId.set(key, attr);
+    }
+  }
+  return Array.from(byId.values());
+}
 
 function normalizeCoordinates(lat, lng) {
   const nLat = Number(lat);
@@ -216,30 +256,40 @@ async function queryEpaHazards({
 
     clearTimeout(timer);
 
-    if (!res.ok) {
-      return {
-        status: 'unavailable',
-        reason: `epa_api_http_${res.status}`,
-        environmentalLiability: null,
-        provenance: 'epa-envirofacts-spatial-query'
-      };
-    }
-
-    const data = await res.json();
     let rawList = [];
-    if (Array.isArray(data)) {
-      rawList = data;
-    } else if (data && Array.isArray(data.Results?.FRSFacet)) {
-      rawList = data.Results.FRSFacet;
-    } else if (data && Array.isArray(data.Facility)) {
-      rawList = data.Facility;
+    if (!res.ok) {
+      const fbController = new AbortController();
+      const fbTimer = setTimeout(() => fbController.abort(), timeoutMs);
+      try {
+        rawList = await fetchEpaArcgisFallback(coords, radiusMiles, fetchFn, fbController.signal);
+      } catch {
+        return {
+          status: 'unavailable',
+          reason: `epa_api_http_${res.status}`,
+          environmentalLiability: null,
+          provenance: 'epa-envirofacts-spatial-query'
+        };
+      } finally {
+        clearTimeout(fbTimer);
+      }
     } else {
-      return { status: 'unavailable', reason: 'epa_invalid_response', environmentalLiability: null, provenance: 'epa-envirofacts-spatial-query' };
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        rawList = data;
+      } else if (data && Array.isArray(data.Results?.FRSFacet)) {
+        rawList = data.Results.FRSFacet;
+      } else if (data && Array.isArray(data.Facility)) {
+        rawList = data.Facility;
+      } else if (data && Array.isArray(data.features)) {
+        rawList = data.features.map((f) => f?.attributes).filter(Boolean);
+      } else {
+        return { status: 'unavailable', reason: 'epa_invalid_response', environmentalLiability: null, provenance: 'epa-envirofacts-spatial-query' };
+      }
     }
 
     const facilities = rawList.map((item) => {
-      const facLat = Number(item.Latitude83 || item.LATITUDE || item.lat);
-      const facLon = Number(item.Longitude83 || item.LONGITUDE || item.lng);
+      const facLat = Number(item.Latitude83 || item.LATITUDE || item.latitude || item.lat);
+      const facLon = Number(item.Longitude83 || item.LONGITUDE || item.longitude || item.lng);
       const dist = (Number.isFinite(facLat) && Number.isFinite(facLon))
         ? haversineMiles(coords.lat, coords.lng, facLat, facLon)
         : null;
@@ -249,17 +299,17 @@ async function queryEpaHazards({
         programs = item.ProgramSysAcronyms;
       } else if (typeof item.ProgramSysAcronyms === 'string') {
         programs = item.ProgramSysAcronyms.split(',').map((s) => s.trim());
-      } else if (item.PROGRAM_SYSTEM_ACRONYMS) {
-        programs = String(item.PROGRAM_SYSTEM_ACRONYMS).split(',').map((s) => s.trim());
+      } else if (item.PROGRAM_SYSTEM_ACRONYMS || item.pgm_sys_acrnm) {
+        programs = String(item.PROGRAM_SYSTEM_ACRONYMS || item.pgm_sys_acrnm).split(',').map((s) => s.trim());
       }
 
       return {
-        registryId: item.RegistryId || item.REGISTRY_ID || null,
-        name: item.PrimaryName || item.PRIMARY_NAME || item.FACILITY_NAME || 'Unknown facility',
-        address: item.LocationAddress || item.LOCATION_ADDRESS || null,
-        city: item.CityName || item.CITY_NAME || null,
-        state: item.StateCode || item.STATE_CODE || null,
-        postalCode: item.PostalCode || item.POSTAL_CODE || null,
+        registryId: item.RegistryId || item.REGISTRY_ID || item.registry_id || null,
+        name: item.PrimaryName || item.PRIMARY_NAME || item.FACILITY_NAME || item.primary_name || 'Unknown facility',
+        address: item.LocationAddress || item.LOCATION_ADDRESS || item.location_address || null,
+        city: item.CityName || item.CITY_NAME || item.city_name || null,
+        state: item.StateCode || item.STATE_CODE || item.state_code || null,
+        postalCode: item.PostalCode || item.POSTAL_CODE || item.postal_code || null,
         distanceMiles: dist,
         programAcronyms: programs
       };

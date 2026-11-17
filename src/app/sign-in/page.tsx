@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { KeyRound } from "lucide-react";
 import { OperatorUnlockForm } from "@/components/workspace/operator-unlock-form";
@@ -5,6 +6,12 @@ import { MemberSignInForm } from "@/components/account/account-panel";
 import { SiteHeader } from "@/components/site/site-header";
 import { SiteFooter } from "@/components/site/site-footer";
 import { WorkspaceSessionProvider } from "@/components/workspace/workspace-shell";
+
+export const metadata: Metadata = {
+  title: "Sign In | PerfectProperty",
+  description: "Sign in to your PerfectProperty member account or unlock operator workspace tools.",
+  robots: { index: false },
+};
 
 /**
  * Members sign in with an emailed one-time link. The operator section below

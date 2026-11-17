@@ -509,7 +509,7 @@ export default async function ListingPage({ params, searchParams }: Props) {
         </div>
 
         {/* Single Unified Auction & Action Decision Rail (above the fold on desktop, ordered before Property overview on mobile) */}
-        <aside className="min-w-0 space-y-5 lg:col-start-2 lg:row-start-2 lg:row-span-4 lg:sticky lg:top-6 lg:self-start">
+        <aside className="min-w-0 space-y-5 lg:col-start-2 lg:row-start-2 lg:self-start">
           <div className="rounded-card border border-line bg-card p-5 text-ink shadow-card sm:p-6">
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-lg font-bold">Auction details</h2>
@@ -577,8 +577,9 @@ export default async function ListingPage({ params, searchParams }: Props) {
         </aside>
 
         {/* Primary Evidence, Gaps & Deep Underwriting Stream */}
-        <section className="min-w-0 lg:col-start-1">
-          <section data-testid="listing-catch" aria-label="Deal Score and the catch" className="rounded-card border border-line bg-card p-5 shadow-card">
+        <section className="min-w-0 lg:col-span-2">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:items-start">
+            <section data-testid="listing-catch" aria-label="Deal Score and the catch" className="rounded-card border border-line bg-card p-5 shadow-card">
             <div className="flex flex-wrap items-center gap-3">
               {scoreBand ? (
                 <span data-testid="deal-score-badge" className="rounded-full px-3 py-1 text-sm font-bold" style={{ background: `${scoreBand.color}${scoreBand.alpha}`, color: scoreBand.color }}>
@@ -609,7 +610,8 @@ export default async function ListingPage({ params, searchParams }: Props) {
             {catchSummary.flags.length ? <ul className="mt-2 list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-ink-2 marker:text-catch">{catchSummary.flags.map((flag, i) => <li key={i}>{flag}</li>)}</ul> : null}
           </section>
           {/* A state-table redemption baseline or a pattern-matched lien signal is modeled, not published, so it must not close the gap (same rule as signals.js). */}
-          <GapLedger className="mt-4" listing={{ id: listing.id, occupancy: listing.occupancy, seniorLienRisk: (provenance.derivedFields as { seniorLienRisk?: unknown } | undefined)?.seniorLienRisk ? null : listing.seniorLienRisk, deposit: listing.deposit, redemptionDays: derivedRedemption ? null : listing.redemptionDays, redemptionWarning: derivedRedemption ? null : listing.redemptionWarning, openingBid: listing.openingBid, saleDate: listing.saleDate, sourceUrl: exactSourceUrl }} />
+          <GapLedger className="" listing={{ id: listing.id, occupancy: listing.occupancy, seniorLienRisk: (provenance.derivedFields as { seniorLienRisk?: unknown } | undefined)?.seniorLienRisk ? null : listing.seniorLienRisk, deposit: listing.deposit, redemptionDays: derivedRedemption ? null : listing.redemptionDays, redemptionWarning: derivedRedemption ? null : listing.redemptionWarning, openingBid: listing.openingBid, saleDate: listing.saleDate, sourceUrl: exactSourceUrl }} />
+          </div>
           <nav aria-label="Property record sections" className="sticky top-0 z-10 -mx-1 mt-6 flex max-w-full gap-6 overflow-x-auto border-b border-line bg-paper/95 px-1 pt-2 text-sm font-semibold text-ink-3 backdrop-blur-sm">
             <a href="#property-facts" className="whitespace-nowrap border-b-2 border-ink px-1 pb-3 text-ink">Overview</a>
             <a href="#auction-details" className="whitespace-nowrap px-1 pb-3 hover:text-ink">Sale terms</a>
@@ -619,7 +621,8 @@ export default async function ListingPage({ params, searchParams }: Props) {
             <a href="#due-diligence-binder" className="whitespace-nowrap px-1 pb-3 hover:text-ink">Due diligence</a>
           </nav>
 
-          <div id="property-facts" className="mt-6 scroll-mt-6 py-5">
+          <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2 lg:items-start">
+          <div id="property-facts" className="scroll-mt-6 py-5">
             <h2 className="text-xl font-bold">Property overview</h2>
             <dl className="mt-3 divide-y divide-line border-y border-line">
               {propertyFacts.map(([label, value]) => (
@@ -639,6 +642,7 @@ export default async function ListingPage({ params, searchParams }: Props) {
           </div>
 
           <div className="scroll-mt-6"><SaleMechanics listing={listing} exactSourceUrl={exactSourceUrl} /></div>
+          </div>
           <div className="mt-6 scroll-mt-6"><PropertyDocuments evidence={listing.documentEvidence} publisherUrl={exactSourceUrl} /></div>
 
           <details id="documents-title" className="mt-6 scroll-mt-6 rounded-card border border-line bg-card px-5 shadow-card">
@@ -784,7 +788,10 @@ export default async function ListingPage({ params, searchParams }: Props) {
             <BiddingSimulator listing={listing} />
             <DueDiligenceChecklist listing={listing} className="scroll-mt-6" />
             <ListingCompare listingId={listing.id} label={listing.address} />
-            <Parcel3DVisualizer listing={listing} />
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:items-start">
+              <Parcel3DVisualizer listing={listing} />
+              <NearbyComps listingId={listing.id} targetAddress={listing.address} targetSqft={listing.sqft} targetOpeningBid={openingBid} />
+            </div>
             {gisLink && (
               <div className="rounded-card border border-line bg-card p-5 text-ink shadow-sm">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -811,7 +818,6 @@ export default async function ListingPage({ params, searchParams }: Props) {
                 </div>
               </div>
             )}
-            <NearbyComps listingId={listing.id} targetAddress={listing.address} targetSqft={listing.sqft} targetOpeningBid={openingBid} />
           </div>
         </section>
 
