@@ -110,7 +110,7 @@ export function AlternativeStreetView({ listingId, address }: { listingId: strin
             <button
               type="button"
               onClick={() => setAttempt((value) => value + 1)}
-              className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-lg border border-line-strong bg-card px-3 py-2 text-xs font-semibold"
+              className="mt-3 inline-flex min-h-9 items-center gap-2 rounded-control border border-line-strong bg-card px-3 py-1.5 text-xs font-semibold text-ink-2 transition-colors hover:bg-paper hover:text-ink"
             >
               <RotateCcw size={14} />Retry other imagery
             </button>

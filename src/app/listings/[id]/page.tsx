@@ -3,10 +3,10 @@ import { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { cache } from "react";
-import { ArrowLeft, CalendarDays, ExternalLink, Gavel, MapPin, TrendingUp, AlertTriangle, Clock, FileText, Download, FileCheck2 } from "lucide-react";
+import { ArrowLeft, CalendarDays, ExternalLink, Gavel, MapPin, TrendingUp, AlertTriangle, Info, Clock, FileText, Download, FileCheck2 } from "lucide-react";
 import { Listing, SOURCES } from "@/data/listings";
 import { getExactSourceListingUrl } from "@/lib/listing-links";
-import { displayDate, safeImageUrl } from "@/lib/listing-display";
+import { safeImageUrl } from "@/lib/listing-display";
 import { combineStatusTones, listingOfferAvailability, listingStatusClass, listingStatusTone } from "@/lib/listing-status";
 import { serializeJsonLd } from "@/lib/json-ld";
 import { formatCountyDisplayName, getCountyCadastralGisLink } from "@/lib/county-seo";
@@ -365,7 +365,7 @@ export default async function ListingPage({ params, searchParams }: Props) {
   const saleTime = optionalPublishedText(sourceFacts.tpsSaleTime ?? sourceFacts.saleTime);
   const saleTimezone = optionalPublishedText(sourceFacts.publisherTimeZone ?? sourceFacts.saleTimezone);
   const saleLocation = optionalPublishedText(sourceFacts.tpsSaleLocation ?? sourceFacts.saleLocation);
-  const reportedSaleSchedule = [displayDate(listing.saleDate), [saleTime, saleTimezone].filter(Boolean).join(" ")].filter(Boolean).join(" · ");
+
   const occupancy = optionalPublishedText(listing.occupancy);
   const interiorAccessAvailable = observedBoolean(sourceFacts.interiorAccessAvailable);
   const hasPublishedAccessState = Boolean(occupancy) || interiorAccessAvailable !== null;
@@ -502,7 +502,7 @@ export default async function ListingPage({ params, searchParams }: Props) {
           </dl>
           {hasPublishedAccessState && (
             <div data-testid="publisher-access-notice" className={`flex items-start gap-3 rounded-control border p-4 text-sm leading-relaxed ${accessNeedsAttention ? "border-catch/30 bg-catch-wash text-catch-ink" : "border-line bg-card text-ink-2"}`}>
-              <AlertTriangle className={`mt-0.5 h-5 w-5 shrink-0 ${accessNeedsAttention ? "text-catch-ink" : "text-ink-3"}`} />
+              {accessNeedsAttention ? <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-catch-ink" aria-hidden /> : <Info className="mt-0.5 h-5 w-5 shrink-0 text-ink-3" aria-hidden />}
               <p><strong className="text-ink">{accessHeadline}</strong><span className="block text-xs">Publisher reported. Confirm current access and inspection rules on the exact listing.</span></p>
             </div>
           )}
@@ -515,10 +515,10 @@ export default async function ListingPage({ params, searchParams }: Props) {
               <h2 className="text-lg font-bold">Auction details</h2>
               <span data-testid="listing-status" data-status-tone={statusTone} className={`rounded-full px-3 py-1 text-xs font-bold ${statusClass}`}>{statusLabel}</span>
             </div>
-            <p className="mt-4 text-3xl font-bold tracking-tight sm:text-4xl">{openingBid !== null ? formatMoney(openingBid) : reportedSaleSchedule}</p>
-            <p className="mt-1 text-sm text-ink-3">{openingBid !== null ? "Published opening amount" : "Reported sale"}</p>
+            <p className={openingBid !== null ? "mt-4 text-3xl font-bold tracking-tight sm:text-4xl" : "mt-4 text-2xl font-bold tracking-tight text-ink sm:text-3xl"}>{openingBid !== null ? formatMoney(openingBid) : "Opening amount not published"}</p>
+            <p className="mt-1 text-sm text-ink-3">{openingBid !== null ? "Published opening amount" : "Confirm reserve or starting bid in the source notice."}</p>
             <dl className="mt-4 divide-y divide-line border-y border-line py-1">
-              {openingBid !== null ? <div className="flex items-start justify-between gap-4 py-3.5 text-sm"><dt className="flex shrink-0 items-center gap-2 text-ink-3"><CalendarDays className="h-4 w-4" /> Reported sale</dt><dd className="text-right font-semibold"><Fact origin={listingFactOrigin(listing, "saleDate")} value={listing.saleDate} format="date" />{[saleTime, saleTimezone].filter(Boolean).length ? ` · ${[saleTime, saleTimezone].filter(Boolean).join(" ")}` : null}</dd></div> : <div className="flex items-center justify-between gap-4 py-3.5 text-sm"><dt className="text-ink-3">Opening amount</dt><dd className="font-semibold"><Fact value={openingBid} format="money" /></dd></div>}
+              <div className="flex items-start justify-between gap-4 py-3.5 text-sm"><dt className="flex shrink-0 items-center gap-2 text-ink-3"><CalendarDays className="h-4 w-4" aria-hidden /> Reported sale</dt><dd className="text-right font-semibold"><Fact origin={listingFactOrigin(listing, "saleDate")} value={listing.saleDate} format="date" />{[saleTime, saleTimezone].filter(Boolean).length ? ` · ${[saleTime, saleTimezone].filter(Boolean).join(" ")}` : null}</dd></div>
               {saleLocation ? <div className="py-3.5 text-sm"><dt className="flex items-center gap-2 text-ink-3"><MapPin className="h-4 w-4" /> Sale location</dt><dd className="mt-1.5 font-semibold leading-relaxed">{saleLocation}</dd></div> : null}
               <div className="flex items-center justify-between gap-4 py-3.5 text-sm"><dt className="text-ink-3">Deposit terms</dt><dd className="max-w-[55%] text-right font-semibold"><Fact origin={listingFactOrigin(listing, "deposit")} value={listing.deposit} /></dd></div>
             </dl>

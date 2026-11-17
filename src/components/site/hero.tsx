@@ -225,9 +225,9 @@ export function Hero() {
       >
         <div
           data-testid="hero-content-stack"
-          className="flex w-full flex-col items-center rounded-card px-4 py-3 sm:px-8 sm:py-4"
+          className="flex w-full flex-col items-center px-4 py-6 sm:px-8 sm:py-8"
           style={{
-            background: "radial-gradient(ellipse at 50% 44%, rgba(245,246,247,0.92) 0%, rgba(245,246,247,0.78) 54%, rgba(245,246,247,0) 86%)",
+            background: "radial-gradient(42% 44% at 50% 44%, rgba(245,246,247,0.78) 0%, rgba(245,246,247,0.38) 48%, rgba(245,246,247,0) 100%)",
           }}
         >
         <motion.h1
@@ -395,7 +395,7 @@ export function Hero() {
         </motion.form>
 
         {/* Quick actions: sample market and nationwide database */}
-        <div className="relative mt-[30px] flex flex-wrap items-center justify-center gap-4 self-center rounded-control bg-[#F5F6F7]/85 px-4 py-2 text-sm font-medium backdrop-blur-[2px] xl:mt-5">
+        <div className="relative mt-[30px] flex flex-wrap items-center justify-center gap-4 self-center rounded-full border border-white/75 bg-white/80 px-4 py-1.5 text-sm font-medium shadow-sm backdrop-blur-md xl:mt-5">
           <motion.button
             type="button"
             onClick={() => {
