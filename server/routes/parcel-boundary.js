@@ -259,7 +259,7 @@ async function querySingleArcGisEndpoint(serviceInfo, lat, lng, apn, county, has
     const queryUrl = new URL(serviceInfo.endpoint);
     queryUrl.search = new URLSearchParams(params).toString();
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 3500);
+    const timeout = setTimeout(() => controller.abort(), Math.max(1000, Number(process.env.PARCEL_QUERY_TIMEOUT_MS) || 7500));
     try {
       const response = await fetch(queryUrl, {
         signal: controller.signal,
@@ -379,8 +379,21 @@ async function querySingleArcGisEndpoint(serviceInfo, lat, lng, apn, county, has
   }
 }
 
+const PARCEL_CACHE = (process.env.NODE_ENV === 'test' || process.env.NODE_TEST_CONTEXT) ? null : new Map();
+const NATIVE_FETCH = typeof globalThis.fetch === 'function' ? globalThis.fetch : null;
+const PARCEL_CACHE_TTL_MS = 60 * 60 * 1000;
+
 async function queryArcGisRest(lat, lng, state, apn = null, county = null) {
   const normalizedState = textValue(state)?.toUpperCase() || null;
+  const allowCache = PARCEL_CACHE && globalThis.fetch === NATIVE_FETCH;
+  const cacheKey = allowCache ? `${normalizedState || ''}|${String(county || '').trim().toUpperCase()}|${Number.isFinite(lat) ? lat.toFixed(5) : ''}|${Number.isFinite(lng) ? lng.toFixed(5) : ''}|${apn || ''}` : null;
+  if (cacheKey && PARCEL_CACHE.has(cacheKey)) {
+    const cached = PARCEL_CACHE.get(cacheKey);
+    if (cached && Date.now() - cached.ts < PARCEL_CACHE_TTL_MS) {
+      return cached.value;
+    }
+    PARCEL_CACHE.delete(cacheKey);
+  }
   const candidates = resolveBoundaryEndpoints(normalizedState, county);
 
   if (candidates.length === 0) {
@@ -406,7 +419,15 @@ async function queryArcGisRest(lat, lng, state, apn = null, county = null) {
       continue;
     }
     try {
-      return await querySingleArcGisEndpoint(serviceInfo, lat, lng, apn, county, hasCoords);
+      const result = await querySingleArcGisEndpoint(serviceInfo, lat, lng, apn, county, hasCoords);
+      if (cacheKey && PARCEL_CACHE && result) {
+        if (PARCEL_CACHE.size >= 400) {
+          const oldest = PARCEL_CACHE.keys().next().value;
+          if (oldest !== undefined) PARCEL_CACHE.delete(oldest);
+        }
+        PARCEL_CACHE.set(cacheKey, { ts: Date.now(), value: result });
+      }
+      return result;
     } catch (error) {
       if (error instanceof ParcelBoundaryError && error.code === 'EXACT_COORDINATES_REQUIRED') {
         throw error;
