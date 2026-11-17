@@ -99,12 +99,13 @@ export async function GET(request: Request) {
   const targetMargin = parseNum(url.searchParams.get("targetMargin"));
   if (targetMargin !== null) operatorInput.targetMargin = targetMargin;
 
-  const operatorNotes = url.searchParams.get("operatorNotes");
+  const canSetAttribution = session.authenticated && hasPermission(session.role, "canExportDossier");
+  const operatorNotes = canSetAttribution ? url.searchParams.get("operatorNotes") : null;
   if (operatorNotes && operatorNotes.trim()) {
     operatorInput.operatorNotes = operatorNotes.trim();
   }
 
-  const operatorId = url.searchParams.get("operatorId");
+  const operatorId = canSetAttribution ? url.searchParams.get("operatorId") : null;
   if (operatorId && operatorId.trim()) {
     operatorInput.operatorId = operatorId.trim();
   } else if (session.authenticated) {

@@ -13,13 +13,15 @@ export async function DELETE(
   }
   const url = new URL(request.url);
   url.pathname = "/api/alerts";
+  const forwardedHeaders = new Headers(request.headers);
+  forwardedHeaders.delete("content-length");
+  forwardedHeaders.delete("host");
+  forwardedHeaders.delete("transfer-encoding");
+  forwardedHeaders.set("content-type", "application/json");
   return proxyWatchlistPropertyApi(
     new Request(url.toString(), {
       method: "DELETE",
-      headers: {
-        ...Object.fromEntries(request.headers.entries()),
-        "content-type": "application/json",
-      },
+      headers: forwardedHeaders,
       body: JSON.stringify({ listingId }),
     })
   );

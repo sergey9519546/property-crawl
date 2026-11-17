@@ -179,10 +179,12 @@ export function ReviewSplitPane({
   // Keyboard shortcut handler
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
+      if (e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
+      const target = e.target as HTMLElement | null;
       // Don't trigger if operator is typing in an input (except Escape to exit)
-      if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement)?.tagName)) {
+      if (target && (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable)) {
         if (e.key === 'Escape') {
-          (e.target as HTMLElement).blur();
+          target.blur();
           setEditMode(false);
           setActiveFieldKey(null);
         }
@@ -540,7 +542,7 @@ export function ReviewSplitPane({
                 placeholder="State verification findings or rejection reason…"
                 className="w-full border border-line-strong rounded-control bg-card px-2.5 py-1.5 text-xs"
               />
-              {validationError && <p className="text-xs text-catch-ink mt-1 font-semibold">{validationError}</p>}
+              {validationError && <p role="alert" className="text-xs text-catch-ink mt-1 font-semibold">{validationError}</p>}
             </div>
           </div>
 

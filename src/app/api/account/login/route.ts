@@ -2,18 +2,10 @@ import { checkFormRateLimit } from "@/lib/form-rate-limit";
 import { accountsApi } from "@/lib/member-account";
 import { rateLimitKey } from "@/lib/client-ip";
 import { workspaceMutationAllowed } from "@/lib/workspace-session";
+import { appOrigin } from "@/lib/app-origin";
 import { sendOutboundMail } from "@server/delivery/outbound-mail";
 
 const headers = { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" };
-
-// The link must point at our own site. In production that is PUBLIC_APP_ORIGIN;
-// the request's Host header is attacker-controlled and would let someone mail a
-// victim a valid sign-in token on a hostile domain.
-function appOrigin(request: Request) {
-  const configured = String(process.env.PUBLIC_APP_ORIGIN || "").trim().replace(/\/$/, "");
-  if (configured) return configured;
-  return process.env.NODE_ENV === "production" ? null : new URL(request.url).origin;
-}
 
 export async function POST(request: Request) {
   if (!workspaceMutationAllowed(request)) return Response.json({ error: "Same-origin request required" }, { status: 403, headers });

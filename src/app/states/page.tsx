@@ -1,5 +1,8 @@
 import Link from "next/link";
 import type { Metadata } from "next";
+import { SiteHeader } from "@/components/site/site-header";
+import { SiteFooter } from "@/components/site/site-footer";
+import { STATE_NAMES } from "@/lib/hero-market-suggestions";
 import { loadStateCounts as loadStateCountsImpl } from "@/lib/state-coverage";
 
 export const metadata: Metadata = {
@@ -40,7 +43,9 @@ export async function loadStateCounts(): Promise<{ rows: { state: string; count:
 export default async function StatesPage() {
   const { rows, error } = await loadStateCounts();
   return (
-    <main className="mx-auto max-w-3xl px-6 py-16 text-ink">
+    <div className="min-h-screen bg-paper text-ink">
+      <SiteHeader />
+      <main id="main-content" tabIndex={-1} className="mx-auto max-w-3xl px-6 pb-20 pt-28 outline-none sm:pt-32">
       <p className="inline-flex items-center gap-2 rounded-full border border-line bg-card px-3 py-1 text-label font-semibold uppercase tracking-[0.12em] text-ink-2">
         <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-signature ring-1 ring-ink/20" />
         Browse by state
@@ -61,13 +66,15 @@ export default async function StatesPage() {
           {rows.map((row) => (
             <li key={row.state}>
               <Link href={`/states/${row.state}`} className="flex items-center justify-between px-4 py-3 text-sm hover:bg-paper">
-                <span className="font-semibold text-ink">{row.state}</span>
+                <span className="font-semibold text-ink">{STATE_NAMES[row.state] ? `${STATE_NAMES[row.state]} (${row.state})` : row.state}</span>
                 <span className="tabular-nums text-ink-3">{row.count} {row.count === 1 ? "listing" : "listings"}</span>
               </Link>
             </li>
           ))}
         </ul>
       )}
-    </main>
+      </main>
+      <SiteFooter />
+    </div>
   );
 }

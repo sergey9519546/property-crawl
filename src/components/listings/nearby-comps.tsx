@@ -103,7 +103,7 @@ export function NearbyComps({
       </div>
 
       {comps.length === 0 ? (
-        <div className="mt-4 rounded-control border border-dashed border-line bg-paper p-6 text-center">
+        <div className="mt-4 rounded-control border border-dashed border-line bg-paper p-4 text-center">
           <p className="text-xs text-ink-3">
             No active distressed comparables observed within an 8 km radius matching the size profile.
           </p>

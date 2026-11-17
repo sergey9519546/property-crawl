@@ -9,7 +9,7 @@ type Props = {
 
 export default async function ForeclosureCountyPage({ params }: Props) {
   const { state, county } = await params;
-  const cleanState = /^[A-Za-z]{2}$/.test(state || "") ? state.toUpperCase() : state;
-  const cleanCounty = countyToSlug(county);
+  const cleanState = /^[A-Za-z]{2}$/.test(state || "") ? state.toUpperCase() : encodeURIComponent(String(state || ""));
+  const cleanCounty = countyToSlug(county) || encodeURIComponent(String(county || ""));
   permanentRedirect(`/states/${cleanState}/${cleanCounty}`);
 }

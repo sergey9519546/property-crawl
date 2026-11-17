@@ -32,6 +32,6 @@ export const metadata: Metadata = {
 };
 
 export default function ResearchPage() {
-  return <WorkspaceShell><main><ResearchInbox /></main></WorkspaceShell>;
+  return <WorkspaceShell><main id="main-content" tabIndex={-1} className="outline-none"><ResearchInbox /></main></WorkspaceShell>;
 }
 

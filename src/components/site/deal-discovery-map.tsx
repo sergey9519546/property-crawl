@@ -769,7 +769,7 @@ export function DealDiscoveryMap() {
               {shown.area}
             </p>
           </div>
-          <span className="inline-flex shrink-0 items-center gap-1 rounded-xl bg-emerald-50 px-3 py-2 text-base font-extrabold tabular-nums text-emerald-700">
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-xl bg-go-wash px-3 py-2 text-base font-extrabold tabular-nums text-go">
             <TrendingUp className="h-4 w-4" aria-hidden /> {pinText(shown.score)}
           </span>
         </div>
@@ -857,7 +857,7 @@ function OpportunityStat({
       </p>
       <p
         className={`mt-0.5 text-sm font-extrabold tabular-nums ${
-          green ? "text-emerald-600" : "text-[#111827]"
+          green ? "text-go" : "text-ink"
         }`}
       >
         {value}

@@ -377,13 +377,17 @@ function ProsecutionCard({ item }: { item: DocketCheckItem }) {
         </div>
       </div>
 
-      <p className="mt-2 text-ink leading-relaxed font-medium">{item.finding}</p>
-
-      <div className="mt-2.5 pt-2 border-t border-line/60 flex flex-wrap items-center justify-between gap-2 text-meta text-ink-3">
-        <span>
+      <p className={`mt-1.5 leading-relaxed ${isFatal || isCaution ? "font-medium text-ink" : "text-ink-2"}`}>{item.finding}</p>
+      {isFatal || isCaution ? (
+        <div className="mt-2 pt-2 border-t border-line/60 text-meta text-ink-3">
           <strong className="text-ink-2">Statute:</strong> {item.statute}
-        </span>
-      </div>
+        </div>
+      ) : (
+        <details className="mt-1.5 text-meta text-ink-3">
+          <summary className="cursor-pointer font-semibold hover:text-ink">Statute reference</summary>
+          <p className="mt-1">{item.statute}</p>
+        </details>
+      )}
     </article>
   );
 }

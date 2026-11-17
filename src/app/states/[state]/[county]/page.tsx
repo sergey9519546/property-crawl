@@ -21,6 +21,8 @@ import {
   getCountyCadastralGisLink,
 } from "@/lib/county-seo";
 import { CountyAlertSubscribe } from "@/components/alerts/county-alert-subscribe";
+import { SiteHeader } from "@/components/site/site-header";
+import { SiteFooter } from "@/components/site/site-footer";
 
 export const dynamic = "force-dynamic";
 
@@ -169,7 +171,9 @@ export default async function CountyDocketPage({ params }: PageProps) {
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(faqSchema) }}
       />
 
-      <main className="mx-auto max-w-5xl px-6 py-12">
+      <div className="min-h-screen bg-paper text-ink">
+      <SiteHeader />
+      <main id="main-content" tabIndex={-1} className="mx-auto max-w-5xl px-6 pb-20 pt-28 outline-none sm:pt-32">
         {/* Breadcrumb Navigation */}
         <nav aria-label="Breadcrumb" className="mb-6 flex flex-wrap items-center gap-2 text-xs font-medium text-ink-3">
           <Link href="/" className="hover:text-ink transition-colors">Home</Link>
@@ -587,6 +591,8 @@ export default async function CountyDocketPage({ params }: PageProps) {
           </Link>
         </div>
       </main>
+      <SiteFooter />
+      </div>
     </>
   );
 }

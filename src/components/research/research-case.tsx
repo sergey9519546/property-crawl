@@ -255,7 +255,7 @@ export function ResearchCase({ caseId }: { caseId: string }) {
             {(() => {
               const snap = (detail.case.listingSnapshot || {}) as Record<string, unknown>;
               const plaintiff = String(snap.plaintiff || "");
-              const state = String(snap.state || detail.case.state || "").toUpperCase();
+              const state = String(snap.state || "").toUpperCase();
               const isJuniorLien =
                 /^(?:high|critical)$/i.test(String(snap.seniorLienRisk || "").trim()) ||
                 /(?:second\s*(?:mortgage|deed)|2nd\s*(?:mortgage|deed)|junior\s*(?:mortgage|deed|lien)|\bheloc\b|(?:home\s+)?equity\s*line|subordinate\s*(?:deed|mortgage|lien)|mechanic'?s?\s*lien|construction\s*lien)/i.test(

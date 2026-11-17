@@ -2,12 +2,13 @@ import { checkFormRateLimit } from "@/lib/form-rate-limit";
 import { accountsApi, currentMember } from "@/lib/member-account";
 import { rateLimitKey } from "@/lib/client-ip";
 import { workspaceMutationAllowed } from "@/lib/workspace-session";
+import { appOrigin } from "@/lib/app-origin";
 import { checkoutConfigured, createCheckoutSession, createCustomer, getPrice } from "@server/billing/stripe-checkout";
 
 const responseHeaders = { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" };
 
-function accountUrl(request: Request, status: string) {
-  return `${new URL(request.url).origin}/account?checkout=${status}`;
+function accountUrl(origin: string, status: string) {
+  return `${origin}/account?checkout=${status}`;
 }
 
 // Whether checkout is set up, and the plan price from Stripe itself.
@@ -29,8 +30,10 @@ export async function POST(request: Request) {
     return Response.json({ configured: false, error: "Checkout is not configured." }, { status: 503, headers: responseHeaders });
   }
   const member = await currentMember(request);
-  if (!member) return Response.json({ error: "Sign in before subscribing", signIn: "/sign-in" }, { status: 401, headers: responseHeaders });
+  if (!member) return Response.json({ error: "Sign in before subscribing", signIn: "/account" }, { status: 401, headers: responseHeaders });
   if (member.entitled) return Response.json({ error: "This account already has an active subscription" }, { status: 409, headers: responseHeaders });
+  const origin = appOrigin(request);
+  if (!origin) return Response.json({ error: "Checkout requires PUBLIC_APP_ORIGIN on this deployment" }, { status: 503, headers: responseHeaders });
 
   // One Stripe customer per account, created on first checkout.
   let customerId = member.stripeCustomerId;
@@ -41,8 +44,8 @@ export async function POST(request: Request) {
     if (!linked.ok) return Response.json({ error: "The billing account could not be saved" }, { status: 503, headers: responseHeaders });
   }
   const result = await createCheckoutSession({
-    successUrl: accountUrl(request, "success"),
-    cancelUrl: accountUrl(request, "cancelled"),
+    successUrl: accountUrl(origin, "success"),
+    cancelUrl: accountUrl(origin, "cancelled"),
     customerId,
     accountId: member.id,
   });

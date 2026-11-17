@@ -6,6 +6,6 @@ export const metadata: Metadata = { title: "Property Research Case | PerfectProp
 
 export default async function ResearchCasePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  return <WorkspaceShell><main><ResearchCase caseId={id} /></main></WorkspaceShell>;
+  return <WorkspaceShell><main id="main-content" tabIndex={-1} className="outline-none"><ResearchCase caseId={id} /></main></WorkspaceShell>;
 }
 

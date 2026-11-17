@@ -17,14 +17,14 @@ export default function GlobalError({
   return (
     <html lang="en">
       <body className="min-h-screen bg-ink text-white antialiased">
-        <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center">
+        <main id="main-content" tabIndex={-1} className="min-h-screen flex flex-col items-center justify-center p-6 text-center outline-none">
           <div className="max-w-md w-full space-y-6">
             <div className="w-16 h-16 rounded-card bg-catch-wash border border-catch/30 text-catch-ink flex items-center justify-center mx-auto">
               <AlertOctagon className="w-8 h-8" />
             </div>
 
             <div className="space-y-2">
-              <p className="text-xs font-mono uppercase tracking-widest text-catch-ink">
+              <p className="text-xs font-mono uppercase tracking-widest text-catch-wash">
                 Application unavailable
               </p>
               <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
@@ -48,7 +48,7 @@ export default function GlobalError({
               <span>Try Again</span>
             </button>
           </div>
-        </div>
+        </main>
       </body>
     </html>
   );

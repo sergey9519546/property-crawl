@@ -12,6 +12,8 @@ import {
 import { serializeJsonLd } from "@/lib/json-ld";
 import { CountyRow, loadStateCounties as loadStateCountiesImpl } from "@/lib/state-coverage";
 import { Gavel, Scale, Calculator, AlertTriangle, ArrowLeft } from "lucide-react";
+import { SiteHeader } from "@/components/site/site-header";
+import { SiteFooter } from "@/components/site/site-footer";
 
 const VALID_STATE_CODES = new Set(Object.keys(STATE_NAMES));
 
@@ -86,7 +88,9 @@ export default async function StateCountiesPage({ params }: { params: Promise<{ 
   const { total, counties, error } = await loadStateCounties(state);
   if (total === 0 && counties.length === 0 && !error) {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-16 text-ink">
+      <div className="min-h-screen bg-paper text-ink">
+        <SiteHeader />
+        <main id="main-content" tabIndex={-1} className="mx-auto max-w-3xl px-6 pb-20 pt-28 outline-none sm:pt-32">
         <p className="text-label font-bold uppercase tracking-[0.14em] text-ink-3">Browse by state</p>
         <h1 className="mt-2 text-3xl font-bold tracking-tight text-ink">
           No active {STATE_NAMES[state] || state} ({state}) auctions indexed yet
@@ -102,14 +106,16 @@ export default async function StateCountiesPage({ params }: { params: Promise<{ 
             Browse all active listings
           </Link>
         </div>
-      </main>
+        </main>
+        <SiteFooter />
+      </div>
     );
   }
   const redemption = getStatutoryRedemption(state);
   const hasRule = !redemption.label.startsWith("Statutory redemption details require");
   const feeSchedule = getStatutoryFeeSchedule(state);
 
-  const siteBaseUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.PUBLIC_APP_ORIGIN || "https://property-crawl.onrender.com").replace(/\/+$/, "");
+  const siteBaseUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.PUBLIC_APP_ORIGIN || "https://perfectproperty.org").replace(/\/+$/, "");
   const breadcrumbsSchema = {
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
@@ -135,10 +141,23 @@ export default async function StateCountiesPage({ params }: { params: Promise<{ 
     ],
   };
 
-  const stateFaqSchema = buildCountyFaqSchema({
+  const stateName = STATE_NAMES[state] || state;
+  const rawStateFaq = buildCountyFaqSchema({
     state,
-    county: `${state} Statewide`,
+    county: stateName,
   });
+  const stateFaqSchema = {
+    ...rawStateFaq,
+    mainEntity: Array.isArray(rawStateFaq.mainEntity)
+      ? rawStateFaq.mainEntity.map((q: { name?: string; acceptedAnswer?: { text?: string; [k: string]: unknown }; [k: string]: unknown }) => ({
+          ...q,
+          name: typeof q.name === "string" ? q.name.replace(new RegExp(`${stateName} County`, "gi"), `${stateName} statewide`) : q.name,
+          acceptedAnswer: q.acceptedAnswer && typeof q.acceptedAnswer.text === "string"
+            ? { ...q.acceptedAnswer, text: q.acceptedAnswer.text.replace(new RegExp(`${stateName} County`, "gi"), `${stateName} statewide`) }
+            : q.acceptedAnswer,
+        }))
+      : rawStateFaq.mainEntity,
+  };
 
   return (
     <>
@@ -151,7 +170,9 @@ export default async function StateCountiesPage({ params }: { params: Promise<{ 
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(stateFaqSchema) }}
       />
 
-      <main className="mx-auto max-w-4xl px-6 py-16 text-ink">
+      <div className="min-h-screen bg-paper text-ink">
+      <SiteHeader />
+      <main id="main-content" tabIndex={-1} className="mx-auto max-w-4xl px-6 pb-20 pt-28 outline-none sm:pt-32">
         {/* Breadcrumb Navigation */}
         <nav aria-label="Breadcrumb" className="mb-6 flex flex-wrap items-center gap-2 text-xs font-medium text-ink-3">
           <Link href="/" className="hover:text-ink transition-colors">Home</Link>
@@ -318,6 +339,8 @@ export default async function StateCountiesPage({ params }: { params: Promise<{ 
           )}
         </div>
       </main>
+      <SiteFooter />
+      </div>
     </>
   );
 }

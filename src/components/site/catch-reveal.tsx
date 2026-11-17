@@ -6,6 +6,7 @@ import { AlertTriangle, ArrowRight, Check, ExternalLink, Eye, House, RefreshCw }
 import { listingCatch } from "@/lib/listing-catch";
 import { safeImageUrl } from "@/lib/listing-display";
 import { getExactSourceListingUrl } from "@/lib/listing-links";
+import { formatCountyDisplayName } from "@/lib/county-seo";
 import { SOURCES } from "@/components/terminal/property-data";
 import { Fact } from "@/components/evidence/fact";
 import { sourceDisplayText } from "@/lib/source-display";
@@ -93,7 +94,7 @@ export function CatchReveal() {
   const exactSourceUrl = listing ? getExactSourceListingUrl(listing, SOURCES[String(listing.source)]?.websiteUrl) : null;
   const found = listing ? listingCatch(listing) : null;
   const photo = listing ? safeImageUrl(listing.photo) : undefined;
-  const place = listing ? [listing.county ? `${String(listing.county).replace(/\s+county\s*$/i, "")} County` : null, listing.state].filter(Boolean).join(", ") : "";
+  const place = listing ? [listing.county ? formatCountyDisplayName(String(listing.county)) : null, listing.state].filter(Boolean).join(", ") : "";
 
   const next = () => {
     setRevealed(false);

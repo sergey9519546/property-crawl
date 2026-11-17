@@ -92,7 +92,7 @@ function buildGeographyPages(
 }
 
 async function buildSitemapEntries(): Promise<MetadataRoute.Sitemap> {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.PUBLIC_APP_ORIGIN || 'https://property-crawl.onrender.com';
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.PUBLIC_APP_ORIGIN || 'https://perfectproperty.org';
   const now = new Date();
 
   const staticPages: MetadataRoute.Sitemap = [
@@ -107,8 +107,6 @@ async function buildSitemapEntries(): Promise<MetadataRoute.Sitemap> {
     { url: `${baseUrl}/enterprise`, lastModified: now, changeFrequency: 'monthly', priority: 0.5 },
     { url: `${baseUrl}/security`, lastModified: now, changeFrequency: 'monthly', priority: 0.4 },
     { url: `${baseUrl}/contact`, lastModified: now, changeFrequency: 'monthly', priority: 0.4 },
-    { url: `${baseUrl}/register`, lastModified: now, changeFrequency: 'monthly', priority: 0.4 },
-    { url: `${baseUrl}/sign-in`, lastModified: now, changeFrequency: 'yearly', priority: 0.3 },
     { url: `${baseUrl}/terms`, lastModified: now, changeFrequency: 'yearly', priority: 0.3 },
     { url: `${baseUrl}/privacy`, lastModified: now, changeFrequency: 'yearly', priority: 0.3 },
   ];
@@ -179,8 +177,11 @@ async function buildSitemapEntries(): Promise<MetadataRoute.Sitemap> {
 
   if (statePages.length === 0) {
     try {
-      const req = createRequire(process.cwd() + "/package.json");
-      const matrix = req("./server/discovery/coverage-matrix").summarize();
+      const getMod = (loader: (p: string) => any, p: string) => loader(p);
+      const reqRoot = createRequire(process.cwd() + "/package.json");
+      const mod = getMod(reqRoot, "./server/discovery/coverage-matrix");
+      const db = getMod(reqRoot, "./server/db/client");
+      const matrix = typeof mod.summarizeWithDatabase === "function" ? await mod.summarizeWithDatabase(db) : mod.summarize();
       ({ statePages, countyPages } = buildGeographyPages(
         baseUrl,
         now,

@@ -155,7 +155,15 @@ function arbitrateTitleRisk(listing = {}, rawNoticeText = '') {
     noticeMethod: listing.irsNoticeMethod,
     noticeText: notice,
   });
-  const redemptionRule = typeof getRedemptionRule === 'function' ? getRedemptionRule(state, {
+  const reoDispositionSources = new Set(['hud', 'fannie', 'freddie', 'va', 'fdic', 'treasury', 'irs', 'gsa', 'landbank', 'usda']);
+  const sourceKey = String(listing.source || '').trim().toLowerCase();
+  const programKey = String(listing.auctionProgram || '').trim().toLowerCase();
+  const isPostForeclosureReo = listing.distressStage === 'reo'
+    || (reoDispositionSources.has(sourceKey) && sourceKey !== 'irs')
+    || (sourceKey === 'servicelink' && ['traditional', 'reo', 'hud reo', 'bank owned'].includes(programKey));
+  const redemptionRule = isPostForeclosureReo && !irsNoticeEval.hasFederalTaxLien
+    ? { days: 0, label: 'Post-foreclosure REO / direct disposition (former-owner foreclosure redemption extinguished)' }
+    : typeof getRedemptionRule === 'function' ? getRedemptionRule(state, {
     hasFederalTaxLien: irsNoticeEval.hasFederalTaxLien,
     noticeText: notice,
     saleType: listing.saleType,
@@ -295,7 +303,7 @@ function arbitrateTitleRisk(listing = {}, rawNoticeText = '') {
   }
 
   // V. North Carolina Upset Bid Window
-  if (state === 'NC') {
+  if (state === 'NC' && !isPostForeclosureReo) {
     warnings.push('NORTH CAROLINA 10-DAY UPSET BID: Sale remains open for upset bids (5% or $750 minimum increase) under N.C.G.S. § 45-21.27.');
   }
 

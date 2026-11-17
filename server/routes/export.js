@@ -1,7 +1,7 @@
 const db = require('../db/client');
 const { presentListing } = require('./listings');
 const discovery = require('../discovery/query');
-const { requireWorkspaceIdentity } = require('../security/workspace-identity');
+const { requireUserIdentity, requireWorkspaceIdentity } = require('../security/workspace-identity');
 const { buildPossessionDossier } = require('../intelligence/post-sale-possession');
 const { calculateRequiredDeposit, getAuctionDepositRules } = require('../intelligence/escrow-optimizer');
 const { calculateSurplusEquityWaterfall } = require('../intelligence/surplus-waterfall');
@@ -225,9 +225,12 @@ async function handleExport(req, res) {
   if (!['csv', 'json', 'markdown', 'dossier'].includes(format)) {
     return res.status(400).json({ error: 'Choose csv, json, or markdown format' });
   }
-  const userId = requireWorkspaceIdentity(req, res);
+  const savedOnly = url.searchParams.get('saved') === 'true';
+  const userId = savedOnly
+    ? requireUserIdentity(req, res)
+    : requireWorkspaceIdentity(req, res);
   if (!userId) return;
-  const saved = url.searchParams.get('saved') === 'true' || url.searchParams.has('userId') || Boolean(req.headers['x-user-id']);
+  const saved = savedOnly || url.searchParams.has('userId') || Boolean(req.headers['x-user-id']);
   let directory, file;
   try {
     const base = path.resolve(__dirname, '../../.cache/discovery-exports');

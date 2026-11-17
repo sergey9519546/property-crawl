@@ -54,7 +54,7 @@ export function TitleRiskForensics({
   seniorLienWarning,
   judgment,
   openingBid,
-  state = "OH",
+  state = "",
   source = "",
 }: TitleRiskForensicsProps) {
   const seniorDebtInputId = useId();

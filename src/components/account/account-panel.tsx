@@ -93,13 +93,13 @@ export function VerifySignIn() {
     }
   }
 
-  if (!token) return <p className="text-sm text-ink-3">This link has no sign-in token. <Link href="/sign-in" className="font-semibold underline">Request a new link</Link>.</p>;
+  if (!token) return <p className="text-sm text-ink-3">This link has no sign-in token. <Link href="/account" className="font-semibold underline">Request a new link</Link>.</p>;
   return (
     <div className="space-y-3">
       <button type="button" onClick={() => void confirm()} disabled={pending} className={`${button} bg-ink text-white hover:bg-ink-2`}>
         {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}Confirm sign-in
       </button>
-      {error && <p role="alert" className="rounded-xl bg-catch-wash p-3 text-sm text-catch-ink">{error} <Link href="/sign-in" className="font-semibold underline">Request a new link</Link>.</p>}
+      {error && <p role="alert" className="rounded-xl bg-catch-wash p-3 text-sm text-catch-ink">{error} <Link href="/account" className="font-semibold underline">Request a new link</Link>.</p>}
     </div>
   );
 }

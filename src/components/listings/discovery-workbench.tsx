@@ -214,6 +214,25 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
   const savedRef = React.useRef(saved);
   savedRef.current = saved;
   const [moreFiltersOpen, setMoreFiltersOpen] = React.useState(false);
+  const [moreMenuOpen, setMoreMenuOpen] = React.useState(false);
+  const moreMenuRef = React.useRef<HTMLDivElement | null>(null);
+  React.useEffect(() => {
+    if (!moreMenuOpen) return;
+    const onPointerDown = (event: MouseEvent) => {
+      if (moreMenuRef.current && !moreMenuRef.current.contains(event.target as Node)) {
+        setMoreMenuOpen(false);
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMoreMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [moreMenuOpen]);
   const [showSavedOnly, setShowSavedOnly] = React.useState(false);
   const [watchlistListings, setWatchlistListings] = React.useState<PropertyListing[] | null>(null);
   const [watchlistLoading, setWatchlistLoading] = React.useState(false);
@@ -927,14 +946,24 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
             <option value="75">Full detail</option>
           </select>
           <SaveSearchButton filters={filters} />
-          <details className="relative">
-            <summary className="flex min-h-10 cursor-pointer items-center rounded-lg border border-line-strong px-3 text-xs font-semibold">More</summary>
-            <div className="absolute right-0 top-full z-20 mt-2 w-56 rounded-xl border border-line bg-card p-2 shadow-lg">
-              <Link href="/hunts" className="block rounded-lg px-3 py-3 text-xs font-semibold hover:bg-paper">Hunts and email alerts</Link>
-              <button onClick={() => exportCurrent("csv")} className="inline-flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-xs font-semibold hover:bg-paper"><FileText size={14} /> Export spreadsheet (staff only)</button>
-              <button onClick={() => exportCurrent("json")} className="inline-flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-xs font-semibold hover:bg-paper"><FileText size={14} /> Export data file (staff only)</button>
-            </div>
-          </details>
+          <div ref={moreMenuRef} className="relative">
+            <button
+              type="button"
+              aria-expanded={moreMenuOpen}
+              aria-haspopup="menu"
+              onClick={() => setMoreMenuOpen((prev) => !prev)}
+              className="flex min-h-10 cursor-pointer items-center rounded-lg border border-line-strong bg-card px-3 text-xs font-semibold text-ink hover:bg-paper"
+            >
+              More
+            </button>
+            {moreMenuOpen ? (
+              <div role="menu" className="absolute right-0 top-full z-20 mt-2 w-56 rounded-xl border border-line bg-card p-2 shadow-lg">
+                <Link role="menuitem" href="/hunts" onClick={() => setMoreMenuOpen(false)} className="block rounded-lg px-3 py-3 text-xs font-semibold hover:bg-paper">Hunts and email alerts</Link>
+                <button type="button" role="menuitem" onClick={() => { setMoreMenuOpen(false); exportCurrent("csv"); }} className="inline-flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-xs font-semibold hover:bg-paper"><FileText size={14} /> Export spreadsheet (staff only)</button>
+                <button type="button" role="menuitem" onClick={() => { setMoreMenuOpen(false); exportCurrent("json"); }} className="inline-flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-xs font-semibold hover:bg-paper"><FileText size={14} /> Export data file (staff only)</button>
+              </div>
+            ) : null}
+          </div>
           <div className="flex flex-wrap gap-2" role="group" aria-label="Result views">
           <button
             type="button"

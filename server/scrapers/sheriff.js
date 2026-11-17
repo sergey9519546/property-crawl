@@ -635,7 +635,41 @@ class SheriffSaleScraper extends BaseScraper {
             } catch (_) {}
           }
           if (accumulatedListings.length > 0) {
-            return accumulatedListings;
+            const byId = new Map();
+            const nowIso = new Date().toISOString().slice(0, 10);
+            const rank = (item) => {
+              const active = item?.area !== 'C' ? 1 : 0;
+              const rawDate = typeof item?.saleDate === 'string' ? item.saleDate.trim() : '';
+              const validDate = /^\d{4}-\d{2}-\d{2}/.test(rawDate) ? rawDate.slice(0, 10) : '';
+              const upcoming = validDate && validDate >= nowIso ? 1 : 0;
+              return { active, validDate, upcoming };
+            };
+            for (const item of accumulatedListings) {
+              if (!item || !item.id) continue;
+              const prev = byId.get(item.id);
+              if (!prev) {
+                byId.set(item.id, item);
+                continue;
+              }
+              const a = rank(item);
+              const b = rank(prev);
+              if (a.active !== b.active) {
+                if (a.active > b.active) byId.set(item.id, item);
+                continue;
+              }
+              if (a.upcoming !== b.upcoming) {
+                if (a.upcoming > b.upcoming) byId.set(item.id, item);
+                continue;
+              }
+              if (a.validDate && b.validDate && a.validDate !== b.validDate) {
+                if (a.validDate < b.validDate) byId.set(item.id, item);
+                continue;
+              }
+              if (a.validDate && !b.validDate) {
+                byId.set(item.id, item);
+              }
+            }
+            return Array.from(byId.values());
           }
         } catch (_) {
           // ColdFusion AJAX failed or mock rejected; fall through to Scrapling

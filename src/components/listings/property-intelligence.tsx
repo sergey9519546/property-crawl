@@ -147,6 +147,7 @@ function valueLabel(value: unknown, key?: string): string {
   return sourceDisplayText(String(value));
 }
 const humanize = (value: string) => value.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase());
+const signedPct = (n: number) => `${n > 0 ? '+' : ''}${n}%`;
 const date = (value: string) => new Date(value).toLocaleDateString();
 
 function hasValidUsCoordinates(lat: number | null | undefined, lng: number | null | undefined): boolean {
@@ -214,7 +215,7 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
     <div className="border-b border-line p-5 sm:p-6">
       <h2 className="text-xl font-semibold tracking-tight text-ink">Research &amp; history</h2>
       <p className="mt-2 text-sm leading-6 text-ink-3">Review changes, compare public records, and check missing details.</p>
-      <div className="mt-4 flex flex-wrap gap-3"><button onClick={() => void research()} disabled={busy || dossier?.source.status !== 'source_observed'} className="flex min-h-11 items-center gap-2 rounded-control bg-ink px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{busy ? <Loader2 size={15} className="animate-spin" /> : <Radar size={15} />}{busy ? 'Checking records…' : 'Check public records'}</button><button onClick={exportDossier} disabled={!dossier} className="flex min-h-11 items-center gap-2 rounded-control border border-line px-4 py-2.5 text-sm font-semibold text-ink-2 disabled:opacity-40"><Download size={14} /> Download evidence</button></div>
+      <div className="mt-4 flex flex-wrap items-center gap-3"><button onClick={() => void research()} disabled={busy || dossier?.source.status !== 'source_observed'} className="flex min-h-11 items-center gap-2 rounded-control bg-ink px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{busy ? <Loader2 size={15} className="animate-spin" /> : <Radar size={15} />}{busy ? 'Checking records…' : 'Check public records'}</button><button onClick={exportDossier} disabled={!dossier} className="flex min-h-11 items-center gap-2 rounded-control border border-line px-4 py-2.5 text-sm font-semibold text-ink-2 disabled:opacity-40"><Download size={14} /> Download evidence</button>{!session.authenticated && <button type="button" onClick={() => session.requestUnlock()} className="text-xs font-semibold text-ink-3 underline underline-offset-2 hover:text-ink">Unlock workspace to refresh live adapters</button>}</div>
     </div>
     <div className="space-y-5 p-5 sm:p-6">
       {error && <p role="alert" className="rounded-control bg-catch-wash p-4 text-sm text-catch-ink">{error}</p>}
@@ -325,7 +326,7 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
                 FHFA State-Quarter HPI Trajectory · {dossier.publicBenchmarks.assessedTrajectory.state}
               </h3>
               <span className="rounded-full border border-yours/40 bg-yours-wash px-2 py-0.5 text-xs font-semibold text-yours">
-                +{dossier.publicBenchmarks.assessedTrajectory.hpiAppreciationPct}% Trajectory
+                {signedPct(dossier.publicBenchmarks.assessedTrajectory.hpiAppreciationPct)} Trajectory
               </span>
             </div>
             <p className="mt-1 text-xs text-ink-3">
@@ -389,11 +390,11 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
               </div>
               <div className="rounded-control border border-line bg-card p-2 text-center">
                 <span className="text-xs font-bold uppercase text-ink-3">5 Years</span>
-                <p className="mt-0.5 text-sm font-bold text-ink">+{dossier.publicBenchmarks.stateMacroHpi.fiveYearPct}%</p>
+                <p className="mt-0.5 text-sm font-bold text-ink">{signedPct(dossier.publicBenchmarks.stateMacroHpi.fiveYearPct)}</p>
               </div>
               <div className="rounded-control border border-line bg-card p-2 text-center">
                 <span className="text-xs font-bold uppercase text-ink-3">Since 1991</span>
-                <p className="mt-0.5 text-sm font-bold text-ink">+{dossier.publicBenchmarks.stateMacroHpi.since1991Pct}%</p>
+                <p className="mt-0.5 text-sm font-bold text-ink">{signedPct(dossier.publicBenchmarks.stateMacroHpi.since1991Pct)}</p>
               </div>
             </div>
           </div>

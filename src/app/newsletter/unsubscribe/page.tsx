@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
+import { SiteHeader } from "@/components/site/site-header";
+import { SiteFooter } from "@/components/site/site-footer";
 
 export default function UnsubscribePage() {
   const [email, setEmail] = useState("");
@@ -33,7 +35,9 @@ export default function UnsubscribePage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-[70vh] max-w-2xl flex-col justify-center px-6 py-16">
+    <div className="min-h-screen bg-paper text-ink">
+      <SiteHeader />
+      <main id="main-content" tabIndex={-1} className="mx-auto flex min-h-[70vh] max-w-2xl flex-col justify-center px-6 py-16 outline-none">
       <p className="text-label font-bold uppercase tracking-[0.14em] text-ink-3">Newsletter</p>
       <h1 className="mt-2 text-3xl font-bold tracking-tight text-ink">Remove a newsletter address</h1>
       <p className="mt-4 text-sm leading-6 text-ink-3">
@@ -63,5 +67,7 @@ export default function UnsubscribePage() {
       </form>
       <Link href="/privacy" className="mt-6 text-sm font-semibold text-ink underline">Privacy notice</Link>
     </main>
+      <SiteFooter />
+    </div>
   );
 }

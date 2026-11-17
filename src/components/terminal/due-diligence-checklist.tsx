@@ -440,12 +440,13 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
                     <p className="text-xs text-ink-3 leading-relaxed font-medium">
                       {item.detectedFinding}
                     </p>
-                    <p className="text-label text-ink-3 leading-relaxed">
-                      <strong>Statutory Basis:</strong> {item.statutoryRule}
-                    </p>
-                    <p className="text-label text-ink font-semibold leading-relaxed">
-                      <strong>Action:</strong> {item.actionRequired}
-                    </p>
+                    <details className="mt-1.5 text-label text-ink-3">
+                      <summary className="cursor-pointer font-semibold text-ink-2 hover:text-ink">Statutory basis &amp; verification step</summary>
+                      <div className="mt-1 space-y-1">
+                        <p className="leading-relaxed"><strong>Statutory Basis:</strong> {item.statutoryRule}</p>
+                        <p className="leading-relaxed text-ink"><strong>Action:</strong> {item.actionRequired}</p>
+                      </div>
+                    </details>
                   </div>
 
                   {/* Status Toggle Buttons */}

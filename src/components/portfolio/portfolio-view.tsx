@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { displayDate } from "@/lib/listing-display";
 import {
   PieChart,
   TrendingDown,
@@ -537,7 +538,7 @@ export function PortfolioView() {
                                   {deal.dealScore != null && (
                                     <span
                                       className="rounded px-1.5 py-0.5 font-bold"
-                                      style={{ backgroundColor: `${scoreBand?.color}20`, color: scoreBand?.color }}
+                                      style={scoreBand ? { backgroundColor: `${scoreBand.color}20`, color: scoreBand.color } : undefined}
                                     >
                                       {Math.round(deal.dealScore)}/99
                                     </span>
@@ -560,7 +561,7 @@ export function PortfolioView() {
                                   <div className="mt-1 flex items-center justify-between text-meta text-ink-3">
                                     <span>Sale Date:</span>
                                     <span className="font-semibold text-ink-2">
-                                      {new Date(deal.saleDate).toLocaleDateString()}
+                                      {displayDate(deal.saleDate, "Unscheduled")}
                                     </span>
                                   </div>
                                 )}
@@ -686,7 +687,7 @@ export function PortfolioView() {
                                 Auction Date
                               </span>
                               <span className="text-xs font-semibold text-ink-2">
-                                {new Date(deal.saleDate).toLocaleDateString()}
+                                {displayDate(deal.saleDate, "Unscheduled")}
                               </span>
                             </div>
                           )}
@@ -781,7 +782,7 @@ export function PortfolioView() {
                       <div className="flex items-center gap-2">
                         <span className="flex items-center gap-1 rounded-control bg-go-wash px-2 py-0.5 text-label font-bold text-go">
                           <Clock className="h-3 w-3" />
-                          {sale.saleDate ? new Date(sale.saleDate).toLocaleDateString() : "Scheduled"}
+                          {sale.saleDate ? displayDate(sale.saleDate, "Scheduled") : "Scheduled"}
                         </span>
                         <h4 className="text-sm font-bold text-ink">{sale.address || sale.id}</h4>
                       </div>

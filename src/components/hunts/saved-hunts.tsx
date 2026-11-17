@@ -253,7 +253,7 @@ export function SavedHunts() {
       const batches = await Promise.all(
         data.items.map(async (hunt: Hunt) => {
           const response = await fetch(
-            `/api/hunts/${hunt.id}/events?limit=25`,
+            `/api/hunts/${encodeURIComponent(hunt.id)}/events?limit=25`,
             { credentials: "same-origin", cache: "no-store" },
           );
           if (!response.ok) return [];
@@ -351,12 +351,20 @@ export function SavedHunts() {
               Refresh hunts
             </button>
           ) : (
-            <button
-              onClick={session.requestUnlock}
-              className="shrink-0 rounded-lg bg-ink px-4 py-2 text-xs font-semibold text-white"
-            >
-              Unlock
-            </button>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <Link
+                href="/account"
+                className="rounded-control bg-ink px-4 py-2 text-xs font-semibold text-white hover:bg-ink-2"
+              >
+                Member sign-in
+              </Link>
+              <button
+                onClick={session.requestUnlock}
+                className="rounded-control border border-line-strong bg-card px-4 py-2 text-xs font-semibold text-ink-2 hover:bg-paper"
+              >
+                Unlock
+              </button>
+            </div>
           )}
         </div>
         {error && (
@@ -1082,8 +1090,7 @@ export function SavedHunts() {
                       </p>
                     )}
                     <p className="mt-4 text-xs leading-5 text-ink-3">
-                      Hunts run when you choose Run hunt. No email or text
-                      notifications are sent.
+                      Subscribed accounts receive alert digests when collection updates match active hunts; run checks anytime with Check for changes.
                     </p>
                   </div>
                 </>

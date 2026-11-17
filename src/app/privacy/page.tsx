@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Lock, Shield, EyeOff, Cookie, ArrowLeft } from "lucide-react";
+import { SiteHeader } from "@/components/site/site-header";
+import { SiteFooter } from "@/components/site/site-footer";
 
 export const metadata: Metadata = {
   title: "Privacy Policy | PerfectProperty",
@@ -36,7 +38,9 @@ export const metadata: Metadata = {
 
 export default function PrivacyPage() {
   return (
-    <main className="mx-auto max-w-4xl px-6 py-16 text-ink sm:px-8">
+    <div className="min-h-screen bg-paper text-ink">
+      <SiteHeader />
+      <main id="main-content" tabIndex={-1} className="mx-auto max-w-4xl px-6 py-16 text-ink outline-none sm:px-8">
       <div className="mb-8">
         <Link
           href="/"
@@ -105,7 +109,7 @@ export default function PrivacyPage() {
               <code>pp_watchlist</code>: Browser cookie used to maintain your private saved property identifiers across sessions.
             </li>
             <li>
-              <code>pp_compare_ids</code>: Local storage token tracking properties selected for pairwise financial comparison.
+              <code>pp_compare_ids</code>: Session storage token tracking properties selected for pairwise financial comparison.
             </li>
             <li>
               <code>pp_operator_session</code>: Cryptographically secure HTTP-only session cookie verifying operator permissions.
@@ -166,5 +170,7 @@ export default function PrivacyPage() {
         </Link>
       </div>
     </main>
+      <SiteFooter />
+    </div>
   );
 }

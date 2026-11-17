@@ -345,9 +345,12 @@ function standardizeListingRecord(raw = {}, options = {}) {
     }
   }
 
+  const auctionProgram = cleanText(input.auctionProgram);
+  const distressStageSnapshot = mapDistressStage(source, input.saleDate, auctionProgram);
+  const isPostForeclosureReo = distressStageSnapshot === 'reo' || (Boolean(source) && REO_SOURCES.has(source) && source !== 'irs');
   let redemptionDays = numberOrNull(input.redemptionDays, { min: 0, integer: true });
   let redemptionWarning = cleanText(input.redemptionWarning);
-  if (state && /^[A-Z]{2}$/.test(state) && redemptionDays === null) {
+  if (state && /^[A-Z]{2}$/.test(state) && redemptionDays === null && (!isPostForeclosureReo || seniorLien?.hasFederalTaxLien)) {
     const redemption = getRedemptionRule(state, {
       hasFederalTaxLien: seniorLien?.hasFederalTaxLien
     });
@@ -404,7 +407,6 @@ function standardizeListingRecord(raw = {}, options = {}) {
   const sourceObservedAt = observationTimestamp(
     input.sourceObservedAt ?? input.observedAt ?? baseProvenance.observedAt ?? options.observedAt
   );
-  const auctionProgram = cleanText(input.auctionProgram);
   const lifecycleStatus = cleanText(input.lifecycleStatus);
   const transactionOutcome = cleanText(input.transactionOutcome);
   const hasDocuments = typeof input.hasDocuments === 'boolean' ? input.hasDocuments : deriveHasDocuments(input, baseProvenance);

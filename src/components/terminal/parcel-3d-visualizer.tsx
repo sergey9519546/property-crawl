@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { AlertTriangle, Box, Compass, Layers, LoaderCircle, MapPin, RotateCcw } from "lucide-react";
 import { Listing } from "@/data/listings";
@@ -295,6 +295,7 @@ export function Parcel3DVisualizer({ listing }: Parcel3DProps) {
   const resolvedApn = (metadata?.parcelId || preflight.apn || "").toString().trim();
   const hasObservedTopography = Boolean(metadata?.topography && metadata.topography.trim());
 
+  const glowId = useId().replace(/:/g, "_");
   const is2d = viewMode === "2d";
   const effectiveExtrusion = !is2d && extruded ? 44 : 0;
 
@@ -471,39 +472,39 @@ export function Parcel3DVisualizer({ listing }: Parcel3DProps) {
 
   return (
     <section
-      className="overflow-hidden rounded-2xl border border-line bg-ink text-white shadow-xl"
+      className={`overflow-hidden rounded-card border border-line shadow-sm ${loadState.status === "ready" ? "bg-ink text-white shadow-xl" : "bg-card text-ink"}`}
       aria-label="Parcel geometry reference"
       data-testid="parcel-3d-visualizer"
     >
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 bg-black/25 px-4 py-3">
+      <div className={`flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3 ${loadState.status === "ready" ? "border-white/10 bg-black/25" : "border-line bg-paper"}`}>
         <div>
-          <p className="text-xs font-bold uppercase tracking-wider text-white/60">
+          <p className={`text-xs font-bold uppercase tracking-wider ${loadState.status === "ready" ? "text-white/60" : "text-ink-3"}`}>
             Cadastral Spatial Reference
           </p>
-          <h2 className="text-sm font-bold text-white">3D Parcel &amp; Topography</h2>
+          <h2 className={`text-sm font-bold ${loadState.status === "ready" ? "text-white" : "text-ink"}`}>3D Parcel &amp; Topography</h2>
         </div>
-        <span className="inline-flex items-center gap-1.5 rounded-xl border border-catch/30 bg-black/60 px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-catch">
+        <span className={`inline-flex items-center gap-1.5 rounded-control border px-3 py-1.5 text-xs font-semibold uppercase tracking-wider ${loadState.status === "ready" ? "border-catch/30 bg-black/60 text-catch" : "border-catch/30 bg-catch-wash text-catch-ink"}`}>
           <MapPin className="h-3.5 w-3.5" />
           {NOT_A_SURVEY}
         </span>
       </div>
 
-      <div className="relative min-h-[340px]">
+      <div className="relative">
         {loadState.status === "loading" ? (
-          <div className="flex min-h-[340px] items-center justify-center gap-2 text-sm text-white/75" role="status">
+          <div className="flex min-h-[160px] items-center justify-center gap-2 text-sm text-ink-3" role="status">
             <LoaderCircle className="h-4 w-4 animate-spin" />
             Resolving cadastral boundary overlay…
           </div>
         ) : null}
 
         {loadState.status === "unavailable" ? (
-          <div className="mx-auto flex min-h-[340px] max-w-lg flex-col items-center justify-center px-6 text-center">
-            <span className="mb-4 grid h-11 w-11 place-items-center rounded-full border border-catch/30 bg-catch/10">
-              <AlertTriangle className="h-5 w-5 text-catch" />
+          <div className="mx-auto flex min-h-[160px] max-w-lg flex-col items-center justify-center px-6 py-6 text-center">
+            <span className="mb-3 grid h-10 w-10 place-items-center rounded-full border border-catch/30 bg-catch-wash">
+              <AlertTriangle className="h-5 w-5 text-catch-ink" />
             </span>
             <h3 className="text-base font-semibold">Cadastral boundary unavailable</h3>
-            <p className="mt-2 text-sm leading-6 text-white/60">{loadState.message}</p>
-            <p className="mt-3 text-xs text-white/60">No boundary polygon was confirmed by the county or state cadastral GIS source.</p>
+            <p className="mt-1.5 text-sm leading-6 text-ink-2">{loadState.message}</p>
+            <p className="mt-2 text-xs text-ink-3">No boundary polygon was confirmed by the county or state cadastral GIS source.</p>
           </div>
         ) : null}
 
@@ -520,7 +521,7 @@ export function Parcel3DVisualizer({ listing }: Parcel3DProps) {
               onPointerCancel={handlePointerEnd}
             >
               <defs>
-                <filter id="parcel-glow" x="-20%" y="-20%" width="140%" height="140%">
+                <filter id={glowId} x="-20%" y="-20%" width="140%" height="140%">
                   <feGaussianBlur stdDeviation="4" result="blur" />
                   <feMerge>
                     <feMergeNode in="blur" />
@@ -575,7 +576,7 @@ export function Parcel3DVisualizer({ listing }: Parcel3DProps) {
                 fillOpacity={effectiveExtrusion > 0 ? "0.2" : "0.14"}
                 stroke="#fbf9f5"
                 strokeWidth="2.4"
-                filter="url(#parcel-glow)"
+                filter={`url(#${glowId})`}
               />
 
               {/* Illustrative interior setback ring (visual reference only) */}

@@ -4,14 +4,14 @@ import { Home, Search, AlertCircle } from "lucide-react";
 
 export default function NotFound() {
   return (
-    <div className="min-h-screen bg-ink text-white flex flex-col items-center justify-center p-6 text-center">
+    <main id="main-content" tabIndex={-1} className="min-h-screen bg-ink text-white flex flex-col items-center justify-center p-6 text-center outline-none">
       <div className="max-w-md w-full space-y-6">
         <div className="w-16 h-16 rounded-2xl bg-catch-wash border border-catch/30 text-catch-ink flex items-center justify-center mx-auto">
           <AlertCircle className="w-8 h-8" />
         </div>
 
         <div className="space-y-2">
-          <p className="text-xs font-mono uppercase tracking-widest text-catch-ink">404 — Not Found</p>
+          <p className="text-xs font-mono uppercase tracking-widest text-catch-wash">404 — Not Found</p>
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
             Listing or Page Unavailable
           </h1>
@@ -38,6 +38,6 @@ export default function NotFound() {
           </Link>
         </div>
       </div>
-    </div>
+    </main>
   );
 }

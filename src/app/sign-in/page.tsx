@@ -2,6 +2,9 @@ import Link from "next/link";
 import { KeyRound } from "lucide-react";
 import { OperatorUnlockForm } from "@/components/workspace/operator-unlock-form";
 import { MemberSignInForm } from "@/components/account/account-panel";
+import { SiteHeader } from "@/components/site/site-header";
+import { SiteFooter } from "@/components/site/site-footer";
+import { WorkspaceSessionProvider } from "@/components/workspace/workspace-shell";
 
 /**
  * Members sign in with an emailed one-time link. The operator section below
@@ -9,7 +12,10 @@ import { MemberSignInForm } from "@/components/account/account-panel";
  */
 export default function SignInPage() {
   return (
-    <main id="main-content" tabIndex={-1} className="mx-auto flex min-h-[70vh] max-w-2xl flex-col justify-center px-6 py-16 outline-none">
+    <WorkspaceSessionProvider>
+      <div className="min-h-screen bg-paper text-ink">
+        <SiteHeader />
+        <main id="main-content" tabIndex={-1} className="mx-auto flex min-h-[70vh] max-w-2xl flex-col justify-center px-6 py-16 outline-none">
       <p className="text-label font-bold uppercase tracking-[0.14em] text-ink-3">Access</p>
       <h1 className="mt-2 text-3xl font-bold tracking-tight text-ink">Sign in</h1>
       <div className="mt-6 rounded-card border border-line bg-card p-6 shadow-sm">
@@ -41,5 +47,8 @@ export default function SignInPage() {
         </Link>
       </div>
     </main>
+        <SiteFooter />
+      </div>
+    </WorkspaceSessionProvider>
   );
 }

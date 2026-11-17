@@ -534,8 +534,10 @@ export function InteractiveTerminal() {
             {/* View switcher segmented control (<=3 choices per Cowan working memory rule) */}
             <div className="inline-flex max-w-full flex-wrap p-1 bg-paper border border-line rounded-control shadow-xs" role="tablist" aria-label="Terminal views">
               <button
+                type="button"
+                role="tab"
+                aria-selected={activeView === "grid"}
                 onClick={() => dispatchFilters({ type: "setView", view: "grid" })}
-                aria-pressed={activeView === "grid"}
                 aria-label={`Deal Grid (${filtered.length} records)`}
                 className={cn(
                   "px-3.5 py-1.5 rounded-control text-xs font-bold transition flex items-center gap-1.5",
@@ -549,8 +551,10 @@ export function InteractiveTerminal() {
               </button>
 
               <button
+                type="button"
+                role="tab"
+                aria-selected={activeView === "map"}
                 onClick={() => dispatchFilters({ type: "setView", view: "map" })}
-                aria-pressed={activeView === "map"}
                 aria-label={`Map (${filtered.length} records)`}
                 className={cn(
                   "px-3.5 py-1.5 rounded-control text-xs font-bold transition flex items-center gap-1.5",
@@ -564,8 +568,10 @@ export function InteractiveTerminal() {
               </button>
 
               <button
+                type="button"
+                role="tab"
+                aria-selected={activeView === "parser"}
                 onClick={() => dispatchFilters({ type: "setView", view: "parser" })}
-                aria-pressed={activeView === "parser"}
                 className={cn(
                   "px-3.5 py-1.5 rounded-control text-xs font-bold transition flex items-center gap-1.5",
                   activeView === "parser"
@@ -778,10 +784,11 @@ export function InteractiveTerminal() {
                 <div className="pt-3 border-t border-line grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 animate-in fade-in duration-150">
                   {/* Min Deal Score */}
                   <div>
-                    <label className="block text-label font-bold uppercase tracking-wider text-ink-3 mb-1">
+                    <label htmlFor="terminal-min-deal-score" className="block text-label font-bold uppercase tracking-wider text-ink-3 mb-1">
                       Min Deal Score
                     </label>
                     <select
+                      id="terminal-min-deal-score"
                       value={minDealScore}
                       onChange={(e) => dispatchFilters({ type: "set", key: "minDealScore", value: Number(e.target.value) })}
                       className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-control border border-line-strong bg-card text-ink-2"
@@ -795,10 +802,11 @@ export function InteractiveTerminal() {
 
                   {/* Minimum modeled bid spread */}
                   <div>
-                    <label className="block text-label font-bold uppercase tracking-wider text-ink-3 mb-1">
+                    <label htmlFor="terminal-min-bid-spread" className="block text-label font-bold uppercase tracking-wider text-ink-3 mb-1">
                       Min Bid Spread
                     </label>
                     <select
+                      id="terminal-min-bid-spread"
                       value={minEquity}
                       onChange={(e) => dispatchFilters({ type: "set", key: "minEquity", value: Number(e.target.value) })}
                       className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-control border border-line-strong bg-card text-ink-2"
@@ -813,10 +821,11 @@ export function InteractiveTerminal() {
 
                   {/* Max Opening Bid */}
                   <div>
-                    <label className="block text-label font-bold uppercase tracking-wider text-ink-3 mb-1">
+                    <label htmlFor="terminal-max-opening-bid" className="block text-label font-bold uppercase tracking-wider text-ink-3 mb-1">
                       Max Opening Bid
                     </label>
                     <select
+                      id="terminal-max-opening-bid"
                       value={maxOpeningBid === null ? "all" : maxOpeningBid}
                       onChange={(e) => dispatchFilters({ type: "set", key: "maxOpeningBid", value: e.target.value === "all" ? null : Number(e.target.value) })}
                       className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-control border border-line-strong bg-card text-ink-2"
@@ -831,10 +840,11 @@ export function InteractiveTerminal() {
 
                   {/* Property Type */}
                   <div>
-                    <label className="block text-label font-bold uppercase tracking-wider text-ink-3 mb-1">
+                    <label htmlFor="terminal-property-type" className="block text-label font-bold uppercase tracking-wider text-ink-3 mb-1">
                       Property Type
                     </label>
                     <select
+                      id="terminal-property-type"
                       value={propertyType}
                       onChange={(e) => dispatchFilters({ type: "set", key: "propertyType", value: e.target.value })}
                       className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-control border border-line-strong bg-card text-ink-2"
@@ -854,10 +864,11 @@ export function InteractiveTerminal() {
 
                   {/* Senior Lien / Title Risk */}
                   <div>
-                    <label className="block text-label font-bold uppercase tracking-wider text-ink-3 mb-1">
+                    <label htmlFor="terminal-senior-lien-risk" className="block text-label font-bold uppercase tracking-wider text-ink-3 mb-1">
                       Senior Title Risk
                     </label>
                     <select
+                      id="terminal-senior-lien-risk"
                       value={seniorLienFilter}
                       onChange={(e) => dispatchFilters({ type: "set", key: "seniorLienFilter", value: e.target.value })}
                       className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-control border border-line-strong bg-card text-ink-2"
@@ -890,10 +901,11 @@ export function InteractiveTerminal() {
                   </div>
                   {/* Statutory Redemption */}
                   <div>
-                    <label className="block text-label font-bold uppercase tracking-wider text-ink-3 mb-1">
+                    <label htmlFor="terminal-redemption-status" className="block text-label font-bold uppercase tracking-wider text-ink-3 mb-1">
                       Redemption Status
                     </label>
                     <select
+                      id="terminal-redemption-status"
                       value={redemptionFilter}
                       onChange={(e) => dispatchFilters({ type: "set", key: "redemptionFilter", value: e.target.value })}
                       className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-control border border-line-strong bg-card text-ink-2"
@@ -1261,7 +1273,7 @@ export function InteractiveTerminal() {
                 </span>
                 <h3 className="text-2xl font-bold text-ink">Need the full institutional triage desk?</h3>
                 <p className="text-xs text-ink-3">
-                  Filter across 16 federal &amp; county sources, calculate statutory cash-to-close carry, and inspect title priority signals across all 50 states.
+                  Filter across {Object.keys(SOURCES).length} federal &amp; county source types, calculate statutory cash-to-close carry, and inspect title priority signals nationwide.
                 </p>
               </div>
               <div className="flex flex-wrap items-center justify-center gap-3 pt-1">

@@ -35,9 +35,9 @@ function captureRes() {
   return res;
 }
 
-test('coverage: GET returns the matrix shape with catalog + catalogByState + liveByState', () => {
+test('coverage: GET returns the matrix shape with catalog + catalogByState + liveByState', async () => {
   const res = captureRes();
-  handleCoverage({ method: 'GET' }, res);
+  await handleCoverage({ method: 'GET' }, res);
   assert.equal(res.statusCode, 200);
   assert.ok(res.payload.catalog, 'catalog aggregate missing');
   assert.ok(res.payload.catalogByState, 'catalogByState missing');
@@ -47,9 +47,9 @@ test('coverage: GET returns the matrix shape with catalog + catalogByState + liv
   assert.ok(res.payload.statusLabels);
 });
 
-test('coverage: non-GET method returns 405', () => {
+test('coverage: non-GET method returns 405', async () => {
   const res = captureRes();
-  handleCoverage({ method: 'POST' }, res);
+  await handleCoverage({ method: 'POST' }, res);
   assert.equal(res.statusCode, 405);
   assert.match(res.payload.error, /Method not allowed/);
 });

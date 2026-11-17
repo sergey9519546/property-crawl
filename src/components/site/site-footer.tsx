@@ -193,7 +193,7 @@ export function SiteFooter() {
 
         {/* Legal row */}
         <div className="mt-16 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
-          <p className="text-meta text-ink-3">
+          <p className="text-meta text-ink-3" suppressHydrationWarning>
             &copy; {new Date().getFullYear()} PerfectProperty. All rights reserved.
           </p>
           <div className="flex items-center gap-5">

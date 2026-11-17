@@ -53,7 +53,7 @@ export function ListingMedia({ listingId, address, photo, gallery = [], lat, lng
   const canShowPhoto = photos.length > 0;
   const publisherGalleryUnavailable = canShowPhoto && photos.every((url) => failedPhotoUrls.has(url));
   const normalizedListingId = typeof listingId === "string" ? listingId.trim() : "";
-  const [mode, setMode] = React.useState<MediaMode>(canShowPhoto ? "photo" : "map");
+  const [mode, setMode] = React.useState<MediaMode>("photo");
   const [streetView, setStreetView] = React.useState<StreetViewState>({ status: "idle" });
   const [mapReady, setMapReady] = React.useState(false);
   const [mapUnavailable, setMapUnavailable] = React.useState(false);
@@ -241,7 +241,7 @@ export function ListingMedia({ listingId, address, photo, gallery = [], lat, lng
   return (
     <div
       data-testid="listing-media"
-      className={`relative overflow-hidden bg-paper sm:h-[460px] ${mode === "streetview" ? "h-[440px]" : "h-[320px]"}`}
+      className="relative h-[340px] overflow-hidden bg-paper sm:h-[460px]"
     >
       {hasAnyMedia ? (
         <div

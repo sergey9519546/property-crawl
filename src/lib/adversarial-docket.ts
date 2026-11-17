@@ -739,8 +739,8 @@ export function evaluateAdversarialDocket(listing: DocketListingInput): Adversar
         ? `${effectiveRedemptionDays}-day redemption period in ${state}: ${redemptionRule.penaltyYieldDescription}. Downside redemption converts into a secured short-term high-yield debt instrument.`
         : effectiveRedemptionDays > 0
           ? `${effectiveRedemptionDays}-day redemption window converts downside redemption into a secured short-term high-yield debt instrument paying statutory interest.`
-          : "Standard short confirmation period enables rapid title vesting without prolonged debtor holding overhang.",
-    status: "verified",
+          : "Standard confirmation period; confirm statutory redemption and objection deadlines at the official notice.",
+    status: Boolean(listing.state && (listing.redemptionDays != null || listing.redemptionWarning)) ? "verified" : "unverified",
   };
 
   // 4. Zero-Fabrication Walk-Away MAO Discipline
@@ -752,8 +752,10 @@ export function evaluateAdversarialDocket(listing: DocketListingInput): Adversar
     statement:
       "Acquisition modeling calculates statutory cash-to-close, transfer taxes, clerk poundage, and rehab contingency. Maximum Allowable Offer establishes a hard ceiling.",
     finding:
-      "Bidding terminal establishes an explicit cash-to-close and MAO ceiling. Certified funds are never tendered beyond mathematically modeled margins.",
-    status: "verified",
+      typeof listing.openingBid === "number" && listing.openingBid > 0
+        ? "Bidding terminal establishes an explicit cash-to-close and MAO ceiling. Certified funds are never tendered beyond mathematically modeled margins."
+        : "No published opening bid on record; MAO ceiling requires explicit buyer price/cost assumptions before bidding.",
+    status: typeof listing.openingBid === "number" && listing.openingBid > 0 ? "verified" : "unverified",
   };
 
   const defensePoints: DocketCheckItem[] = [
@@ -771,6 +773,7 @@ export function evaluateAdversarialDocket(listing: DocketListingInput): Adversar
   const fatalCount = fatalPoints.length;
   const cautionCount = prosecutionPoints.filter((p) => p.status === "caution").length;
   const defenseCount = defensePoints.filter((p) => p.status === "verified").length;
+  const hasCompleteCoreEvidence = isInstitutionalFirstMortgage && hasParcelMatch && typeof listing.openingBid === "number" && listing.openingBid > 0;
 
   let verdict: TrialVerdict = "verified";
   let headline = "DEFENSE VERIFIED — SENIOR POSITION CONFIRMED FOR UNDERWRITING";
@@ -798,6 +801,14 @@ export function evaluateAdversarialDocket(listing: DocketListingInput): Adversar
     if (hasIrsNotice) recommendedReasonCodes.push("title_risk_unresolved");
     if (isOccupied) recommendedReasonCodes.push("property_condition");
     if (hasRedemptionLockup) recommendedReasonCodes.push("timing_or_funds");
+  } else if (!hasCompleteCoreEvidence) {
+    verdict = "conditional";
+    headline = "UNVERIFIED RECORDS — TITLE & SOURCE REVIEW REQUIRED";
+    verdictDescription =
+      "No fatal defect was text-matched, but plaintiff priority, cadastral parcel identity, or opening bid remains unverified in the captured record.";
+    badgeClass = "border-line-strong bg-paper text-ink";
+    recommendedDecision = "inbox";
+    recommendedReasonCodes.push("missing_sale_terms");
   }
 
   const docketSummaryNote = `[Trial Docket Verdict: ${headline}] Fatal defects: ${fatalCount}; Cautions: ${cautionCount}; Defenses verified: ${defenseCount}. ${verdictDescription}`;

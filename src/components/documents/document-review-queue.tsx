@@ -218,15 +218,8 @@ export function DocumentReviewQueue() {
           <h1 className="mt-3 text-3xl font-semibold tracking-tight">Document review queue</h1>
           <p className="mt-4 max-w-3xl text-sm leading-7 text-ink-2">
             Publisher documents from the listing evidence pipeline, plus any
-            decisions you record. Approve, reject, or request more evidence
-            before an item is treated as reviewed. Decisions write through to
-            PostgreSQL <code className="text-xs">document_reviews</code> when{" "}
-            <code className="text-xs">DATABASE_URL</code> is set, otherwise a
-            host-local file under <code className="text-xs">.cache/</code>.
-            File mode survives API restarts but is lost on container recreate
-            unless a volume is attached. Check{" "}
-            <code className="text-xs">GET /api/health</code>{" "}
-            <code className="text-xs">documentReviewStore</code>.
+            decisions recorded by operators. Approve, reject, or request more evidence
+            before an item is treated as reviewed.
           </p>
         </div>
         <button
@@ -441,7 +434,7 @@ export function DocumentReviewQueue() {
         </div>
       )}
 
-        {data && data.reviews.length > 0 && data.byStatus.pending === 0 && (
+        {data && (data.byStatus.approved + data.byStatus.rejected + data.byStatus.needs_more) > 0 && data.byStatus.pending === 0 && (
           <div className="mt-4 flex items-center gap-2 rounded-control border border-go/30 bg-go-wash p-4 text-sm text-ink">
             <Check size={16} className="text-go" />
             All extracted documents have been reviewed.

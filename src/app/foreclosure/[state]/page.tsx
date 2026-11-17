@@ -8,6 +8,6 @@ type Props = {
 
 export default async function ForeclosureStatePage({ params }: Props) {
   const { state } = await params;
-  const cleanState = /^[A-Za-z]{2}$/.test(state || "") ? state.toUpperCase() : state;
+  const cleanState = /^[A-Za-z]{2}$/.test(state || "") ? state.toUpperCase() : encodeURIComponent(String(state || ""));
   permanentRedirect(`/states/${cleanState}`);
 }

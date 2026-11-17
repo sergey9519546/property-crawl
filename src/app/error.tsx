@@ -16,14 +16,14 @@ export default function ErrorPage({
   }, [error]);
 
   return (
-    <div className="min-h-screen bg-ink text-white flex flex-col items-center justify-center p-6 text-center">
+    <main id="main-content" tabIndex={-1} className="min-h-screen bg-ink text-white flex flex-col items-center justify-center p-6 text-center outline-none">
       <div className="max-w-md w-full space-y-6">
         <div className="w-16 h-16 rounded-card bg-catch-wash border border-catch/30 text-catch-ink flex items-center justify-center mx-auto">
           <AlertOctagon className="w-8 h-8" />
         </div>
 
         <div className="space-y-2">
-          <p className="text-xs font-mono uppercase tracking-widest text-catch-ink">Page unavailable</p>
+          <p className="text-xs font-mono uppercase tracking-widest text-catch-wash">Page unavailable</p>
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
             This page couldn’t load
           </h1>
@@ -55,6 +55,6 @@ export default function ErrorPage({
           </Link>
         </div>
       </div>
-    </div>
+    </main>
   );
 }

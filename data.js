@@ -25,7 +25,7 @@ window.SOURCES = {
     "key": "trustee",
     "label": "Trustee's Sale",
     "tier": "B",
-    "color": "#0ea5e9",
+    "color": "#0369a1",
     "note": "Non-judicial foreclosure auction",
     "websiteUrl": "https://www.clarkcountynv.gov"
   },
@@ -57,7 +57,7 @@ window.SOURCES = {
     "key": "usda",
     "label": "USDA RD/FSA REO",
     "tier": "A",
-    "color": "#3b82f6",
+    "color": "#1d4ed8",
     "note": "resales.usda.gov",
     "websiteUrl": "https://www.resales.usda.gov"
   },
@@ -105,7 +105,7 @@ window.SOURCES = {
     "key": "landbank",
     "label": "Land Bank",
     "tier": "B",
-    "color": "#059669",
+    "color": "#047857",
     "note": "landbanksearch.com — 70+ county land bank aggregator",
     "websiteUrl": "https://www.landbanksearch.com"
   },

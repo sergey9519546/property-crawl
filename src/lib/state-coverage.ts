@@ -36,23 +36,17 @@ export function formatCountyRows(raw: unknown): CountyRow[] {
     : [];
 }
 
-function getSummarize(): () => any {
-  if (typeof require !== "undefined") {
+async function summarizeCoverage(): Promise<any> {
+  const getMod = (loader: (p: string) => any, p: string) => loader(p);
+  const reqRoot = createRequire(process.cwd() + "/package.json");
+  const mod = getMod(reqRoot, "./server/discovery/coverage-matrix");
+  if (typeof mod.summarizeWithDatabase === "function") {
     try {
-      return require("@server/discovery/coverage-matrix").summarize;
+      const db = getMod(reqRoot, "./server/db/client");
+      return await mod.summarizeWithDatabase(db);
     } catch {}
   }
-  try {
-    const req = createRequire(import.meta.url);
-    try {
-      return req("@server/discovery/coverage-matrix").summarize;
-    } catch {}
-    try {
-      return req("../../server/discovery/coverage-matrix").summarize;
-    } catch {}
-  } catch {}
-  const reqRoot = createRequire(process.cwd() + "/package.json");
-  return reqRoot("./server/discovery/coverage-matrix").summarize;
+  return mod.summarize();
 }
 
 export async function loadStateCounts(): Promise<{ rows: { state: string; count: number }[]; error: string | null }> {
@@ -79,8 +73,7 @@ export async function loadStateCounts(): Promise<{ rows: { state: string; count:
 
   // Second attempt: directly compute from local coverage matrix engine without any external network dependency
   try {
-    const summarize = getSummarize();
-    const matrix = summarize();
+    const matrix = await summarizeCoverage();
     const totals = matrix.liveByState?.byStateTotal || {};
     const rows = formatStateRows(totals);
     return { rows, error: null };
@@ -115,8 +108,7 @@ export async function loadStateCounties(state: string): Promise<{ total: number;
 
   // Second attempt: directly compute from local coverage matrix engine without any external network dependency
   try {
-    const summarize = getSummarize();
-    const matrix = summarize();
+    const matrix = await summarizeCoverage();
     const totalRaw = matrix.liveByState?.byStateTotal?.[state];
     const total = typeof totalRaw === "number" && Number.isFinite(totalRaw) && totalRaw > 0 ? totalRaw : 0;
     const raw = matrix.liveByState?.byCounty?.[state];

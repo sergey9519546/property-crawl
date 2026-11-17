@@ -131,6 +131,11 @@ export default async function DecisionPacketExportPage({
 
   const scenario = caseDecision?.underwriteScenario || null;
 
+  const positiveNum = (val: unknown): number | undefined => {
+    if (val === null || val === undefined || val === '') return undefined;
+    const n = Number(val);
+    return Number.isFinite(n) && n > 0 ? n : undefined;
+  };
   const operatorInput: {
     disposition?: string;
     operatorNotes?: string;
@@ -153,12 +158,8 @@ export default async function DecisionPacketExportPage({
     maxAllowableOffer: caseDecision?.decision?.maxOffer ?? scenario?.maxAllowableOffer ?? undefined,
     rehabBudget: scenario?.rehabBudget ?? undefined,
     targetMargin: scenario?.targetMargin ?? undefined,
-    customValuation: typeof scenario?.customValuation === 'number' && Number.isFinite(scenario.customValuation) && scenario.customValuation > 0
-      ? scenario.customValuation
-      : undefined,
-    customOpeningBid: typeof scenario?.customOpeningBid === 'number' && Number.isFinite(scenario.customOpeningBid) && scenario.customOpeningBid > 0
-      ? scenario.customOpeningBid
-      : undefined,
+    customValuation: positiveNum(scenario?.customValuation),
+    customOpeningBid: positiveNum(scenario?.customOpeningBid),
     holdingMonths: typeof scenario?.holdingMonths === 'number' && Number.isFinite(scenario.holdingMonths) && scenario.holdingMonths > 0
       ? scenario.holdingMonths
       : undefined,
