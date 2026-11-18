@@ -4,6 +4,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
+const { ensureEdgeMiddlewareManifest } = require('./ensure-edge-middleware-manifest');
 
 const root = path.resolve(__dirname, '..');
 
@@ -40,6 +41,7 @@ function ensureNftManifests(explicitDistDir) {
         fs.writeFileSync(nftPath, nftPayload);
       }
     }
+    ensureEdgeMiddlewareManifest({ distDir });
   }
 }
 

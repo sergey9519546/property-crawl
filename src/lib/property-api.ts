@@ -71,10 +71,19 @@ export async function proxyPropertyApi(request: Request, dependencies: {
   }
   if (request.headers.get("sec-fetch-site") === "cross-site" && !origin) return jsonError(403, "Cross-origin request denied");
   const headers = new Headers({ Accept: "application/json" });
-  for (const name of ["content-type"]) {
+  for (const name of ["content-type", "x-forwarded-for"]) {
     const value = request.headers.get(name);
     if (value) headers.set(name, value);
   }
+  if (!headers.has("x-forwarded-for")) {
+    const realIp = request.headers.get("x-real-ip");
+    if (realIp) headers.set("x-forwarded-for", realIp);
+  }
+  const clientIp =
+    request.headers.get("x-real-ip")?.trim() ||
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    "";
+  if (clientIp) headers.set("x-pp-client-ip", clientIp);
   const watchlistCookie = (request.headers.get("cookie") || "")
     .split(";")
     .map((part) => part.trim())

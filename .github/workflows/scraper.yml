@@ -41,16 +41,26 @@ jobs:
             git push
           fi
 
-      - name: Trigger Production Scraper Run
+      - name: Sync Refreshed Listings to Production Database
         env:
-          PRODUCTION_APP_URL: ${{ secrets.PRODUCTION_APP_URL || 'https://property-crawl.onrender.com' }}
-          SCRAPER_ADMIN_TOKEN: ${{ secrets.SCRAPER_ADMIN_TOKEN }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
-          # Wake up Render free web service so background collection runs
-          curl -sSf "${PRODUCTION_APP_URL}/api/health" > /dev/null 2>&1 || echo "Wakeup ping dispatched"
-          if [ -n "${SCRAPER_ADMIN_TOKEN}" ]; then
-            curl -s -X POST "${PRODUCTION_APP_URL}/api/scrapers/run" \
-              -H "x-scraper-token: ${SCRAPER_ADMIN_TOKEN}" \
-              -H "x-async: true" || echo "Production trigger skipped or timed out"
+          if [ -n "${DATABASE_URL}" ]; then
+            npm run db:import:prune
+          else
+            echo "DATABASE_URL not configured; skipping database import and prune"
           fi
 
+      - name: Trigger Production Scraper Run
+        env:
+          PRODUCTION_APP_URL: ${{ secrets.PRODUCTION_APP_URL || 'https://property-crawl.vercel.app' }}
+          SCRAPER_ADMIN_TOKEN: ${{ secrets.SCRAPER_ADMIN_TOKEN }}
+        run: |
+          # Trigger backend scraper refresh when configured
+          curl -sSf "${PRODUCTION_APP_URL}/api/health" > /dev/null 2>&1 || echo "Wakeup ping dispatched"
+          if [ -n "${SCRAPER_ADMIN_TOKEN}" ]; then
+            curl -s --max-time 55 -X POST "${PRODUCTION_APP_URL}/api/scrapers/run?wave=wave1" \
+              -H "x-scraper-token: ${SCRAPER_ADMIN_TOKEN}" || echo "Production wave1 trigger skipped or timed out"
+            curl -s --max-time 55 -X POST "${PRODUCTION_APP_URL}/api/scrapers/run?wave=wave2" \
+              -H "x-scraper-token: ${SCRAPER_ADMIN_TOKEN}" || echo "Production wave2 trigger skipped or timed out"
+          fi

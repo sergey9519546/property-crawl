@@ -8,7 +8,7 @@
   },
   "scripts": {
     "test:stabilization": "node --test test/tracks123-stabilization.test.js test/county-inventory.test.js test/recorder-qualification-durability.test.js",
-    "build": "next build && node scripts/ensure-nft-manifests.js",
+    "build": "next build && node scripts/ensure-nft-manifests.js && node scripts/ensure-edge-middleware-manifest.js",
     "canary:list": "node scripts/canary-live.js list",
     "canary:live": "node scripts/canary-live.js run",
     "canary:promote": "node scripts/canary-live.js promote",
@@ -91,7 +91,7 @@
     "test:agents": "node --test test/agents.test.js",
     "test:ai": "node test/ai.test.js && node --test test/ai/notice-parser.test.js test/ai/bidding-simulator.test.js test/ai/address-normalizer-helpers.test.js test/ai/cost-tracker-helpers.test.js test/ai/cache-helpers.test.js test/ai/address-normalizer.test.js test/bidding.test.js test/fetch-strategy-ssrf.test.js",
     "test:canary": "node --test test/canary-live.test.js",
-    "test:canonical": "node --test test/canonical-runtime.test.js test/production-boot.test.js test/discovery/query-helpers.test.js test/discovery/discovery-contracts-helpers.test.js test/i18n-completeness.test.js",
+    "test:canonical": "node --test test/canonical-runtime.test.js test/production-boot.test.js test/discovery/query-helpers.test.js test/discovery/discovery-contracts-helpers.test.js test/i18n-completeness.test.js test/ensure-edge-middleware-manifest.test.js test/vercel-handler.test.js test/deploy-vercel-api.test.js",
     "test:ci-coverage": "node scripts/verify-test-coverage.js",
     "test:commands": "node --test test/commands.test.js",
     "test:crawler-doctor": "node --test test/crawler-toolchain-doctor.test.js",

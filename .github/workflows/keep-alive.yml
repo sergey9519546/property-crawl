@@ -1,8 +1,8 @@
 name: Keep-Alive Heartbeat
 
 on:
-  schedule:
-    - cron: '*/10 * * * *' # Every 10 minutes to prevent Render free-tier idle spin-down
+  # Disabled scheduled 24/7 pinging so serverless/free-tier quotas aren't burned
+  # on idle heartbeats; invoke manually if keeping a stateful free container warm.
   workflow_dispatch:
 
 jobs:
@@ -12,6 +12,6 @@ jobs:
     steps:
       - name: Ping Production Healthcheck
         run: |
-          TARGET_URL="${{ secrets.PRODUCTION_APP_URL || 'https://property-crawl.onrender.com' }}/api/health"
-          echo "Pinging $TARGET_URL to maintain container liveness..."
+          TARGET_URL="${{ secrets.PRODUCTION_APP_URL || 'https://property-crawl.vercel.app' }}/api/health"
+          echo "Pinging $TARGET_URL to verify liveness..."
           curl -fsS --max-time 15 "$TARGET_URL" > /dev/null || echo "Health ping dispatched"
