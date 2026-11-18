@@ -4,6 +4,7 @@ import * as React from "react";
 import { AlertTriangle, MapPin } from "lucide-react";
 import type { DiscoveryFilters } from "@/lib/discovery-query";
 import { discoverySearchParams } from "@/lib/discovery-query";
+import { useLocale } from "@/components/i18n/locale-provider";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 type Feature = { geometry?: { type?: string; coordinates?: number[] }; properties?: { id?: string; count?: number; source?: string; status?: string } };
@@ -22,6 +23,7 @@ export function DiscoveryMap({
   compareIds: string[];
   compareFull: boolean;
 }) {
+  const { locale, messages: m } = useLocale();
   const ref = React.useRef<HTMLDivElement>(null);
   const mapRef = React.useRef<any>(null);
   const markerRef = React.useRef<any[]>([]);
@@ -35,7 +37,7 @@ export function DiscoveryMap({
   compareIdsRef.current = compareIds;
   compareFullRef.current = compareFull;
   const [error, setError] = React.useState("");
-  const [notice, setNotice] = React.useState("Loading visible map area…");
+  const [notice, setNotice] = React.useState(m.listingsUi.mapLoading);
   const requestRef = React.useRef<{ id: number; controller: AbortController; signature: string } | null>(null);
   const settledRef = React.useRef("");
   const loadRef = React.useRef<(() => Promise<void>) | null>(null);
@@ -89,19 +91,19 @@ export function DiscoveryMap({
           compareBtn.className = "inline-flex min-h-11 items-center justify-center rounded-lg border border-line-strong bg-card px-3 text-xs font-semibold text-ink";
           compareBtn.setAttribute("aria-pressed", selected ? "true" : "false");
           compareBtn.disabled = blocked;
-          compareBtn.textContent = selected ? "In compare" : blocked ? "Compare is full" : "Compare";
+          compareBtn.textContent = selected ? m.listingsUi.inCompareBtn : blocked ? m.listingsUi.compareFullBtn : m.listingsUi.compareBtn;
           compareBtn.onclick = (click) => {
             click.stopPropagation();
             if (compareBtn.disabled) return;
             onCompareRef.current(listingId);
             const next = compareBtn.getAttribute("aria-pressed") !== "true";
             compareBtn.setAttribute("aria-pressed", next ? "true" : "false");
-            compareBtn.textContent = next ? "In compare" : "Compare";
+            compareBtn.textContent = next ? m.listingsUi.inCompareBtn : m.listingsUi.compareBtn;
           };
           const openBtn = document.createElement("button");
           openBtn.type = "button";
           openBtn.className = "inline-flex min-h-11 items-center justify-center rounded-lg bg-ink px-3 text-xs font-semibold text-white";
-          openBtn.textContent = "Open listing";
+          openBtn.textContent = m.listingsUi.openRecordBtn;
           openBtn.onclick = (click) => {
             click.stopPropagation();
             onOpenRef.current(listingId);
@@ -119,7 +121,7 @@ export function DiscoveryMap({
       if (caught instanceof DOMException && caught.name === "AbortError") return;
       if (requestRef.current?.id !== request.id) return;
       requestRef.current = null;
-      setError(caught instanceof Error ? caught.message : "Map records are unavailable."); setNotice("");
+      setError(locale === "en" && caught instanceof Error ? caught.message : m.listingsUi.mapUnavailable); setNotice("");
     }
   }, [filters]);
   loadRef.current = load;

@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { ArrowRight, CheckCircle2, Clock3, Download, Eye, FileWarning, Inbox, Loader2, RefreshCw, RotateCcw, Sparkles } from "lucide-react";
 import { PrivateWorkspaceGate, useWorkspaceSession } from "@/components/workspace/workspace-shell";
+import { useLocale } from "@/components/i18n/locale-provider";
 import type { ResearchCaseSummary } from "@/lib/workspace-types";
 import { sourceDisplayText } from "@/lib/source-display";
 import { createRequestGate } from "@/lib/latest-request";
@@ -33,6 +34,7 @@ function eventLabel(item: ResearchCaseSummary) {
 }
 
 export function ResearchInbox() {
+  const { messages: m } = useLocale();
   const session = useWorkspaceSession();
   const [state, setState] = React.useState<"inbox" | "pursue" | "pass">("inbox");
   const [data, setData] = React.useState<CaseList | null>(null);
@@ -120,15 +122,15 @@ export function ResearchInbox() {
 
   return <div className="mx-auto max-w-[1380px] px-5 py-10 sm:px-8">
     <div className="flex flex-wrap items-end justify-between gap-5">
-      <div><p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-ink"><Inbox size={17} /> Research inbox</p><h1 className="mt-3 max-w-4xl text-4xl font-semibold leading-tight tracking-tight sm:text-6xl">What changed, and what deserves another look?</h1><p className="mt-4 max-w-3xl text-sm leading-7 text-ink-2">New hunt matches, material source changes, evidence gaps, and passed cases that now meet your reconsideration rules arrive here automatically.</p></div>
-      <button type="button" onClick={() => void refresh()} disabled={loading || !session.authenticated} className="inline-flex items-center gap-2 rounded-control border border-line bg-card px-4 py-2.5 text-sm font-semibold disabled:opacity-50"><RefreshCw size={15} className={loading ? "animate-spin" : ""} />Refresh</button>
+      <div><p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-ink"><Inbox size={17} /> {m.workspacePages.researchEyebrow}</p><h1 className="mt-3 max-w-4xl text-4xl font-semibold leading-tight tracking-tight sm:text-6xl">{m.workspacePages.researchHeading}</h1><p className="mt-4 max-w-3xl text-sm leading-7 text-ink-2">{m.workspacePages.researchSub}</p></div>
+      <button type="button" onClick={() => void refresh()} disabled={loading || !session.authenticated} className="inline-flex items-center gap-2 rounded-control border border-line bg-card px-4 py-2.5 text-sm font-semibold disabled:opacity-50"><RefreshCw size={15} className={loading ? "animate-spin" : ""} />{m.listingsUi.refreshBtn}</button>
     </div>
 
     <div className="mt-8 grid gap-5 lg:grid-cols-[1fr_330px]">
-      <PrivateWorkspaceGate title="Unlock the research inbox">
+      <PrivateWorkspaceGate title={m.workspacePages.researchUnlockTitle}>
         <section>
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-card p-3">
-            <div className="flex gap-1" role="tablist" aria-label="Case status">{tabs.map((tab) => <button key={tab.value} type="button" role="tab" aria-selected={state === tab.value} onClick={() => setState(tab.value)} className={`rounded-control px-4 py-2 text-xs font-semibold ${state === tab.value ? "bg-ink text-white" : "text-ink-3 hover:bg-paper"}`}>{tab.label}</button>)}</div>
+            <div className="flex gap-1" role="tablist" aria-label="Case status">{tabs.map((tab) => <button key={tab.value} type="button" role="tab" aria-selected={state === tab.value} onClick={() => setState(tab.value)} className={`rounded-control px-4 py-2 text-xs font-semibold ${state === tab.value ? "bg-ink text-white" : "text-ink-3 hover:bg-paper"}`}>{tab.value === "inbox" ? m.workspacePages.researchTabInbox : tab.value === "pursue" ? m.workspacePages.researchTabPursuing : m.workspacePages.researchTabPassed}</button>)}</div>
             <p className="text-xs text-ink-3">Auto-checks every 8 seconds{lastUpdated ? ` · Updated ${lastUpdated.toLocaleTimeString()}` : ""}</p>
           </div>
           {error && <p role="alert" className="mt-4 rounded-control bg-catch-wash p-4 text-sm text-catch-ink">{error}</p>}
@@ -136,7 +138,7 @@ export function ResearchInbox() {
             {data?.items.map((item) => <article key={item.id} className={`rounded-card border bg-card p-5 ${item.reconsiderationRequired ? "border-ink ring-2 ring-ink/10" : "border-line"}`}>
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className={`rounded-full px-2.5 py-1 text-label font-bold uppercase tracking-wider ${item.reconsiderationRequired ? "bg-ink text-white" : item.latestOrigin?.type === "evaluation_unknown" ? "bg-catch-wash text-catch-ink" : "bg-paper text-ink-2"}`}>{eventLabel(item)}</span>{item.reconsiderationRequired && <span className="flex items-center gap-1 text-xs font-semibold text-yours"><RotateCcw size={13} />Your decision is unchanged until review</span>}</div><h2 className="mt-3 truncate text-xl font-semibold">{sourceDisplayText(item.address || item.listingId)}</h2><p className="mt-2 text-xs text-ink-3">{sourceDisplayText(item.sourceRef.sourceId)} · Record {sourceDisplayText(item.sourceRef.recordId)} · Revision {item.revision}</p></div>
-                <Link href={`/research/${encodeURIComponent(item.id)}`} className="inline-flex items-center gap-2 rounded-control bg-ink px-4 py-2.5 text-xs font-semibold text-white hover:bg-ink-2">Investigate <ArrowRight size={14} /></Link>
+                <Link href={`/research/${encodeURIComponent(item.id)}`} className="inline-flex items-center gap-2 rounded-control bg-ink px-4 py-2.5 text-xs font-semibold text-white hover:bg-ink-2">{m.workspacePages.researchInvestigate} <ArrowRight size={14} /></Link>
               </div>
               <div className="mt-4 grid gap-3 border-t border-line pt-4 text-xs sm:grid-cols-4">
                 <div><p className="text-ink-3">Published deadline</p><p className="mt-1 flex items-center gap-1 font-semibold"><Clock3 size={13} />{formatDate(item.saleDate)}</p></div>
@@ -153,8 +155,8 @@ export function ResearchInbox() {
         <section className="rounded-card bg-ink p-6 text-white"><Sparkles size={22} className="text-signature" /><h2 className="mt-4 text-xl font-semibold">Second Look</h2><p className="mt-2 text-sm leading-6 text-paper/80">Pass with a reason and a supported return condition. A changed bid, sale date, status, building area, or newly linked evidence can bring the case back without rewriting your decision.</p></section>
         <Link href="/research/alachua" className="flex items-center justify-between rounded-card border border-line bg-paper p-5 text-sm font-semibold text-ink hover:bg-card"><span className="flex items-center gap-2"><FileWarning size={17} />Alachua Second Chance pilot</span><ArrowRight size={15} /></Link>
         <section className="rounded-card border border-line bg-card p-5"><div className="flex items-center gap-2"><Download size={17} /><h2 className="font-semibold">Preserve browser work</h2></div><p className="mt-2 text-xs leading-5 text-ink-2">Preview local watchlist IDs against live publisher records. Demo and unresolved IDs stay rejected for review; originals remain in browser storage.</p><button type="button" disabled={!session.authenticated || importing} onClick={() => void previewBrowserImport()} className="mt-4 w-full rounded-control border border-line px-4 py-2.5 text-xs font-semibold disabled:opacity-50">{importing ? "Checking…" : "Preview durable import"}</button>{preview && <div className="mt-4 rounded-control bg-paper p-4 text-xs leading-5"><p className="font-semibold">{preview.creatable} new · {preview.existing} existing · {preview.rejected.length} need review</p><p className="mt-1 text-ink-3">Only {preview.accepted.length} validated live records can become cases.</p><button type="button" disabled={importing} onClick={() => void commitBrowserImport()} className="mt-3 w-full rounded-control bg-ink px-3 py-2 text-xs font-semibold text-white hover:bg-ink-2">Commit reviewed import</button></div>}{message && <p role="status" className="mt-3 rounded-control bg-catch-wash p-3 text-xs leading-5 text-catch-ink">{message}</p>}</section>
-        <Link href="/hunts" className="flex items-center justify-between rounded-card border border-line bg-card p-5 text-sm font-semibold"><span className="flex items-center gap-2"><Eye size={17} />Create a hunt</span><ArrowRight size={15} /></Link>
-        <Link href="/activity" className="flex items-center justify-between rounded-card border border-line bg-card p-5 text-sm font-semibold"><span className="flex items-center gap-2"><FileWarning size={17} />Inspect collection outcomes</span><ArrowRight size={15} /></Link>
+        <Link href="/hunts" className="flex items-center justify-between rounded-card border border-line bg-card p-5 text-sm font-semibold"><span className="flex items-center gap-2"><Eye size={17} />{m.workspacePages.researchCreateHunt}</span><ArrowRight size={15} /></Link>
+        <Link href="/activity" className="flex items-center justify-between rounded-card border border-line bg-card p-5 text-sm font-semibold"><span className="flex items-center gap-2"><FileWarning size={17} />{m.workspacePages.researchInspectActivity}</span><ArrowRight size={15} /></Link>
       </aside>
     </div>
   </div>;

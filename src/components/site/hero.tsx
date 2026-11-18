@@ -8,6 +8,7 @@ import { ArrowRight, ArrowUp, Building2, Database, Flag, Globe2, House, Map as M
 import { EASE_OUT } from "./motion";
 import { UnicornHeroBg } from "./unicorn-hero-bg";
 import { ErrorBoundary } from "./error-boundary";
+import { useLocale } from "@/components/i18n/locale-provider";
 import {
   buildMarketSuggestions,
   mergeMarketListings,
@@ -24,6 +25,9 @@ const H1_WORDS = ["Find", "the", "deal", "before", "everyone", "else."];
  */
 
 export function Hero() {
+  const { messages, format } = useLocale();
+  const h = messages.home.hero;
+  const h1Words = h.headline.split(/\s+/);
   const [url, setUrl] = React.useState("");
   const [status, setStatus] = React.useState("");
   const [selectedMarket, setSelectedMarket] = React.useState<MarketSuggestion | null>(null);
@@ -72,7 +76,7 @@ export function Hero() {
     mouseY.set(0);
   }, [mouseX, mouseY]);
 
-  const placeholder = "City, county, state, ZIP, or address";
+  const placeholder = h.placeholder;
 
   React.useEffect(() => {
     if (deferredUrl.length < 2 || /^https?:\/\//i.test(deferredUrl)) {
@@ -234,9 +238,9 @@ export function Hero() {
           className="text-display font-semibold tracking-[-0.02em] text-ink sm:text-[48px] sm:leading-[52px]"
           style={{ margin: 0, maxWidth: 620 }}
         >
-          <span className="sr-only">Find the deal before everyone else.</span>
+          <span className="sr-only">{h.headline}</span>
           <span aria-hidden className="flex flex-wrap justify-center gap-x-[0.25em]">
-            {H1_WORDS.map((w, i) => (
+            {h1Words.map((w, i) => (
               <motion.span
                 key={i}
                 className="inline-block"
@@ -256,8 +260,8 @@ export function Hero() {
           transition={{ duration: 0.45, delay: 0.15, ease: EASE_OUT }}
           className="mt-4 max-w-[620px] text-body font-normal leading-[1.5] text-ink/80 sm:mt-[28px] xl:mt-3 xl:max-w-[820px]"
         >
-          Search any market or address. See the best opportunities, the catch,
-          and your next move &mdash; before you bid.
+          {h.subtitle}
+
         </motion.p>
 
         {/* Frosted glass URL input — glass-input token */}
@@ -314,7 +318,7 @@ export function Hero() {
             }}
             type="text"
             role="combobox"
-            aria-label="Market or address"
+            aria-label={h.inputAria}
             aria-autocomplete="list"
             aria-controls="hero-address-suggestions"
             aria-expanded={suggestionsOpen}
@@ -327,7 +331,7 @@ export function Hero() {
           />
           <button
             type="submit"
-            aria-label="Search market"
+            aria-label={h.searchMarketAria}
             className="inline-flex h-[44px] w-[44px] sm:h-[34px] sm:w-[34px] shrink-0 items-center justify-center rounded-full bg-ink text-white transition-colors hover:bg-ink-2"
             style={{
               boxShadow: "0 0 0 1px rgb(24,21,41), 0 4px 8px rgba(24,21,41,0.18)",
@@ -340,7 +344,7 @@ export function Hero() {
             <ul
               id="hero-address-suggestions"
               role="listbox"
-              aria-label="Market and address suggestions"
+              aria-label={h.suggestionsAria}
               className="absolute left-0 right-0 top-[calc(100%+8px)] overflow-hidden rounded-card border border-white/80 bg-white/95 p-1.5 text-left shadow-[0_18px_48px_rgba(15,23,42,0.2)] backdrop-blur-xl"
             >
               {suggestions.map((suggestion, index) => (
@@ -382,10 +386,10 @@ export function Hero() {
                 >
                   <span className="flex items-center gap-2">
                     <Database className="h-4 w-4 text-go" />
-                    Search all listings for &ldquo;{deferredUrl}&rdquo;
+                    {format(h.searchAllPrefix, { query: deferredUrl })}
                   </span>
                   <span className="flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-go">
-                    All listings <ArrowRight className="h-3.5 w-3.5" />
+                    {h.allListings} <ArrowRight className="h-3.5 w-3.5" />
                   </span>
                 </li>
               ) : null}
@@ -415,7 +419,7 @@ export function Hero() {
             className="flex items-center gap-1.5 text-ink hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ink"
           >
             <Undo2 className="h-4 w-4 text-ink" />
-            Try Cleveland, OH
+            {h.tryCleveland}
           </motion.button>
           <span className="hidden text-ink-3 sm:inline" aria-hidden>•</span>
           <Link
@@ -423,7 +427,7 @@ export function Hero() {
             className="flex items-center gap-1.5 font-semibold text-ink underline underline-offset-4 hover:text-ink-2"
           >
             <Database className="h-4 w-4 text-ink-2" />
-            Browse listings
+            {h.browseListings}
             <ArrowRight className="h-3.5 w-3.5 text-ink-2" />
           </Link>
         </div>

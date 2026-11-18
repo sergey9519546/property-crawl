@@ -1,6 +1,6 @@
 import { serializeJsonLd } from "@/lib/json-ld";
 
-export function SeoSchema({ nonce }: { nonce?: string | null }) {
+export function SeoSchema({ nonce, locale = "en" }: { nonce?: string | null; locale?: string }) {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.PUBLIC_APP_ORIGIN || "https://property-crawl.onrender.com";
   const structuredData = {
     "@context": "https://schema.org",
@@ -18,6 +18,7 @@ export function SeoSchema({ nonce }: { nonce?: string | null }) {
         "@id": `${baseUrl}/#website`,
         "url": baseUrl,
         "name": "PerfectProperty",
+        "inLanguage": locale,
         "description": "Find sheriff sales, foreclosures, tax sales and government-sold homes in one place, with the risks spelled out.",
         "publisher": { "@id": `${baseUrl}/#organization` },
         "potentialAction": {

@@ -1,5 +1,9 @@
 "use client";
 
+import { useLocale } from "@/components/i18n/locale-provider";
+import { formatUsd, formatLocaleDate, formatLocaleNumber } from "@/lib/i18n/translator";
+import { localizeRedemption } from "@/lib/i18n/domain";
+
 import { useEffect, useRef, useState } from "react";
 import {
   X,
@@ -70,6 +74,11 @@ function explicitCashScenario(listing: Listing, openingBid: number | null) {
 }
 
 export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: PropertyDrawerProps) {
+  const { locale, messages, format } = useLocale();
+  const t = messages.drawerExtra;
+  const showMoney = (v: number | null | undefined) => locale === "en" ? displayMoney(v) : (v !== null && v !== undefined && Number.isFinite(v) ? formatUsd(locale, v) : t.notPublished);
+  const showDate = (v: string | null | undefined) => locale === "en" ? displayDate(v) : (v ? formatLocaleDate(locale, v) : t.notPublished);
+  const showRedemption = (days: number) => locale === "en" ? redemptionLabel(days) : localizeRedemption(locale, days, redemptionLabel(days));
   const panelRef = useRef<HTMLDivElement | null>(null);
 
   // aria-modal="true" is a promise: the content behind this drawer is inert.
@@ -169,7 +178,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
     label: sourceDisplayText(listing.source),
     color: "#5f5c6e",
     tier: 'Unrated',
-    note: "Source not classified",
+    note: t.sourceUnclassified,
     websiteUrl: "#"
   };
   const exactSourceUrl = getExactSourceListingUrl(listing, source.websiteUrl);
@@ -227,7 +236,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
       setAiSource('backend');
     } catch (error) {
       console.error('Error fetching AI analysis:', error);
-      setAiAnalysis('An error occurred while fetching the analysis.');
+      setAiAnalysis(t.aiFetchError);
       setAiSource('backend');
     } finally {
       setAiLoading(false);
@@ -236,7 +245,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
 
   const handleDownloadLoi = () => {
     if (!listing || openingBid === null) {
-      setAiAnalysis("A source-published opening amount is required before an LOI scenario can be generated.");
+      setAiAnalysis(t.loiNeedBidError);
       return;
     }
     const text = generateLetterOfIntent(listing, { offerPrice: openingBid });
@@ -251,7 +260,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
 
   const handleGenerateAiLoi = async () => {
     if (!listing || openingBid === null) {
-      setAiAnalysis("A source-published opening amount is required before an LOI scenario can be generated.");
+      setAiAnalysis(t.loiNeedBidError);
       return;
     }
     handleDownloadLoi();
@@ -259,7 +268,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
 
   const handleDownloadIcMemo = () => {
     if (!listing || openingBid === null || estHigh === null) {
-      setAiAnalysis("A source-published opening amount and valuation evidence are required before an investment memo can be generated.");
+      setAiAnalysis(t.memoNeedEvidenceError);
       return;
     }
     const memoMetrics = isCommercialOrMulti && sqft !== null ? computeCreMetrics({
@@ -279,7 +288,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
 
   const handleGenerateAiMemo = async () => {
     if (!listing || openingBid === null || estHigh === null) {
-      setAiAnalysis("A source-published opening amount and valuation evidence are required before an investment memo can be generated.");
+      setAiAnalysis(t.memoNeedEvidenceError);
       return;
     }
     handleDownloadIcMemo();
@@ -308,7 +317,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
             >
               {source.label}
             </span>
-            <span className="text-xs font-bold text-ink-3">Tier {source.tier}</span>
+            <span className="text-xs font-bold text-ink-3">{format(t.tierBadge, { tier: source.tier })}</span>
           </div>
 
           <div className="flex items-center gap-2">
@@ -322,13 +331,13 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
               )}
             >
               <Bookmark className={cn("w-4 h-4", isSaved && "fill-current")} />
-              <span>{isSaved ? "Saved" : "Add to Watchlist"}</span>
+              <span>{isSaved ? t.watchlistSaved : t.watchlistAdd}</span>
             </button>
 
             <button
               onClick={onClose}
               className="p-2 rounded-control text-ink-3 hover:text-ink hover:bg-paper transition"
-              aria-label="Close drawer"
+              aria-label={t.closeDrawerAria}
             >
               <X className="w-5 h-5" />
             </button>
@@ -338,7 +347,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
         {/* Tab Navigation */}
         <div
           role="tablist"
-          aria-label="Property inspection tabs"
+          aria-label={t.tabsAria}
           className="bg-paper px-6 py-2 border-b border-line flex items-center gap-2"
           onKeyDown={(event) => {
             const order: Array<"underwrite" | "3d" | "bidding" | "signals"> = ["underwrite", "3d", "bidding", "signals"];
@@ -371,7 +380,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
             )}
           >
             <FileText className="w-3.5 h-3.5" />
-            <span>Underwrite & Legal</span>
+            <span>{t.tabUnderwrite}</span>
           </button>
 
           <button
@@ -389,7 +398,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
             )}
           >
             <Box className="w-3.5 h-3.5 text-ink-3" />
-            <span>3D Lot & Elevation</span>
+            <span>{t.tab3d}</span>
           </button>
 
           <button
@@ -407,7 +416,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
             )}
           >
             <Sparkles className="w-3.5 h-3.5 text-ink" />
-            <span>Bidding Simulator</span>
+            <span>{t.tabBidding}</span>
           </button>
 
           <button
@@ -425,7 +434,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
             )}
           >
             <Activity className="w-3.5 h-3.5 text-ink-3" />
-            <span>Signals</span>
+            <span>{t.tabSignals}</span>
           </button>
         </div>
 
@@ -436,13 +445,13 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
             {photoUrl ? (
               <img src={photoUrl} alt="" className="w-full h-full object-cover" />
             ) : (
-              <div className="flex h-full items-center justify-center text-sm font-semibold text-ink-3">No source photo published</div>
+              <div className="flex h-full items-center justify-center text-sm font-semibold text-ink-3">{t.noSourcePhoto}</div>
             )}
             {dealScore !== null && (
               <div className="absolute top-4 left-4 bg-card/90 backdrop-blur-md px-3 py-1.5 rounded-control border border-card/80 shadow-md">
-                <span className="text-xs text-ink-3 font-semibold uppercase">Modeled score: </span>
+                <span className="text-xs text-ink-3 font-semibold uppercase">{t.modeledScorePrefix}</span>
                 <span className="text-sm font-extrabold text-ink">{dealScore}/99</span>
-                <span className="block text-meta text-ink-3">Bid-to-midpoint triage · see Signals tab</span>
+                <span className="block text-meta text-ink-3">{t.bidToMidpointHint}</span>
               </div>
             )}
           </div>
@@ -454,7 +463,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
             <h2 id="property-drawer-title" className="text-2xl font-bold text-ink">{listing.address}</h2>
             <p className="text-sm text-ink-3 flex items-center gap-1.5 mt-1">
               <MapPin className="w-4 h-4 text-ink-3" />
-              {displayText(listing.city)}, {listing.state} {displayText(listing.zip, "")} · {displayText(listing.county, "County not published")}
+              {displayText(listing.city)}, {listing.state} {displayText(listing.zip, "")} · {displayText(listing.county, t.countyNotPublished)}
             </p>
           </div>
 
@@ -462,30 +471,30 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
           {activeTab === "underwrite" && (
             <div id="panel-underwrite" role="tabpanel" aria-labelledby="tab-underwrite" className="space-y-6">
               <div className="flex items-center gap-2 pt-2 text-label font-mono font-bold tracking-wider text-ink-3">
-                <span>SEC 01 // EXECUTIVE TRIAGE &amp; VALUATION</span>
+                <span>{t.sec01}</span>
               </div>
               {/* Core Valuation Matrix */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 bg-paper rounded-control border border-line">
                 <div>
-                  <p className="text-label font-bold text-ink-3 uppercase">Opening Bid</p>
-                  <p className="text-lg font-extrabold text-ink">{displayMoney(openingBid)}</p>
+                  <p className="text-label font-bold text-ink-3 uppercase">{t.openingBid}</p>
+                  <p className="text-lg font-extrabold text-ink">{showMoney(openingBid)}</p>
                 </div>
                 <div>
-                  <p className="text-label font-bold text-ink-3 uppercase">Est. Low / High</p>
+                  <p className="text-label font-bold text-ink-3 uppercase">{t.estLowHigh}</p>
                   <p className="text-sm font-bold text-ink-2">
-                    {estLow !== null && estHigh !== null ? `${displayMoney(estLow)}–${displayMoney(estHigh)}` : "Not published"}
+                    {estLow !== null && estHigh !== null ? `${showMoney(estLow)}–${showMoney(estHigh)}` : t.notPublished}
                   </p>
                 </div>
                 <div>
-                  <p className="text-label font-bold text-ink-3 uppercase">Bid Spread</p>
-                  <p className="text-lg font-extrabold text-ink">{bidSpread === null ? "Not modeled" : displayMoney(bidSpread)}</p>
-                  <p className="text-meta text-ink-3">Valuation midpoint minus opening amount</p>
+                  <p className="text-label font-bold text-ink-3 uppercase">{t.bidSpread}</p>
+                  <p className="text-lg font-extrabold text-ink">{bidSpread === null ? t.notModeled : showMoney(bidSpread)}</p>
+                  <p className="text-meta text-ink-3">{t.bidSpreadHint}</p>
                 </div>
                 <div>
-                  <p className="text-label font-bold text-ink-3 uppercase">Sale Date</p>
+                  <p className="text-label font-bold text-ink-3 uppercase">{t.saleDate}</p>
                   <p className="text-sm font-bold text-ink flex items-center gap-1">
                     <Calendar className="w-3.5 h-3.5" />
-                    {displayDate(listing.saleDate)}
+                    {showDate(listing.saleDate)}
                   </p>
                 </div>
               </div>
@@ -498,13 +507,13 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
                   <div className="flex items-center gap-2">
                     <Sparkles className="w-4 h-4 text-ink-3 fill-ink-3" />
                     <h3 className="text-sm font-bold text-ink uppercase tracking-wide">
-                      AI Deal Intelligence ("Here's the Catch")
+                      {t.catchHeading}
                     </h3>
                   </div>
                   <div className="flex items-center gap-2">
                     {aiSource && (
                       <span className="text-label font-bold px-2 py-0.5 rounded-full bg-line text-ink-2">
-                        Rule Engine
+                        {t.ruleEngine}
                       </span>
                     )}
                     {!aiAnalysis && !aiLoading ? (
@@ -512,21 +521,21 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
                         onClick={handleRunAi}
                         className="px-3 py-1 bg-ink text-white text-xs font-bold rounded-lg hover:bg-ink-2 transition shadow-sm"
                       >
-                        Analyze Deal
+                        {t.analyzeDealBtn}
                       </button>
                     ) : !aiLoading && (
                       <button
                         onClick={handleRunAi}
                         className="text-label font-semibold text-ink-3 hover:text-ink underline"
                       >
-                        Re-analyze
+                        {t.reanalyzeBtn}
                       </button>
                     )}
                   </div>
                 </div>
 
                 {aiLoading && (
-                  <p className="text-xs text-ink-3 animate-pulse">Reviewing available listing evidence...</p>
+                  <p className="text-xs text-ink-3 animate-pulse">{t.reviewingEvidence}</p>
                 )}
 
                 {aiAnalysis ? (
@@ -536,14 +545,14 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
                 ) : (
                   !aiLoading && (
                     <p className="text-xs text-ink-3">
-                      Analyze the available source record and surface evidence gaps. Official title, lien, docket, and occupancy checks remain separate.
+                      {t.analyzeHelper}
                     </p>
                   )
                 )}
               </div>
 
               <div className="flex items-center gap-2 pt-4 border-t border-line text-label font-mono font-bold tracking-wider text-ink-3">
-                <span>SEC 04 // OFFICIAL DOCKET &amp; EVIDENCE</span>
+                <span>{t.sec04}</span>
               </div>
               {/* Fail-closed official-record evidence check. */}
               <PropertyIntelligence key={listing.id} listingId={listing.id} lat={listing.lat ?? null} lng={listing.lng ?? null} />
@@ -554,14 +563,14 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-bold text-ink uppercase tracking-wide flex items-center gap-1.5">
                     <Box className="w-4 h-4 text-ink" />
-                    <span>Cadastral parcel boundary</span>
+                    <span>{t.cadastralHeading}</span>
                   </h3>
                   <button
                     type="button"
                     onClick={() => setActiveTab("3d")}
                     className="text-xs font-semibold text-ink-3 hover:text-ink underline flex items-center gap-1"
                   >
-                    <span>Full 3D inspection</span>
+                    <span>{t.full3dBtn}</span>
                     <ArrowUpRight className="w-3.5 h-3.5" />
                   </button>
                 </div>
@@ -569,14 +578,14 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
               </div>
 
               <div className="flex items-center gap-2 pt-4 border-t border-line text-label font-mono font-bold tracking-wider text-ink-3">
-                <span>SEC 02 // TITLE RISK &amp; STATUTORY ENCUMBRANCES</span>
+                <span>{t.sec02}</span>
               </div>
               {/* Modeled title-risk signal; not a completed title search. */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-bold text-ink uppercase tracking-wide flex items-center gap-1.5">
                     <Scale className="w-4 h-4 text-ink" />
-                    <span>Modeled title-risk signal</span>
+                    <span>{t.modeledTitleRisk}</span>
                   </h3>
                   <span className={cn(
                     "text-label font-extrabold uppercase px-2.5 py-0.5 rounded-control",
@@ -584,19 +593,19 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
                       ? "bg-catch text-ink"
                       : "bg-catch-wash text-catch-ink"
                   )}>
-                    {listing.seniorLienRisk === "high" ? "Possible senior-lien risk" : "Official review required"}
+                    {listing.seniorLienRisk === "high" ? t.possibleSeniorRisk : t.officialReviewReq}
                   </span>
                 </div>
 
                 <div className="p-4 rounded-control border border-line bg-card space-y-3 text-xs">
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <span className="text-ink-3 block text-label">Normalized source category:</span>
+                      <span className="text-ink-3 block text-label">{t.normalizedSourceCat}</span>
                       <span className="font-bold text-ink">{source.label}</span>
                     </div>
                     <div>
-                      <span className="text-ink-3 block text-label">Lien-priority status:</span>
-                      <span className="font-bold text-catch-ink">Unverified</span>
+                      <span className="text-ink-3 block text-label">{t.lienPriorityStatus}</span>
+                      <span className="font-bold text-catch-ink">{t.unverified}</span>
                     </div>
                   </div>
                   <div className={cn(
@@ -608,8 +617,8 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
                     <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-catch-ink" />
                     <p>
                       {listing.seniorLienRisk === "high"
-                        ? "The normalized notice contains a possible junior-claimant signal. Confirm lien priority and surviving encumbrances from official recorder and court documents."
-                        : "No junior-lien phrase is stored on this record. That is not lien priority or a clear title."}
+                        ? t.juniorSignalPresent
+                        : t.juniorSignalAbsent}
                     </p>
                   </div>
                 </div>
@@ -620,29 +629,29 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-bold flex items-center gap-1.5 text-catch-ink">
                       <Clock className="w-4 h-4 text-catch-ink" />
-                      Modeled redemption review
+                      {t.redemptionModeledHeading}
                     </span>
                     <span className="font-extrabold text-label uppercase px-2 py-0.5 rounded bg-catch/15 text-catch-ink">
                       {derivedRedemption
-                        ? (modeledRedemptionDays !== null ? `${Math.round(modeledRedemptionDays)}-day state table` : "State table unset")
-                        : (redemptionDays !== null ? redemptionLabel(redemptionDays) : "Official terms required")}
+                        ? (modeledRedemptionDays !== null ? format(t.stateTableDays, { days: Math.round(modeledRedemptionDays) }) : t.stateTableUnset)
+                        : (redemptionDays !== null ? showRedemption(redemptionDays) : t.officialTermsRequired)}
                     </span>
                   </div>
                   <p className="leading-relaxed">
                     {derivedRedemption
-                      ? `State-table baseline only${modeledRedemptionDays !== null ? `: ${Math.round(modeledRedemptionDays)} days for ${listing.state || "this state"}` : ""}. Not a term recorded on this sale.`
-                      : (listing.redemptionWarning || (redemptionDays !== null ? `The state-level model suggests a possible ${redemptionLabel(redemptionDays).toLowerCase()} review window for this ${listing.state} sale.` : "The source indicates a redemption review may apply, but no duration was captured."))}
+                      ? format(t.stateTableBaseline, { daysPart: modeledRedemptionDays !== null ? format(t.stateTableDaysPart, { days: Math.round(modeledRedemptionDays), state: listing.state || t.thisStateFallback }) : "" })
+                      : (listing.redemptionWarning || (redemptionDays !== null ? format(t.redemptionModelHint, { label: showRedemption(redemptionDays).toLowerCase(), state: listing.state }) : t.redemptionUndatedHint))}
                   </p>
-                  <p className="leading-relaxed font-semibold">Confirm the applicable period and exceptions in the official court, deed, and auction documents.</p>
+                  <p className="leading-relaxed font-semibold">{t.confirmOfficialPeriods}</p>
                   <div className="grid grid-cols-2 gap-1 pt-1 text-label text-catch-ink border-t border-catch/20">
-                    <div><strong>Feed auction date:</strong> {displayDate(listing.saleDate)}</div>
-                    <div><strong>Jurisdiction:</strong> {listing.state} · {source.label}</div>
+                    <div><strong>{t.feedAuctionDate}</strong> {showDate(listing.saleDate)}</div>
+                    <div><strong>{t.jurisdictionPrefix}</strong> {listing.state} · {source.label}</div>
                   </div>
                 </div>
               )}
 
               <div className="flex items-center gap-2 pt-4 border-t border-line text-label font-mono font-bold tracking-wider text-ink-3">
-                <span>SEC 03 // ACQUISITION CASH-TO-CLOSE &amp; CARRY</span>
+                <span>{t.sec03}</span>
               </div>
               {/* Evidence-backed cash requirement. */}
               {cashToClose ? (
@@ -650,29 +659,29 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm font-bold text-ink uppercase tracking-wide flex items-center gap-1.5">
                       <DollarSign className="w-4 h-4 text-ink" />
-                      <span>Cash requirement evidence</span>
+                      <span>{t.cashReqEvidence}</span>
                     </h3>
-                    <span className="text-xs font-extrabold text-ink">{displayMoney(cashToClose.totalAcquisitionCost)}</span>
+                    <span className="text-xs font-extrabold text-ink">{showMoney(cashToClose.totalAcquisitionCost)}</span>
                   </div>
-                  <p className="text-label leading-relaxed text-ink-3">Every amount below is tagged as published evidence or an explicit scenario assumption. Missing terms remain unresolved.</p>
+                  <p className="text-label leading-relaxed text-ink-3">{t.cashReqHelper}</p>
                   <div className="divide-y divide-line border border-line rounded-card bg-card text-xs">
                     {([
-                      ["Purchase-price scenario", "purchasePrice", cashToClose.purchasePrice],
-                      ["Registration funds (separate)", "registrationFunds", cashToClose.registrationFunds],
-                      ["Deposit credited to purchase", "creditedDeposit", cashToClose.creditedDeposit],
-                      ["Buyer’s premium", "buyersPremium", cashToClose.buyersPremium],
-                      ["Sheriff / trustee fee", "sheriffPoundage", cashToClose.sheriffPoundage],
-                      ["Transfer tax", "transferTax", cashToClose.transferTax],
-                      ["Taxes or surviving debt", "delinquentTaxes", cashToClose.delinquentTaxes],
-                      ["Other settlement costs", "settlementCosts", cashToClose.settlementCosts],
+                      [t.purchasePriceScenario, "purchasePrice", cashToClose.purchasePrice],
+                      [t.regFundsSeparate, "registrationFunds", cashToClose.registrationFunds],
+                      [t.depositCredited, "creditedDeposit", cashToClose.creditedDeposit],
+                      [t.buyersPremiumLabel, "buyersPremium", cashToClose.buyersPremium],
+                      [t.sheriffTrusteeFee, "sheriffPoundage", cashToClose.sheriffPoundage],
+                      [t.transferTax, "transferTax", cashToClose.transferTax],
+                      [t.taxesSurvivingDebt, "delinquentTaxes", cashToClose.delinquentTaxes],
+                      [t.otherSettlementCosts, "settlementCosts", cashToClose.settlementCosts],
                     ] as const).map(([label, field, amount]) => (
                       <div key={field} className="p-3 flex items-center justify-between gap-3">
-                        <span className="text-ink-3">{label}<span className="ml-1 text-meta uppercase">({cashToClose.basis[field] ?? "unresolved"})</span></span>
-                        <span className="font-semibold text-ink-2">{displayMoney(amount)}</span>
+                        <span className="text-ink-3">{label}<span className="ml-1 text-meta uppercase">({cashToClose.basis[field] ?? t.basisUnresolved})</span></span>
+                        <span className="font-semibold text-ink-2">{showMoney(amount)}</span>
                       </div>
                     ))}
-                    <div className="p-3 flex justify-between bg-paper"><span className="font-bold text-ink">Total acquisition cash</span><span className="font-extrabold text-ink">{displayMoney(cashToClose.totalAcquisitionCost)}</span></div>
-                    <div className="p-3 flex justify-between bg-paper"><span className="font-bold text-ink">Cash remaining at settlement</span><span className="font-extrabold text-ink">{displayMoney(cashToClose.cashDueAtSettlement)}</span></div>
+                    <div className="p-3 flex justify-between bg-paper"><span className="font-bold text-ink">{t.totalAcquisitionCash}</span><span className="font-extrabold text-ink">{showMoney(cashToClose.totalAcquisitionCost)}</span></div>
+                    <div className="p-3 flex justify-between bg-paper"><span className="font-bold text-ink">{t.cashRemainingSettlement}</span><span className="font-extrabold text-ink">{showMoney(cashToClose.cashDueAtSettlement)}</span></div>
                   </div>
                 </div>
               ) : (
@@ -681,8 +690,8 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
                   onClick={() => setActiveTab("bidding")}
                   className="w-full text-left rounded-control border border-dashed border-line-strong bg-paper p-4 text-xs text-ink-3 hover:border-ink transition"
                 >
-                  Cash requirements are unresolved. No fee is inferred from the source name or state.{" "}
-                  <span className="font-bold text-ink underline">Switch to Bidding Simulator &amp; Reverse Scenario &rarr;</span>
+                  {t.cashUnresolvedPrompt}{" "}
+                  <span className="font-bold text-ink underline">{t.switchToSimulator}</span>
                 </button>
               )}
 
@@ -692,32 +701,32 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1.5">
                       <Scale className="w-4 h-4 text-ink-2" />
-                      <h3 className="text-sm font-bold text-ink uppercase tracking-wide">CRE / Multi-Family Underwriting</h3>
+                      <h3 className="text-sm font-bold text-ink uppercase tracking-wide">{t.creHeading}</h3>
                     </div>
                     <span className="text-xs font-extrabold text-ink-2">
-                      Cap Rate: {creMetrics.capitalizationRate}%
+                      {format(t.capRateLabel, { rate: creMetrics.capitalizationRate })}
                     </span>
                   </div>
                   <div className="grid grid-cols-3 gap-2 text-center text-xs">
                     <div className="p-2.5 rounded-control bg-card border border-line">
-                      <p className="text-ink-3 text-label uppercase font-bold">Net Operating Income</p>
-                      <p className="font-extrabold text-sm text-ink">${creMetrics.netOperatingIncome.toLocaleString()}/yr</p>
+                      <p className="text-ink-3 text-label uppercase font-bold">{t.noiLabel}</p>
+                      <p className="font-extrabold text-sm text-ink">{format(t.perYearSuffix, { amount: formatUsd(locale, creMetrics.netOperatingIncome) })}</p>
                     </div>
                     <div className="p-2.5 rounded-control bg-card border border-line">
-                      <p className="text-ink-3 text-label uppercase font-bold">Estimated DSCR</p>
+                      <p className="text-ink-3 text-label uppercase font-bold">{t.estDscrLabel}</p>
                       <p className="font-extrabold text-sm text-ink-2">{creMetrics.estimatedDscr}x</p>
                     </div>
                     <div className="p-2.5 rounded-control bg-card border border-line">
-                      <p className="text-ink-3 text-label uppercase font-bold">Target Yield MAO</p>
-                      <p className="font-extrabold text-sm text-ink">${creMetrics.maxAllowableOffer.toLocaleString()}</p>
+                      <p className="text-ink-3 text-label uppercase font-bold">{t.targetYieldMaoLabel}</p>
+                      <p className="font-extrabold text-sm text-ink">{formatUsd(locale, creMetrics.maxAllowableOffer)}</p>
                     </div>
                   </div>
                 </div>
               )}
 
               <button type="button" onClick={() => setActiveTab("bidding")} className="w-full rounded-control border border-ink/15 bg-paper p-4 text-left transition hover:border-ink">
-                <span className="flex items-center gap-1.5 text-sm font-bold uppercase tracking-wide text-ink"><Calculator className="h-4 w-4" />Price and cost reverse scenario</span>
-                <span className="mt-1 block text-xs leading-relaxed text-ink-3">Enter the costs you can support, then see the maximum price or cost reduction that meets your target. Unknown fees and debt stay unresolved.</span>
+                <span className="flex items-center gap-1.5 text-sm font-bold uppercase tracking-wide text-ink"><Calculator className="h-4 w-4" />{t.reverseScenarioTitle}</span>
+                <span className="mt-1 block text-xs leading-relaxed text-ink-3">{t.reverseScenarioSub}</span>
               </button>
 
               {/* Comparable-sale evidence */}
@@ -725,31 +734,31 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-bold text-ink uppercase tracking-wide flex items-center gap-1.5">
                     <Home className="w-4 h-4 text-ink" />
-                    <span>Comparable-sale evidence</span>
+                    <span>{t.compEvidenceTitle}</span>
                   </h3>
                   <span className="text-xs text-ink-3">{displayText(listing.city)}, {listing.state}</span>
                 </div>
                 {compsLoading ? (
                   <div className="rounded-control border border-line bg-paper p-4 text-xs text-ink-3">
-                    Scanning active proximity &amp; square-footage comparables within 16 km...
+                    {t.compsScanning}
                   </div>
                 ) : compsData && compsData.comps.length > 0 ? (
                   <div className="space-y-2.5">
                     <div className="grid grid-cols-3 gap-2 rounded-control border border-line bg-paper p-3 text-center text-xs">
                       <div>
-                        <p className="text-label font-bold uppercase text-ink-3">Active Comps</p>
+                        <p className="text-label font-bold uppercase text-ink-3">{t.activeComps}</p>
                         <p className="mt-0.5 font-extrabold text-ink">{compsData.stats.count}</p>
                       </div>
                       <div>
-                        <p className="text-label font-bold uppercase text-ink-3">Median Opening</p>
+                        <p className="text-label font-bold uppercase text-ink-3">{t.medianOpening}</p>
                         <p className="mt-0.5 font-extrabold text-ink">
                           {compsData.stats.medianOpeningBid !== null
-                            ? displayMoney(compsData.stats.medianOpeningBid)
-                            : "Unpublished"}
+                            ? showMoney(compsData.stats.medianOpeningBid)
+                            : t.unpublished}
                         </p>
                       </div>
                       <div>
-                        <p className="text-label font-bold uppercase text-ink-3">Median Score</p>
+                        <p className="text-label font-bold uppercase text-ink-3">{t.medianScore}</p>
                         <p className="mt-0.5 font-extrabold text-ink">
                           {compsData.stats.medianDealScore !== null ? compsData.stats.medianDealScore : "—"}
                         </p>
@@ -772,17 +781,17 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
                               </a>
                               <p className="mt-0.5 text-label text-ink-3">
                                 {displayText(row.city, listing.city || undefined)}, {row.state || listing.state}
-                                {compSqft !== null ? ` · ${compSqft.toLocaleString()} sqft` : ""}
-                                {typeof item.distanceKm === "number" ? ` · ${item.distanceKm.toFixed(1)} km` : ""}
+                                {compSqft !== null ? ` · ${formatLocaleNumber(locale, compSqft)} ${t.sqftUnit}` : ""}
+                                {typeof item.distanceKm === "number" ? ` · ${item.distanceKm.toFixed(1)} ${t.kmUnit}` : ""}
                               </p>
                             </div>
                             <div className="shrink-0 text-right">
                               <p className="font-bold text-ink">
-                                {compBid !== null ? displayMoney(compBid) : "Bid unpublished"}
+                                {compBid !== null ? showMoney(compBid) : t.bidUnpublished}
                               </p>
                               {typeof item.score === "number" && (
                                 <p className="text-label font-semibold text-ink-3">
-                                  Match {Math.round(item.score * 100)}%
+                                  {format(t.compMatchPct, { pct: Math.round(item.score * 100) })}
                                 </p>
                               )}
                             </div>
@@ -793,29 +802,29 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
                   </div>
                 ) : (
                   <div className="rounded-control border border-dashed border-line-strong bg-card p-4 text-xs leading-relaxed text-ink-3">
-                    No verified comparable-sale records were captured within {compsData?.radiusKm ?? 16} km of this source record. The valuation band above is shown only when supplied by the ingestion pipeline; it is not a substitute for dated, address-level comps.
+                    {format(t.compsEmpty, { km: compsData?.radiusKm ?? 16 })}
                   </div>
                 )}
               </div>
 
               {/* Court & Legal Specifics */}
               <div className="space-y-3">
-                <h3 className="text-sm font-bold text-ink uppercase tracking-wide">Legal Docket & Deposit Terms</h3>
+                <h3 className="text-sm font-bold text-ink uppercase tracking-wide">{t.docketDepositTitle}</h3>
                 <div className="divide-y divide-line border border-line rounded-card bg-card text-xs">
                   <div className="p-3.5 flex justify-between">
-                    <span className="text-ink-3 font-semibold">Plaintiff</span>
+                    <span className="text-ink-3 font-semibold">{t.plaintiff}</span>
                     <span className="font-medium text-ink">{displayText(listing.plaintiff)}</span>
                   </div>
                   <div className="p-3.5 flex justify-between">
-                    <span className="text-ink-3 font-semibold">Defendant</span>
+                    <span className="text-ink-3 font-semibold">{t.defendant}</span>
                     <span className="font-medium text-ink">{displayText(listing.defendant)}</span>
                   </div>
                   <div className="p-3.5 flex justify-between">
-                    <span className="text-ink-3 font-semibold">Attorney of Record</span>
+                    <span className="text-ink-3 font-semibold">{t.attorneyRecord}</span>
                     <span className="font-medium text-ink">{displayText(listing.attorney)}</span>
                   </div>
                   <div className="p-3.5 flex justify-between">
-                    <span className="text-ink-3 font-semibold">Deposit Terms</span>
+                    <span className="text-ink-3 font-semibold">{t.depositTerms}</span>
                     <span className="font-medium text-ink">{displayText(listing.deposit)}</span>
                   </div>
                 </div>
@@ -823,7 +832,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
 
               {/* Institutional Deal Execution Artifacts */}
               <div className="space-y-3">
-                <h3 className="text-sm font-bold text-ink uppercase tracking-wide">Institutional Execution Documents</h3>
+                <h3 className="text-sm font-bold text-ink uppercase tracking-wide">{t.execDocsTitle}</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   <button
                     onClick={handleDownloadLoi}
@@ -831,7 +840,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
                     className="flex items-center justify-center gap-2 h-10 px-3 rounded-control border border-ink bg-ink text-white text-xs font-bold hover:bg-ink-2 transition shadow-sm disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     <Download className="w-3.5 h-3.5" />
-                    <span>Download LOI (.txt)</span>
+                    <span>{t.downloadLoi}</span>
                   </button>
 
                   <button
@@ -840,11 +849,11 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
                     className="flex items-center justify-center gap-2 h-10 px-3 rounded-control border border-line bg-card text-ink text-xs font-bold hover:bg-paper transition shadow-sm disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     <FileText className="w-3.5 h-3.5" />
-                    <span>Export IC Memo (.md)</span>
+                    <span>{t.exportIcMemo}</span>
                   </button>
                 </div>
                 {(openingBid === null || estHigh === null) && (
-                  <p className="text-label leading-relaxed text-ink-3">Documents remain disabled until the source record includes the financial evidence each template requires.</p>
+                  <p className="text-label leading-relaxed text-ink-3">{t.execDocsDisabledNote}</p>
                 )}
               </div>
             </div>
@@ -855,8 +864,8 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
             <div id="panel-3d" role="tabpanel" aria-labelledby="tab-3d" className="space-y-4 animate-in fade-in">
               <Parcel3DVisualizer listing={listing} />
               <div className="p-4 bg-paper rounded-control border border-line text-xs text-ink-3 space-y-1.5">
-                <span className="font-bold text-ink block">Concept visualization only</span>
-                <p>This view is not a boundary survey, elevation certificate, zoning determination, or FEMA flood finding. Attach official parcel geometry and hazard records before relying on dimensions or setbacks.</p>
+                <span className="font-bold text-ink block">{t.conceptVizOnly}</span>
+                <p>{t.conceptVizBody}</p>
               </div>
             </div>
           )}
@@ -885,7 +894,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
                 data-testid="exact-source-listing-link"
                 className="w-full inline-flex h-11 items-center justify-center rounded-control bg-card border border-line text-sm font-bold text-ink hover:bg-paper transition gap-2 shadow-sm"
               >
-                <span>Open exact {source.label} listing</span>
+                <span>{format(t.openExactListing, { source: source.label })}</span>
                 <ExternalLink className="w-4 h-4" />
               </a>
             </div>

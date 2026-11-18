@@ -13,6 +13,11 @@ import type {
   Marker as MapLibreMarker,
 } from "maplibre-gl";
 import { sourceDisplayText } from "@/lib/source-display";
+import { useLocale } from "@/components/i18n/locale-provider";
+import { localizeDisplayDate, localizePropType } from "@/lib/i18n/domain";
+import { formatUsd, interpolate } from "@/lib/i18n/translator";
+import type { Locale } from "@/lib/i18n/config";
+import type { Messages } from "@/lib/i18n/messages";
 
 type Opportunity = {
   id: string;
@@ -49,6 +54,12 @@ type ListingRow = {
 };
 
 type ScanState = "idle" | "playing" | "complete";
+type WindowKind =
+  | { kind: "cleveland" }
+  | { kind: "national" }
+  | { kind: "state"; state: string }
+  | { kind: "market" };
+type FeedStatus = "loading" | "ready" | "empty" | "error";
 
 const CLEVELAND_CENTER: [number, number] = [-81.6944, 41.4993];
 const PIN_COLORS = ["#0F172A", "#1D4ED8", "#0F766E", "#7C3AED", "#B45309"];
@@ -58,10 +69,10 @@ function finite(value: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-function moneyOrDash(value: unknown): string {
+function moneyOrDash(value: unknown, locale: Locale): string {
   const n = finite(value);
   if (n === null || n <= 0) return "—";
-  return `$${Math.round(n).toLocaleString()}`;
+  return locale === "en" ? `$${Math.round(n).toLocaleString()}` : formatUsd(locale, n);
 }
 
 function isClevelandCoord(lat: number, lng: number): boolean {
@@ -72,7 +83,13 @@ function isUsCoord(lat: number, lng: number): boolean {
   return lat >= 15 && lat <= 72 && lng >= -180 && lng <= -64;
 }
 
-function listingToOpportunity(row: ListingRow, index: number): Opportunity | null {
+function listingToOpportunity(
+  row: ListingRow,
+  index: number,
+  t: Messages["mapsUi"],
+  messages: Messages,
+  locale: Locale,
+): Opportunity | null {
   const lat = finite(row.lat);
   const lng = finite(row.lng);
   if (lat === null || lng === null || !row.id) return null;
@@ -88,21 +105,25 @@ function listingToOpportunity(row: ListingRow, index: number): Opportunity | nul
     .filter((part): part is string => Boolean(part))
     .join(", ");
   const datePart = row.saleDate ? String(row.saleDate).slice(0, 10) : "";
-  const signal = datePart
-    ? `Scheduled ${datePart}`
-    : row.propType?.trim() || "Published record";
+  const formattedDate = datePart
+    ? (locale === "en" ? datePart : localizeDisplayDate(datePart, locale, datePart))
+    : "";
+  const signal = formattedDate
+    ? interpolate(t.ddmScheduledSignal, { date: formattedDate })
+    : (row.propType?.trim() ? localizePropType(row.propType, messages, locale) : null) ||
+      t.ddmPublishedRecord;
   return {
     id: String(row.id),
-    address: row.address?.trim() || "Address not published",
-    area: area || "United States",
-    source: row.source?.trim() || "Listing",
+    address: row.address?.trim() || t.ddmAddressNotPublished,
+    area: area || t.ddmUsArea,
+    source: row.source?.trim() || t.ddmListingFallback,
     sourceKey: "listing",
     signal,
-    insight: "Geocoded record with published source terms. Verify status and title on the publisher docket.",
+    insight: t.ddmInsight,
     score: score !== null && score > 0 ? score : 0,
-    opening: moneyOrDash(opening),
-    arv: mid !== null ? moneyOrDash(mid) : "—",
-    spread: spread !== null ? moneyOrDash(spread) : "—",
+    opening: moneyOrDash(opening, locale),
+    arv: mid !== null ? moneyOrDash(mid, locale) : "—",
+    spread: spread !== null ? moneyOrDash(spread, locale) : "—",
     color: PIN_COLORS[index % PIN_COLORS.length],
     lng,
     lat,
@@ -147,6 +168,9 @@ type MarkerEntry = {
 };
 
 export function DealDiscoveryMap() {
+  const { locale, messages } = useLocale();
+  const t = messages.mapsUi;
+
   const mapContainerRef = React.useRef<HTMLDivElement>(null);
   const atlasRef = React.useRef<HTMLDivElement>(null);
   const mapRef = React.useRef<MapLibreMap | null>(null);
@@ -158,9 +182,9 @@ export function DealDiscoveryMap() {
   const hasPlayedRef = React.useRef(false);
 
   const [activeIndex, setActiveIndex] = React.useState(0);
-  const [deals, setDeals] = React.useState<Opportunity[]>([]);
-  const [windowLabel, setWindowLabel] = React.useState("Cleveland window");
-  const [inventoryNote, setInventoryNote] = React.useState("Reading published listings.");
+  const [rawRows, setRawRows] = React.useState<ListingRow[]>([]);
+  const [windowKind, setWindowKind] = React.useState<WindowKind>({ kind: "cleveland" });
+  const [feedStatus, setFeedStatus] = React.useState<FeedStatus>("loading");
   const [announcement, setAnnouncement] = React.useState("");
   const [mapReady, setMapReady] = React.useState(false);
   const [mapUnavailable, setMapUnavailable] = React.useState(false);
@@ -170,6 +194,28 @@ export function DealDiscoveryMap() {
   const [scanRun, setScanRun] = React.useState(0);
   const shouldReduceMotion = usePrefersReducedMotion();
   const reduceMotionRef = React.useRef(shouldReduceMotion);
+
+  const deals = React.useMemo(
+    () =>
+      rawRows
+        .map((row, index) => listingToOpportunity(row, index, t, messages, locale))
+        .filter((row): row is Opportunity => row !== null)
+        .slice(0, 8),
+    [rawRows, t, messages, locale],
+  );
+  const windowLabel = React.useMemo(() => {
+    if (windowKind.kind === "cleveland") return t.ddmClevelandWin;
+    if (windowKind.kind === "national") return t.ddmNationalWin;
+    if (windowKind.kind === "state") return interpolate(t.ddmStateWin, { state: windowKind.state });
+    return t.ddmMarketWin;
+  }, [windowKind, t]);
+  const inventoryNote = React.useMemo(() => {
+    if (feedStatus === "loading") return t.ddmReadingNote;
+    if (feedStatus === "empty") return t.ddmEmptyCoordsNote;
+    if (feedStatus === "error") return t.ddmFeedFailedNote;
+    return "";
+  }, [feedStatus, t]);
+
   const activeDeal = deals[activeIndex] ?? null;
   const isClevelandWindow = deals.length === 0 || deals.every((deal) => isClevelandCoord(deal.lat, deal.lng));
 
@@ -190,21 +236,19 @@ export function DealDiscoveryMap() {
         if (!response.ok) throw new Error(String(response.status));
         const data = (await response.json()) as { listings?: ListingRow[] };
         if (cancelled) return;
-        const clevelandDeals = (data.listings ?? [])
+        const clevelandRows = (data.listings ?? [])
           .filter((row) => {
             const lat = finite(row.lat);
             const lng = finite(row.lng);
-            return lat !== null && lng !== null && isClevelandCoord(lat, lng);
+            return lat !== null && lng !== null && isClevelandCoord(lat, lng) && Boolean(row.id);
           })
-          .map((row, index) => listingToOpportunity(row, index))
-          .filter((row): row is Opportunity => row !== null)
           .slice(0, 8);
 
-        if (clevelandDeals.length > 0) {
-          setDeals(clevelandDeals);
-          setWindowLabel("Cleveland window");
+        if (clevelandRows.length > 0) {
+          setRawRows(clevelandRows);
+          setWindowKind({ kind: "cleveland" });
           setActiveIndex(0);
-          setInventoryNote("");
+          setFeedStatus("ready");
           return;
         }
 
@@ -212,30 +256,33 @@ export function DealDiscoveryMap() {
         if (!fallbackRes.ok) throw new Error(String(fallbackRes.status));
         const fallbackData = (await fallbackRes.json()) as { listings?: ListingRow[] };
         if (cancelled) return;
-        const rawRows = fallbackData.listings ?? [];
-        const nationalDeals = rawRows
-          .map((row, index) => listingToOpportunity(row, index))
-          .filter((row): row is Opportunity => row !== null)
+        const rawFallback = fallbackData.listings ?? [];
+        const nationalRows = rawFallback
+          .filter((row) => {
+            const lat = finite(row.lat);
+            const lng = finite(row.lng);
+            return lat !== null && lng !== null && isUsCoord(lat, lng) && Boolean(row.id);
+          })
           .slice(0, 8);
         const states = new Set(
-          rawRows
+          rawFallback
             .map((row) => (typeof row.state === "string" ? row.state.trim().toUpperCase() : ""))
             .filter(Boolean),
         );
-        setDeals(nationalDeals);
-        setWindowLabel(
-          nationalDeals.length > 0
+        setRawRows(nationalRows);
+        setWindowKind(
+          nationalRows.length > 0
             ? states.size === 1
-              ? `${[...states][0]} market window`
-              : "National market window"
-            : "Market window",
+              ? { kind: "state", state: [...states][0] }
+              : { kind: "national" }
+            : { kind: "market" },
         );
         setActiveIndex(0);
-        setInventoryNote(nationalDeals.length ? "" : "No published listing with coordinates in this window.");
+        setFeedStatus(nationalRows.length ? "ready" : "empty");
       } catch {
         if (cancelled) return;
-        setDeals([]);
-        setInventoryNote("The listing feed did not return this window.");
+        setRawRows([]);
+        setFeedStatus("error");
       }
     };
 
@@ -311,7 +358,7 @@ export function DealDiscoveryMap() {
         element.dataset.discovering = "false";
       });
       if (announce) {
-        setAnnouncement(`${deal.address} selected. ${deal.signal}.`);
+        setAnnouncement(`${deal.address} · ${deal.signal}`);
       }
 
       const map = mapRef.current;
@@ -435,7 +482,7 @@ export function DealDiscoveryMap() {
           element.dataset.discovering = "false";
           element.setAttribute(
             "aria-label",
-            `Show ${deal.address} opportunity`,
+            interpolate(t.ddmShowOppAria, { address: deal.address }),
           );
           element.setAttribute("aria-controls", "storyteller-map-preview");
           element.setAttribute("aria-pressed", index === 0 ? "true" : "false");
@@ -589,15 +636,15 @@ export function DealDiscoveryMap() {
       mapRef.current?.remove();
       mapRef.current = null;
     };
-  }, [deals]);
+  }, [deals, t]);
 
   const shown = activeDeal ?? {
     id: "",
     address: inventoryNote,
     area: windowLabel,
-    source: "Listings",
+    source: t.ddmListingFallback,
     sourceKey: "listing" as const,
-    signal: "No pin",
+    signal: t.ddmNoPin,
     insight: inventoryNote,
     score: 0,
     opening: "—",
@@ -621,7 +668,7 @@ export function DealDiscoveryMap() {
       data-scanning={scanState === "playing" ? "true" : "false"}
       data-scan-state={scanState}
       role="region"
-      aria-label={`Interactive ${windowLabel.toLowerCase()} opportunity map`}
+      aria-label={interpolate(t.ddmRegionAria, { window: windowLabel.toLowerCase() })}
       className="opportunity-atlas relative w-full overflow-hidden rounded-[18px] border border-[#D9E2EC] bg-[#EAF1F6]"
     >
       <div className="opportunity-atlas__map relative h-[390px] overflow-hidden sm:h-[480px] lg:h-[620px]">
@@ -651,7 +698,7 @@ export function DealDiscoveryMap() {
         <div
           ref={mapContainerRef}
           data-testid="maplibre-map"
-          aria-label="Interactive street map"
+          aria-label={t.ddmStreetMapAria}
           className="opportunity-atlas__canvas absolute inset-0 z-[1]"
         />
 
@@ -660,7 +707,7 @@ export function DealDiscoveryMap() {
             role="status"
             className="absolute left-3 top-[72px] z-20 rounded-xl border border-white/80 bg-white/90 px-3 py-2 text-xs font-semibold text-[#475569] shadow-sm backdrop-blur sm:left-5"
           >
-            Map tiles are unavailable. Opportunity coordinates and ranked list remain active.
+            {t.ddmTilesDownBanner}
           </div>
         ) : null}
 
@@ -674,7 +721,7 @@ export function DealDiscoveryMap() {
                   key={deal.id}
                   type="button"
                   onClick={() => selectDeal(index, true)}
-                  aria-label={`Show ${deal.address} opportunity`}
+                  aria-label={interpolate(t.ddmShowOppAria, { address: deal.address })}
                   aria-pressed={active ? "true" : "false"}
                   aria-controls="storyteller-map-preview"
                   className="opportunity-map-marker opportunity-map-marker--fallback absolute"
@@ -716,10 +763,10 @@ export function DealDiscoveryMap() {
             </span>
             <div className="min-w-0">
               <p className="truncate text-xs font-extrabold uppercase tracking-[0.12em] text-slate-900">
-                Map preview
+                {t.ddmMapPreviewTag}
               </p>
               <p className="truncate text-xs font-semibold text-[#111827]">
-                {deals.length ? `${deals.length} published in ${windowLabel.toLowerCase()}` : windowLabel}
+                {deals.length ? interpolate(t.ddmPublishedInWin, { count: deals.length, window: windowLabel.toLowerCase() }) : windowLabel}
               </p>
             </div>
           </div>
@@ -729,8 +776,8 @@ export function DealDiscoveryMap() {
             disabled={shouldReduceMotion}
             aria-label={
               shouldReduceMotion
-                ? "Market discovery animation disabled by reduced motion preference"
-                : "Replay market discovery"
+                ? t.ddmMotionDisabledAria
+                : t.ddmReplayAria
             }
             className="opportunity-replay inline-flex h-11 shrink-0 items-center gap-2 rounded-xl border border-white/85 bg-white/92 px-3 text-xs font-bold text-[#111827] shadow-[0_8px_26px_rgba(15,23,42,0.1)] backdrop-blur-md disabled:cursor-default disabled:opacity-70"
           >
@@ -740,13 +787,13 @@ export function DealDiscoveryMap() {
               <Radar className="h-3.5 w-3.5" aria-hidden />
             )}
             <span className="hidden sm:inline">
-              {shouldReduceMotion ? "Motion reduced" : "Replay discovery"}
+              {shouldReduceMotion ? t.ddmMotionReduced : t.ddmReplayBtn}
             </span>
           </button>
         </div>
 
         <div className="absolute bottom-3 left-3 z-20 hidden items-center gap-2 rounded-lg border border-white/80 bg-white/86 px-2.5 py-2 text-xs font-semibold text-[#475569] shadow-sm backdrop-blur md:flex lg:bottom-5 lg:left-5">
-          Pin = published listing
+          {t.ddmLegendPin}
         </div>
       </div>
 
@@ -754,7 +801,7 @@ export function DealDiscoveryMap() {
         id="storyteller-map-preview"
         data-testid="storyteller-map-preview"
         data-opportunity-detail="true"
-        aria-label={`Selected opportunity: ${shown.address}`}
+        aria-label={interpolate(t.ddmSelectedOppAria, { address: shown.address })}
         className="opportunity-inspector relative z-40 border-t border-[#E2E8F0] bg-white p-4 sm:p-5 lg:absolute lg:bottom-4 lg:right-4 lg:top-4 lg:w-[352px] lg:overflow-y-auto lg:rounded-2xl lg:border lg:border-white/90 lg:bg-white/94 lg:shadow-[0_22px_70px_rgba(15,23,42,0.18)] lg:backdrop-blur-xl"
       >
         <div className="flex items-start justify-between gap-4">
@@ -779,25 +826,25 @@ export function DealDiscoveryMap() {
         </p>
 
         <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-          <OpportunityStat label="Opening" value={shown.opening} />
-          <OpportunityStat label="Value band" value={shown.arv} />
-          <OpportunityStat label="Spread" value={shown.spread} green />
+          <OpportunityStat label={t.ddmStatOpening} value={shown.opening} />
+          <OpportunityStat label={t.ddmStatValueBand} value={shown.arv} />
+          <OpportunityStat label={t.ddmStatSpread} value={shown.spread} green />
         </div>
 
         <a
           href={shown.id ? `/listings/${encodeURIComponent(shown.id)}` : "/listings"}
           className="opportunity-primary-action mt-3 inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-xl bg-ink hover:bg-ink-2 px-4 text-xs font-bold text-white"
         >
-          {shown.id ? "Open listing" : "Open the feed"} <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+          {shown.id ? t.ddmOpenListing : t.ddmOpenFeed} <ArrowRight className="h-3.5 w-3.5" aria-hidden />
         </a>
 
         <div className="mt-5 border-t border-[#E8EDF3] pt-4">
           <div className="flex items-center justify-between">
             <p className="text-xs font-extrabold uppercase tracking-[0.12em] text-[#5B6472]">
-              Next opportunities
+              {t.ddmNextOpps}
             </p>
             <span className="text-xs font-semibold text-[#5B6472]">
-              Feed order
+              {t.ddmFeedOrder}
             </span>
           </div>
           <div data-testid="opportunity-list" className="mt-2 space-y-1.5">
@@ -808,7 +855,7 @@ export function DealDiscoveryMap() {
                   key={deal.id}
                   type="button"
                   onClick={() => selectDeal(index)}
-                  aria-label={`Inspect ${deal.address} from ranked list`}
+                  aria-label={interpolate(t.ddmInspectRankedAria, { address: deal.address })}
                   className="opportunity-list-row flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left"
                 >
                   <span

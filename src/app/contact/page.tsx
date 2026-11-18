@@ -1,12 +1,14 @@
 "use client";
 
 import * as React from "react";
+import { useLocale } from "@/components/i18n/locale-provider";
 import Link from "next/link";
 import { SiteHeader } from "@/components/site/site-header";
 import { SiteFooter } from "@/components/site/site-footer";
 import { ArrowLeft, Send, CheckCircle2, AlertCircle, Loader2, Mail, Building, User } from "lucide-react";
 
 export default function ContactPage() {
+  const { locale, messages: m, format } = useLocale();
   const [name, setName] = React.useState("");
   const [email, setEmail] = React.useState("");
   const [company, setCompany] = React.useState("");
@@ -36,18 +38,18 @@ export default function ContactPage() {
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
         setStatus("success");
-        setResponseMsg(data.message || "Message received.");
+        setResponseMsg(locale === "en" && data.message ? data.message : m.contact.successTitle);
         setName("");
         setEmail("");
         setCompany("");
         setMessage("");
       } else {
         setStatus("error");
-        setResponseMsg(data.error || "We couldn't send your message. Please try again.");
+        setResponseMsg(locale === "en" && data.error ? data.error : m.contact.errFallback);
       }
     } catch {
       setStatus("error");
-      setResponseMsg("Connection problem. Please try again in a moment.");
+      setResponseMsg(m.contact.errFallback);
     }
   }
 
@@ -61,20 +63,19 @@ export default function ContactPage() {
               href="/"
               className="inline-flex items-center gap-1.5 text-sm font-semibold text-ink-3 transition-colors hover:text-ink"
             >
-              <ArrowLeft className="h-4 w-4" /> Back to PerfectProperty
+              <ArrowLeft className="h-4 w-4" /> {m.infoPages.backToSite}
             </Link>
             <div className="mt-8">
               <p className="inline-flex items-center gap-2 rounded-full border border-line bg-card px-3 py-1 text-label font-bold uppercase tracking-wider text-ink-2">
                 <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-signature ring-1 ring-ink/20" />
-                Get in touch
+                {m.contact.eyebrow}
               </p>
             </div>
             <h1 className="mt-6 text-balance text-4xl font-semibold leading-[1.08] tracking-[-0.03em] sm:text-5xl">
-              Contact PerfectProperty
+              {locale === "en" ? "Contact PerfectProperty" : m.contact.title}
             </h1>
             <p className="mt-5 max-w-[620px] text-pretty text-lg leading-8 text-ink-2">
-              Tell us about a listing that looks wrong, a county you want added, a question about membership, or a team
-              that wants to use PerfectProperty. Your message is saved and read. We can&apos;t promise a reply time.
+              {locale === "en" ? "Tell us about a listing that looks wrong, a county you want added, a question about membership, or a team that wants to use PerfectProperty. Your message is saved and read. We can't promise a reply time." : `${m.contact.lead} ${m.contact.savedNote}`}
             </p>
           </div>
         </section>
@@ -95,7 +96,7 @@ export default function ContactPage() {
                       onClick={() => setStatus("idle")}
                       className="rounded-control bg-go px-5 py-2.5 text-sm font-semibold text-white hover:bg-go/90 transition"
                     >
-                      Send another message
+                      {m.contact.sendAnother}
                     </button>
                   </div>
                 </div>
@@ -111,7 +112,7 @@ export default function ContactPage() {
                   <div className="grid gap-6 sm:grid-cols-2">
                     <div>
                       <label htmlFor="contact-name" className="block text-xs font-bold uppercase tracking-wide text-ink-2">
-                        Your name <span className="text-catch-ink">*</span>
+                        {m.contact.nameLabel} <span className="text-catch-ink">*</span>
                       </label>
                       <div className="relative mt-2">
                         <User className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-ink-3" />
@@ -120,7 +121,7 @@ export default function ContactPage() {
                           type="text"
                           required
                           maxLength={200}
-                          placeholder="Your full name"
+                          placeholder={m.contact.namePlaceholder}
                           value={name}
                           onChange={(e) => setName(e.target.value)}
                           className="w-full rounded-control border border-line-strong pl-10 pr-4 py-2.5 text-sm text-ink placeholder:text-ink-3 focus:border-ink focus:outline-none focus:ring-1 focus:ring-ink"
@@ -130,7 +131,7 @@ export default function ContactPage() {
 
                     <div>
                       <label htmlFor="contact-email" className="block text-xs font-bold uppercase tracking-wide text-ink-2">
-                        Your email <span className="text-catch-ink">*</span>
+                        {m.contact.emailLabel} <span className="text-catch-ink">*</span>
                       </label>
                       <div className="relative mt-2">
                         <Mail className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-ink-3" />
@@ -139,7 +140,7 @@ export default function ContactPage() {
                           type="email"
                           required
                           maxLength={320}
-                          placeholder="you@example.com"
+                          placeholder={m.contact.emailPlaceholder}
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
                           className="w-full rounded-control border border-line-strong pl-10 pr-4 py-2.5 text-sm text-ink placeholder:text-ink-3 focus:border-ink focus:outline-none focus:ring-1 focus:ring-ink"
@@ -150,7 +151,7 @@ export default function ContactPage() {
 
                   <div>
                     <label htmlFor="contact-company" className="block text-xs font-bold uppercase tracking-wide text-ink-2">
-                      Company (optional)
+                      {m.contact.companyLabel}
                     </label>
                     <div className="relative mt-2">
                       <Building className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-ink-3" />
@@ -158,7 +159,7 @@ export default function ContactPage() {
                         id="contact-company"
                         type="text"
                         maxLength={200}
-                        placeholder="Your company or team"
+                        placeholder={m.contact.companyPlaceholder}
                         value={company}
                         onChange={(e) => setCompany(e.target.value)}
                         className="w-full rounded-control border border-line-strong pl-10 pr-4 py-2.5 text-sm text-ink placeholder:text-ink-3 focus:border-ink focus:outline-none focus:ring-1 focus:ring-ink"
@@ -168,7 +169,7 @@ export default function ContactPage() {
 
                   <div>
                     <label htmlFor="contact-message" className="block text-xs font-bold uppercase tracking-wide text-ink-2">
-                      Your message <span className="text-catch-ink">*</span>
+                      {m.contact.messageLabel} <span className="text-catch-ink">*</span>
                     </label>
                     <div className="relative mt-2">
                       <textarea
@@ -176,14 +177,14 @@ export default function ContactPage() {
                         required
                         rows={5}
                         maxLength={5000}
-                        placeholder="Tell us what you need: a county, a listing, or a question about membership."
+                        placeholder={m.contact.messagePlaceholder}
                         value={message}
                         onChange={(e) => setMessage(e.target.value)}
                         className="w-full rounded-control border border-line-strong p-4 text-sm text-ink placeholder:text-ink-3 focus:border-ink focus:outline-none focus:ring-1 focus:ring-ink"
                       />
                     </div>
                     <p className="mt-1 text-right text-label text-ink-3">
-                      {message.length} / 5000 characters
+                      {format(m.contact.charCount, { count: message.length })}
                     </p>
                   </div>
 
@@ -194,11 +195,11 @@ export default function ContactPage() {
                   >
                     {status === "submitting" ? (
                       <>
-                        <Loader2 className="h-4 w-4 animate-spin" /> Sending...
+                        <Loader2 className="h-4 w-4 animate-spin" /> {m.contact.sendingBtn}
                       </>
                     ) : (
                       <>
-                        <Send className="h-4 w-4" /> Send message
+                        <Send className="h-4 w-4" /> {m.contact.sendBtn}
                       </>
                     )}
                   </button>

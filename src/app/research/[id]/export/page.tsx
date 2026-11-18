@@ -5,12 +5,18 @@ import { WorkspaceShell } from '@/components/workspace/workspace-shell';
 import { DecisionPacketView } from '@/components/research/decision-packet-view';
 import { hasPermission, readWorkspaceSession, workspaceSessionConfiguration } from '@/lib/workspace-session';
 import { buildDecisionPacket } from '@server/export/decision-packet';
+import { getMessages } from '@/lib/i18n/messages';
+import { getRequestLocale } from '@/lib/i18n/server';
 
-export const metadata: Metadata = {
-  title: 'Foreclosure Decision Packet | PerfectProperty',
-  description: 'Auditable due diligence decision packet with title risk matrix and cash-to-close schedule',
-  robots: { index: false, follow: false },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getRequestLocale();
+  const t = getMessages(locale).metaExtra;
+  return {
+    title: t.decisionPacketTitle || 'Foreclosure Decision Packet | PerfectProperty',
+    description: t.decisionPacketDesc,
+    robots: { index: false, follow: false },
+  };
+}
 
 async function fetchListingOrCase(id: string) {
   let decodedId = id;

@@ -4,8 +4,11 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { KeyRound } from "lucide-react";
+import { useLocale } from "@/components/i18n/locale-provider";
 
 export function OperatorUnlockForm() {
+  const { messages, format } = useLocale();
+  const t = messages.operatorUnlock;
   const router = useRouter();
   const [credential, setCredential] = React.useState("");
   const [configured, setConfigured] = React.useState(true);
@@ -23,10 +26,10 @@ export function OperatorUnlockForm() {
         setAuthenticated(Boolean(response.ok && result.authenticated));
       })
       .catch(() => {
-        if (!cancelled) setError("Workspace status could not be checked. You can still submit the operator key.");
+        if (!cancelled) setError(t.statusCheckFallback);
       });
     return () => { cancelled = true; };
-  }, []);
+  }, [t.statusCheckFallback]);
 
   async function unlock(event: React.FormEvent) {
     event.preventDefault();
@@ -51,22 +54,22 @@ export function OperatorUnlockForm() {
       if (response.status === 429) {
         const retryAfter = Number(response.headers.get("Retry-After"));
         setError(Number.isFinite(retryAfter) && retryAfter > 0
-          ? `Too many attempts. Wait ${retryAfter} seconds and try again.`
-          : "Too many attempts. Wait a moment and try again.");
+          ? format(t.rateLimitWithSeconds, { seconds: retryAfter })
+          : t.rateLimitGeneric);
         return;
       }
       if (response.status === 503) {
         setConfigured(false);
-        setError(typeof result.error === "string" ? result.error : "Set SCRAPER_ADMIN_TOKEN on both application processes before unlocking the workspace");
+        setError(typeof result.error === "string" ? result.error : t.configMissingHint);
         return;
       }
-      if (!response.ok) throw new Error(typeof result.error === "string" ? result.error : "Workspace could not be unlocked");
+      if (!response.ok) throw new Error(typeof result.error === "string" ? result.error : t.unlockFailedFallback);
       setCredential("");
       setAuthenticated(true);
       router.push("/workspace");
       router.refresh();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Workspace could not be unlocked");
+      setError(caught instanceof Error ? caught.message : t.unlockFailedFallback);
     } finally {
       setSubmitting(false);
     }
@@ -75,8 +78,8 @@ export function OperatorUnlockForm() {
   if (authenticated) {
     return (
       <div className="mt-6 rounded-card border border-go/30 bg-go-wash p-6 text-sm text-ink">
-        <p className="font-semibold">Operator session is active.</p>
-        <Link href="/workspace" className="mt-3 inline-flex h-12 items-center rounded-control bg-ink px-5 text-sm font-semibold text-white hover:bg-ink-2">Open the workspace</Link>
+        <p className="font-semibold">{t.activeSessionNotice}</p>
+        <Link href="/workspace" className="mt-3 inline-flex h-12 items-center rounded-control bg-ink px-5 text-sm font-semibold text-white hover:bg-ink-2">{t.openWorkspaceLink}</Link>
       </div>
     );
   }
@@ -84,7 +87,7 @@ export function OperatorUnlockForm() {
   return (
     <form onSubmit={unlock} className="mt-6 rounded-card border border-line bg-card p-6 shadow-sm">
       <label htmlFor="sign-in-operator-key" className="text-xs font-semibold text-ink">
-        Operator key <span className="sr-only">(Workspace access key)</span>
+        {t.keyLabel} <span className="sr-only">{t.keySrSuffix}</span>
       </label>
       <div className="mt-2 flex items-center gap-2 rounded-control border border-line-strong bg-card px-3 focus-within:border-yours focus-within:ring-2 focus-within:ring-yours/20">
         <KeyRound size={16} className="text-ink-3" />
@@ -99,10 +102,10 @@ export function OperatorUnlockForm() {
           className="min-w-0 flex-1 bg-transparent py-3 text-sm outline-none focus-visible:shadow-none"
         />
       </div>
-      {!configured ? <p className="mt-3 rounded-control bg-catch-wash p-3 text-xs leading-5 text-catch-ink">Set SCRAPER_ADMIN_TOKEN on both application processes before unlocking the workspace.</p> : null}
+      {!configured ? <p className="mt-3 rounded-control bg-catch-wash p-3 text-xs leading-5 text-catch-ink">{t.configMissingHint}</p> : null}
       {error ? <p role="alert" className="mt-3 rounded-control bg-catch-wash p-3 text-xs leading-5 text-catch-ink">{error}</p> : null}
       <button disabled={submitting || !configured} className="mt-4 w-full rounded-control bg-ink px-4 py-3 text-sm font-semibold text-white hover:bg-ink-2 disabled:opacity-50">
-        {submitting ? "Unlocking…" : "Unlock workspace"}
+        {submitting ? t.unlockingBtn : t.unlockBtn}
       </button>
     </form>
   );

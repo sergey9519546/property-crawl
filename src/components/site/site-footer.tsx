@@ -4,6 +4,9 @@ import * as React from "react";
 import Link from "next/link";
 import { Logo } from "./logo";
 import { ArrowRight } from "lucide-react";
+import { LanguageSwitcher } from "@/components/i18n/language-switcher";
+import { useLocale } from "@/components/i18n/locale-provider";
+import type { Messages } from "@/lib/i18n/messages";
 
 function GithubIcon({ className }: { className?: string }) {
   return (
@@ -13,52 +16,57 @@ function GithubIcon({ className }: { className?: string }) {
   );
 }
 
-const COLUMNS: { title: string; links: { label: string; href: string }[] }[] = [
-  {
-    title: "Product",
-    links: [
-      { label: "Browse listings", href: "/listings" },
-      { label: "Research cases", href: "/research" },
-      { label: "The catch", href: "/#the-catch" },
-      { label: "Hunts", href: "/hunts" },
-      { label: "Portfolio", href: "/portfolio" },
-      { label: "Activity", href: "/activity" },
-      { label: "Free vs member", href: "/#pricing" },
-    ],
-  },
-  {
-    title: "Learn",
-    links: [
-      { label: "Buyer's guide", href: "/resources#knowledge-base" },
-      { label: "Questions", href: "/#faq" },
-      { label: "States and counties", href: "/states" },
-      { label: "Sources", href: "/sources" },
-      { label: "Case studies", href: "/case-studies" },
-      { label: "What's new", href: "/resources#changelog" },
-    ],
-  },
-  {
-    title: "Account",
-    links: [
-      { label: "Member sign-in", href: "/account" },
-      { label: "Staff sign-in", href: "/sign-in" },
-    ],
-  },
-  {
-    title: "Company",
-    links: [
-      { label: "About", href: "/about" },
-      { label: "For teams", href: "/enterprise" },
-      { label: "Security", href: "/security" },
-      { label: "Contact", href: "/contact" },
-      { label: "Legal", href: "/terms" },
-      { label: "Privacy", href: "/privacy" },
-      { label: "Unsubscribe", href: "/newsletter/unsubscribe" },
-    ],
-  },
-];
+function buildColumns(m: Messages): { title: string; links: { label: string; href: string }[] }[] {
+  const l = m.footer.links;
+  return [
+    {
+      title: m.footer.colProduct,
+      links: [
+        { label: l.browseListings, href: "/listings" },
+        { label: l.researchCases, href: "/research" },
+        { label: l.theCatch, href: "/#the-catch" },
+        { label: l.hunts, href: "/hunts" },
+        { label: l.portfolio, href: "/portfolio" },
+        { label: l.activity, href: "/activity" },
+        { label: l.freeVsMember, href: "/#pricing" },
+      ],
+    },
+    {
+      title: m.footer.colLearn,
+      links: [
+        { label: l.buyersGuide, href: "/resources#knowledge-base" },
+        { label: l.questions, href: "/#faq" },
+        { label: l.statesAndCounties, href: "/states" },
+        { label: l.sources, href: "/sources" },
+        { label: l.caseStudies, href: "/case-studies" },
+        { label: l.whatsNew, href: "/resources#changelog" },
+      ],
+    },
+    {
+      title: m.footer.colAccount,
+      links: [
+        { label: l.memberSignIn, href: "/account" },
+        { label: l.staffSignIn, href: "/sign-in" },
+      ],
+    },
+    {
+      title: m.footer.colCompany,
+      links: [
+        { label: l.about, href: "/about" },
+        { label: l.forTeams, href: "/enterprise" },
+        { label: l.security, href: "/security" },
+        { label: l.contact, href: "/contact" },
+        { label: l.legal, href: "/terms" },
+        { label: l.privacy, href: "/privacy" },
+        { label: l.unsubscribe, href: "/newsletter/unsubscribe" },
+      ],
+    },
+  ];
+}
 
 export function SiteFooter() {
+  const { locale, messages, format } = useLocale();
+  const columns = React.useMemo(() => buildColumns(messages), [messages]);
   const [email, setEmail] = React.useState("");
   const [newsletterStatus, setNewsletterStatus] = React.useState("");
 
@@ -76,11 +84,13 @@ export function SiteFooter() {
       if (!response.ok) throw new Error(payload?.error || "Subscription failed");
       setNewsletterStatus(
         payload?.delivery === "forwarded" || payload?.delivery === "sent"
-          ? "Thanks — you're on the list."
-          : "Saved. We can't send email yet, so you won't get a confirmation."
+          ? messages.footer.newsletterSent
+          : (locale === "en"
+              ? "Saved. We can't send email yet, so you won't get a confirmation."
+              : messages.footer.newsletterSavedNoEmail),
       );
     } catch {
-      setNewsletterStatus("That did not go through. Please try again.");
+      setNewsletterStatus(messages.footer.newsletterError);
     }
   };
 
@@ -90,10 +100,10 @@ export function SiteFooter() {
         <div className="mx-auto grid max-w-[1240px] gap-8 px-6 py-14 sm:px-8 lg:grid-cols-[minmax(0,1fr)_minmax(420px,0.8fr)] lg:items-center lg:gap-20 lg:py-16">
           <div className="max-w-[600px]">
             <p className="text-title font-semibold leading-tight tracking-[-0.02em] text-ink sm:text-display">
-              Subscribe for source coverage notes
+              {messages.footer.newsletterTitle}
             </p>
             <p className="mt-2 max-w-[520px] text-body text-ink-3">
-              Occasional notes on which sources we added or fixed. We write them by hand, so there is no regular schedule. Always check a sale at its source before you bid.
+              {messages.footer.newsletterSubtitle}
             </p>
           </div>
           <form
@@ -101,7 +111,7 @@ export function SiteFooter() {
             className="w-full"
           >
             <label htmlFor="footer-email" className="mb-2 block text-label font-bold uppercase tracking-wider text-ink-2">
-              Work email
+              {messages.footer.workEmail}
             </label>
             <div className="flex flex-col gap-2 sm:flex-row">
               <input
@@ -114,14 +124,14 @@ export function SiteFooter() {
                   setNewsletterStatus("");
                 }}
                 aria-describedby="newsletter-status"
-                placeholder="you@example.com"
+                placeholder={messages.footer.emailPlaceholder}
                 className="h-12 min-w-0 flex-1 rounded-control border border-line-strong bg-card px-4 text-meta text-ink shadow-sm placeholder:text-ink-3 focus:border-ink focus:outline-none focus:ring-2 focus:ring-ink/20"
               />
               <button
                 type="submit"
                 className="inline-flex h-12 shrink-0 items-center justify-center rounded-control bg-ink px-5 text-meta font-semibold text-white transition-colors hover:bg-ink-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
               >
-                Subscribe
+                {messages.footer.subscribeBtn}
                 <ArrowRight className="ml-1.5 h-4 w-4" aria-hidden />
               </button>
             </div>
@@ -142,22 +152,22 @@ export function SiteFooter() {
         <div className="grid grid-cols-2 gap-x-8 gap-y-12 sm:grid-cols-4 lg:grid-cols-[1.6fr_repeat(4,1fr)] lg:gap-x-12">
           {/* Brand column */}
           <div className="col-span-2 lg:col-span-1">
-            <Link href="/" className="flex items-center" aria-label="PerfectProperty home">
+            <Link href="/" className="flex items-center" aria-label={messages.common.homeAria}>
               <Logo className="text-base" />
             </Link>
             <p className="mt-4 max-w-[230px] text-meta leading-6 text-ink-2">
-              Auction and government-sold homes in one place, with the catch spelled out.
+              {messages.footer.brandTagline}
             </p>
             <div className="mt-5 flex items-center gap-3">
               {[
                 {
-                  label: "PerfectProperty on GitHub",
+                  label: messages.footer.githubAria,
                   href: "https://github.com/sergey9519546/property-crawl",
                   Icon: GithubIcon,
                 },
               ].map(({ Icon, href, label }) => (
                 <a
-                  key={label}
+                  key={href}
                   href={href}
                   target="_blank"
                   rel="noreferrer"
@@ -170,14 +180,14 @@ export function SiteFooter() {
             </div>
           </div>
 
-          {COLUMNS.map((col) => (
+          {columns.map((col) => (
             <div key={col.title}>
               <p className="text-label font-bold uppercase tracking-wider text-ink-3">
                 {col.title}
               </p>
               <ul className="mt-3 space-y-2.5">
                 {col.links.map((l) => (
-                  <li key={l.label}>
+                  <li key={l.href}>
                     <Link
                       href={l.href}
                       className="text-meta font-medium text-ink-2 transition-colors hover:text-ink"
@@ -191,20 +201,21 @@ export function SiteFooter() {
           ))}
         </div>
 
-        {/* Legal row */}
+        {/* Legal & language row */}
         <div className="mt-16 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
           <p className="text-meta text-ink-3" suppressHydrationWarning>
-            &copy; {new Date().getFullYear()} PerfectProperty. All rights reserved.
+            {format(messages.footer.copyright, { year: new Date().getFullYear() })}
           </p>
-          <div className="flex items-center gap-5">
+          <div className="flex flex-wrap items-center gap-5">
+            <LanguageSwitcher variant="inline" />
             <Link href="/terms" className="text-meta font-medium text-ink-2 hover:text-ink">
-              Terms
+              {messages.footer.termsShort}
             </Link>
             <Link href="/privacy" className="text-meta font-medium text-ink-2 hover:text-ink">
-              Privacy
+              {messages.footer.privacyShort}
             </Link>
             <Link href="/security" className="text-meta font-medium text-ink-2 hover:text-ink">
-              Security
+              {messages.footer.securityShort}
             </Link>
           </div>
         </div>

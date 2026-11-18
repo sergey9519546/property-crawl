@@ -13,6 +13,8 @@ import {
   Keyboard,
   ShieldCheck
 } from 'lucide-react';
+import { useLocale } from '@/components/i18n/locale-provider';
+import { formatUsd, interpolate } from '@/lib/i18n/translator';
 
 export interface EvidenceSpan {
   quote: string;
@@ -102,6 +104,10 @@ export function ReviewSplitPane({
   onReject,
   onUpdateFields
 }: ReviewSplitPaneProps) {
+  const { locale, messages } = useLocale();
+  const t = messages.reviewB2;
+  const fmtMoney = (value: number) => (locale === 'en' ? `$${value.toLocaleString()}` : formatUsd(locale, value));
+
   const [currentIndex, setCurrentIndex] = useState(0);
   const [editMode, setEditMode] = useState(false);
   const [editedFields, setEditedFields] = useState<any>({});
@@ -128,6 +134,7 @@ export function ReviewSplitPane({
       setEditMode(false);
       setReviewNote('');
       setActiveFieldKey(null);
+      setValidationError(null);
     } else if (!currentItem) {
       lastResetIdRef.current = null;
     }
@@ -156,6 +163,7 @@ export function ReviewSplitPane({
 
   const handleApproveCurrent = useCallback(async () => {
     if (!currentItem) return;
+    setValidationError(null);
     const actedId = currentItem.id;
     const fields = editMode ? editedFields : currentItem.extractedFields;
     if (editMode && onUpdateFields) onUpdateFields(actedId, editedFields);
@@ -167,14 +175,14 @@ export function ReviewSplitPane({
     if (!currentItem) return;
     const actedId = currentItem.id;
     if (!reviewNote.trim()) {
-      setValidationError('A reviewer note is required before rejecting a legal notice.');
+      setValidationError(t.spErrRejectNote);
       return;
     }
     setValidationError(null);
     const fields = editMode ? editedFields : currentItem.extractedFields;
     const result = await onReject(actedId, reviewNote.trim() || undefined, fields);
     if (result !== false) setPendingAdvanceFromId(actedId);
-  }, [currentItem, editMode, editedFields, onReject, reviewNote]);
+  }, [currentItem, editMode, editedFields, onReject, reviewNote, t.spErrRejectNote]);
 
   // Keyboard shortcut handler
   useEffect(() => {
@@ -187,6 +195,7 @@ export function ReviewSplitPane({
           target.blur();
           setEditMode(false);
           setActiveFieldKey(null);
+          setValidationError(null);
         }
         return;
       }
@@ -216,6 +225,7 @@ export function ReviewSplitPane({
           e.preventDefault();
           setEditMode(false);
           setActiveFieldKey(null);
+          setValidationError(null);
           break;
         default:
           break;
@@ -230,8 +240,8 @@ export function ReviewSplitPane({
     return (
       <div className="p-12 text-center text-ink-3 bg-card rounded-card border border-line">
         <FileText className="w-8 h-8 mx-auto text-ink-3 mb-2" />
-        <p className="font-semibold text-ink-2">No documents in review queue.</p>
-        <p className="text-xs text-ink-3">All captured legal notices have been processed.</p>
+        <p className="font-semibold text-ink-2">{t.spEmptyTitle}</p>
+        <p className="text-xs text-ink-3">{t.spEmptyBody}</p>
       </div>
     );
   }
@@ -268,20 +278,20 @@ export function ReviewSplitPane({
               ? 'bg-signature text-ink ring-1 ring-ink/30'
               : 'bg-paper text-ink hover:bg-line/60 border border-line-strong'
           }`}
-          title={`Characters ${span.start}–${span.end}: "${span.quote}"`}
+          title={interpolate(t.spVerifiedTitle, { start: span.start, end: span.end, quote: span.quote })}
         >
           <ShieldCheck className="w-3 h-3" />
-          <span>{isSelected ? 'Highlighted' : 'Verified span'}</span>
+          <span>{isSelected ? t.spHighlightedBadge : t.spVerifiedSpanBadge}</span>
         </button>
       );
     }
     return (
       <span
         className="inline-flex items-center gap-1 rounded bg-catch-wash border border-catch/30 px-1.5 py-0.5 text-label font-semibold text-catch-ink"
-        title="Value was not found verbatim in raw notice text"
+        title={t.spUnverifiedTitle}
       >
         <AlertCircle className="w-3 h-3" />
-        <span>Unverified in text</span>
+        <span>{t.spUnverifiedBadge}</span>
       </span>
     );
   }
@@ -291,38 +301,40 @@ export function ReviewSplitPane({
       {/* Top Navigation & Shortcut Legend */}
       <div className="bg-ink text-white px-5 py-3 flex items-center justify-between text-xs border-b border-ink-2">
         <div className="flex items-center gap-3">
-          <span className="font-bold tracking-tight">Review Split-Pane</span>
+          <span className="font-bold tracking-tight">{t.spHeaderTitle}</span>
           <span className="bg-ink-2 text-paper px-2 py-0.5 rounded font-mono text-xs">
-            {currentIndex + 1} of {items.length}
+            {interpolate(t.spIndexOfTotal, { current: safeIndex + 1, total: items.length })}
           </span>
           {currentItem?.extractedFields?.caseNumber && (
-            <span className="text-paper/75 font-mono">Case: {currentItem.extractedFields.caseNumber}</span>
+            <span className="text-paper/75 font-mono">{interpolate(t.spCasePrefix, { number: currentItem.extractedFields.caseNumber })}</span>
           )}
         </div>
 
         {/* Keyboard shortcut badges */}
         <div className="hidden sm:flex items-center gap-3 text-paper/75 text-xs">
-          <span className="flex items-center gap-1"><Keyboard className="w-3.5 h-3.5 text-paper/70" /> Hotkeys:</span>
-          <span><kbd className="bg-ink-2 px-1.5 py-0.5 rounded font-bold text-go-fill">A</kbd> Approve</span>
-          <span><kbd className="bg-ink-2 px-1.5 py-0.5 rounded font-bold text-catch">R</kbd> Reject</span>
-          <span><kbd className="bg-ink-2 px-1.5 py-0.5 rounded font-bold text-signature">E</kbd> Edit</span>
-          <span><kbd className="bg-ink-2 px-1.5 py-0.5 rounded font-bold text-paper">J/K</kbd> Next/Prev</span>
+          <span className="flex items-center gap-1"><Keyboard className="w-3.5 h-3.5 text-paper/70" /> {t.spHotkeys}</span>
+          <span><kbd className="bg-ink-2 px-1.5 py-0.5 rounded font-bold text-go-fill">A</kbd> {t.spKeyApprove}</span>
+          <span><kbd className="bg-ink-2 px-1.5 py-0.5 rounded font-bold text-catch">R</kbd> {t.spKeyReject}</span>
+          <span><kbd className="bg-ink-2 px-1.5 py-0.5 rounded font-bold text-signature">E</kbd> {t.spKeyEdit}</span>
+          <span><kbd className="bg-ink-2 px-1.5 py-0.5 rounded font-bold text-paper">J/K</kbd> {t.spKeyNav}</span>
         </div>
 
         <div className="flex items-center gap-1.5">
           <button
             onClick={handlePrev}
-            disabled={currentIndex === 0}
+            disabled={safeIndex === 0}
             className="p-1 rounded hover:bg-ink-2 disabled:opacity-40 transition"
             aria-label="Previous Notice"
+            {...(locale !== "en" ? ({ "aria-label": t.spPrevAria } as Record<string, string>) : {})}
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
           <button
             onClick={handleNext}
-            disabled={currentIndex >= items.length - 1}
+            disabled={safeIndex >= items.length - 1}
             className="p-1 rounded hover:bg-ink-2 disabled:opacity-40 transition"
             aria-label="Next Notice"
+            {...(locale !== "en" ? ({ "aria-label": t.spNextAria } as Record<string, string>) : {})}
           >
             <ChevronRight className="w-4 h-4" />
           </button>
@@ -334,7 +346,7 @@ export function ReviewSplitPane({
         {/* Left Pane: Raw Legal Notice Prose */}
         <div className="flex flex-col h-full bg-paper/50 overflow-hidden">
           <div className="p-3 bg-paper border-b border-line text-xs font-bold text-ink-2 flex justify-between items-center">
-            <span>RAW LEGAL NOTICE PROSE</span>
+            <span>{t.spLeftHeading}</span>
             {safeExternalUrl(currentItem?.sourceUrl) && (
               <a
                 href={safeExternalUrl(currentItem?.sourceUrl)!}
@@ -342,13 +354,13 @@ export function ReviewSplitPane({
                 rel="noreferrer"
                 className="text-yours hover:underline text-xs"
               >
-                Open Source
+                {t.spOpenSource}
               </a>
             )}
           </div>
           <div className="flex-1 p-5 overflow-y-auto font-mono text-xs leading-relaxed text-ink whitespace-pre-wrap select-text">
             {!rawText ? (
-              'No raw document text available.'
+              t.spNoRawText
             ) : canHighlight && activeSpan ? (
               <>
                 {rawText.slice(0, activeSpan.start)}
@@ -366,17 +378,17 @@ export function ReviewSplitPane({
         {/* Right Pane: Structured Fields & Verification */}
         <div className="flex flex-col h-full bg-card overflow-hidden">
           <div className="p-3 bg-paper border-b border-line text-xs font-bold text-ink-2 flex justify-between items-center">
-            <span>STRUCTURED EXTRACTED FIELDS</span>
+            <span>{t.spRightHeading}</span>
             <div className="flex items-center gap-2">
               <span className={`text-label font-bold px-2 py-0.5 rounded ${confidence === null ? 'bg-paper text-ink-2 border border-line' : isHighConfidence ? 'bg-paper text-ink border border-line-strong' : 'bg-catch-wash text-catch-ink border border-catch/30'}`}>
-                {confidence === null ? 'Pending review' : `${Math.round(confidence * 100)}% Confidence`}
+                {confidence === null ? t.spPendingConfidence : interpolate(t.spConfidencePct, { pct: Math.round(confidence * 100) })}
               </span>
               <button
                 onClick={() => setEditMode(!editMode)}
                 className={`p-1 rounded transition text-xs flex items-center gap-1 ${editMode ? 'bg-yours-wash text-yours font-bold' : 'hover:bg-paper text-ink-2'}`}
               >
                 <Edit2 className="w-3 h-3" />
-                <span>{editMode ? 'Editing' : 'Edit'}</span>
+                <span>{editMode ? t.spEditingBtn : t.spEditBtn}</span>
               </button>
             </div>
           </div>
@@ -385,7 +397,7 @@ export function ReviewSplitPane({
             {/* Field: Case Number */}
             <div>
               <div className="flex items-center justify-between gap-2 mb-1">
-                <label htmlFor="split-edit-case-number" className="font-semibold text-ink-2">Case / Docket Number</label>
+                <label htmlFor="split-edit-case-number" className="font-semibold text-ink-2">{t.spFieldCase}</label>
                 {renderSpanBadge('caseNumber')}
               </div>
               {editMode ? (
@@ -406,7 +418,7 @@ export function ReviewSplitPane({
             {/* Field: Defendant */}
             <div>
               <div className="flex items-center justify-between gap-2 mb-1">
-                <label htmlFor="split-edit-defendant" className="font-semibold text-ink-2">Defendant (Owner / Heirs)</label>
+                <label htmlFor="split-edit-defendant" className="font-semibold text-ink-2">{t.spFieldDefendant}</label>
                 {renderSpanBadge('defendant')}
               </div>
               {editMode ? (
@@ -427,7 +439,7 @@ export function ReviewSplitPane({
             {/* Field: Plaintiff */}
             <div>
               <div className="flex items-center justify-between gap-2 mb-1">
-                <label htmlFor="split-edit-plaintiff" className="font-semibold text-ink-2">Plaintiff (Foreclosing Lender)</label>
+                <label htmlFor="split-edit-plaintiff" className="font-semibold text-ink-2">{t.spFieldPlaintiff}</label>
                 {renderSpanBadge('plaintiff')}
               </div>
               {editMode ? (
@@ -449,7 +461,7 @@ export function ReviewSplitPane({
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <div className="flex items-center justify-between gap-1 mb-1">
-                  <label htmlFor="split-edit-opening-bid" className="font-semibold text-ink-2">Opening Bid ($)</label>
+                  <label htmlFor="split-edit-opening-bid" className="font-semibold text-ink-2">{t.spFieldOpeningBid}</label>
                   {renderSpanBadge('openingBid')}
                 </div>
                 {editMode ? (
@@ -462,13 +474,13 @@ export function ReviewSplitPane({
                   />
                 ) : (
                   <div className="p-2 rounded-control bg-paper border border-line font-mono font-bold text-ink">
-                    {currentItem?.extractedFields?.openingBid ? `$${currentItem.extractedFields.openingBid.toLocaleString()}` : '—'}
+                    {currentItem?.extractedFields?.openingBid ? fmtMoney(currentItem.extractedFields.openingBid) : '—'}
                   </div>
                 )}
               </div>
               <div>
                 <div className="flex items-center justify-between gap-1 mb-1">
-                  <label htmlFor="split-edit-judgment-amount" className="font-semibold text-ink-2">Judgment Amount ($)</label>
+                  <label htmlFor="split-edit-judgment-amount" className="font-semibold text-ink-2">{t.spFieldJudgment}</label>
                   {renderSpanBadge('judgmentAmount')}
                 </div>
                 {editMode ? (
@@ -481,7 +493,7 @@ export function ReviewSplitPane({
                   />
                 ) : (
                   <div className="p-2 rounded-control bg-paper border border-line font-mono text-ink">
-                    {currentItem?.extractedFields?.judgmentAmount ? `$${currentItem.extractedFields.judgmentAmount.toLocaleString()}` : '—'}
+                    {currentItem?.extractedFields?.judgmentAmount ? fmtMoney(currentItem.extractedFields.judgmentAmount) : '—'}
                   </div>
                 )}
               </div>
@@ -491,7 +503,7 @@ export function ReviewSplitPane({
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <div className="flex items-center justify-between gap-1 mb-1">
-                  <label htmlFor="split-edit-sale-date" className="font-semibold text-ink-2">Auction Sale Date</label>
+                  <label htmlFor="split-edit-sale-date" className="font-semibold text-ink-2">{t.spFieldSaleDate}</label>
                   {renderSpanBadge('saleDate')}
                 </div>
                 {editMode ? (
@@ -510,7 +522,7 @@ export function ReviewSplitPane({
               </div>
               <div>
                 <div className="flex items-center justify-between gap-1 mb-1">
-                  <label htmlFor="split-edit-apn" className="font-semibold text-ink-2">APN / Parcel ID</label>
+                  <label htmlFor="split-edit-apn" className="font-semibold text-ink-2">{t.spFieldApn}</label>
                   {renderSpanBadge('apn')}
                 </div>
                 {editMode ? (
@@ -532,14 +544,14 @@ export function ReviewSplitPane({
             {/* Field: Reviewer Note */}
             <div>
               <label htmlFor="split-pane-review-note" className="font-semibold text-ink-2 block mb-1">
-                Reviewer Note (required when rejecting)
+                {t.spReviewNoteLabel}
               </label>
               <textarea
                 id="split-pane-review-note"
                 rows={2}
                 value={reviewNote}
                 onChange={(e) => setReviewNote(e.target.value)}
-                placeholder="State verification findings or rejection reason…"
+                placeholder={t.spReviewNotePlaceholder}
                 className="w-full border border-line-strong rounded-control bg-card px-2.5 py-1.5 text-xs"
               />
               {validationError && <p role="alert" className="text-xs text-catch-ink mt-1 font-semibold">{validationError}</p>}
@@ -553,7 +565,7 @@ export function ReviewSplitPane({
               className="flex-1 inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-control border border-catch/30 bg-catch-wash text-catch-ink text-xs font-bold hover:bg-catch-wash/80 transition"
             >
               <X className="w-4 h-4 text-catch-ink" />
-              <span>Reject Notice [R]</span>
+              <span>{t.spRejectActionBtn}</span>
             </button>
 
             <button
@@ -561,7 +573,7 @@ export function ReviewSplitPane({
               className="flex-1 inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-control bg-go text-white text-xs font-bold hover:bg-go/90 transition shadow-sm"
             >
               <Check className="w-4 h-4" />
-              <span>Approve & Publish [A]</span>
+              <span>{t.spApproveActionBtn}</span>
             </button>
           </div>
         </div>

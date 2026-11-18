@@ -10,62 +10,19 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SCORE_BANDS } from "@/lib/score-bands";
+import { getMessages } from "@/lib/i18n/messages";
+import { getRequestLocale } from "@/lib/i18n/server";
+import { interpolate } from "@/lib/i18n/translator";
 
-export const metadata: Metadata = {
-  title: "Design system — PerfectProperty",
-  description: "Evidence ink: how PerfectProperty draws printed, yours and unknown values.",
-  robots: { index: false, follow: false },
-};
-
-const INK = [
-  ["ink", "bg-ink", "Headings, values"],
-  ["ink-2", "bg-ink-2", "Body copy"],
-  ["ink-3", "bg-ink-3", "Meta text (lightest allowed)"],
-  ["paper", "bg-paper", "Page"],
-  ["card", "bg-card", "Raised surface"],
-  ["line", "bg-line", "Hairlines"],
-  ["line-strong", "bg-line-strong", "Inputs, checkboxes"],
-] as const;
-
-const EVIDENCE = [
-  ["catch-wash", "bg-[var(--color-catch-wash)]", "The catch / unknown"],
-  ["catch", "bg-[var(--color-catch)]", "Persimmon #FF5533, fills only"],
-  ["catch-ink", "bg-[var(--color-catch-ink)]", "Catch text #A92E14"],
-  ["yours", "bg-[var(--color-yours)]", "Buyer-typed"],
-  ["yours-wash", "bg-[var(--color-yours-wash)]", "Yours chip"],
-  ["go", "bg-[var(--color-go)]", "Go text #0B7A56"],
-  ["go-fill", "bg-[var(--color-go-fill)]", "Celadon #12B981, action fills"],
-  ["signature", "bg-[var(--color-signature)]", "Butter #FFE24A, brand only, never data"],
-] as const;
-
-const TYPE = [
-  ["display", "text-display font-semibold", "Display"],
-  ["title", "text-title font-semibold", "Title"],
-  ["lead", "text-lead", "Lead paragraph"],
-  ["body", "text-body", "Body text"],
-  ["meta", "text-meta text-ink-2", "Meta text"],
-  ["label", "text-label font-semibold uppercase text-ink-3", "Label"],
-] as const;
-
-const RADII = [
-  ["control · 12px", "rounded-control h-16 w-28"],
-  ["card · 24px", "rounded-card h-24 w-40"],
-  ["full · chips", "rounded-full h-10 w-28"],
-] as const;
-
-const ELEVATION = [
-  ["shadow-card", "Resting cards"],
-  ["shadow-raised", "Featured card, menus"],
-  ["shadow-overlay", "Drawers, dialogs"],
-] as const;
-
-// A buyer's own model: every bar is "yours", told apart by strength, not hue.
-const MODEL_BARS = [
-  ["Assumed value", "bg-yours", "100%"],
-  ["Repairs", "bg-yours/70", "22%"],
-  ["Carry + close", "bg-yours/50", "9%"],
-  ["Required profit", "bg-yours/35", "15%"],
-] as const;
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getRequestLocale();
+  const meta = getMessages(locale).metaExtra;
+  return {
+    title: meta.designTitle,
+    description: meta.designDesc,
+    robots: { index: false, follow: false },
+  };
+}
 
 const card = "rounded-card border border-line bg-card p-5 sm:p-6";
 const kicker = "text-label font-semibold uppercase text-ink-3";
@@ -82,40 +39,99 @@ function Swatch({ name, cls, use }: { name: string; cls: string; use: string }) 
   );
 }
 
-export default function DesignPage() {
+export default async function DesignPage() {
+  const locale = await getRequestLocale();
+  const t = getMessages(locale).designB2;
+
+  const inkSwatches = [
+    ["ink", "bg-ink", t.inkDescHeadings],
+    ["ink-2", "bg-ink-2", t.inkDescBody],
+    ["ink-3", "bg-ink-3", t.inkDescMeta],
+    ["paper", "bg-paper", t.inkDescPage],
+    ["card", "bg-card", t.inkDescSurface],
+    ["line", "bg-line", t.inkDescHairlines],
+    ["line-strong", "bg-line-strong", t.inkDescInputs],
+  ] as const;
+
+  const evidenceSwatches = [
+    ["catch-wash", "bg-[var(--color-catch-wash)]", t.evDescCatchWash],
+    ["catch", "bg-[var(--color-catch)]", t.evDescCatch],
+    ["catch-ink", "bg-[var(--color-catch-ink)]", t.evDescCatchInk],
+    ["yours", "bg-[var(--color-yours)]", t.evDescYours],
+    ["yours-wash", "bg-[var(--color-yours-wash)]", t.evDescYoursWash],
+    ["go", "bg-[var(--color-go)]", t.evDescGo],
+    ["go-fill", "bg-[var(--color-go-fill)]", t.evDescGoFill],
+    ["signature", "bg-[var(--color-signature)]", t.evDescSignature],
+  ] as const;
+
+  const typeSteps = [
+    ["display", "text-display font-semibold", t.typeDisplay],
+    ["title", "text-title font-semibold", t.typeTitle],
+    ["lead", "text-lead", t.typeLead],
+    ["body", "text-body", t.typeBody],
+    ["meta", "text-meta text-ink-2", t.typeMeta],
+    ["label", "text-label font-semibold uppercase text-ink-3", t.typeLabel],
+  ] as const;
+
+  const radiiSteps = [
+    [t.radControl, "rounded-control h-16 w-28"],
+    [t.radCard, "rounded-card h-24 w-40"],
+    [t.radFull, "rounded-full h-10 w-28"],
+  ] as const;
+
+  const elevationSteps = [
+    ["shadow-card", t.elevResting],
+    ["shadow-raised", t.elevRaised],
+    ["shadow-overlay", t.elevOverlay],
+  ] as const;
+
+  // A buyer's own model: every bar is "yours", told apart by strength, not hue.
+  const modelBars = [
+    [t.barAssumed, "bg-yours", "100%"],
+    [t.barRepairs, "bg-yours/70", "22%"],
+    [t.barCarryClose, "bg-yours/50", "9%"],
+    [t.barProfit, "bg-yours/35", "15%"],
+  ] as const;
+
+  const bandCopy: Record<string, { label: string; desc: string }> = {
+    elite: { label: t.bandEliteLabel, desc: t.bandEliteDesc },
+    strong: { label: t.bandStrongLabel, desc: t.bandStrongDesc },
+    fair: { label: t.bandFairLabel, desc: t.bandFairDesc },
+    thin: { label: t.bandThinLabel, desc: t.bandThinDesc },
+  };
+
   return (
     <div className="min-h-screen bg-paper text-ink">
       <SiteHeader />
       <main id="main-content" tabIndex={-1} className="outline-none">
       <div className="mx-auto max-w-[1040px] space-y-16 px-5 pb-24 pt-28 lg:px-8">
         <header>
-          <p className={kicker}>Design system</p>
-          <h1 className="mt-3 text-display font-semibold text-ink">Evidence ink</h1>
+          <p className={kicker}>{t.kicker}</p>
+          <h1 className="mt-3 text-display font-semibold text-ink">{t.title}</h1>
           <p className="mt-4 max-w-[640px] text-lead text-ink-2">
-            Every value on PerfectProperty is one of three materials: printed, yours, or unknown. A missing fact is
-            drawn, never hidden, because empty space reads as safe.
+            {t.lead}
           </p>
         </header>
 
         <section>
-          <SectionHeading eyebrow="Scale" title="One ink family, three radii, six type steps." align="left" />
+          <SectionHeading eyebrow={t.scaleEyebrow} title={t.scaleTitle} align="left" />
           <div className="mt-8 grid gap-4 md:grid-cols-2">
             <div className={card}>
-              <h3 className={kicker}>Ink, paper and lines</h3>
+              <h3 className={kicker}>{t.inkCardTitle}</h3>
               <ul className="mt-4 grid gap-3 sm:grid-cols-2">
-                {INK.map(([n, c, u]) => <Swatch key={n} name={n} cls={c} use={u} />)}
+                {inkSwatches.map(([n, c, u]) => <Swatch key={n} name={n} cls={c} use={u} />)}
               </ul>
             </div>
             <div className={card}>
-              <h3 className={kicker}>Evidence colours</h3>
+              <h3 className={kicker}>{t.evidenceCardTitle}</h3>
               <ul className="mt-4 grid gap-3 sm:grid-cols-2">
-                {EVIDENCE.map(([n, c, u]) => <Swatch key={n} name={n} cls={c} use={u} />)}
+                {evidenceSwatches.map(([n, c, u]) => <Swatch key={n} name={n} cls={c} use={u} />)}
               </ul>
             </div>
             <div className={`${card} md:col-span-2`}>
-              <h3 className={kicker}>Type steps</h3>
+              <h3 className={kicker}>{t.typeCardTitle}</h3>
               <ul className="mt-4 divide-y divide-line">
-                {TYPE.map(([n, c, s]) => (
+                {typeSteps.map(([n, c, s]) => (
                   <li key={n} className="flex flex-wrap items-baseline gap-x-6 gap-y-1 py-3">
                     <code className="w-20 shrink-0 text-meta text-ink-3">{n}</code>
                     <span className={c}>{s}</span>
@@ -124,9 +140,9 @@ export default function DesignPage() {
               </ul>
             </div>
             <div className={`${card} md:col-span-2`}>
-              <h3 className={kicker}>Radii</h3>
+              <h3 className={kicker}>{t.radiiCardTitle}</h3>
               <div className="mt-4 flex flex-wrap items-end gap-6">
-                {RADII.map(([n, c]) => (
+                {radiiSteps.map(([n, c]) => (
                   <div key={n}>
                     <div aria-hidden className={`border border-line-strong bg-paper ${c}`} />
                     <p className="mt-2 text-meta text-ink-2">{n}</p>
@@ -138,49 +154,48 @@ export default function DesignPage() {
         </section>
 
         <section>
-          <SectionHeading eyebrow="Materials" title="Three kinds of value, side by side." align="left" tone="catch">
-            Same footprint, same size. Only the material changes, and it never relies on colour alone.
+          <SectionHeading eyebrow={t.materialsEyebrow} title={t.materialsTitle} align="left" tone="catch">
+            {t.materialsLead}
           </SectionHeading>
           <div className="mt-8 grid gap-4 md:grid-cols-3">
             <div className={card}>
-              <h3 className={kicker}>Printed</h3>
-              <p className="mt-3 text-title font-semibold"><Fact value="As published" /></p>
-              <p className="mt-2 text-meta text-ink-2">Published by the source. Plain ink.</p>
+              <h3 className={kicker}>{t.matPrintedTitle}</h3>
+              <p className="mt-3 text-title font-semibold"><Fact value={t.matPrintedVal} /></p>
+              <p className="mt-2 text-meta text-ink-2">{t.matPrintedDesc}</p>
             </div>
             <div className={card}>
-              <h3 className={kicker}>Yours <YoursTag /></h3>
-              <p className="mt-3 text-title font-semibold"><Fact value="Your number" origin="yours" /></p>
-              <p className="mt-2 text-meta text-ink-2">Typed by the buyer. Periwinkle pencil.</p>
+              <h3 className={kicker}>{t.matYoursTitle} <YoursTag /></h3>
+              <p className="mt-3 text-title font-semibold"><Fact value={t.matYoursVal} origin="yours" /></p>
+              <p className="mt-2 text-meta text-ink-2">{t.matYoursDesc}</p>
             </div>
             <div className={card}>
-              <h3 className={kicker}>Unknown</h3>
+              <h3 className={kicker}>{t.matUnknownTitle}</h3>
               <p className="mt-3 text-title font-semibold"><Fact value={null} format="money" /></p>
-              <p className="mt-2 text-meta text-ink-2">Nobody published it. Persimmon hatch.</p>
+              <p className="mt-2 text-meta text-ink-2">{t.matUnknownDesc}</p>
             </div>
           </div>
           <div className={`${card} mt-4`}>
-            <h3 className={kicker}>The three reasons</h3>
+            <h3 className={kicker}>{t.threeReasonsTitle}</h3>
             <ul className="mt-4 grid gap-4 sm:grid-cols-3">
               <li>
                 <p className="text-body font-semibold"><Fact value={null} /></p>
-                <p className="mt-2 text-meta text-ink-2">The default. The notice does not say.</p>
+                <p className="mt-2 text-meta text-ink-2">{t.reasonDefaultDesc}</p>
               </li>
               <li>
                 <p className="text-body font-semibold"><Fact value={null} reason="Set at the sale" /></p>
-                <p className="mt-2 text-meta text-ink-2">Only when the source&apos;s rules prove it is set on sale day.</p>
+                <p className="mt-2 text-meta text-ink-2">{t.reasonSaleDayDesc}</p>
               </li>
               <li>
                 <p className="text-body font-semibold"><Fact value={null} reason="Not checked yet" /></p>
-                <p className="mt-2 text-meta text-ink-2">Only when it is knowable but we have not looked.</p>
+                <p className="mt-2 text-meta text-ink-2">{t.reasonNotCheckedDesc}</p>
               </li>
             </ul>
           </div>
         </section>
 
         <section>
-          <SectionHeading eyebrow="Component" title="A specimen with empty fields." align="left" tone="catch">
-            This ledger is a demo object with every field empty, so every gap shows. It is not a property and holds no
-            real data.
+          <SectionHeading eyebrow={t.compEyebrow} title={t.compTitle} align="left" tone="catch">
+            {t.compLead}
           </SectionHeading>
           <div className="mt-8">
             <GapLedger listing={{ id: "specimen" }} />
@@ -188,79 +203,80 @@ export default function DesignPage() {
         </section>
 
         <section>
-          <SectionHeading eyebrow="Primitives" title="Buttons, chips and notices, picked by meaning." align="left">
-            The shadcn kit in <code>src/components/ui</code> is themed onto the palette, plus evidence variants. Reach
-            for these before hand-writing classes.
+          <SectionHeading eyebrow={t.primEyebrow} title={t.primTitle} align="left">
+            {t.primLeadBefore} <code>src/components/ui</code> {t.primLeadAfter}
           </SectionHeading>
           <div className="mt-8 grid gap-4">
             <div className={card}>
-              <h3 className={kicker}>Buttons</h3>
+              <h3 className={kicker}>{t.btnSectionTitle}</h3>
               <div className="mt-4 flex flex-wrap items-center gap-3">
-                <Button>Primary · ink</Button>
-                <Button variant="secondary">Secondary</Button>
-                <Button variant="outline">Outline</Button>
-                <Button variant="ghost">Ghost</Button>
-                <Button variant="go">Live action · go</Button>
-                <Button variant="destructive">Destructive</Button>
-                <Button variant="link">Link</Button>
+                <Button>{t.btnPrimary}</Button>
+                <Button variant="secondary">{t.btnSecondary}</Button>
+                <Button variant="outline">{t.btnOutline}</Button>
+                <Button variant="ghost">{t.btnGhost}</Button>
+                <Button variant="go">{t.btnGo}</Button>
+                <Button variant="destructive">{t.btnDestructive}</Button>
+                <Button variant="link">{t.btnLink}</Button>
               </div>
-              <p className="mt-3 text-meta text-ink-3">One ink primary per view. Go only for live actions such as opening a sale or running a hunt.</p>
+              <p className="mt-3 text-meta text-ink-3">{t.btnGuidance}</p>
             </div>
             <div className={card}>
-              <h3 className={kicker}>Chips</h3>
+              <h3 className={kicker}>{t.chipsSectionTitle}</h3>
               <div className="mt-4 flex flex-wrap items-center gap-2">
-                <Badge variant="catch">Stale source</Badge>
-                <Badge variant="catch">Not checked yet</Badge>
-                <Badge variant="go">Sale open</Badge>
-                <Badge variant="yours">Your estimate</Badge>
-                <Badge variant="neutral">Tax sale</Badge>
-                <Badge variant="neutral">3 sources</Badge>
+                <Badge variant="catch">{t.chipStale}</Badge>
+                <Badge variant="catch">{t.chipNotChecked}</Badge>
+                <Badge variant="go">{t.chipSaleOpen}</Badge>
+                <Badge variant="yours">{t.chipYourEstimate}</Badge>
+                <Badge variant="neutral">{t.chipTaxSale}</Badge>
+                <Badge variant="neutral">{t.chipThreeSources}</Badge>
               </div>
-              <p className="mt-3 text-meta text-ink-3">Sale types and counts are published facts, so they stay neutral. Never a green &ldquo;verified&rdquo; chip.</p>
+              <p className="mt-3 text-meta text-ink-3">{t.chipsGuidance}</p>
             </div>
             <div className="grid gap-4 md:grid-cols-3">
               <Alert variant="catch">
                 <AlertTriangle aria-hidden />
-                <AlertTitle>Occupied · no interior access</AlertTitle>
-                <AlertDescription>The listing&apos;s own catch, or an error. Persimmon.</AlertDescription>
+                <AlertTitle>{t.alertCatchTitle}</AlertTitle>
+                <AlertDescription>{t.alertCatchDesc}</AlertDescription>
               </Alert>
               <Alert variant="go">
                 <CheckCircle2 aria-hidden />
-                <AlertTitle>Hunt saved</AlertTitle>
-                <AlertDescription>The user&apos;s own action worked. Green.</AlertDescription>
+                <AlertTitle>{t.alertGoTitle}</AlertTitle>
+                <AlertDescription>{t.alertGoDesc}</AlertDescription>
               </Alert>
               <Alert variant="neutral">
                 <Info aria-hidden />
-                <AlertTitle>Listings are updating</AlertTitle>
-                <AlertDescription>System or legal notices. Neutral, never persimmon.</AlertDescription>
+                <AlertTitle>{t.alertNeutralTitle}</AlertTitle>
+                <AlertDescription>{t.alertNeutralDesc}</AlertDescription>
               </Alert>
             </div>
           </div>
         </section>
 
         <section>
-          <SectionHeading eyebrow="Data" title="Numbers to check, not verdicts." align="left">
-            A Deal Score is drawn on an ink ladder, never green or red. A buyer&apos;s model is drawn in periwinkle,
-            told apart by strength, not by new hues.
+          <SectionHeading eyebrow={t.dataEyebrow} title={t.dataTitle} align="left">
+            {t.dataLead}
           </SectionHeading>
           <div className="mt-8 grid gap-4 md:grid-cols-2">
             <div className={card}>
-              <h3 className={kicker}>Deal Score bands</h3>
+              <h3 className={kicker}>{t.bandsSectionTitle}</h3>
               <ul className="mt-4 space-y-3">
-                {SCORE_BANDS.map((band) => (
-                  <li key={band.key} className="flex flex-wrap items-center gap-3">
-                    <span className="rounded-full px-3 py-1 text-meta font-bold" style={{ background: `${band.color}${band.alpha}`, color: band.color }}>
-                      {band.label} · {band.min}–{band.max}
-                    </span>
-                    <span className="text-label text-ink-3">{band.desc}</span>
-                  </li>
-                ))}
+                {SCORE_BANDS.map((band) => {
+                  const localized = bandCopy[band.key];
+                  return (
+                    <li key={band.key} className="flex flex-wrap items-center gap-3">
+                      <span className="rounded-full px-3 py-1 text-meta font-bold" style={{ background: `${band.color}${band.alpha}`, color: band.color }}>
+                        {interpolate(t.bandRange, { label: localized?.label || band.label, min: band.min, max: band.max })}
+                      </span>
+                      <span className="text-label text-ink-3">{localized?.desc || band.desc}</span>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
             <div className={card}>
-              <h3 className={kicker}>A buyer&apos;s model <YoursTag /></h3>
+              <h3 className={kicker}>{t.buyerModelTitle} <YoursTag /></h3>
               <ul className="mt-4 space-y-3">
-                {MODEL_BARS.map(([label, fill, width]) => (
+                {modelBars.map(([label, fill, width]) => (
                   <li key={label}>
                     <p className="text-meta text-ink-2">{label}</p>
                     <div className="mt-1 h-2.5 overflow-hidden rounded-full bg-line">
@@ -274,12 +290,12 @@ export default function DesignPage() {
         </section>
 
         <section>
-          <SectionHeading eyebrow="Surfaces" title="Elevation and the dark panel." align="left" />
+          <SectionHeading eyebrow={t.surfEyebrow} title={t.surfTitle} align="left" />
           <div className="mt-8 grid gap-4 md:grid-cols-2">
             <div className={card}>
-              <h3 className={kicker}>Elevation, cast in ink</h3>
+              <h3 className={kicker}>{t.elevCardTitle}</h3>
               <div className="mt-5 flex flex-wrap gap-5">
-                {ELEVATION.map(([cls, use]) => (
+                {elevationSteps.map(([cls, use]) => (
                   <div key={cls} className={`w-36 rounded-control bg-card p-4 ${cls}`}>
                     <code className="text-label text-ink">{cls}</code>
                     <p className="mt-1 text-label text-ink-3">{use}</p>
@@ -288,70 +304,69 @@ export default function DesignPage() {
               </div>
             </div>
             <div className="on-ink rounded-card bg-ink p-5 text-white shadow-overlay sm:p-6">
-              <h3 className="text-label font-semibold uppercase text-white/60">Evidence on ink</h3>
+              <h3 className="text-label font-semibold uppercase text-white/60">{t.onInkTitle}</h3>
               <dl className="mt-4 space-y-3 text-body">
-                <div className="flex justify-between gap-4"><dt className="text-white/75">Opening bid</dt><dd className="font-semibold"><Fact value={126000} format="money" /></dd></div>
-                <div className="flex justify-between gap-4"><dt className="text-white/75">Your top bid</dt><dd className="font-semibold"><Fact value={98000} format="money" origin="yours" /></dd></div>
-                <div className="flex justify-between gap-4"><dt className="text-white/75">Deposit</dt><dd className="font-semibold"><Fact value={null} /></dd></div>
+                <div className="flex justify-between gap-4"><dt className="text-white/75">{t.onInkOpening}</dt><dd className="font-semibold"><Fact value={126000} format="money" /></dd></div>
+                <div className="flex justify-between gap-4"><dt className="text-white/75">{t.onInkTopBid}</dt><dd className="font-semibold"><Fact value={98000} format="money" origin="yours" /></dd></div>
+                <div className="flex justify-between gap-4"><dt className="text-white/75">{t.onInkDeposit}</dt><dd className="font-semibold"><Fact value={null} /></dd></div>
               </dl>
-              <p className="mt-4 text-meta text-white/60">Add <code>on-ink</code> to any dark container that renders a Fact. Text steps are white, white/75 and white/60.</p>
+              <p className="mt-4 text-meta text-white/60">{t.onInkGuidancePrefix} <code>on-ink</code> {t.onInkGuidanceSuffix}</p>
             </div>
           </div>
         </section>
 
         <section>
-          <SectionHeading eyebrow="States" title="Loading, empty and failed, each said plainly." align="left" />
+          <SectionHeading eyebrow={t.statesEyebrow} title={t.statesTitle} align="left" />
           <div className="mt-8 grid gap-4 md:grid-cols-3">
             <div className={card}>
-              <h3 className={kicker}>Loading</h3>
+              <h3 className={kicker}>{t.stateLoadingTitle}</h3>
               <div className="mt-4 space-y-2" aria-hidden>
                 <Skeleton className="h-5 w-3/4 bg-line" />
                 <Skeleton className="h-4 w-1/2 bg-line" />
                 <Skeleton className="h-9 w-1/3 bg-line" />
               </div>
-              <p className="mt-3 text-meta text-ink-3">Reserve the final size so nothing jumps when data lands.</p>
+              <p className="mt-3 text-meta text-ink-3">{t.stateLoadingDesc}</p>
             </div>
             <div className={card}>
-              <h3 className={kicker}>Empty</h3>
-              <p className="mt-4 text-body font-semibold text-ink">No listings match these filters.</p>
-              <p className="mt-1 text-meta text-ink-2">Say what is missing and the next step. Neutral, because nothing went wrong.</p>
+              <h3 className={kicker}>{t.stateEmptyTitle}</h3>
+              <p className="mt-4 text-body font-semibold text-ink">{t.stateEmptyHeadline}</p>
+              <p className="mt-1 text-meta text-ink-2">{t.stateEmptyDesc}</p>
             </div>
             <Alert variant="catch">
               <AlertTriangle aria-hidden />
-              <AlertTitle>Listings could not load</AlertTitle>
-              <AlertDescription>Failed is not empty: say it failed, and offer a retry. Never fall back to sample data.</AlertDescription>
+              <AlertTitle>{t.stateFailedTitle}</AlertTitle>
+              <AlertDescription>{t.stateFailedDesc}</AlertDescription>
             </Alert>
           </div>
         </section>
 
         <section>
-          <SectionHeading eyebrow="Colour grammar" title="Colour is spent on evidence, not mood." align="left" />
+          <SectionHeading eyebrow={t.grammarEyebrow} title={t.grammarTitle} align="left" />
           <div className="mt-8 grid gap-4 md:grid-cols-2">
             <div className={card}>
-              <h3 className={kicker}>Do</h3>
+              <h3 className={kicker}>{t.grammarDoTitle}</h3>
               <ul className="mt-3 list-disc space-y-2 pl-5 text-meta text-ink-2">
-                <li>Persimmon for the catch and for unknown values.</li>
-                <li>Periwinkle for what the buyer typed.</li>
-                <li>Celadon green for an action or for something live.</li>
-                <li>Ink, paper and lines for everything else.</li>
+                <li>{t.doList1}</li>
+                <li>{t.doList2}</li>
+                <li>{t.doList3}</li>
+                <li>{t.doList4}</li>
               </ul>
             </div>
             <div className={card}>
-              <h3 className={kicker}>Don&apos;t</h3>
+              <h3 className={kicker}>{t.grammarDontTitle}</h3>
               <ul className="mt-3 list-disc space-y-2 pl-5 text-meta text-ink-2">
-                <li>Use green for &ldquo;good deal&rdquo; or &ldquo;verified&rdquo;. Green reads as safe.</li>
-                <li>Show a missing value as a dash or blank space.</li>
-                <li>Pass a typed estimate off in plain ink.</li>
-                <li>Carry meaning in colour alone.</li>
+                <li>{t.dontList1}</li>
+                <li>{t.dontList2}</li>
+                <li>{t.dontList3}</li>
+                <li>{t.dontList4}</li>
               </ul>
             </div>
           </div>
         </section>
       </div>
-  
+
       </main>
       <SiteFooter />
     </div>
-
   );
 }

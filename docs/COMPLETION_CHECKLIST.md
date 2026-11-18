@@ -34,7 +34,7 @@ The 2026-10-31 through 2026-11-08 audit receipts (Tracks 1–3 stabilization, re
 
 | Fact | Value | Source |
 |---|---|---|
-| Stabilization & DB fast-path code | Through `fe17807` + current head: durable PG checkpoints, late-row CTE + Migration `034`/`038` fast discovery path, `PG_FACET_CACHE`, single-pass observation stats, `createListingsBulk`, `SheriffSaleScraper` per-county `completedCounties` + `20`-portal rotation (`MAX_CONTINUATIONS_PER_CYCLE=2`), un-reobserved past-sale & `Pass B` `200`-row purge maintenance, `12`-jurisdiction `DEFAULT_TRUSTEE_JURISDICTIONS`, slice-scoped drift telemetry baselines + sparse-field filter, and `sourceCadences()` first-match parity with `presentListing()` | git log & test suite |
+| Stabilization & current codebase | Through `6abe9df` + local head: durable PG checkpoints, late-row CTE + Migrations `034`–`039` fast discovery & `mv_neighborhood_stats` fidelity, `PG_FACET_CACHE`, revision-keyed precompressed `GET /api/listings` response cache + `pgRevisionCoalesced`, Florida GIO / NY / Clark NV parcel boundary endpoints, RBAC proxy enforcement, hero-first property layout, review split-pane hotkey/validation hardening, and full-site `en`/`hy`/`ru` i18n | git log & test suite |
 | Live URL | `https://property-crawl.onrender.com`; `fe17807` verified live on Render (`uptime: 901.4s`, post-Continuation 2 `05:51:19Z`) with `dataMode: "postgres"` (`databaseFunctional: true`, `documentReviewStore: "postgres"`), `inventoryFreshness.stale: false` (`2,837/2,837` fresh across all 8 serving sources; `laggingSources: []`), `scrapersInFault: 0`, and `scrapersWithDrift: 0` across 3 continuation slices | live health readback 2026-11-14 |
 | Hosted evidence storage | explicitly **ephemeral_filesystem**, mount/backup unverified; startup success does not establish durability | deployed `/api/health` readback |
 | Hosted database readback | **2,837 listings** and **26,761 observations** (`8,870` tracked records, `2,837/2,837` fresh across all 8 sources including `sheriff: 517/517` and `servicelink: 1,941/1,941` fresh after concluding past-sale & terminal row purge); Migrations `034`–`038` active on PostgreSQL | live /api/health readback 2026-11-14 |
@@ -1097,6 +1097,18 @@ regression.
 | `gsa` | publisher robots exclusion on `/our-listing`. Collector is fail-closed; there is an operator-only override that is **not** used. |
 | `irs` | Live canary found **0 real-estate auction cards** on two distinct runs → `NOT_CLEAN`. Empty publisher inventory is not a clean canary. `reports/canary-irs-2026-09-27.md` |
 | `hud` | Stays at its declared OH/NJ promoted run scope. A nationwide sweep is not promoted. |
+
+## Daily Developer & Release Workflow
+
+| Stage | Command | Purpose |
+|---|---|---|
+| Dev servers | `npm run dev:api` & `npm run dev` | Run Node listing API (`:3000`) and Next.js 16 canonical UI (`:3001`) |
+| Context & schema sync | `npm run context:gen && npm run schema:check` | Keep generated `CONTEXT.md` and `src/lib/db/` schema/migration mirrors aligned |
+| Static & meta verification | `npm run lint && npm run test:meta-guards && npm run test:seo` | TypeScript check, structural/honesty/doc guards, SEO title & meta gates |
+| i18n parity check | `node --test test/i18n-completeness.test.js` | Enforce 100% key, array-length, and placeholder parity across `en`, `hy`, `ru` |
+| Full JS coverage | `npm run test:ci-coverage` | Run all JS/TS suites (`test/run-ui-suite.js` and Python tools execute separately) |
+| Production build & UI E2E | `npm run build && node test/run-ui-suite.js` | Verify Next.js production bundle and 63 Playwright E2E checks |
+| Release / pre-push gate | `npm run release:gate` | Run the complete `PP-02` gate suite before push/deploy |
 
 ## Do not do
 

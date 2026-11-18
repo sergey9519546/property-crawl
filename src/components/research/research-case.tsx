@@ -8,7 +8,10 @@ import { readUnderwriteScenario } from "@/lib/underwrite-scenario";
 import { PrivateWorkspaceGate, useWorkspaceSession } from "@/components/workspace/workspace-shell";
 import type { Claim, ReconsiderationCondition, ResearchCaseDetail, ResearchDossier } from "@/lib/workspace-types";
 import { sourceDisplayText } from "@/lib/source-display";
-import { listingCatch } from "@/lib/listing-catch";
+import { localizedListingCatch } from "@/lib/i18n/domain";
+import { useLocale } from "@/components/i18n/locale-provider";
+import type { Locale } from "@/lib/i18n/config";
+import { formatLocaleDate, formatLocaleNumber, formatUsd, interpolate } from "@/lib/i18n/translator";
 import { bandForScore } from "@/lib/score-bands";
 import { evaluateAdversarialDocket } from "@/lib/adversarial-docket";
 import { cn } from "@/lib/utils";
@@ -16,26 +19,49 @@ import { cn } from "@/lib/utils";
 type DetailResponse = { case: ResearchCaseDetail; dossier: ResearchDossier };
 type IntakeItem = { id: string; sourceId: string; sourceUrl: string; capturedAt: string; review?: { decision?: string }; status?: string };
 
-const reasonChoices = [
-  ["price_above_target", "Price above target"],
-  ["missing_sale_terms", "Missing sale terms"],
-  ["title_risk_unresolved", "Title risk unresolved"],
-  ["insufficient_margin", "Insufficient modeled margin"],
-  ["property_condition", "Property condition"],
-  ["timing_or_funds", "Timing or funds"],
-] as const;
-const relationships = ["sale_terms", "title_research", "occupancy_research", "valuation_research", "supports_identity", "other"];
+const relationships = ["sale_terms", "title_research", "occupancy_research", "valuation_research", "supports_identity", "other"] as const;
 
-function show(value: unknown) {
-  if (value === null || value === undefined || value === "") return "Unknown";
-  if (typeof value === "number") return value.toLocaleString();
+function show(value: unknown, locale: Locale, unknownLabel: string) {
+  if (value === null || value === undefined || value === "") return unknownLabel;
+  if (typeof value === "number") return locale === "en" ? value.toLocaleString() : formatLocaleNumber(locale, value);
   if (typeof value === "string") return sourceDisplayText(value);
   return sourceDisplayText(JSON.stringify(value));
 }
 
-function claimName(claim: Claim) { return sourceDisplayText(claim.title || claim.key || "Recorded claim"); }
+function claimName(claim: Claim, fallback: string) { return sourceDisplayText(claim.title || claim.key || fallback); }
 
 export function ResearchCase({ caseId }: { caseId: string }) {
+  const { locale, messages } = useLocale();
+  const t = messages.researchB2;
+  const d = messages.designB2;
+  const fmtMoney = (n: number) => (locale === "en" ? `$${Math.round(n).toLocaleString()}` : formatUsd(locale, n));
+  const fmtMoneyStr = (raw: string | number | null | undefined) => {
+    const n = Number(raw || 0);
+    return Number.isFinite(n) ? fmtMoney(n) : "$0";
+  };
+  const fmtDateTime = (value: string) =>
+    locale === "en"
+      ? new Date(value).toLocaleString()
+      : formatLocaleDate(locale, value, { dateStyle: "medium", timeStyle: "short" });
+
+  const reasonChoices = [
+    ["price_above_target", t.rcReasonPriceAbove],
+    ["missing_sale_terms", t.rcReasonMissingTerms],
+    ["title_risk_unresolved", t.rcReasonTitleRisk],
+    ["insufficient_margin", t.rcReasonLowMargin],
+    ["property_condition", t.rcReasonCondition],
+    ["timing_or_funds", t.rcReasonTimingFunds],
+  ] as const;
+
+  const relationshipLabels: Record<string, string> = {
+    sale_terms: t.rcRelSaleTerms,
+    title_research: t.rcRelTitleResearch,
+    occupancy_research: t.rcRelOccupancyResearch,
+    valuation_research: t.rcRelValuationResearch,
+    supports_identity: t.rcRelSupportsIdentity,
+    other: t.rcRelOther,
+  };
+
   const session = useWorkspaceSession();
   const searchParams = useSearchParams();
   const requestedReturn = searchParams.get("returnTo");
@@ -60,15 +86,15 @@ export function ResearchCase({ caseId }: { caseId: string }) {
     try {
       const response = await fetch(`/api/workspace/cases/${encodeURIComponent(caseId)}`, { cache: "no-store", credentials: "same-origin" });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Research case could not be loaded");
+      if (!response.ok) throw new Error(result.error || t.rcErrLoadCase);
       setDetail(result); setError("");
       setDecisionState(result.case.state);
       setReasonCodes(result.case.decision?.reasonCodes || []);
       setNote(result.case.decision?.note || "");
       if (result.case.reconsideration?.conditions?.length) { setMode(result.case.reconsideration.mode); setConditions(result.case.reconsideration.conditions); }
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "Research case could not be loaded"); }
+    } catch (caught) { setError(caught instanceof Error ? caught.message : t.rcErrLoadCase); }
     finally { setLoading(false); }
-  }, [caseId, session.authenticated]);
+  }, [caseId, session.authenticated, t.rcErrLoadCase]);
 
   React.useEffect(() => { void load(); }, [load]);
 
@@ -77,9 +103,9 @@ export function ResearchCase({ caseId }: { caseId: string }) {
     try {
       const response = await fetch(path, { method, credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Case update failed");
+      if (!response.ok) throw new Error(result.error || t.rcErrUpdateCase);
       await load(); return result;
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "Case update failed"); return null; }
+    } catch (caught) { setError(caught instanceof Error ? caught.message : t.rcErrUpdateCase); return null; }
     finally { setBusy(false); }
   }
 
@@ -92,7 +118,7 @@ export function ResearchCase({ caseId }: { caseId: string }) {
       origin: { type: "manual" },
       ...(local ? { underwriteScenario: local } : {}),
     });
-    if (result) setMessage(result.sourceCheck?.updated === true ? "A newer saved publisher observation was found and the snapshot was updated." : "No newer saved publisher observation was found. This check does not contact the publisher.");
+    if (result) setMessage(result.sourceCheck?.updated === true ? t.rcMsgRecheckFound : t.rcMsgRecheckNone);
   }
 
   async function syncLocalScenario() {
@@ -104,7 +130,7 @@ export function ResearchCase({ caseId }: { caseId: string }) {
       origin: { type: "manual" },
       underwriteScenario: local,
     });
-    if (result) setMessage("Local underwriting assumptions synced to research case.");
+    if (result) setMessage(t.rcMsgSyncedLocal);
   }
 
   async function saveDecision() {
@@ -119,7 +145,7 @@ export function ResearchCase({ caseId }: { caseId: string }) {
       ...(scenarioToPersist ? { underwriteScenario: scenarioToPersist } : {}),
       ...(decisionState === "pass" ? { reconsideration: { mode, conditions } } : {}),
     });
-    if (result) setMessage(decisionState === "pass" ? "Pass saved. The case returns only when a supported condition is met." : "Decision saved to this case revision.");
+    if (result) setMessage(decisionState === "pass" ? t.rcMsgPassSaved : t.rcMsgDecisionSaved);
   }
 
   async function loadEvidence() {
@@ -127,63 +153,68 @@ export function ResearchCase({ caseId }: { caseId: string }) {
     try {
       const response = await fetch("/api/source-network/intake?includeContent=false", { cache: "no-store", credentials: "same-origin" });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Evidence queue could not be loaded");
+      if (!response.ok) throw new Error(result.error || t.rcErrLoadEvidence);
       const approved = (result.items || []).filter((item: IntakeItem) => item.review?.decision === "approved");
       setIntake(approved); if (approved[0]) setSelectedEvidence(approved[0].id);
-      setMessage(approved.length ? `${approved.length} reviewed evidence packet${approved.length === 1 ? "" : "s"} available.` : "No approved evidence packets are available to link.");
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "Evidence queue could not be loaded"); }
+      setMessage(
+        approved.length
+          ? interpolate(approved.length === 1 ? t.rcMsgEvidenceAvailSingle : t.rcMsgEvidenceAvailPlural, { count: approved.length })
+          : t.rcMsgEvidenceNone,
+      );
+    } catch (caught) { setError(caught instanceof Error ? caught.message : t.rcErrLoadEvidence); }
     finally { setBusy(false); }
   }
 
   async function linkEvidence() {
     if (!detail || !selectedEvidence) return;
     const result = await mutate(`/api/workspace/cases/${encodeURIComponent(caseId)}/evidence`, "POST", { expectedRevision: detail.case.revision, intakeId: selectedEvidence, relationship });
-    if (result) setMessage("Reviewed evidence linked. Its contents remain an attachment until an official-record adapter establishes a fact.");
+    if (result) setMessage(t.rcMsgEvidenceLinked);
   }
 
   async function unlinkEvidence(intakeId: string) {
     if (!detail) return;
     const result = await mutate(`/api/workspace/cases/${encodeURIComponent(caseId)}/evidence/${encodeURIComponent(intakeId)}`, "DELETE", { expectedRevision: detail.case.revision });
-    if (result) setMessage("Evidence reference removed from the new case revision.");
+    if (result) setMessage(t.rcMsgEvidenceUnlinked);
   }
 
   async function downloadPacket(format: "json" | "md") {
     setBusy(true); setError("");
     try {
       const response = await fetch(`/api/workspace/cases/${encodeURIComponent(caseId)}/packet?format=${format}`, { credentials: "same-origin", cache: "no-store" });
-      if (!response.ok) { const result = await response.json(); throw new Error(result.error || "Packet could not be generated"); }
+      if (!response.ok) { const result = await response.json(); throw new Error(result.error || t.rcErrPacketGen); }
       const blob = await response.blob();
       const url = URL.createObjectURL(blob); const anchor = document.createElement("a");
       anchor.href = url; anchor.download = `property-research-${caseId}-r${detail?.case.revision || "current"}.${format === "md" ? "md" : "json"}`; anchor.click();
-      URL.revokeObjectURL(url); setMessage("Packet generated from the current stored case revision.");
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "Packet could not be generated"); }
+      URL.revokeObjectURL(url); setMessage(t.rcMsgPacketGen);
+    } catch (caught) { setError(caught instanceof Error ? caught.message : t.rcErrPacketGen); }
     finally { setBusy(false); }
   }
 
+  const stateLabels: Record<"inbox" | "pursue" | "pass", string> = {
+    inbox: t.rcStateInbox,
+    pursue: t.rcStatePursue,
+    pass: t.rcStatePass,
+  };
+
   return <div className="mx-auto max-w-[1380px] px-5 py-8 sm:px-8">
-    <Link href={returnTo} className="inline-flex items-center gap-2 text-xs font-semibold text-ink-2 hover:text-ink"><ArrowLeft size={14} />Back to research</Link>
-    <PrivateWorkspaceGate title="Unlock this research case" headingLevel={1}>
+    <Link href={returnTo} className="inline-flex items-center gap-2 text-xs font-semibold text-ink-2 hover:text-ink"><ArrowLeft size={14} />{t.rcBackResearch}</Link>
+    <PrivateWorkspaceGate title={t.rcGateTitle} headingLevel={1}>
       {loading && !detail
         ? <>
-            {/* The h1 belongs to the loaded branch below, so these states used
-                to render a bare <p> with no page-level heading at all -- three
-                of this page's four states gave a screen-reader user nothing to
-                navigate from. Measured as h1=0 on /research/[id] while every
-                other route in the app reported h1=1. */}
-            <h1 className="mt-6 text-2xl font-semibold text-ink">Reconstructing this research case</h1>
-            <p className="mt-3 flex items-center gap-2 rounded-card bg-card p-7 text-sm"><Loader2 size={17} className="animate-spin" />Gathering the evidence recorded for this case…</p>
+            <h1 className="mt-6 text-2xl font-semibold text-ink">{t.rcLoadingTitle}</h1>
+            <p className="mt-3 flex items-center gap-2 rounded-card bg-card p-7 text-sm"><Loader2 size={17} className="animate-spin" />{t.rcLoadingBody}</p>
           </>
         : error && !detail
           ? <>
-              <h1 className="mt-6 text-2xl font-semibold text-ink">This research case could not be opened</h1>
+              <h1 className="mt-6 text-2xl font-semibold text-ink">{t.rcErrorTitle}</h1>
               <p role="alert" className="mt-3 rounded-card bg-catch-wash p-6 text-sm text-catch-ink">{error}</p>
             </>
           : detail && <>
         <header className="mt-6 rounded-card bg-ink p-6 text-white sm:p-8">
-          <div className="flex flex-wrap items-start justify-between gap-5"><div><div className="flex flex-wrap items-center gap-2"><span className="rounded-full bg-card/10 px-3 py-1 text-label font-bold uppercase tracking-wider">{detail.case.state}</span>{detail.case.reconsiderationRequired && <span className="flex items-center gap-1 rounded-full bg-signature px-3 py-1 text-label font-bold uppercase tracking-wider text-ink"><RotateCcw size={12} />Second Look</span>}</div><h1 className="mt-4 text-3xl font-semibold sm:text-5xl">{sourceDisplayText(detail.case.address || detail.case.listingId)}</h1><p className="mt-3 text-xs text-paper/75">{sourceDisplayText(detail.case.sourceRef.sourceId)} · {sourceDisplayText(detail.case.sourceRef.recordId)} · Case revision {detail.case.revision}</p></div><div className="flex flex-wrap gap-2"><Link href={`/research/${encodeURIComponent(caseId)}/export`} className="inline-flex items-center gap-2 rounded-control border border-white/25 px-3 py-2 text-xs font-semibold">Decision packet dossier</Link><button type="button" aria-label="Download JSON decision packet" disabled={busy} onClick={() => void downloadPacket("json")} className="inline-flex items-center gap-2 rounded-control bg-card px-3 py-2 text-xs font-semibold text-ink"><Download size={14} />JSON</button><button type="button" aria-label="Download print-ready decision report" disabled={busy} onClick={() => void downloadPacket("md")} className="inline-flex items-center gap-2 rounded-control border border-white/25 px-3 py-2 text-xs font-semibold"><Download size={14} />Print-ready report</button></div></div>
+          <div className="flex flex-wrap items-start justify-between gap-5"><div><div className="flex flex-wrap items-center gap-2"><span className="rounded-full bg-card/10 px-3 py-1 text-label font-bold uppercase tracking-wider">{stateLabels[detail.case.state as "inbox" | "pursue" | "pass"] ?? detail.case.state}</span>{detail.case.reconsiderationRequired && <span className="flex items-center gap-1 rounded-full bg-signature px-3 py-1 text-label font-bold uppercase tracking-wider text-ink"><RotateCcw size={12} />{t.rcSecondLookBadge}</span>}</div><h1 className="mt-4 text-3xl font-semibold sm:text-5xl">{sourceDisplayText(detail.case.address || detail.case.listingId)}</h1><p className="mt-3 text-xs text-paper/75">{sourceDisplayText(detail.case.sourceRef.sourceId)} · {sourceDisplayText(detail.case.sourceRef.recordId)} · {interpolate(t.rcCaseRevisionLine, { revision: detail.case.revision })}</p></div><div className="flex flex-wrap gap-2"><Link href={`/research/${encodeURIComponent(caseId)}/export`} className="inline-flex items-center gap-2 rounded-control border border-white/25 px-3 py-2 text-xs font-semibold">{t.rcDecisionDossierBtn}</Link><button type="button" aria-label={t.rcDownloadJsonAria} disabled={busy} onClick={() => void downloadPacket("json")} className="inline-flex items-center gap-2 rounded-control bg-card px-3 py-2 text-xs font-semibold text-ink"><Download size={14} />JSON</button><button type="button" aria-label={t.rcDownloadMdAria} disabled={busy} onClick={() => void downloadPacket("md")} className="inline-flex items-center gap-2 rounded-control border border-white/25 px-3 py-2 text-xs font-semibold"><Download size={14} />{t.rcPrintReportBtn}</button></div></div>
           {detail.case.reconsiderationRequired && (
             <div className="mt-5 rounded-control bg-ink-2 p-4 text-sm leading-6 text-paper">
-              <p>Relevant evidence changed. Your saved pass remains intact until you review and save a new decision.</p>
+              <p>{t.rcReconsiderLead}</p>
               {(detail.case.latestTrigger?.matchedConditions || []).length > 0 && (
                 <ul data-testid="matched-conditions" className="mt-2 list-disc pl-5 text-xs text-paper/80">
                   {detail.case.latestTrigger!.matchedConditions!.map((condition, index) => (
@@ -202,10 +233,10 @@ export function ResearchCase({ caseId }: { caseId: string }) {
                     <ShieldAlert size={16} className="mt-0.5 shrink-0 text-catch" />
                     <div>
                       <strong className="block font-bold uppercase tracking-wider text-white">
-                        CRITICAL TITLE ALERT: Junior Lien Surviving Mortgage Trap (JUNIOR_LIEN_SURVIVING_MORTGAGE)
+                        {t.rcCriticalTitleAlert}
                       </strong>
                       <p className="mt-1 leading-relaxed text-paper/90">
-                        Apparent price drop is a value trap. The foreclosing plaintiff is a subordinate lienholder (2nd Mortgage, HELOC, or Mechanic&apos;s Lien). Under common law recording acts, the senior 1st mortgage survives the auction in full against the winning bidder!
+                        {t.rcCriticalTitleBody}
                       </p>
                     </div>
                   </div>
@@ -218,10 +249,10 @@ export function ResearchCase({ caseId }: { caseId: string }) {
                     <AlertTriangle size={16} className="mt-0.5 shrink-0 text-catch" />
                     <div>
                       <strong className="block font-bold uppercase tracking-wider text-white">
-                        CASE FLAG: IRS 120-Day Redemption Window Active (IRS_REDEMPTION_WINDOW_ACTIVE)
+                        {t.rcIrsFlagTitle}
                       </strong>
                       <p className="mt-1 leading-relaxed text-paper/90">
-                        Active federal tax lien recorded under 26 U.S.C. § 7425(d). The United States holds a statutory 120-day super-priority post-sale right of redemption.
+                        {t.rcIrsFlagBody}
                       </p>
                     </div>
                   </div>
@@ -234,10 +265,10 @@ export function ResearchCase({ caseId }: { caseId: string }) {
                     <Scale size={16} className="mt-0.5 shrink-0 text-yours-wash" />
                     <div>
                       <strong className="block font-bold uppercase tracking-wider text-white">
-                        CASE FLAG: HOA Super-Priority Assessment Risk (HOA_SUPER_PRIORITY_RISK)
+                        {t.rcHoaFlagTitle}
                       </strong>
                       <p className="mt-1 leading-relaxed text-paper/90">
-                        Property is in a statutory super-priority state (UCIOA / NV / FL). Common expense assessments hold statutory priority over private deeds; verify whether senior mortgage is extinguished (NV NRS 116.3116) or survives with safe harbor payoffs.
+                        {t.rcHoaFlagBody}
                       </p>
                     </div>
                   </div>
@@ -245,7 +276,22 @@ export function ResearchCase({ caseId }: { caseId: string }) {
               )}
             </div>
           )}
-          {(() => { const snap = detail.case.listingSnapshot as Parameters<typeof listingCatch>[0]; const band = bandForScore(snap.dealScore); const catchSummary = listingCatch(snap); return <section data-testid="case-catch" className="mt-5 rounded-control bg-card/5 p-4 text-sm leading-6 text-paper"><p className="font-semibold">{band ? `Deal Score ${Math.round(Number(snap.dealScore))}/99 · ${band.label}` : "Deal Score unavailable"} · {catchSummary.flags.length ? `${catchSummary.flags.length} thing${catchSummary.flags.length === 1 ? "" : "s"} to check` : "no published red flags"}</p><p className="mt-1 text-xs text-paper/80">{sourceDisplayText([...catchSummary.notes, ...catchSummary.flags].join(" "))}</p></section>; })()}
+          {(() => {
+            const snap = detail.case.listingSnapshot as Parameters<typeof localizedListingCatch>[0];
+            const band = bandForScore(snap.dealScore);
+            const bandLabel = band
+              ? (band.key === "elite" ? d.bandEliteLabel : band.key === "strong" ? d.bandStrongLabel : band.key === "fair" ? d.bandFairLabel : d.bandThinLabel)
+              : "";
+            const catchSummary = localizedListingCatch(snap, [], locale);
+            return (
+              <section data-testid="case-catch" className="mt-5 rounded-control bg-card/5 p-4 text-sm leading-6 text-paper">
+                <p className="font-semibold">
+                  {band ? interpolate(t.rcDealScoreBand, { score: Math.round(Number(snap.dealScore)), label: bandLabel }) : t.rcDealScoreUnavail} · {catchSummary.flags.length ? interpolate(catchSummary.flags.length === 1 ? t.rcCatchFlagSingle : t.rcCatchFlagPlural, { count: catchSummary.flags.length }) : t.rcCatchNoFlags}
+                </p>
+                <p className="mt-1 text-xs text-paper/80">{sourceDisplayText([...catchSummary.notes, ...catchSummary.flags].join(" "))}</p>
+              </section>
+            );
+          })()}
         </header>
         {error && <p role="alert" className="mt-4 rounded-control bg-catch-wash p-4 text-sm text-catch-ink">{error}</p>}{message && <p role="status" className="mt-4 flex items-center gap-2 rounded-control border border-go/30 bg-go-wash p-4 text-sm text-ink"><Check size={16} />{message}</p>}
 
@@ -284,7 +330,7 @@ export function ResearchCase({ caseId }: { caseId: string }) {
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
                       <ShieldAlert size={19} className="text-ink" />
-                      <h2 className="text-xl font-semibold">Title Risk &amp; Senior Lien Survival</h2>
+                      <h2 className="text-xl font-semibold">{t.rcTitleRiskHeading}</h2>
                     </div>
                     {isJuniorLien && decisionState !== "pass" && (
                       <button
@@ -293,25 +339,25 @@ export function ResearchCase({ caseId }: { caseId: string }) {
                         onClick={() => {
                           setDecisionState("pass");
                           setReasonCodes((prev) => [...new Set([...prev, "title_risk_unresolved"])]);
-                          if (!note) setNote("Pass: Junior lien foreclosure value trap. Senior mortgage survives sale.");
-                          setMessage("Applied Title Risk Unresolved pass recommendation.");
+                          if (!note) setNote(t.rcPassTitleTrapNote);
+                          setMessage(t.rcPassTitleTrapMsg);
                         }}
                         className="inline-flex items-center gap-1.5 rounded-control border border-catch/30 bg-catch-wash px-3 py-1.5 text-xs font-semibold text-catch-ink hover:bg-catch-wash/80 disabled:opacity-50"
                       >
                         <ShieldAlert size={13} />
-                        Pass: Title Risk Trap
+                        {t.rcPassTitleTrapBtn}
                       </button>
                     )}
                   </div>
                   <p className="mt-2 text-xs leading-5 text-ink-2">
-                    Deterministic title risk arbitration checking senior deed survival, 26 U.S.C. § 7425(d) federal tax liens, and state HOA super-priority rules.
+                    {t.rcTitleRiskDesc}
                   </p>
 
                   <div className="mt-4 grid gap-3 sm:grid-cols-3">
                     <div className="rounded-control border border-line bg-paper/70 p-3.5 text-xs">
-                      <span className="text-label font-bold uppercase tracking-wider text-ink-3">Foreclosing Party &amp; Priority</span>
+                      <span className="text-label font-bold uppercase tracking-wider text-ink-3">{t.rcForeclosingPartyLabel}</span>
                       <p className="mt-1 font-bold text-ink truncate">
-                        {plaintiff ? sourceDisplayText(plaintiff) : "Unpublished plaintiff"}
+                        {plaintiff ? sourceDisplayText(plaintiff) : t.rcUnpublishedPlaintiff}
                       </p>
                       <span className={cn(
                         "mt-1.5 inline-block text-label font-bold uppercase px-2 py-0.5 rounded",
@@ -319,33 +365,33 @@ export function ResearchCase({ caseId }: { caseId: string }) {
                         isHoaPlaintiff ? "bg-catch-wash text-catch-ink border border-catch/30" :
                         "bg-paper text-ink"
                       )}>
-                        {isJuniorLien ? "Junior Lien (Senior Survives)" : isHoaPlaintiff ? "HOA Assessment Lien" : "Senior Mortgage Position"}
+                        {isJuniorLien ? t.rcJuniorLienBadge : isHoaPlaintiff ? t.rcHoaLienBadge : t.rcSeniorPosBadge}
                       </span>
                     </div>
 
                     <div className="rounded-control border border-line bg-paper/70 p-3.5 text-xs">
-                      <span className="text-label font-bold uppercase tracking-wider text-ink-3">Federal Tax Lien (26 U.S.C. § 7425)</span>
+                      <span className="text-label font-bold uppercase tracking-wider text-ink-3">{t.rcFedTaxLienLabel}</span>
                       <p className="mt-1 font-bold text-ink">
-                        {isIrsLien ? "120-Day IRS Redemption Active" : "No Federal Tax Lien Flag"}
+                        {isIrsLien ? t.rcIrsRedemptionActive : t.rcNoIrsFlag}
                       </p>
                       <span className={cn(
                         "mt-1.5 inline-block text-label font-bold uppercase px-2 py-0.5 rounded",
                         isIrsLien ? "bg-catch-wash text-catch-ink border border-catch/30" : "bg-paper text-ink-2"
                       )}>
-                        {isIrsLien ? "Active Redemption Window" : "Clear of IRS Citations"}
+                        {isIrsLien ? t.rcActiveRedemptionWin : t.rcClearOfIrs}
                       </span>
                     </div>
 
                     <div className="rounded-control border border-line bg-paper/70 p-3.5 text-xs">
-                      <span className="text-label font-bold uppercase tracking-wider text-ink-3">HOA Super-Priority Status</span>
+                      <span className="text-label font-bold uppercase tracking-wider text-ink-3">{t.rcHoaSuperLabel}</span>
                       <p className="mt-1 font-bold text-ink">
-                        {state === "NV" ? "NV 9-Mo Super-Priority (NRS 116.3116)" : state === "FL" ? "FL Safe Harbor (Fla. Stat. § 718.116)" : isSuperState ? `${state} UCIOA Super-Priority` : `${state} Standard Subordinate`}
+                        {state === "NV" ? t.rcHoaNvStatus : state === "FL" ? t.rcHoaFlStatus : isSuperState ? interpolate(t.rcHoaUcioaStatus, { state }) : interpolate(t.rcHoaStdStatus, { state })}
                       </p>
                       <span className={cn(
                         "mt-1.5 inline-block text-label font-bold uppercase px-2 py-0.5 rounded",
                         isSuperState ? "bg-yours-wash text-yours border border-yours/30" : "bg-paper text-ink-2"
                       )}>
-                        {state === "NV" ? "Extinguishes Senior Mortgage" : isSuperState ? "Super-Priority Assessment" : "Subordinate to 1st Deed"}
+                        {state === "NV" ? t.rcHoaExtinguishes : isSuperState ? t.rcHoaSuperAssessment : t.rcHoaSubordinateFirst}
                       </span>
                     </div>
                   </div>
@@ -353,10 +399,10 @@ export function ResearchCase({ caseId }: { caseId: string }) {
                   {isJuniorLien && (
                     <div className="mt-4 rounded-control border border-catch/30 bg-catch-wash p-4 text-xs text-catch-ink">
                       <strong className="block font-bold uppercase tracking-wide text-catch-ink">
-                        VALUE TRAP WARNING: Junior Lien Foreclosure
+                        {t.rcValueTrapHeading}
                       </strong>
                       <p className="mt-1 text-xs leading-relaxed text-catch-ink">
-                        The foreclosing plaintiff holds a subordinate instrument (2nd mortgage, HELOC, or mechanic&apos;s construction lien). A steep price drop or low opening bid does not reflect total encumbrances. The winning bidder takes title subject to the underlying senior 1st mortgage in full.
+                        {t.rcValueTrapBody}
                       </p>
                     </div>
                   )}
@@ -374,7 +420,7 @@ export function ResearchCase({ caseId }: { caseId: string }) {
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
                       <Scale size={19} className="text-ink" />
-                      <h2 className="text-xl font-semibold">Adversarial Trial Docket: Prosecution vs. Defense</h2>
+                      <h2 className="text-xl font-semibold">{t.rcDocketHeading}</h2>
                     </div>
                     <button
                       type="button"
@@ -387,16 +433,16 @@ export function ResearchCase({ caseId }: { caseId: string }) {
                         } else if (!note.includes(docket.headline)) {
                           setNote(`${docket.docketSummaryNote}\n\n${note}`);
                         }
-                        setMessage(`Applied trial recommendation: ${docket.recommendedDecision.toUpperCase()} with ${docket.recommendedReasonCodes.length} reason code(s). Review reasons and click Save Decision to commit.`);
+                        setMessage(interpolate(t.rcMsgAppliedTrial, { decision: docket.recommendedDecision.toUpperCase(), count: docket.recommendedReasonCodes.length }));
                       }}
                       className="inline-flex items-center gap-1.5 rounded-control border border-line-strong bg-paper px-3 py-1.5 text-xs font-semibold text-ink hover:bg-paper disabled:opacity-50"
                     >
                       <Gavel size={13} />
-                      Apply Trial Recommendation
+                      {t.rcApplyTrialBtn}
                     </button>
                   </div>
                   <p className="mt-2 text-xs leading-5 text-ink-2">
-                    Adversarial audit pitting 7 statutory deal-killers against recording acts, cadastral verification, and walk-away math.
+                    {t.rcDocketDesc}
                   </p>
 
                   <div className={cn("mt-4 rounded-control border p-4 text-xs", docket.badgeClass)}>
@@ -417,16 +463,16 @@ export function ResearchCase({ caseId }: { caseId: string }) {
 
                   <div className="mt-4 grid grid-cols-3 gap-3 text-center text-xs">
                     <div className="rounded-control border border-catch/30 bg-catch-wash/70 p-3">
-                      <span className="text-label font-bold uppercase tracking-wider text-catch-ink">Fatal Deal-Killers</span>
+                      <span className="text-label font-bold uppercase tracking-wider text-catch-ink">{t.rcFatalKillers}</span>
                       <p className="mt-0.5 text-lg font-black text-ink">{docket.fatalCount}</p>
                     </div>
                     <div className="rounded-control border border-catch/30 bg-catch-wash/40 p-3">
-                      <span className="text-label font-bold uppercase tracking-wider text-catch-ink">Caution Points</span>
+                      <span className="text-label font-bold uppercase tracking-wider text-catch-ink">{t.rcCautionPoints}</span>
                       <p className="mt-0.5 text-lg font-black text-ink">{docket.cautionCount}</p>
                     </div>
                     <div className="rounded-control border border-line bg-paper p-3">
-                      <span className="text-label font-bold uppercase tracking-wider text-ink">Defenses Verified</span>
-                      <p className="mt-0.5 text-lg font-black text-ink">{docket.defenseCount} of {docket.defensePoints.length}</p>
+                      <span className="text-label font-bold uppercase tracking-wider text-ink">{t.rcDefensesVerified}</span>
+                      <p className="mt-0.5 text-lg font-black text-ink">{interpolate(t.rcOfTotal, { count: docket.defenseCount, total: docket.defensePoints.length })}</p>
                     </div>
                   </div>
 
@@ -435,9 +481,9 @@ export function ResearchCase({ caseId }: { caseId: string }) {
                       <div className="flex items-center justify-between border-b border-line pb-2">
                         <div className="flex items-center gap-1.5 font-bold text-ink">
                           <Gavel size={14} className="text-catch-ink" />
-                          <span>Prosecution Attack Vectors</span>
+                          <span>{t.rcProsVectors}</span>
                         </div>
-                        <span className="text-label font-semibold text-ink-3">7 checkpoints</span>
+                        <span className="text-label font-semibold text-ink-3">{t.rcSevenCheckpoints}</span>
                       </div>
                       <ul className="space-y-2 pt-1">
                         {docket.prosecutionPoints.map((item) => (
@@ -450,11 +496,11 @@ export function ResearchCase({ caseId }: { caseId: string }) {
                                 item.status === "caution" ? "bg-catch-wash text-catch-ink" :
                                 "bg-paper text-ink-2"
                               )}>
-                                {item.status === "disqualified" ? "Disqualified" : item.status === "caution" ? "Caution" : "Pre-Auction"}
+                                {item.status === "disqualified" ? t.rcStatusDisq : item.status === "caution" ? t.rcStatusCaution : t.rcStatusPreAuction}
                               </span>
                             </div>
                             <p className="mt-1 text-xs leading-relaxed text-ink-2">{item.finding}</p>
-                            <span className="mt-1 block text-label text-ink-3">Statute: {item.statute}</span>
+                            <span className="mt-1 block text-label text-ink-3">{interpolate(t.rcStatutePrefix, { statute: item.statute })}</span>
                           </li>
                         ))}
                       </ul>
@@ -464,9 +510,9 @@ export function ResearchCase({ caseId }: { caseId: string }) {
                       <div className="flex items-center justify-between border-b border-line pb-2">
                         <div className="flex items-center gap-1.5 font-bold text-ink">
                           <ShieldCheck size={14} className="text-ink" />
-                          <span>Defense Value Shields</span>
+                          <span>{t.rcDefShields}</span>
                         </div>
-                        <span className="text-label font-semibold text-ink-3">4 defenses</span>
+                        <span className="text-label font-semibold text-ink-3">{t.rcFourDefenses}</span>
                       </div>
                       <ul className="space-y-2 pt-1">
                         {docket.defensePoints.map((item) => (
@@ -477,11 +523,11 @@ export function ResearchCase({ caseId }: { caseId: string }) {
                                 "text-label font-bold uppercase px-1.5 py-0.5 rounded",
                                 item.status === "verified" ? "bg-paper text-ink" : "bg-paper text-ink-2"
                               )}>
-                                {item.status === "verified" ? "Verified" : "Pending"}
+                                {item.status === "verified" ? t.rcStatusVerified : t.rcStatusPending}
                               </span>
                             </div>
                             <p className="mt-1 text-xs leading-relaxed text-ink-2">{item.finding}</p>
-                            <span className="mt-1 block text-label text-ink-3">Authority: {item.statute}</span>
+                            <span className="mt-1 block text-label text-ink-3">{interpolate(t.rcAuthorityPrefix, { statute: item.statute })}</span>
                           </li>
                         ))}
                       </ul>
@@ -500,7 +546,7 @@ export function ResearchCase({ caseId }: { caseId: string }) {
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
                       <Calculator size={19} className="text-ink" />
-                      <h2 className="text-xl font-semibold">Underwriting scenario &amp; acquisition model</h2>
+                      <h2 className="text-xl font-semibold">{t.rcScenarioHeading}</h2>
                     </div>
                     {localScenario && (hasDiff || !serverScenario) && (
                       <button
@@ -510,77 +556,83 @@ export function ResearchCase({ caseId }: { caseId: string }) {
                         className="inline-flex items-center gap-1.5 rounded-control border border-line-strong bg-paper px-3 py-1.5 text-xs font-semibold text-ink hover:bg-paper disabled:opacity-50"
                       >
                         <Save size={13} />
-                        Sync local model to case
+                        {t.rcSyncLocalBtn}
                       </button>
                     )}
                   </div>
                   <p className="mt-2 text-xs leading-5 text-ink-2">
-                    Investor assumptions modeled in the bidding terminal. These inputs govern Max Allowable Offer and statutory cash-to-close calculations.
+                    {t.rcScenarioDesc}
                   </p>
                   {effectiveScenario ? (
                     <div className="mt-5 space-y-4">
                       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                         <div className="rounded-control bg-paper p-3.5 border border-line">
-                          <span className="text-label font-bold uppercase tracking-wider text-ink-2">Valuation</span>
+                          <span className="text-label font-bold uppercase tracking-wider text-ink-2">{t.rcValLabel}</span>
                           <p className="mt-1 text-sm font-bold text-ink">
-                            {effectiveScenario.customValuation ? `$${Number(effectiveScenario.customValuation).toLocaleString()}` : "Market benchmark"}
+                            {effectiveScenario.customValuation ? fmtMoney(Number(effectiveScenario.customValuation)) : t.rcMarketBench}
                           </p>
                         </div>
                         <div className="rounded-control bg-paper p-3.5 border border-line">
-                          <span className="text-label font-bold uppercase tracking-wider text-ink-2">Assumed Opening Bid</span>
+                          <span className="text-label font-bold uppercase tracking-wider text-ink-2">{t.rcAssumedBidLabel}</span>
                           <p className="mt-1 text-sm font-bold text-ink">
-                            {effectiveScenario.customOpeningBid ? `$${Number(effectiveScenario.customOpeningBid).toLocaleString()}` : (typeof detail.case.openingBid === "number" ? `$${detail.case.openingBid.toLocaleString()}` : "Unpublished")}
+                            {effectiveScenario.customOpeningBid ? fmtMoney(Number(effectiveScenario.customOpeningBid)) : (typeof detail.case.openingBid === "number" ? fmtMoney(detail.case.openingBid) : t.rcUnpublished)}
                           </p>
                         </div>
                         <div className="rounded-control bg-paper p-3.5 border border-line">
-                          <span className="text-label font-bold uppercase tracking-wider text-ink-2">Max Allowable Offer</span>
+                          <span className="text-label font-bold uppercase tracking-wider text-ink-2">{t.rcMaoLabel}</span>
                           <p className="mt-1 text-sm font-bold text-ink">
-                            {typeof effectiveScenario.maxAllowableOffer === "number" ? `$${effectiveScenario.maxAllowableOffer.toLocaleString()}` : "Requires valuation"}
+                            {typeof effectiveScenario.maxAllowableOffer === "number" ? fmtMoney(effectiveScenario.maxAllowableOffer) : t.rcRequiresVal}
                           </p>
                         </div>
                         <div className="rounded-control bg-paper p-3.5 border border-line">
-                          <span className="text-label font-bold uppercase tracking-wider text-ink-2">Rehab &amp; Margin</span>
+                          <span className="text-label font-bold uppercase tracking-wider text-ink-2">{t.rcRehabMarginLabel}</span>
                           <p className="mt-1 text-sm font-bold text-ink">
-                            ${effectiveScenario.rehabBudget.toLocaleString()} · {effectiveScenario.targetMargin}%
+                            {fmtMoney(effectiveScenario.rehabBudget)} · {effectiveScenario.targetMargin}%
                           </p>
                         </div>
                       </div>
                       <div className="rounded-control bg-paper p-4 text-xs text-ink-2 space-y-1.5">
                         <div className="flex flex-wrap items-center justify-between gap-2 text-ink font-semibold">
-                          <span>Holding period assumption: {effectiveScenario.holdingMonths || 6} months</span>
+                          <span>{interpolate(t.rcHoldPeriodLine, { months: effectiveScenario.holdingMonths || 6 })}</span>
                           <Link href={`/listings/${encodeURIComponent(detail.case.listingId)}#due-diligence-binder`} className="text-ink underline hover:text-ink-2 text-xs font-semibold">
-                            Tune in terminal →
+                            {t.rcTuneInTerminal}
                           </Link>
                         </div>
                         <p className="text-xs text-ink-3">
-                          Transfer tax: ${effectiveScenario.transferTax || "0"} · Delinquent taxes: ${effectiveScenario.delinquentTaxes || "0"} · Settlement: ${effectiveScenario.settlementCosts || "0"} · Buyer premium: ${effectiveScenario.buyersPremium || "0"} · Sheriff poundage: ${effectiveScenario.sheriffPoundage || "0"}
+                          {interpolate(t.rcScenarioFeesLine, {
+                            transfer: fmtMoneyStr(effectiveScenario.transferTax),
+                            taxes: fmtMoneyStr(effectiveScenario.delinquentTaxes),
+                            settlement: fmtMoneyStr(effectiveScenario.settlementCosts),
+                            premium: fmtMoneyStr(effectiveScenario.buyersPremium),
+                            poundage: fmtMoneyStr(effectiveScenario.sheriffPoundage),
+                          })}
                         </p>
                       </div>
                     </div>
                   ) : (
                     <div className="mt-4 rounded-control bg-paper p-4 text-xs text-ink-2 border border-line">
-                      <p>No customized underwriting scenario has been attached to this case yet.</p>
+                      <p>{t.rcNoScenario}</p>
                       <p className="mt-1">
                         <Link href={`/listings/${encodeURIComponent(detail.case.listingId)}#due-diligence-binder`} className="text-ink underline font-semibold">
-                          Open listing bidding simulator
+                          {t.rcOpenSimLink}
                         </Link>{" "}
-                        to model target price, rehab budget, and statutory fees.
+                        {t.rcOpenSimSuffix}
                       </p>
                     </div>
                   )}
                 </section>
               );
             })()}
-            <section className="rounded-card border border-line bg-card p-5 sm:p-7"><div className="flex items-center gap-2"><GitCompareArrows size={19} className="text-ink" /><h2 className="text-xl font-semibold">Evidence comparison</h2></div><p className="mt-2 text-xs leading-5 text-ink-2">Publisher claims and matched official-record claims remain separate. A blank side means the evidence is still unknown.</p><div className="mt-5 grid gap-4 md:grid-cols-2"><ClaimColumn title="Publisher record" claims={detail.dossier.claimGroups?.publisher || []} empty="No publisher claims were retained in this dossier snapshot." /><ClaimColumn title="Official records" claims={detail.dossier.claimGroups?.official || []} empty="No parcel-level official record has been matched." /></div>{(detail.dossier.signals || []).length > 0 && <div className="mt-5 border-t border-line pt-5"><h3 className="text-sm font-semibold">Conflicts and cautions</h3><div className="mt-3 space-y-2">{detail.dossier.signals?.map((signal, index) => <div key={index} className="rounded-control bg-catch-wash p-4 text-xs leading-5 text-catch-ink"><p className="font-semibold">{sourceDisplayText(signal.title || signal.type || "Evidence signal")}</p><p className="mt-1">{sourceDisplayText(signal.reason || "Review the underlying evidence.")}</p></div>)}</div></div>}</section>
+            <section className="rounded-card border border-line bg-card p-5 sm:p-7"><div className="flex items-center gap-2"><GitCompareArrows size={19} className="text-ink" /><h2 className="text-xl font-semibold">{t.rcEvidenceCompHeading}</h2></div><p className="mt-2 text-xs leading-5 text-ink-2">{t.rcEvidenceCompDesc}</p><div className="mt-5 grid gap-4 md:grid-cols-2"><ClaimColumn title={t.rcPubRecordCol} claims={detail.dossier.claimGroups?.publisher || []} empty={t.rcPubEmpty} fallbackTitle={t.rcRecordedClaimFallback} sourceLabel={t.rcSourceLink} unknownLabel={t.alUnknown} locale={locale} /><ClaimColumn title={t.rcOffRecordCol} claims={detail.dossier.claimGroups?.official || []} empty={t.rcOffEmpty} fallbackTitle={t.rcRecordedClaimFallback} sourceLabel={t.rcSourceLink} unknownLabel={t.alUnknown} locale={locale} /></div>{(detail.dossier.signals || []).length > 0 && <div className="mt-5 border-t border-line pt-5"><h3 className="text-sm font-semibold">{t.rcConflictsHeading}</h3><div className="mt-3 space-y-2">{detail.dossier.signals?.map((signal, index) => <div key={index} className="rounded-control bg-catch-wash p-4 text-xs leading-5 text-catch-ink"><p className="font-semibold">{sourceDisplayText(signal.title || signal.type || t.rcSignalTitleFallback)}</p><p className="mt-1">{sourceDisplayText(signal.reason || t.rcSignalReasonFallback)}</p></div>)}</div></div>}</section>
 
-            <section className="rounded-card border border-line bg-card p-5 sm:p-7"><div className="flex items-center gap-2"><ShieldQuestion size={19} className="text-ink" /><h2 className="text-xl font-semibold">What to investigate next</h2></div><div className="mt-4 space-y-3">{(detail.dossier.gaps || []).map((gap, index) => <article key={gap.key || index} className="rounded-control bg-paper p-4"><h3 className="text-sm font-semibold">{sourceDisplayText(gap.title || gap.key || "Open question")}</h3><p className="mt-2 text-xs leading-5 text-ink-2">{sourceDisplayText(gap.reason || "Supporting evidence has not been linked.")}</p>{gap.nextAction && <p className="mt-2 text-xs font-semibold text-ink">Next: {sourceDisplayText(gap.nextAction)}</p>}</article>)}{!(detail.dossier.gaps || []).length && <p className="text-sm text-ink-2">No open questions were recorded in this snapshot. Recheck source freshness before acting.</p>}<button type="button" disabled={busy} onClick={() => void recheckSource()} className="inline-flex items-center gap-2 rounded-control border border-line-strong px-3 py-2 text-xs font-semibold disabled:opacity-50"><RotateCcw size={14} />Check latest saved observation</button></div></section>
+            <section className="rounded-card border border-line bg-card p-5 sm:p-7"><div className="flex items-center gap-2"><ShieldQuestion size={19} className="text-ink" /><h2 className="text-xl font-semibold">{t.rcInvestNextHeading}</h2></div><div className="mt-4 space-y-3">{(detail.dossier.gaps || []).map((gap, index) => <article key={gap.key || index} className="rounded-control bg-paper p-4"><h3 className="text-sm font-semibold">{sourceDisplayText(gap.title || gap.key || t.rcGapTitleFallback)}</h3><p className="mt-2 text-xs leading-5 text-ink-2">{sourceDisplayText(gap.reason || t.rcGapReasonFallback)}</p>{gap.nextAction && <p className="mt-2 text-xs font-semibold text-ink">{t.alNextPrefix} {sourceDisplayText(gap.nextAction)}</p>}</article>)}{!(detail.dossier.gaps || []).length && <p className="text-sm text-ink-2">{t.rcNoOpenGaps}</p>}<button type="button" disabled={busy} onClick={() => void recheckSource()} className="inline-flex items-center gap-2 rounded-control border border-line-strong px-3 py-2 text-xs font-semibold disabled:opacity-50"><RotateCcw size={14} />{t.rcRecheckSavedBtn}</button></div></section>
 
-            <section className="rounded-card border border-line bg-card p-5 sm:p-7"><div className="flex items-center justify-between gap-3"><div className="flex items-center gap-2"><FileCheck2 size={19} className="text-ink" /><h2 className="text-xl font-semibold">Reviewed evidence</h2></div><button type="button" disabled={busy} onClick={() => void loadEvidence()} className="rounded-control border border-line px-3 py-2 text-xs font-semibold">Load review queue</button></div><div className="mt-4 space-y-3">{detail.case.evidenceLinks.map((link) => <article key={link.intakeId} className="rounded-control bg-paper p-4"><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-semibold">{sourceDisplayText(link.relationship.replaceAll("_", " "))}</p><a href={link.sourceUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 break-all text-xs text-ink underline hover:text-ink-2">Open exact evidence <ExternalLink size={12} /></a><p className="mt-2 text-label text-ink-2">SHA-256 {link.contentSha256}</p></div><button type="button" aria-label="Unlink evidence" disabled={busy} onClick={() => void unlinkEvidence(link.intakeId)} className="rounded-control p-2 hover:bg-paper"><Trash2 size={15} /></button></div></article>)}{!detail.case.evidenceLinks.length && <p className="text-sm text-ink-2">No reviewed attachments are linked.</p>}</div>{intake.length > 0 && <div className="mt-5 grid gap-2 border-t border-line pt-5 sm:grid-cols-[1fr_180px_auto]"><select aria-label="Reviewed evidence packet" value={selectedEvidence} onChange={(event) => setSelectedEvidence(event.target.value)} className="rounded-control border border-line bg-card px-3 py-2 text-xs">{intake.map((item) => <option key={item.id} value={item.id}>{sourceDisplayText(item.sourceId)} · {item.id}</option>)}</select><select aria-label="Evidence relationship" value={relationship} onChange={(event) => setRelationship(event.target.value)} className="rounded-control border border-line bg-card px-3 py-2 text-xs">{relationships.map((item) => <option key={item} value={item}>{item.replaceAll("_", " ")}</option>)}</select><button type="button" disabled={busy || !selectedEvidence} onClick={() => void linkEvidence()} className="inline-flex items-center justify-center gap-1 rounded-control bg-ink px-3 py-2 text-xs font-semibold text-white"><Link2 size={13} />Link</button></div>}<p className="mt-4 text-xs leading-5 text-ink-2">Attachment review confirms the file and source reference were reviewed. It does not make every extracted statement a verified property fact.</p></section>
+            <section className="rounded-card border border-line bg-card p-5 sm:p-7"><div className="flex items-center justify-between gap-3"><div className="flex items-center gap-2"><FileCheck2 size={19} className="text-ink" /><h2 className="text-xl font-semibold">{t.rcReviewedEvidenceHeading}</h2></div><button type="button" disabled={busy} onClick={() => void loadEvidence()} className="rounded-control border border-line px-3 py-2 text-xs font-semibold">{t.rcLoadReviewQueueBtn}</button></div><div className="mt-4 space-y-3">{detail.case.evidenceLinks.map((link) => <article key={link.intakeId} className="rounded-control bg-paper p-4"><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-semibold">{relationshipLabels[link.relationship] || sourceDisplayText(link.relationship.replaceAll("_", " "))}</p><a href={link.sourceUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 break-all text-xs text-ink underline hover:text-ink-2">{t.rcOpenExactEvidence} <ExternalLink size={12} /></a><p className="mt-2 text-label text-ink-2">SHA-256 {link.contentSha256}</p></div><button type="button" aria-label={t.rcUnlinkEvidenceAria} disabled={busy} onClick={() => void unlinkEvidence(link.intakeId)} className="rounded-control p-2 hover:bg-paper"><Trash2 size={15} /></button></div></article>)}{!detail.case.evidenceLinks.length && <p className="text-sm text-ink-2">{t.rcNoAttachments}</p>}</div>{intake.length > 0 && <div className="mt-5 grid gap-2 border-t border-line pt-5 sm:grid-cols-[1fr_180px_auto]"><select aria-label={t.rcSelectEvidenceAria} value={selectedEvidence} onChange={(event) => setSelectedEvidence(event.target.value)} className="rounded-control border border-line bg-card px-3 py-2 text-xs">{intake.map((item) => <option key={item.id} value={item.id}>{sourceDisplayText(item.sourceId)} · {item.id}</option>)}</select><select aria-label={t.rcSelectRelAria} value={relationship} onChange={(event) => setRelationship(event.target.value)} className="rounded-control border border-line bg-card px-3 py-2 text-xs">{relationships.map((item) => <option key={item} value={item}>{relationshipLabels[item] || item.replaceAll("_", " ")}</option>)}</select><button type="button" disabled={busy || !selectedEvidence} onClick={() => void linkEvidence()} className="inline-flex items-center justify-center gap-1 rounded-control bg-ink px-3 py-2 text-xs font-semibold text-white"><Link2 size={13} />{t.rcLinkBtn}</button></div>}<p className="mt-4 text-xs leading-5 text-ink-2">{t.rcAttachmentBoundary}</p></section>
 
-            <section className="rounded-card border border-line bg-card p-5 sm:p-7"><div className="flex items-center gap-2"><History size={19} className="text-ink" /><h2 className="text-xl font-semibold">Observation and decision timeline</h2></div><ol className="mt-5 space-y-4">{detail.case.timeline.map((entry, index) => <li key={entry.id || index} className="relative border-l-2 border-line pl-5"><span className="absolute -left-[6px] top-1 h-2.5 w-2.5 rounded-full bg-ink" /><p className="text-xs font-semibold">{sourceDisplayText(entry.type.replaceAll("_", " "))}</p><p className="mt-1 text-xs text-ink-2">{new Date(entry.at).toLocaleString()} · Revision {entry.revision || "—"}</p></li>)}</ol></section>
+            <section className="rounded-card border border-line bg-card p-5 sm:p-7"><div className="flex items-center gap-2"><History size={19} className="text-ink" /><h2 className="text-xl font-semibold">{t.rcTimelineHeading}</h2></div><ol className="mt-5 space-y-4">{detail.case.timeline.map((entry, index) => <li key={entry.id || index} className="relative border-l-2 border-line pl-5"><span className="absolute -left-[6px] top-1 h-2.5 w-2.5 rounded-full bg-ink" /><p className="text-xs font-semibold">{sourceDisplayText(entry.type.replaceAll("_", " "))}</p><p className="mt-1 text-xs text-ink-2">{interpolate(t.rcTimelineRevision, { date: fmtDateTime(entry.at), revision: entry.revision || "—" })}</p></li>)}</ol></section>
           </div>
 
-          <aside className="rounded-card border border-line bg-card p-5 xl:sticky xl:top-24"><h2 className="text-xl font-semibold">Record your decision</h2><p className="mt-2 text-xs leading-5 text-ink-2">The decision and its reasons are versioned with the same evidence snapshot used by exports.</p><div className="mt-5 grid grid-cols-3 gap-2">{(["inbox", "pursue", "pass"] as const).map((value) => <button key={value} type="button" aria-pressed={decisionState === value} onClick={() => setDecisionState(value)} className={`rounded-control px-3 py-2.5 text-xs font-semibold capitalize ${decisionState === value ? "bg-ink text-white" : "border border-line"}`}>{value}</button>)}</div>
+          <aside className="rounded-card border border-line bg-card p-5 xl:sticky xl:top-24"><h2 className="text-xl font-semibold">{t.rcRecordDecisionHeading}</h2><p className="mt-2 text-xs leading-5 text-ink-2">{t.rcRecordDecisionDesc}</p><div className="mt-5 grid grid-cols-3 gap-2">{(["inbox", "pursue", "pass"] as const).map((value) => <button key={value} type="button" aria-pressed={decisionState === value} onClick={() => setDecisionState(value)} className={`rounded-control px-3 py-2.5 text-xs font-semibold ${decisionState === value ? "bg-ink text-white" : "border border-line"}`}>{stateLabels[value]}</button>)}</div>
             {(() => {
               const docket = detail.case.listingSnapshot
                 ? evaluateAdversarialDocket(detail.case.listingSnapshot as any)
@@ -591,9 +643,9 @@ export function ResearchCase({ caseId }: { caseId: string }) {
                   <div className="flex items-start gap-2">
                     <ShieldAlert size={16} className="mt-0.5 shrink-0 text-catch-ink" />
                     <div className="space-y-1">
-                      <strong className="block font-bold">Prosecution Verdict: FATAL DISQUALIFIER</strong>
+                      <strong className="block font-bold">{t.rcAsideFatalTitle}</strong>
                       <p className="text-xs leading-relaxed text-catch-ink">
-                        Senior lien or bankruptcy stay detected. Recommended decision: <strong>PASS</strong>.
+                        {t.rcAsideFatalDescPrefix} <strong>{t.rcAsideFatalPassWord}</strong>.
                       </p>
                       {decisionState !== "pass" && (
                         <button
@@ -605,7 +657,7 @@ export function ResearchCase({ caseId }: { caseId: string }) {
                           }}
                           className="mt-1.5 inline-flex items-center gap-1 rounded bg-catch-ink px-2.5 py-1 text-xs font-semibold text-white hover:bg-catch"
                         >
-                          Apply Injunctive Pass
+                          {t.rcApplyInjunctionPassBtn}
                         </button>
                       )}
                     </div>
@@ -619,9 +671,9 @@ export function ResearchCase({ caseId }: { caseId: string }) {
                 <div className="flex items-start gap-2">
                   <ShieldAlert size={16} className="mt-0.5 shrink-0 text-catch-ink" />
                   <div className="space-y-1">
-                    <strong className="block font-bold uppercase tracking-wider">VALUE TRAP DETECTED</strong>
+                    <strong className="block font-bold uppercase tracking-wider">{t.rcAsideTrapTitle}</strong>
                     <p className="text-xs leading-relaxed">
-                      Junior lien foreclosure (2nd mortgage / HELOC / mechanic&apos;s lien). Senior 1st mortgage survives sale in full!
+                      {t.rcAsideTrapBody}
                     </p>
                     {decisionState !== "pass" && (
                       <button
@@ -629,11 +681,11 @@ export function ResearchCase({ caseId }: { caseId: string }) {
                         onClick={() => {
                           setDecisionState("pass");
                           setReasonCodes((prev) => [...new Set([...prev, "title_risk_unresolved"])]);
-                          if (!note) setNote("Pass: Junior lien foreclosure value trap. Senior mortgage survives sale.");
+                          if (!note) setNote(t.rcPassTitleTrapNote);
                         }}
                         className="mt-1.5 inline-flex items-center gap-1 rounded bg-catch-ink px-2.5 py-1 text-xs font-semibold text-white hover:opacity-90"
                       >
-                        Pass: Value Trap
+                        {t.rcPassValueTrapBtn}
                       </button>
                     )}
                   </div>
@@ -641,11 +693,11 @@ export function ResearchCase({ caseId }: { caseId: string }) {
               </div>
             )}
 
-            {decisionState !== "inbox" && <fieldset className="mt-5"><legend className="text-xs font-semibold">Reasons {decisionState === "pass" ? "(choose at least one)" : ""}</legend><div className="mt-3 space-y-2">{reasonChoices.map(([value, title]) => <label key={value} className="flex items-center gap-2 text-xs"><input type="checkbox" checked={reasonCodes.includes(value)} onChange={(event) => setReasonCodes(event.target.checked ? [...reasonCodes, value] : reasonCodes.filter((item) => item !== value))} />{title}</label>)}</div></fieldset>}
-            <label className="mt-5 block text-xs font-semibold">Decision note<textarea value={note} onChange={(event) => setNote(event.target.value)} maxLength={2000} rows={4} className="mt-2 w-full rounded-control border border-line p-3 text-sm font-normal" placeholder="What matters, what is unresolved, and what you will verify." /></label>
-            {decisionState === "pass" && <div className="mt-5 border-t border-line pt-5"><div className="flex items-center gap-2"><RotateCcw size={16} className="text-ink" /><h3 className="text-sm font-semibold">Bring it back when…</h3></div><select aria-label="Reconsideration matching" value={mode} onChange={(event) => setMode(event.target.value as "any" | "all")} className="mt-3 w-full rounded-control border border-line bg-card px-3 py-2 text-xs"><option value="any">Any condition matches</option><option value="all">Every condition matches</option></select><div className="mt-3 space-y-3">{conditions.map((condition, index) => <ConditionEditor key={index} condition={condition} onChange={(next) => setConditions(conditions.map((item, itemIndex) => itemIndex === index ? next : item))} onRemove={conditions.length > 1 ? () => setConditions(conditions.filter((_, itemIndex) => itemIndex !== index)) : undefined} />)}</div><button type="button" disabled={conditions.length >= 10} onClick={() => setConditions([...conditions, { field: "saleDate", operator: "changed" }])} className="mt-3 text-xs font-semibold text-ink underline hover:text-ink-2 disabled:opacity-50">Add return condition</button></div>}
-            <button type="button" disabled={busy || (decisionState === "pass" && reasonCodes.length === 0)} onClick={() => void saveDecision()} className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-control bg-ink px-4 py-3 text-sm font-semibold text-white disabled:opacity-50">{busy ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}Save decision</button>
-            <div className="mt-5 rounded-control bg-paper p-4 text-xs leading-5 text-ink-2"><p className="flex items-center gap-2 font-semibold text-ink"><Clock3 size={14} />Reproducible revision</p><p className="mt-1">Packets generated now use case revision {detail.case.revision}. Changed inputs create a new revision; earlier timeline entries remain.</p></div>
+            {decisionState !== "inbox" && <fieldset className="mt-5"><legend className="text-xs font-semibold">{t.rcReasonsLegend} {decisionState === "pass" ? t.rcReasonsMinOne : ""}</legend><div className="mt-3 space-y-2">{reasonChoices.map(([value, title]) => <label key={value} className="flex items-center gap-2 text-xs"><input type="checkbox" checked={reasonCodes.includes(value)} onChange={(event) => setReasonCodes(event.target.checked ? [...reasonCodes, value] : reasonCodes.filter((item) => item !== value))} />{title}</label>)}</div></fieldset>}
+            <label className="mt-5 block text-xs font-semibold">{t.rcDecisionNoteLabel}<textarea value={note} onChange={(event) => setNote(event.target.value)} maxLength={2000} rows={4} className="mt-2 w-full rounded-control border border-line p-3 text-sm font-normal" placeholder={t.rcDecisionNotePlaceholder} /></label>
+            {decisionState === "pass" && <div className="mt-5 border-t border-line pt-5"><div className="flex items-center gap-2"><RotateCcw size={16} className="text-ink" /><h3 className="text-sm font-semibold">{t.rcBringBackHeading}</h3></div><select aria-label={t.rcReconsiderMatchingAria} value={mode} onChange={(event) => setMode(event.target.value as "any" | "all")} className="mt-3 w-full rounded-control border border-line bg-card px-3 py-2 text-xs"><option value="any">{t.rcMatchAny}</option><option value="all">{t.rcMatchAll}</option></select><div className="mt-3 space-y-3">{conditions.map((condition, index) => <ConditionEditor key={index} condition={condition} onChange={(next) => setConditions(conditions.map((item, itemIndex) => itemIndex === index ? next : item))} onRemove={conditions.length > 1 ? () => setConditions(conditions.filter((_, itemIndex) => itemIndex !== index)) : undefined} />)}</div><button type="button" disabled={conditions.length >= 10} onClick={() => setConditions([...conditions, { field: "saleDate", operator: "changed" }])} className="mt-3 text-xs font-semibold text-ink underline hover:text-ink-2 disabled:opacity-50">{t.rcAddConditionBtn}</button></div>}
+            <button type="button" disabled={busy || (decisionState === "pass" && reasonCodes.length === 0)} onClick={() => void saveDecision()} className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-control bg-ink px-4 py-3 text-sm font-semibold text-white disabled:opacity-50">{busy ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}{t.rcSaveDecisionBtn}</button>
+            <div className="mt-5 rounded-control bg-paper p-4 text-xs leading-5 text-ink-2"><p className="flex items-center gap-2 font-semibold text-ink"><Clock3 size={14} />{t.rcReproHeading}</p><p className="mt-1">{interpolate(t.rcReproBody, { revision: detail.case.revision })}</p></div>
           </aside>
         </div>
       </>}
@@ -653,36 +705,54 @@ export function ResearchCase({ caseId }: { caseId: string }) {
   </div>;
 }
 
-function ClaimColumn({ title, claims, empty }: { title: string; claims: Claim[]; empty: string }) {
-  return <div className="rounded-control border border-line p-4"><h3 className="text-sm font-semibold">{title}</h3><dl className="mt-3 space-y-3">{claims.map((claim, index) => <div key={`${claim.key || claim.title}-${index}`}><dt className="text-label font-bold uppercase tracking-wider text-ink-2">{claimName(claim)}</dt><dd className="mt-1 break-words text-sm font-semibold">{show(claim.value)}</dd>{claim.sourceUrl && <a href={claim.sourceUrl} target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center gap-1 text-label text-ink underline hover:text-ink-2">Source <ExternalLink size={10} /></a>}</div>)}{!claims.length && <p className="text-xs leading-5 text-ink-2">{empty}</p>}</dl></div>;
+function ClaimColumn({
+  title,
+  claims,
+  empty,
+  fallbackTitle,
+  sourceLabel,
+  unknownLabel,
+  locale,
+}: {
+  title: string;
+  claims: Claim[];
+  empty: string;
+  fallbackTitle: string;
+  sourceLabel: string;
+  unknownLabel: string;
+  locale: Locale;
+}) {
+  return <div className="rounded-control border border-line p-4"><h3 className="text-sm font-semibold">{title}</h3><dl className="mt-3 space-y-3">{claims.map((claim, index) => <div key={`${claim.key || claim.title}-${index}`}><dt className="text-label font-bold uppercase tracking-wider text-ink-2">{claimName(claim, fallbackTitle)}</dt><dd className="mt-1 break-words text-sm font-semibold">{show(claim.value, locale, unknownLabel)}</dd>{claim.sourceUrl && <a href={claim.sourceUrl} target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center gap-1 text-label text-ink underline hover:text-ink-2">{sourceLabel} <ExternalLink size={10} /></a>}</div>)}{!claims.length && <p className="text-xs leading-5 text-ink-2">{empty}</p>}</dl></div>;
 }
 
 function ConditionEditor({ condition, onChange, onRemove }: { condition: ReconsiderationCondition; onChange: (value: ReconsiderationCondition) => void; onRemove?: () => void }) {
+  const { messages } = useLocale();
+  const t = messages.researchB2;
   const numeric = condition.field === "openingBid" || condition.field === "sqft";
   const evidence = condition.field === "requiredEvidence";
   const titleRisk = condition.field === "titleRisk";
   const operatorOptions = evidence
-    ? [["available", "becomes available"]]
+    ? [["available", t.rcOpBecomesAvail]]
     : titleRisk
     ? [
-        ["junior_lien_surviving_mortgage", "Junior lien surviving mortgage trap"],
-        ["irs_redemption_active", "Active IRS 120-day redemption window"],
-        ["hoa_super_priority", "HOA super-priority assessment risk (UCIOA/NV/FL)"],
-        ["changed", "Title risk status changes"],
+        ["junior_lien_surviving_mortgage", t.rcOpJuniorTrap],
+        ["irs_redemption_active", t.rcOpIrsActive],
+        ["hoa_super_priority", t.rcOpHoaSuper],
+        ["changed", t.rcOpTitleChanges],
       ]
     : condition.field === "openingBid"
     ? [
-        ["changed", "changes"],
-        ["lte", "is at most ($)"],
-        ["gte", "is at least ($)"],
-        ["dropped_by_pct", "drops by at least (%)"],
-        ["bid_to_assessed_lte", "is at most % of assessed"],
+        ["changed", t.rcOpChanges],
+        ["lte", t.rcOpLteUsd],
+        ["gte", t.rcOpGteUsd],
+        ["dropped_by_pct", t.rcOpDropPct],
+        ["bid_to_assessed_lte", t.rcOpBidAssessed],
       ]
     : condition.field === "saleDate"
-    ? [["changed", "changes"], ["within_days", "is within N days"]]
+    ? [["changed", t.rcOpChanges], ["within_days", t.rcOpWithinDays]]
     : numeric
-    ? [["changed", "changes"], ["lte", "is at most"], ["gte", "is at least"]]
-    : [["changed", "changes"]];
+    ? [["changed", t.rcOpChanges], ["lte", t.rcOpLte], ["gte", t.rcOpGte]]
+    : [["changed", t.rcOpChanges]];
 
-  return <div className="rounded-control bg-paper p-3"><div className="flex gap-2"><select aria-label="Reconsideration field" value={condition.field} onChange={(event) => { const field = event.target.value as ReconsiderationCondition["field"]; onChange(field === "requiredEvidence" ? { field, operator: "available", value: "any" } : field === "titleRisk" ? { field, operator: "junior_lien_surviving_mortgage" } : { field, operator: "changed" }); }} className="min-w-0 flex-1 rounded-control border border-line bg-card px-2 py-2 text-xs"><option value="openingBid">Opening amount</option><option value="saleDate">Sale date</option><option value="status">Published status</option><option value="sqft">Building area</option><option value="requiredEvidence">Required evidence</option><option value="titleRisk">Title risk &amp; senior lien</option></select>{onRemove && <button type="button" aria-label="Remove condition" onClick={onRemove} className="rounded-control px-2 hover:bg-paper"><Trash2 size={14} /></button>}</div><select aria-label="Reconsideration operator" value={condition.operator} onChange={(event) => { const operator = event.target.value as ReconsiderationCondition["operator"]; const needsNumeric = operator === "lte" || operator === "gte" || operator === "dropped_by_pct" || operator === "bid_to_assessed_lte" || operator === "within_days"; onChange({ field: condition.field, operator, ...(needsNumeric ? { value: typeof condition.value === "number" && condition.value > 0 ? condition.value : operator === "dropped_by_pct" ? 10 : operator === "bid_to_assessed_lte" ? 65 : operator === "within_days" ? 14 : 0 } : operator === "available" ? { value: typeof condition.value === "string" ? condition.value : "any" } : {}) }); }} className="mt-2 w-full rounded-control border border-line bg-card px-2 py-2 text-xs">{operatorOptions.map(([value, title]) => <option key={value} value={value}>{title}</option>)}</select>{(condition.operator === "lte" || condition.operator === "gte" || condition.operator === "dropped_by_pct" || condition.operator === "bid_to_assessed_lte" || condition.operator === "within_days") && <input aria-label="Reconsideration threshold" type="number" min={condition.operator === "within_days" || condition.operator === "dropped_by_pct" || condition.operator === "bid_to_assessed_lte" ? 1 : 0} max={condition.operator === "dropped_by_pct" || condition.operator === "bid_to_assessed_lte" ? 100 : condition.operator === "within_days" ? 365 : undefined} value={typeof condition.value === "number" ? condition.value : 0} onChange={(event) => onChange({ ...condition, value: Number(event.target.value) })} className="mt-2 w-full rounded-control border border-line bg-card px-2 py-2 text-xs" />}{condition.operator === "available" && <select aria-label="Required evidence type" value={typeof condition.value === "string" ? condition.value : "any"} onChange={(event) => onChange({ ...condition, value: event.target.value })} className="mt-2 w-full rounded-control border border-line bg-card px-2 py-2 text-xs"><option value="any">Any reviewed evidence</option><option value="sale_terms">Sale terms</option><option value="title_research">Title research</option><option value="occupancy_research">Occupancy research</option><option value="valuation_research">Valuation research</option></select>}</div>;
+  return <div className="rounded-control bg-paper p-3"><div className="flex gap-2"><select aria-label={t.rcCondFieldAria} value={condition.field} onChange={(event) => { const field = event.target.value as ReconsiderationCondition["field"]; onChange(field === "requiredEvidence" ? { field, operator: "available", value: "any" } : field === "titleRisk" ? { field, operator: "junior_lien_surviving_mortgage" } : { field, operator: "changed" }); }} className="min-w-0 flex-1 rounded-control border border-line bg-card px-2 py-2 text-xs"><option value="openingBid">{t.rcCondFieldBid}</option><option value="saleDate">{t.rcCondFieldSaleDate}</option><option value="status">{t.rcCondFieldStatus}</option><option value="sqft">{t.rcCondFieldSqft}</option><option value="requiredEvidence">{t.rcCondFieldEvidence}</option><option value="titleRisk">{t.rcCondFieldTitleRisk}</option></select>{onRemove && <button type="button" aria-label={t.rcCondRemoveAria} onClick={onRemove} className="rounded-control px-2 hover:bg-paper"><Trash2 size={14} /></button>}</div><select aria-label={t.rcCondOpAria} value={condition.operator} onChange={(event) => { const operator = event.target.value as ReconsiderationCondition["operator"]; const needsNumeric = operator === "lte" || operator === "gte" || operator === "dropped_by_pct" || operator === "bid_to_assessed_lte" || operator === "within_days"; onChange({ field: condition.field, operator, ...(needsNumeric ? { value: typeof condition.value === "number" && condition.value > 0 ? condition.value : operator === "dropped_by_pct" ? 10 : operator === "bid_to_assessed_lte" ? 65 : operator === "within_days" ? 14 : 0 } : operator === "available" ? { value: typeof condition.value === "string" ? condition.value : "any" } : {}) }); }} className="mt-2 w-full rounded-control border border-line bg-card px-2 py-2 text-xs">{operatorOptions.map(([value, title]) => <option key={value} value={value}>{title}</option>)}</select>{(condition.operator === "lte" || condition.operator === "gte" || condition.operator === "dropped_by_pct" || condition.operator === "bid_to_assessed_lte" || condition.operator === "within_days") && <input aria-label={t.rcCondThresholdAria} type="number" min={condition.operator === "within_days" || condition.operator === "dropped_by_pct" || condition.operator === "bid_to_assessed_lte" ? 1 : 0} max={condition.operator === "dropped_by_pct" || condition.operator === "bid_to_assessed_lte" ? 100 : condition.operator === "within_days" ? 365 : undefined} value={typeof condition.value === "number" ? condition.value : 0} onChange={(event) => onChange({ ...condition, value: Number(event.target.value) })} className="mt-2 w-full rounded-control border border-line bg-card px-2 py-2 text-xs" />}{condition.operator === "available" && <select aria-label={t.rcCondEvidenceTypeAria} value={typeof condition.value === "string" ? condition.value : "any"} onChange={(event) => onChange({ ...condition, value: event.target.value })} className="mt-2 w-full rounded-control border border-line bg-card px-2 py-2 text-xs"><option value="any">{t.rcEvAny}</option><option value="sale_terms">{t.rcRelSaleTerms}</option><option value="title_research">{t.rcRelTitleResearch}</option><option value="occupancy_research">{t.rcRelOccupancyResearch}</option><option value="valuation_research">{t.rcRelValuationResearch}</option></select>}</div>;
 }

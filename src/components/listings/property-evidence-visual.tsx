@@ -1,3 +1,7 @@
+"use client";
+
+import { useLocale } from "@/components/i18n/locale-provider";
+
 type PropertyEvidenceVisualProps = {
   listingId?: string | null;
   address: string;
@@ -26,8 +30,8 @@ function take(seed: number, offset: number, range: number) {
   return (((seed >>> offset) ^ Math.imul(seed, offset + 17)) >>> 0) % range;
 }
 
-function addressLines(address: string) {
-  const clean = address.replace(/\s+/g, " ").trim() || "Address under review";
+function addressLines(address: string, emptyFallback: string) {
+  const clean = address.replace(/\s+/g, " ").trim() || emptyFallback;
   if (clean.length <= 39) return [clean];
 
   const splitCandidates = [clean.lastIndexOf(",", 39), clean.lastIndexOf(" ", 39)];
@@ -43,9 +47,11 @@ function addressLines(address: string) {
  * from being read as a depiction of the subject property.
  */
 export function PropertyEvidenceVisual({ listingId, address, compact = false, className = "", statusLabel }: PropertyEvidenceVisualProps) {
+  const { messages, format } = useLocale();
+  const t = messages.mediaUi;
   const seed = stableHash(`${listingId || "unresolved"}|${address.toLowerCase()}`);
   const palette = palettes[seed % palettes.length];
-  const lines = addressLines(address);
+  const lines = addressLines(address, t.addressUnderReview);
   const parcelPoints = [
     [198 + take(seed, 1, 54), 158 + take(seed, 3, 38)],
     [820 + take(seed, 5, 80), 116 + take(seed, 7, 46)],
@@ -78,7 +84,7 @@ export function PropertyEvidenceVisual({ listingId, address, compact = false, cl
   return (
     <div
       role="img"
-      aria-label={`Research visualization for ${address}. This is not a property photo. A verified photo is pending.`}
+      aria-label={format(t.evidenceAlt, { address })}
       data-testid="property-evidence-visual"
       className={`relative isolate h-full w-full overflow-hidden ${className}`}
       style={{ backgroundColor: palette.ink }}
@@ -129,21 +135,21 @@ export function PropertyEvidenceVisual({ listingId, address, compact = false, cl
 
         <g transform="translate(64 56)">
           <rect width="324" height="42" rx="8" fill={palette.accent} />
-          <text x="20" y="27" fill={palette.ink} fontSize="17" fontWeight="800" letterSpacing="2.5">RESEARCH VISUALIZATION</text>
+          <text x="20" y="27" fill={palette.ink} fontSize="17" fontWeight="800" letterSpacing="2.5">{t.svgResearchViz}</text>
         </g>
-        <text x="1136" y="80" textAnchor="end" fill={palette.field} fontSize="17" fontWeight="700" letterSpacing="2">NOT A PROPERTY PHOTO</text>
-        <text x="1136" y="109" textAnchor="end" fill={palette.field} opacity="0.7" fontSize="14" fontWeight="600" letterSpacing="1.5">RECORD {recordSuffix}</text>
+        <text x="1136" y="80" textAnchor="end" fill={palette.field} fontSize="17" fontWeight="700" letterSpacing="2">{t.svgNotPhoto}</text>
+        <text x="1136" y="109" textAnchor="end" fill={palette.field} opacity="0.7" fontSize="14" fontWeight="600" letterSpacing="1.5">{format(t.svgRecord, { suffix: recordSuffix })}</text>
 
         <g transform="translate(0 540)">
           <rect width="1200" height="180" fill={palette.ink} opacity="0.94" />
           <line x1="64" y1="0" x2="1136" y2="0" stroke={palette.field} strokeWidth="2" opacity="0.22" />
           <circle cx="82" cy="42" r="7" fill={palette.accent} />
-          <text x="104" y="48" fill={palette.field} fontSize="18" fontWeight="800" letterSpacing="2">VERIFIED PHOTO PENDING</text>
-          <text x="1136" y="48" textAnchor="end" fill={palette.field} opacity="0.76" fontSize="14" fontWeight="700" letterSpacing="1.5">EVIDENCE CANVAS / {statusLabel?.toUpperCase() || "SOURCE MEDIA OPEN"}</text>
+          <text x="104" y="48" fill={palette.field} fontSize="18" fontWeight="800" letterSpacing="2">{t.svgPhotoPending}</text>
+          <text x="1136" y="48" textAnchor="end" fill={palette.field} opacity="0.76" fontSize="14" fontWeight="700" letterSpacing="1.5">{format(t.svgEvidenceCanvas, { status: statusLabel?.toUpperCase() || t.svgSourceMediaOpen })}</text>
           <text x="64" y={lines.length > 1 ? 90 : 104} fill="#ffffff" fontSize={compact ? "25" : "29"} fontWeight="750" letterSpacing="-0.4">
             {lines.map((line, index) => <tspan key={line} x="64" dy={index === 0 ? 0 : 34}>{line}</tspan>)}
           </text>
-          {!compact ? <text x="1136" y="112" textAnchor="end" fill={palette.field} opacity="0.74" fontSize="14" fontWeight="600">Parcel geometry is illustrative · confirm against cited records</text> : null}
+          {!compact ? <text x="1136" y="112" textAnchor="end" fill={palette.field} opacity="0.74" fontSize="14" fontWeight="600">{t.svgParcelIllustrative}</text> : null}
         </g>
       </svg>
     </div>

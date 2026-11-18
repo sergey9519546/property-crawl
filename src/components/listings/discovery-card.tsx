@@ -13,8 +13,9 @@ import { SOURCES, type PropertyListing } from "@/components/terminal/property-da
 import { displayDate, knownNumber } from "@/lib/listing-display";
 import { sourceDisplayText } from "@/lib/source-display";
 import { bandForScore } from "@/lib/score-bands";
+import { useLocale } from "@/components/i18n/locale-provider";
+import { localizeDisplayDate, localizeNumberText } from "@/lib/i18n/domain";
 
-// Distress stage → label + Tailwind classes for the badge.
 const DISTRESS_STAGE_BADGE: Record<string, { label: string; className: string }> = {
   reo: { label: "REO", className: "bg-paper text-ink-2" },
   pre_foreclosure: { label: "Pre-FC", className: "bg-paper text-ink-2" },
@@ -22,7 +23,6 @@ const DISTRESS_STAGE_BADGE: Record<string, { label: string; className: string }>
   tax_sale: { label: "Tax sale", className: "bg-paper text-ink-2" },
 };
 
-// Format publisher capitalization for display only; the source address stays intact.
 function readable(value: string) {
   if (value !== value.toUpperCase()) return value;
   return value.toLowerCase().replace(/\b[a-z]+/g, (word) =>
@@ -30,7 +30,6 @@ function readable(value: string) {
 }
 function addressLines(listing: PropertyListing) {
   const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  // Only remove the locality when it matches the separately published fields.
   const suffix = listing.city && listing.state
     ? new RegExp(`,?\\s+${escape(listing.city)}[,\\s]+${escape(listing.state)}(?:[,\\s]+\\d{5}(?:-\\d{4})?)?\\s*$`, "i") : null;
   const street = suffix ? listing.address.replace(suffix, "").trim().replace(/,$/, "") : listing.address;
@@ -51,24 +50,8 @@ type Props = {
   onCompare: (id: string) => void;
 };
 
-// Memoized on purpose: the workbench re-renders whenever any of its own state
-// moves (a triage chip, the watchlist, the loading flag), and each card
-// re-derives the address, the score band, several number parses, and the date
-// and money formatting. All of that is a pure function of `listing`, so a card
-// whose props are unchanged has nothing to recompute. `onSave` takes the id so
-// the callback identity can stay stable across renders; an inline closure here
-// would defeat the comparison, which is the usual way a memoized list stops
-// paying off.
-//
-// Measured alongside the memoized search field, with an instrument that has no
-// frame-wait floor in it: typing 19 characters over 48 cards went 302.0 ms ->
-// 316.7 ms, about 16 ms per keystroke either way. No measurable benefit here.
-//
-// What it does buy is a ceiling: a card whose props are unchanged has nothing to
-// recompute. That stops mattering at 48 cards and would not at 500. See
-// discovery-workbench.tsx for the full numbers, the two claims that were
-// withdrawn, and the harness bug that produced them.
 export const DiscoveryCard = React.memo(function DiscoveryCard({ listing, href, saved, saving, onSave, compared, compareFull, onCompare }: Props) {
+  const { locale, messages: m, format } = useLocale();
   const { street, locality } = addressLines(listing);
   const observed = (listing.provenance?.origin === "live" || listing.provenance?.origin === "email_notice") && listing.provenance?.observed === true;
   const archived = listing.provenance?.origin === "archive";
@@ -76,9 +59,9 @@ export const DiscoveryCard = React.memo(function DiscoveryCard({ listing, href, 
   const lifecycle = listing.lifecycle || listing.lifecycleStatus;
   const stale = listing.sourceFreshness?.status === "stale";
   const facts = [
-    knownNumber(listing.beds) !== null ? `${listing.beds} bed` : null,
-    knownNumber(listing.baths) !== null ? `${listing.baths} bath` : null,
-    knownNumber(listing.sqft) !== null ? `${Number(listing.sqft).toLocaleString("en-US")} sq ft` : null,
+    knownNumber(listing.beds) !== null ? `${listing.beds} ${m.listingsUi.bedShort}` : null,
+    knownNumber(listing.baths) !== null ? `${listing.baths} ${m.listingsUi.bathShort}` : null,
+    knownNumber(listing.sqft) !== null ? `${localizeNumberText(Number(listing.sqft), locale)} ${m.listingsUi.sqFtUnit}` : null,
   ].filter(Boolean);
   const completeness = listing.evidenceCompleteness;
   const quality = listing.researchQuality;
@@ -86,18 +69,16 @@ export const DiscoveryCard = React.memo(function DiscoveryCard({ listing, href, 
   const effectiveDealScore = knownNumber(listing.dealScore) ?? knownNumber(listing.opportunity?.dealScore);
   const qualityBadge = quality
     ? quality.band === 'strong'
-      ? { label: `Evidence ${quality.score}`, className: 'bg-paper text-ink' }
+      ? { label: format(m.listingsUi.evidenceScore, { score: quality.score }), className: 'bg-paper text-ink' }
       : quality.band === 'usable'
-        ? { label: `Evidence ${quality.score}`, className: 'bg-paper text-ink-2' }
-        : quality.band === 'thin'
-          ? { label: `Evidence ${quality.score}`, className: 'bg-catch-wash text-catch-ink' }
-          : { label: `Evidence ${quality.score}`, className: 'bg-catch-wash text-catch-ink' }
+        ? { label: format(m.listingsUi.evidenceScore, { score: quality.score }), className: 'bg-paper text-ink-2' }
+        : { label: format(m.listingsUi.evidenceScore, { score: quality.score }), className: 'bg-catch-wash text-catch-ink' }
     : null;
   const urgencyBadge = opportunity && ['imminent', 'near_term'].includes(opportunity.urgency)
     ? {
         label: opportunity.urgency === 'imminent'
-          ? `Sale ${opportunity.daysToSale}d`
-          : `Sale ~${opportunity.daysToSale}d`,
+          ? `${m.states.saleLabel} ${opportunity.daysToSale}d`
+          : `${m.states.saleLabel} ~${opportunity.daysToSale}d`,
         className: opportunity.urgency === 'imminent'
           ? 'bg-go-fill text-ink'
           : 'bg-go-wash text-go',
@@ -108,7 +89,7 @@ export const DiscoveryCard = React.memo(function DiscoveryCard({ listing, href, 
     <div className="relative shrink-0">
       <ListingThumbnail listingId={listing.id} address={listing.address} photo={listing.photo} photoCount={Array.isArray(listing.images) && listing.images.length > 0 ? listing.images.length : (listing.photo ? 1 : 0)} observed={observed} layout="card" />
       {program ? <span className="absolute left-3 top-3 max-w-[calc(100%-5rem)] rounded-control bg-card/95 px-2.5 py-1.5 text-xs font-semibold text-ink-2 shadow-sm">{sourceDisplayText(program)}</span> : null}
-      <button type="button" onClick={() => onSave(listing.id)} disabled={saving} aria-label={`${saved ? "Remove from" : "Add to"} watchlist: ${listing.address}`} aria-pressed={saved} className="absolute right-3 top-3 grid h-11 w-11 place-items-center rounded-full border border-line bg-card text-ink-2 shadow-sm transition hover:bg-paper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-3 disabled:opacity-60">
+      <button type="button" onClick={() => onSave(listing.id)} disabled={saving} aria-label={format(saved ? m.listingsUi.removeFromWatchlistAddress : m.listingsUi.addToWatchlistAddress, { address: listing.address })} aria-pressed={saved} className="absolute right-3 top-3 grid h-11 w-11 place-items-center rounded-full border border-line bg-card text-ink-2 shadow-sm transition hover:bg-paper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-3 disabled:opacity-60">
         {saving ? <Loader2 size={17} className="animate-spin" /> : <Bookmark size={17} className={saved ? "fill-ink text-ink" : ""} />}
       </button>
     </div>
@@ -116,28 +97,20 @@ export const DiscoveryCard = React.memo(function DiscoveryCard({ listing, href, 
       <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-label text-ink-3">
         <span className="font-medium text-ink-3">{sourceDisplayText(SOURCES[listing.source]?.label || listing.source)}</span>
         {lifecycle ? <><span aria-hidden>·</span><span>{sourceDisplayText(lifecycle.replace(/_/g, " "))}</span></> : null}
-        {!observed ? <span className="rounded bg-catch-wash px-1.5 py-0.5 text-catch-ink">{archived ? "Dated archive" : "Demo / unverified"}</span> : null}
+        {!observed ? <span className="rounded bg-catch-wash px-1.5 py-0.5 text-catch-ink">{archived ? m.listingsUi.datedArchive : m.listingsUi.demoUnverified}</span> : null}
         {(() => {
-          // Prefer the server's verdict. It is cadence-aware per source, so a
-          // record 11 hours old against a 6-hour cadence is stale, while a
-          // 40-day-old fl-dor record on a 720-hour cadence is not. The old
-          // `triage.staleDays > 30` test could express neither: it floored to
-          // 0 under 24 hours, so with background collection off every ServiceLink
-          // listing read as current while /api/health reported all 7,497 as past
-          // cadence. That test is kept only as the fallback for a response that
-          // carries no freshness verdict at all.
           const verdict = listing.sourceFreshness?.status;
-          const stale = verdict
+          const staleFlag = verdict
             ? verdict === "stale"
             : Boolean(listing.triage && listing.triage.staleDays > 30);
-          if (!stale) return null;
+          if (!staleFlag) return null;
           const { ageHours, cadenceHours } = listing.sourceFreshness || {};
           const explain = typeof ageHours === "number" && typeof cadenceHours === "number"
             ? `Publisher record last observed ${Math.round(ageHours)}h ago; ${SOURCES[listing.source]?.label || listing.source} refreshes every ${cadenceHours}h.`
             : "The publisher record is past its refresh cadence.";
           return (
             <span className="rounded bg-catch-wash px-1.5 py-0.5 text-xs font-semibold text-catch-ink" title={explain}>
-              Stale
+              {m.listingsUi.staleBadge}
             </span>
           );
         })()}
@@ -146,26 +119,29 @@ export const DiscoveryCard = React.memo(function DiscoveryCard({ listing, href, 
           if (!stage || stage === "unknown") return null;
           const badge = DISTRESS_STAGE_BADGE[stage];
           if (!badge) return null;
-          return <span className={`rounded px-1.5 py-0.5 text-xs font-semibold ${badge.className}`}>{badge.label}</span>;
+          const stageLabel = locale === "en"
+            ? badge.label
+            : (m.listingsUi.distressStages[stage as keyof typeof m.listingsUi.distressStages] ?? badge.label);
+          return <span className={`rounded px-1.5 py-0.5 text-xs font-semibold ${badge.className}`}>{stageLabel}</span>;
         })()}
         {listing.crossSourceMatches && listing.crossSourceMatches.length > 0 ? (
           <span
             className="rounded bg-paper px-1.5 py-0.5 text-xs font-semibold text-ink"
-            title={listing.crossSourceMatches.map((m) => `${sourceDisplayText(m.source)}${m.openingBid != null ? ` ($${Number(m.openingBid).toLocaleString("en-US")})` : ""}`).join("\n")}
+            title={listing.crossSourceMatches.map((item) => `${sourceDisplayText(item.source)}${item.openingBid != null ? ` ($${Number(item.openingBid).toLocaleString("en-US")})` : ""}`).join("\n")}
           >
-            {listing.crossSourceMatches.length + 1} sources
+            {format(m.listingsUi.sourcesCount, { count: listing.crossSourceMatches.length + 1 })}
           </span>
         ) : null}
         {qualityBadge ? (
           <span
             className={`rounded px-1.5 py-0.5 text-xs font-semibold ${qualityBadge.className}`}
-            title={quality?.note || 'Research evidence quality'}
+            title={quality?.note || "Research evidence quality"}
           >
             {qualityBadge.label}
           </span>
         ) : null}
         {urgencyBadge ? (
-          <span className={`rounded px-1.5 py-0.5 text-xs font-semibold ${urgencyBadge.className}`} title={opportunity?.note || 'Sale urgency'}>
+          <span className={`rounded px-1.5 py-0.5 text-xs font-semibold ${urgencyBadge.className}`} title={opportunity?.note || "Sale urgency"}>
             {urgencyBadge.label}
           </span>
         ) : null}
@@ -176,26 +152,29 @@ export const DiscoveryCard = React.memo(function DiscoveryCard({ listing, href, 
       {facts.length ? <p className="mt-2 text-xs text-ink-3">{facts.join(" · ")}</p> : null}
       <dl className="mt-4 grid grid-cols-2 gap-3 border-y border-line py-3">
         <div>
-          <dt className="text-xs text-ink-3">Opening amount</dt>
+          <dt className="text-xs text-ink-3">{m.listingsUi.openingAmountLabel}</dt>
           <dd className="mt-1 min-h-7 text-xl font-semibold tracking-tight text-ink"><Fact origin={listingFactOrigin(listing, "openingBid")} value={listing.openingBid} format="money" /></dd>
           {knownNumber(listing.openingBid) === null && knownNumber(listing.judgment) !== null ? (
-            <p className="mt-1 text-xs text-ink-3">Judgment: <span className="font-semibold text-ink">${Number(listing.judgment).toLocaleString("en-US")}</span></p>
+            <p className="mt-1 text-xs text-ink-3">{m.listingsUi.judgmentPrefix} <span className="font-semibold text-ink">${Number(listing.judgment).toLocaleString("en-US")}</span></p>
           ) : knownNumber(listing.assessed) !== null ? (
-            <p className="mt-1 text-xs text-ink-3">Assessed: <span className="font-medium text-ink-2">${Number(listing.assessed).toLocaleString("en-US")}</span></p>
+            <p className="mt-1 text-xs text-ink-3">{m.listingsUi.assessedPrefix} <span className="font-medium text-ink-2">${Number(listing.assessed).toLocaleString("en-US")}</span></p>
           ) : null}
         </div>
         <div>
-          <dt className="text-xs text-ink-3">Sale date</dt>
+          <dt className="text-xs text-ink-3">{m.listingsUi.saleDateLabel}</dt>
           <dd className="mt-1 min-h-7 text-sm font-semibold leading-7 text-ink"><Fact origin={listingFactOrigin(listing, "saleDate")} value={listing.saleDate} format="date" /></dd>
           {opportunity && knownNumber(opportunity.rank) !== null ? (
-            <p className="mt-1 text-xs text-ink-3">Rank: <span className="font-medium text-ink-2">{opportunity.rank}/100</span></p>
+            <p className="mt-1 text-xs text-ink-3">{m.listingsUi.rankPrefix} <span className="font-medium text-ink-2">{opportunity.rank}/100</span></p>
           ) : null}
         </div>
       </dl>
       <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-label text-ink-3">
-        <span title={sourceDisplayText(listing.discoveryStatus || "Freshness unknown")} className={stale ? "font-medium text-catch-ink" : ""}>{archived ? "Archived source record" : stale ? "Source refresh due" : observed ? "Source record observed" : "Source record unverified"}{listing.sourceObservedAt ? ` · ${displayDate(listing.sourceObservedAt)}` : " · date unavailable"}</span>
-        {completeness ? <span title={completeness.missing.length ? `Not available in this record: ${completeness.missing.map(field => field.replace(/([A-Z])/g, " $1").toLowerCase()).join(", ")}` : "All tracked details are available in this record"}>{completeness.known} of {completeness.total} details available</span> : null}
-        {listing.hasDocuments === true ? <span className="inline-flex items-center gap-1"><FileText size={12} /> Documents</span> : null}
+        <span title={sourceDisplayText(listing.discoveryStatus || "Freshness unknown")} className={stale ? "font-medium text-catch-ink" : ""}>
+          {archived ? m.listingsUi.sourceArchived : stale ? m.listingsUi.sourceRefreshDue : observed ? m.listingsUi.sourceObserved : m.listingsUi.sourceUnverified}
+          {listing.sourceObservedAt ? ` · ${locale === "en" ? displayDate(listing.sourceObservedAt) : localizeDisplayDate(listing.sourceObservedAt, locale, m.listingsUi.dateUnavailable)}` : ` · ${m.listingsUi.dateUnavailable}`}
+        </span>
+        {completeness ? <span title={completeness.missing.length ? `Not available in this record: ${completeness.missing.map(field => field.replace(/([A-Z])/g, " $1").toLowerCase()).join(", ")}` : "All tracked details are available in this record"}>{format(m.listingsUi.detailsAvailable, { known: completeness.known, total: completeness.total })}</span> : null}
+        {listing.hasDocuments === true ? <span className="inline-flex items-center gap-1"><FileText size={12} /> {m.listingsUi.documentsLabel}</span> : null}
         {effectiveDealScore !== null ? (() => {
           const band = bandForScore(effectiveDealScore);
           const isAssessor = listing.opportunity?.valuationBasis === 'enrolled_assessor_registry';
@@ -205,19 +184,19 @@ export const DiscoveryCard = React.memo(function DiscoveryCard({ listing, href, 
               title={band?.desc || (isAssessor ? 'Assessor-benchmarked deal score' : 'Modeled Deal Score')}
             >
               {band ? `${band.label} ${effectiveDealScore}` : `Deal score ${effectiveDealScore}/99`}
-              {isAssessor ? ' (Assessor)' : ''}
+              {isAssessor ? ` ${m.listingsUi.assessorTag}` : ''}
             </span>
           );
         })() : null}
-        {opportunity && knownNumber(opportunity.rank) !== null ? <span title={opportunity.note}>Opportunity rank {opportunity.rank}/100</span> : null}
+        {opportunity && knownNumber(opportunity.rank) !== null ? <span title={opportunity.note}>{format(m.listingsUi.opportunityRank, { rank: opportunity.rank })}</span> : null}
       </div>
       <div className="mt-auto grid gap-2 pt-4">
-        <button type="button" aria-pressed={compared} aria-label={`${compared ? "Remove from" : "Add to"} compare: ${listing.address}`} disabled={compareFull && !compared} onClick={() => onCompare(listing.id)} className="inline-flex min-h-11 items-center justify-center rounded-control border border-line-strong bg-card px-3 text-xs font-semibold text-ink-2 transition hover:border-ink-3 hover:bg-paper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-3 disabled:cursor-not-allowed disabled:opacity-50">
-          {compared ? "In compare" : compareFull ? "Compare is full" : "Compare"}
+        <button type="button" aria-pressed={compared} aria-label={`${compared ? m.listingsUi.removeBtn : m.listingsUi.compareBtn}: ${listing.address}`} disabled={compareFull && !compared} onClick={() => onCompare(listing.id)} className="inline-flex min-h-11 items-center justify-center rounded-control border border-line-strong bg-card px-3 text-xs font-semibold text-ink-2 transition hover:border-ink-3 hover:bg-paper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-3 disabled:cursor-not-allowed disabled:opacity-50">
+          {compared ? m.listingsUi.inCompareBtn : compareFull ? m.listingsUi.compareFullBtn : m.listingsUi.compareBtn}
         </button>
         <div className="grid gap-2 sm:grid-cols-[1.2fr_1fr]">
-          <Link href={href} prefetch={false} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-control bg-ink px-3 text-xs font-semibold text-white transition hover:bg-ink-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-3 focus-visible:ring-offset-2">View property <ArrowUpRight size={14} /></Link>
-          <CaseAction listingId={listing.id} label="Research" className="h-11 border-line bg-card font-semibold text-ink-2 hover:border-ink-3 hover:bg-paper" />
+          <Link href={href} prefetch={false} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-control bg-ink px-3 text-xs font-semibold text-white transition hover:bg-ink-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-3 focus-visible:ring-offset-2">{m.listingsUi.viewPropertyBtn} <ArrowUpRight size={14} /></Link>
+          <CaseAction listingId={listing.id} label={m.listingsUi.researchBtn} className="h-11 border-line bg-card font-semibold text-ink-2 hover:border-ink-3 hover:bg-paper" />
         </div>
       </div>
     </div>

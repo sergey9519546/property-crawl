@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Bookmark } from "lucide-react";
 import { useWorkspaceSession } from "@/components/workspace/workspace-shell";
+import { useLocale } from "@/components/i18n/locale-provider";
 
 // Same device-storage key and shape (JSON array of listing ids) as the /listings grid.
 const DEVICE_KEY = "perfectproperty:saved-listings";
@@ -17,6 +18,7 @@ function readDeviceIds(): string[] {
 }
 
 export function ListingWatchlistToggle({ listingId }: { listingId: string }) {
+  const { locale } = useLocale();
   const session = useWorkspaceSession();
   const [saved, setSaved] = React.useState(false);
   const [error, setError] = React.useState("");
@@ -100,7 +102,7 @@ export function ListingWatchlistToggle({ listingId }: { listingId: string }) {
         className="flex min-h-12 w-full items-center justify-center gap-2 rounded-lg border border-line-strong px-4 py-3 text-sm font-semibold text-ink hover:border-ink hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 disabled:opacity-50"
       >
         <Bookmark className={`h-4 w-4 ${saved ? "fill-current" : ""}`} aria-hidden />
-        {busy ? "Updating watchlist…" : saved ? "Saved to watchlist" : "Save to watchlist"}
+        {busy ? (locale === "hy" ? "Թարմացվում է…" : locale === "ru" ? "Обновление…" : "Updating watchlist…") : saved ? (locale === "hy" ? "Պահված է նախընտրածներում" : locale === "ru" ? "В избранном" : "Saved to watchlist") : (locale === "hy" ? "Պահել նախընտրածներում" : locale === "ru" ? "В избранное" : "Save to watchlist")}
       </button>
       {error ? <p role="status" className="mt-2 text-xs text-catch-ink">{error}</p> : null}
     </div>

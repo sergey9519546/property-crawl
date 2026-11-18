@@ -1,12 +1,20 @@
 import type { Metadata } from "next";
 import { PortfolioView } from "@/components/portfolio/portfolio-view";
 import { WorkspaceShell } from "@/components/workspace/workspace-shell";
+import { getRequestLocale } from "@/lib/i18n/server";
+import { getMessages } from "@/lib/i18n/messages";
 
-export const metadata: Metadata = {
-  title: "Portfolio & Watchlist Dashboard | PerfectProperty",
-  description:
-    "Track saved foreclosure deals, monitor opening bid price drops, review upcoming auction dates, and analyze portfolio allocation.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getRequestLocale();
+  const m = getMessages(locale);
+  return {
+    title: locale === "en" ? "Portfolio & Watchlist Dashboard | PerfectProperty" : m.meta.portfolioTitle,
+    description:
+      locale === "en"
+        ? "Track saved foreclosure deals, monitor opening bid price drops, review upcoming auction dates, and analyze portfolio allocation."
+        : m.meta.portfolioDescription,
+  };
+}
 
 export default function PortfolioPage() {
   return (

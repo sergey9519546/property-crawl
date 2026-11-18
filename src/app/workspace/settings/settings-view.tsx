@@ -3,6 +3,8 @@
 import * as React from "react";
 import { KeyRound, ShieldCheck, Database, Activity, Server, Camera, Play } from "lucide-react";
 import { useWorkspaceSession } from "@/components/workspace/workspace-shell";
+import { useLocale } from "@/components/i18n/locale-provider";
+import { formatLocaleNumber, interpolate } from "@/lib/i18n/translator";
 
 type ReadyData = {
   ready?: boolean;
@@ -47,6 +49,8 @@ type ImageProvidersResponse = {
 };
 
 export function WorkspaceSettingsView() {
+  const { locale, messages } = useLocale();
+  const t = messages.settingsB2;
   const session = useWorkspaceSession();
   const [healthData, setHealthData] = React.useState<{
     status?: string;
@@ -138,19 +142,21 @@ export function WorkspaceSettingsView() {
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) {
-        setTriggerMessage(data?.error || `Scraper run rejected (HTTP ${res.status})`);
+        setTriggerMessage(data?.error || interpolate(t.errScraperRejected, { status: res.status }));
       } else {
         setTriggerMessage(
-          `Scraper run accepted${typeof data?.ran === "number" ? ` (${data.ran} executed)` : ""}.`
+          interpolate(t.msgScraperAccepted, {
+            ranPart: typeof data?.ran === "number" ? interpolate(t.ranCountPart, { count: data.ran }) : "",
+          }),
         );
         await loadAll();
       }
     } catch (err) {
-      setTriggerMessage(err instanceof Error ? err.message : "Failed to trigger scrapers.");
+      setTriggerMessage(err instanceof Error ? err.message : t.errTrigger);
     } finally {
       setTriggerBusy(false);
     }
-  }, [session, loadAll]);
+  }, [session, loadAll, t.errScraperRejected, t.errTrigger, t.msgScraperAccepted, t.ranCountPart]);
 
   const scraperSummaryList = React.useMemo(() => {
     const source = Array.isArray(scraperHealth?.scrapers)
@@ -167,10 +173,10 @@ export function WorkspaceSettingsView() {
     <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
       <div className="mb-8">
         <h1 className="text-2xl font-bold tracking-tight text-ink">
-          Operator Workspace Settings
+          {t.heading}
         </h1>
         <p className="mt-1 text-sm text-ink-3">
-          Runtime configuration, readiness probes, scraper fleet status, and persistence mode.
+          {t.subtitle}
         </p>
       </div>
 
@@ -182,40 +188,40 @@ export function WorkspaceSettingsView() {
               <KeyRound className="h-5 w-5" aria-hidden />
             </div>
             <div>
-              <h2 className="text-base font-semibold text-ink">Operator Session</h2>
-              <p className="text-xs text-ink-3">Current session authentication and role authorization</p>
+              <h2 className="text-base font-semibold text-ink">{t.sessionTitle}</h2>
+              <p className="text-xs text-ink-3">{t.sessionSubtitle}</p>
             </div>
           </div>
 
           <dl className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3 text-sm">
             <div className="rounded-control bg-paper p-4">
-              <dt className="text-xs font-medium text-ink-3 uppercase tracking-wider">Status</dt>
+              <dt className="text-xs font-medium text-ink-3 uppercase tracking-wider">{t.statusLabel}</dt>
               <dd className="mt-1 font-semibold text-ink">
-                {session.authenticated ? "Authenticated" : session.configured ? "Locked" : "Unconfigured"}
+                {session.authenticated ? t.statusAuth : session.configured ? t.statusLocked : t.statusUnconf}
               </dd>
             </div>
             <div className="rounded-control bg-paper p-4">
-              <dt className="text-xs font-medium text-ink-3 uppercase tracking-wider">Role</dt>
+              <dt className="text-xs font-medium text-ink-3 uppercase tracking-wider">{t.roleLabel}</dt>
               <dd className="mt-1 font-semibold text-ink">
                 {session.authenticated
-                  ? (session.role === "analyst" ? "Analyst" : session.role === "viewer" ? "Viewer" : "Operator")
+                  ? (session.role === "analyst" ? t.roleAnalyst : session.role === "viewer" ? t.roleViewer : t.roleOperator)
                   : session.member?.entitled
-                    ? "Member (Entitled)"
+                    ? t.roleMemberEntitled
                     : session.member
-                      ? "Member"
-                      : "Viewer"}
+                      ? t.roleMember
+                      : t.roleViewer}
               </dd>
             </div>
             <div className="rounded-control bg-paper p-4">
-              <dt className="text-xs font-medium text-ink-3 uppercase tracking-wider">Permissions</dt>
+              <dt className="text-xs font-medium text-ink-3 uppercase tracking-wider">{t.permsLabel}</dt>
               <dd className="mt-1 font-semibold text-ink">
                 {session.authenticated
                   ? (session.role === "operator"
-                      ? "Full Workspace Controls"
+                      ? t.permFull
                       : session.role === "analyst"
-                        ? "Analyst Controls (No Scrapers)"
-                        : "Read-only Workspace")
-                  : "Read-only Discovery"}
+                        ? t.permAnalyst
+                        : t.permReadOnlyWs)
+                  : t.permReadOnlyDisc}
               </dd>
             </div>
           </dl>
@@ -228,41 +234,41 @@ export function WorkspaceSettingsView() {
               <Database className="h-5 w-5" aria-hidden />
             </div>
             <div>
-              <h2 className="text-base font-semibold text-ink">Persistence &amp; Discovery Readiness</h2>
-              <p className="text-xs text-ink-3">Live telemetry from /api/health and /api/health/ready</p>
+              <h2 className="text-base font-semibold text-ink">{t.persistenceTitle || <>Persistence &amp; Discovery Readiness</>}</h2>
+              <p className="text-xs text-ink-3">{t.persistenceSubtitle}</p>
             </div>
           </div>
 
           <dl className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3 text-sm">
             <div className="rounded-control bg-paper p-4">
-              <dt className="text-xs font-medium text-ink-3 uppercase tracking-wider">Inventory Mode</dt>
+              <dt className="text-xs font-medium text-ink-3 uppercase tracking-wider">{t.invModeLabel}</dt>
               <dd className="mt-1 font-semibold text-ink">
-                {loading ? "Checking..." : healthData?.dataMode || "Unknown"}
+                {loading ? t.checking : healthData?.dataMode || t.unknown}
               </dd>
             </div>
             <div className="rounded-control bg-paper p-4">
-              <dt className="text-xs font-medium text-ink-3 uppercase tracking-wider">Postgres Reachable</dt>
+              <dt className="text-xs font-medium text-ink-3 uppercase tracking-wider">{t.pgReachableLabel}</dt>
               <dd className="mt-1 font-semibold text-ink">
-                {loading ? "Checking..." : healthData?.postgresReachable ? "Yes" : "No"}
+                {loading ? t.checking : healthData?.postgresReachable ? t.yes : t.no}
               </dd>
             </div>
             <div className="rounded-control bg-paper p-4">
-              <dt className="text-xs font-medium text-ink-3 uppercase tracking-wider">Readiness Probe</dt>
+              <dt className="text-xs font-medium text-ink-3 uppercase tracking-wider">{t.probeLabel}</dt>
               <dd className="mt-1 font-semibold text-ink">
                 {loading
-                  ? "Checking..."
+                  ? t.checking
                   : readyData?.ready
-                    ? `Ready (${readyStatusCode ?? 200})`
+                    ? interpolate(t.readyStatus, { status: readyStatusCode ?? 200 })
                     : readyStatusCode === 401
-                      ? "Locked (Unlock operator)"
-                      : `Not Ready (${readyStatusCode ?? "N/A"})`}
+                      ? t.probeLocked
+                      : interpolate(t.notReadyStatus, { status: readyStatusCode ?? t.na })}
               </dd>
             </div>
           </dl>
 
           {readyData?.failedChecks && readyData.failedChecks.length > 0 ? (
             <div className="mt-4 rounded-control border border-catch/30 bg-catch-wash p-3 text-xs text-catch-ink">
-              <strong>Failed checks:</strong> {readyData.failedChecks.join(", ")}
+              <strong>{t.failedChecksPrefix}</strong> {readyData.failedChecks.join(", ")}
             </div>
           ) : null}
         </div>
@@ -275,8 +281,8 @@ export function WorkspaceSettingsView() {
                 <Activity className="h-5 w-5" aria-hidden />
               </div>
               <div>
-                <h2 className="text-base font-semibold text-ink">Scraper Fleet &amp; Drift Health</h2>
-                <p className="text-xs text-ink-3">Live diagnostics from /api/scrapers/health and /api/scrapers</p>
+                <h2 className="text-base font-semibold text-ink">{t.fleetTitle || <>Scraper Fleet &amp; Drift Health</>}</h2>
+                <p className="text-xs text-ink-3">{t.fleetSubtitle}</p>
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -286,7 +292,7 @@ export function WorkspaceSettingsView() {
                   onClick={() => session.requestUnlock()}
                   className="rounded-control border border-line-strong bg-card px-3 py-1.5 text-xs font-semibold text-ink hover:bg-paper"
                 >
-                  Unlock to view diagnostics
+                  {t.unlockDiagBtn || "Unlock to view diagnostics"}
                 </button>
               ) : null}
               <button
@@ -297,10 +303,10 @@ export function WorkspaceSettingsView() {
               >
                 <Play className="h-3.5 w-3.5" aria-hidden />
                 {triggerBusy
-                  ? "Running..."
+                  ? t.runningScrapersBtn
                   : session.authenticated
-                    ? "Run Scrapers"
-                    : "Unlock to Run Scrapers"}
+                    ? t.runScrapersBtn
+                    : t.unlockRunScrapersBtn}
               </button>
             </div>
           </div>
@@ -313,29 +319,29 @@ export function WorkspaceSettingsView() {
 
           <dl className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-4 text-sm">
             <div className="rounded-control bg-paper p-4">
-              <dt className="text-xs font-medium text-ink-3 uppercase tracking-wider">Fleet Status</dt>
+              <dt className="text-xs font-medium text-ink-3 uppercase tracking-wider">{t.fleetStatusLabel}</dt>
               <dd className="mt-1 font-semibold text-ink">
                 {loading
-                  ? "Checking..."
-                  : activeScraperStats?.systemStatus || (scraperStatusCode ? `Gated (HTTP ${scraperStatusCode})` : scraperTelemetryStatus ? `HTTP ${scraperTelemetryStatus}` : "Unavailable")}
+                  ? t.checking
+                  : activeScraperStats?.systemStatus || (scraperStatusCode ? interpolate(t.gatedStatus, { status: scraperStatusCode }) : scraperTelemetryStatus ? interpolate(t.httpStatus, { status: scraperTelemetryStatus }) : t.unavailable)}
               </dd>
             </div>
             <div className="rounded-control bg-paper p-4">
-              <dt className="text-xs font-medium text-ink-3 uppercase tracking-wider">Total Scrapers</dt>
+              <dt className="text-xs font-medium text-ink-3 uppercase tracking-wider">{t.totalScrapersLabel}</dt>
               <dd className="mt-1 font-semibold text-ink tabular-nums">
-                {activeScraperStats?.totalScrapers !== undefined ? String(activeScraperStats.totalScrapers) : "—"}
+                {activeScraperStats?.totalScrapers !== undefined ? formatLocaleNumber(locale, activeScraperStats.totalScrapers) : "—"}
               </dd>
             </div>
             <div className="rounded-control bg-paper p-4">
-              <dt className="text-xs font-medium text-ink-3 uppercase tracking-wider">Scrapers in Fault</dt>
+              <dt className="text-xs font-medium text-ink-3 uppercase tracking-wider">{t.inFaultLabel}</dt>
               <dd className="mt-1 font-semibold text-ink tabular-nums">
-                {activeScraperStats ? String(activeScraperStats.scrapersInFault ?? 0) : "—"}
+                {activeScraperStats ? formatLocaleNumber(locale, activeScraperStats.scrapersInFault ?? 0) : "—"}
               </dd>
             </div>
             <div className="rounded-control bg-paper p-4">
-              <dt className="text-xs font-medium text-ink-3 uppercase tracking-wider">Selector Drift Alarms</dt>
+              <dt className="text-xs font-medium text-ink-3 uppercase tracking-wider">{t.driftAlarmsLabel}</dt>
               <dd className="mt-1 font-semibold text-ink tabular-nums">
-                {activeScraperStats ? String(activeScraperStats.scrapersWithDrift ?? 0) : "—"}
+                {activeScraperStats ? formatLocaleNumber(locale, activeScraperStats.scrapersWithDrift ?? 0) : "—"}
               </dd>
             </div>
           </dl>
@@ -349,7 +355,7 @@ export function WorkspaceSettingsView() {
                     {item.name || item.key}
                   </span>
                   <span className="font-mono text-ink-2">
-                    {item.status || "idle"}{item.driftDetected ? " · drift" : ""}
+                    {item.status || "idle"}{item.driftDetected ? t.driftSuffix : ""}
                   </span>
                 </li>
               ))}
@@ -364,34 +370,34 @@ export function WorkspaceSettingsView() {
               <Camera className="h-5 w-5" aria-hidden />
             </div>
             <div>
-              <h2 className="text-base font-semibold text-ink">Property Imagery Providers &amp; Cache Health</h2>
-              <p className="text-xs text-ink-3">Live provider status from /api/property-image/providers</p>
+              <h2 className="text-base font-semibold text-ink">{t.imageryTitle}</h2>
+              <p className="text-xs text-ink-3">{t.imagerySubtitle}</p>
             </div>
           </div>
 
           <dl className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4 text-sm">
             <div className="rounded-control bg-paper p-4">
-              <dt className="text-xs font-medium text-ink-3 uppercase tracking-wider">Configured Total</dt>
+              <dt className="text-xs font-medium text-ink-3 uppercase tracking-wider">{t.configTotalLabel}</dt>
               <dd className="mt-1 font-semibold text-ink tabular-nums">
-                {loading ? "Checking..." : imageProviders?.summary?.total ?? (imageProvidersStatus ? `HTTP ${imageProvidersStatus}` : "—")}
+                {loading ? t.checking : imageProviders?.summary?.total !== undefined ? formatLocaleNumber(locale, imageProviders.summary.total) : (imageProvidersStatus ? interpolate(t.httpStatus, { status: imageProvidersStatus }) : "—")}
               </dd>
             </div>
             <div className="rounded-control bg-paper p-4">
-              <dt className="text-xs font-medium text-ink-3 uppercase tracking-wider">Available</dt>
+              <dt className="text-xs font-medium text-ink-3 uppercase tracking-wider">{t.availableLabel}</dt>
               <dd className="mt-1 font-semibold text-ink tabular-nums">
-                {imageProviders?.summary ? String(imageProviders.summary.available ?? 0) : "—"}
+                {imageProviders?.summary ? formatLocaleNumber(locale, imageProviders.summary.available ?? 0) : "—"}
               </dd>
             </div>
             <div className="rounded-control bg-paper p-4">
-              <dt className="text-xs font-medium text-ink-3 uppercase tracking-wider">Missing Keys</dt>
+              <dt className="text-xs font-medium text-ink-3 uppercase tracking-wider">{t.missingKeysLabel}</dt>
               <dd className="mt-1 font-semibold text-catch-ink tabular-nums">
-                {imageProviders?.summary ? String(imageProviders.summary.missingKey ?? 0) : "—"}
+                {imageProviders?.summary ? formatLocaleNumber(locale, imageProviders.summary.missingKey ?? 0) : "—"}
               </dd>
             </div>
             <div className="rounded-control bg-paper p-4">
-              <dt className="text-xs font-medium text-ink-3 uppercase tracking-wider">Open Circuits</dt>
+              <dt className="text-xs font-medium text-ink-3 uppercase tracking-wider">{t.openCircuitsLabel}</dt>
               <dd className="mt-1 font-semibold text-catch-ink tabular-nums">
-                {imageProviders?.summary ? String(imageProviders.summary.circuitOpen ?? 0) : "—"}
+                {imageProviders?.summary ? formatLocaleNumber(locale, imageProviders.summary.circuitOpen ?? 0) : "—"}
               </dd>
             </div>
           </dl>
@@ -405,14 +411,14 @@ export function WorkspaceSettingsView() {
                     <div className="flex items-center justify-between gap-2">
                       <span className="font-semibold text-ink">{provider.label || provider.id}</span>
                       <span className={`rounded-full px-2 py-0.5 text-label font-bold uppercase ${available ? "bg-go-wash text-go" : "bg-catch-wash text-catch-ink"}`}>
-                        {available ? "Healthy" : !provider.keyConfigured && provider.requiresKey ? "Missing key" : "Circuit open"}
+                        {available ? t.healthyBadge : !provider.keyConfigured && provider.requiresKey ? t.missingKeyBadge : t.circuitOpenBadge}
                       </span>
                     </div>
                     {provider.role ? <p className="text-xs text-ink-3">{provider.role}</p> : null}
                     <div className="flex items-center justify-between text-xs font-mono text-ink-3">
-                      <span>{provider.requiresKey ? (provider.keyConfigured ? "Key set" : `${provider.keyEnvVar || "Key"} unset`) : "Public / keyless"}</span>
+                      <span>{provider.requiresKey ? (provider.keyConfigured ? t.keySet : interpolate(t.keyUnset, { envVar: provider.keyEnvVar || "Key" })) : t.publicKeyless}</span>
                       {provider.cache && typeof provider.cache.entries === "number" ? (
-                        <span>{provider.cache.entries} cached</span>
+                        <span>{interpolate(t.cachedEntries, { count: formatLocaleNumber(locale, provider.cache.entries) })}</span>
                       ) : null}
                     </div>
                   </li>
@@ -429,23 +435,23 @@ export function WorkspaceSettingsView() {
               <ShieldCheck className="h-5 w-5" aria-hidden />
             </div>
             <div>
-              <h2 className="text-base font-semibold text-ink">Security Invariants</h2>
-              <p className="text-xs text-ink-3">Active protection boundaries</p>
+              <h2 className="text-base font-semibold text-ink">{t.secTitle}</h2>
+              <p className="text-xs text-ink-3">{t.secSubtitle}</p>
             </div>
           </div>
 
           <ul className="mt-4 space-y-2 text-xs text-ink-2">
             <li className="flex items-center gap-2">
               <span className="h-1.5 w-1.5 rounded-full bg-ink-3" />
-              Content-Security-Policy: Cryptographic per-request dynamic nonce (strict-dynamic)
+              {t.secCsp}
             </li>
             <li className="flex items-center gap-2">
               <span className="h-1.5 w-1.5 rounded-full bg-ink-3" />
-              SSRF Defenses: Loopback/Private IP filtering on webhooks and crawler lanes
+              {t.secSsrf}
             </li>
             <li className="flex items-center gap-2">
               <span className="h-1.5 w-1.5 rounded-full bg-ink-3" />
-              Operational Truth: Closed does not equal sold; bidsPlaced does not drive velocity
+              {t.secTruth}
             </li>
           </ul>
         </div>

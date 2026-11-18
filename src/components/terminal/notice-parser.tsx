@@ -3,6 +3,8 @@
 import { useMemo, useState } from "react";
 import { AlertCircle, Bookmark, FileSearch, FileText, LoaderCircle } from "lucide-react";
 import { PropertyListing } from "./property-data";
+import { useLocale } from "@/components/i18n/locale-provider";
+import { formatUsd } from "@/lib/i18n/translator";
 
 interface NoticeParserProps {
   onSaveToWatchlist: (listing: PropertyListing) => void;
@@ -64,51 +66,49 @@ const SAMPLE = [
   "Attorney: Manley Deas Kochalski LLC."
 ].join("\n");
 
-const REQUIRED_REVIEW_FIELDS = [
-  ["property_address", "property address"],
-  ["state", "state"],
-  ["case_number", "court case number"],
-  ["opening_bid", "opening bid"],
-  ["sale_date", "sale date"],
-  ["deposit_terms", "deposit terms"],
-  ["attorney", "attorney of record"]
-] as const;
-
-function textValue(value: string | null) {
-  return value || "Not found in notice";
-}
-
-function moneyValue(value: number | null) {
-  return value === null || !Number.isFinite(value)
-    ? "Not found in notice"
-    : new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(value);
-}
-
-function ExtractedField({ label, value, evidence }: { label: string; value: string; evidence?: string | null }) {
-  const missing = value === "Not found in notice";
+function ExtractedField({ label, value, missing, evidenceLabel }: { label: string; value: string; missing: boolean; evidenceLabel?: string | null }) {
   return (
     <div className={`rounded-control border p-3 ${missing ? "border-catch/30 bg-catch-wash" : "border-line bg-card"}`}>
       <span className="block text-label font-bold uppercase tracking-[0.1em] text-ink-3">{label}</span>
       <strong className={`mt-1 block break-words text-xs ${missing ? "text-catch-ink" : "text-ink"}`}>{value}</strong>
-      {evidence ? <span className="mt-1.5 block line-clamp-2 text-meta leading-4 text-ink-3">Evidence: “{evidence}”</span> : null}
+      {evidenceLabel ? <span className="mt-1.5 block line-clamp-2 text-meta leading-4 text-ink-3">{evidenceLabel}</span> : null}
     </div>
   );
 }
 
 export function NoticeParser({ onSaveToWatchlist }: NoticeParserProps) {
+  const { locale, messages, format } = useLocale();
+  const t = messages.modalsAndParser;
   const [rawText, setRawText] = useState("");
   const [isParsing, setIsParsing] = useState(false);
   const [parseResponse, setParseResponse] = useState<ParseResponse | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
   const [needsUnlock, setNeedsUnlock] = useState(false);
 
+  const textValue = (value: string | null) => value || t.npNotFound;
+  const moneyValue = (value: number | null) =>
+    value === null || !Number.isFinite(value)
+      ? t.npNotFound
+      : formatUsd(locale, value, { maximumFractionDigits: 2 });
+  const evidenceText = (value?: string | null) =>
+    value ? format(t.npEvidencePrefix, { evidence: value }) : null;
+
   const parsedResult = parseResponse?.parsed ?? null;
   const missingReviewFields = useMemo(() => {
     if (!parsedResult) return [];
-    return REQUIRED_REVIEW_FIELDS
+    const requiredReviewFields = [
+      ["property_address", t.npReqAddress],
+      ["state", t.npReqState],
+      ["case_number", t.npReqCaseNumber],
+      ["opening_bid", t.npReqOpeningBid],
+      ["sale_date", t.npReqSaleDate],
+      ["deposit_terms", t.npReqDepositTerms],
+      ["attorney", t.npReqAttorney],
+    ] as const;
+    return requiredReviewFields
       .filter(([field]) => parsedResult.field_status[field] === "not_found")
       .map(([, label]) => label);
-  }, [parsedResult]);
+  }, [parsedResult, t.npReqAddress, t.npReqAttorney, t.npReqCaseNumber, t.npReqDepositTerms, t.npReqOpeningBid, t.npReqSaleDate, t.npReqState]);
 
   const handleParse = async () => {
     if (!rawText.trim()) return;
@@ -123,11 +123,11 @@ export function NoticeParser({ onSaveToWatchlist }: NoticeParserProps) {
         body: JSON.stringify({ noticeText: rawText })
       });
       const body = await response.json().catch(() => null);
-      if (response.status === 401) { setNeedsUnlock(true); throw new Error("Unlock your workspace, then return here to extract the notice. Your text will stay on this page."); }
-      if (!response.ok || !body?.parsed) throw new Error(body?.error || "The notice could not be parsed.");
+      if (response.status === 401) { setNeedsUnlock(true); throw new Error(t.npUnlockError); }
+      if (!response.ok || !body?.parsed) throw new Error(body?.error || t.npParseError);
       setParseResponse(body as ParseResponse);
     } catch (error) {
-      setParseError(error instanceof Error ? error.message : "The notice could not be parsed.");
+      setParseError(error instanceof Error ? error.message : t.npParseError);
     } finally {
       setIsParsing(false);
     }
@@ -138,7 +138,7 @@ export function NoticeParser({ onSaveToWatchlist }: NoticeParserProps) {
     const address = parsedResult.property_address;
     const state = parsedResult.state;
     if (!address || !state) {
-      setParseError("A source-stated property address and state are required before this extraction can be added.");
+      setParseError(t.npNeedAddressError);
       return;
     }
 
@@ -191,6 +191,9 @@ export function NoticeParser({ onSaveToWatchlist }: NoticeParserProps) {
 
   const canSave = Boolean(parsedResult?.property_address && parsedResult?.state);
   const llmCandidateCount = Object.keys(parseResponse?.unverifiedCandidates || {}).length;
+  const cityStateVal = parsedResult?.city || parsedResult?.state
+    ? `${parsedResult.city || t.npCityMissing}, ${parsedResult.state || t.npStateMissing}`
+    : t.npNotFound;
 
   return (
     <div className="space-y-4 rounded-card border border-line bg-card p-6 shadow-sm">
@@ -198,25 +201,25 @@ export function NoticeParser({ onSaveToWatchlist }: NoticeParserProps) {
         <div className="flex items-center gap-2">
           <FileText className="h-5 w-5 text-ink" />
           <div>
-            <h3 className="text-lg font-bold text-ink">Legal Notice Evidence Extractor</h3>
-            <p className="text-xs text-ink-3">Extracts stated facts; it does not complete missing fields.</p>
+            <h3 className="text-lg font-bold text-ink">{t.npTitle}</h3>
+            <p className="text-xs text-ink-3">{t.npSubtitle}</p>
           </div>
         </div>
         <button type="button" onClick={() => { setRawText(SAMPLE); setParseResponse(null); setParseError(null); }} className="text-xs font-semibold text-ink hover:underline">
-          Paste sample notice
+          {t.npPasteSample}
         </button>
       </div>
 
       <textarea
         value={rawText}
         onChange={(event) => { setRawText(event.target.value); setParseResponse(null); setParseError(null); }}
-        placeholder="Paste raw foreclosure notice, gazette clipping, or court docket text here…"
-        aria-label="Raw legal notice"
+        placeholder={t.npPlaceholder}
+        aria-label={t.npTextareaAria}
         className="h-36 w-full rounded-control border border-line-strong p-4 font-mono text-xs text-ink focus:border-yours focus:outline-none focus:ring-2 focus:ring-yours/15"
       />
 
       <div className="flex items-center justify-between gap-3">
-        <span className="text-xs text-ink-3">All extracted fields require comparison with the source document.</span>
+        <span className="text-xs text-ink-3">{t.npCompareHelper}</span>
         <button
           type="button"
           onClick={handleParse}
@@ -224,14 +227,14 @@ export function NoticeParser({ onSaveToWatchlist }: NoticeParserProps) {
           className="inline-flex h-10 items-center justify-center gap-1.5 rounded-control bg-ink px-5 text-xs font-bold text-white transition hover:bg-ink-2 disabled:opacity-50"
         >
           {isParsing ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <FileSearch className="h-4 w-4 text-white/75" />}
-          <span>{isParsing ? "Extracting…" : "Extract stated facts"}</span>
+          <span>{isParsing ? t.npExtracting : t.npExtractBtn}</span>
         </button>
       </div>
 
       {parseError ? (
         <div className="flex items-start gap-2 rounded-control border border-catch/30 bg-catch-wash p-3 text-xs text-catch-ink" role="alert">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>{parseError}{needsUnlock ? <a href="/listings" target="_blank" rel="noopener noreferrer" className="mt-2 block font-semibold underline underline-offset-2">Open workspace in a new tab</a> : null}</span>
+          <span>{parseError}{needsUnlock ? <a href="/listings" target="_blank" rel="noopener noreferrer" className="mt-2 block font-semibold underline underline-offset-2">{t.npOpenWorkspaceTab}</a> : null}</span>
         </div>
       ) : null}
 
@@ -241,57 +244,57 @@ export function NoticeParser({ onSaveToWatchlist }: NoticeParserProps) {
             <div className="flex items-start gap-2 text-xs text-catch-ink">
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
               <div>
-                <strong className="block font-extrabold">Unverified extraction — source review required</strong>
-                <span>{parseResponse?.confidenceMeaning || "Completeness is not factual verification."}</span>
-                {llmCandidateCount > 0 ? <span className="mt-1 block">{llmCandidateCount} AI candidate field(s) were kept separate and were not promoted into these facts.</span> : null}
+                <strong className="block font-extrabold">{t.npUnverifiedBanner}</strong>
+                <span>{parseResponse?.confidenceMeaning || t.npConfidenceDefault}</span>
+                {llmCandidateCount > 0 ? <span className="mt-1 block">{format(t.npAiCandidatesNote, { count: llmCandidateCount })}</span> : null}
               </div>
             </div>
             <button
               type="button"
               onClick={handleAddToWatchlist}
               disabled={!canSave}
-              title={canSave ? "Add this unverified extraction" : "A source-stated address and state are required"}
+              title={canSave ? t.npAddCanTitle : t.npAddCantTitle}
               className="inline-flex items-center gap-1 rounded-control bg-ink px-3 py-1.5 text-xs font-bold text-white transition hover:bg-ink-2 disabled:cursor-not-allowed disabled:opacity-40"
             >
               <Bookmark className="h-3.5 w-3.5" />
-              <span>{canSave ? "Add extraction" : "Needs address + state"}</span>
+              <span>{canSave ? t.npAddBtn : t.npNeedsAddressBtn}</span>
             </button>
           </div>
 
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <ExtractedField label="Address" value={textValue(parsedResult.property_address)} evidence={parsedResult.evidence.property_address} />
-            <ExtractedField label="City / State" value={parsedResult.city || parsedResult.state ? `${parsedResult.city || "City not found"}, ${parsedResult.state || "state not found"}` : "Not found in notice"} evidence={parsedResult.evidence.state} />
-            <ExtractedField label="Opening bid" value={moneyValue(parsedResult.opening_bid)} evidence={parsedResult.evidence.opening_bid} />
-            <ExtractedField label="Appraised value" value={moneyValue(parsedResult.appraised_value)} evidence={parsedResult.evidence.appraised_value} />
-            <ExtractedField label="Auction date" value={textValue(parsedResult.sale_date)} evidence={parsedResult.evidence.sale_date} />
-            <ExtractedField label="Auction time" value={textValue(parsedResult.sale_time)} evidence={parsedResult.evidence.sale_time} />
-            <ExtractedField label="Sale type" value={textValue(parsedResult.sale_type)} evidence={parsedResult.evidence.sale_type} />
-            <ExtractedField label="Case number" value={textValue(parsedResult.case_number)} evidence={parsedResult.evidence.case_number} />
-            <ExtractedField label="Plaintiff / seller" value={textValue(parsedResult.plaintiff_or_seller)} evidence={parsedResult.evidence.plaintiff_or_seller} />
-            <ExtractedField label="Defendant" value={textValue(parsedResult.defendant)} evidence={parsedResult.evidence.defendant} />
-            <ExtractedField label="Judgment" value={moneyValue(parsedResult.judgment_amount)} evidence={parsedResult.evidence.judgment_amount} />
-            <ExtractedField label="Deposit" value={textValue(parsedResult.deposit_terms)} evidence={parsedResult.evidence.deposit_terms} />
-            <ExtractedField label="Attorney" value={textValue(parsedResult.attorney)} evidence={parsedResult.evidence.attorney} />
-            <ExtractedField label="Parcel / lot" value={textValue(parsedResult.parcel_or_lot)} evidence={parsedResult.evidence.parcel_or_lot} />
+            <ExtractedField label={t.npFieldLabels.address} value={textValue(parsedResult.property_address)} missing={!parsedResult.property_address} evidenceLabel={evidenceText(parsedResult.evidence.property_address)} />
+            <ExtractedField label={t.npFieldLabels.cityState} value={cityStateVal} missing={cityStateVal === t.npNotFound} evidenceLabel={evidenceText(parsedResult.evidence.state)} />
+            <ExtractedField label={t.npFieldLabels.openingBid} value={moneyValue(parsedResult.opening_bid)} missing={parsedResult.opening_bid === null} evidenceLabel={evidenceText(parsedResult.evidence.opening_bid)} />
+            <ExtractedField label={t.npFieldLabels.appraisedValue} value={moneyValue(parsedResult.appraised_value)} missing={parsedResult.appraised_value === null} evidenceLabel={evidenceText(parsedResult.evidence.appraised_value)} />
+            <ExtractedField label={t.npFieldLabels.saleDate} value={textValue(parsedResult.sale_date)} missing={!parsedResult.sale_date} evidenceLabel={evidenceText(parsedResult.evidence.sale_date)} />
+            <ExtractedField label={t.npFieldLabels.saleTime} value={textValue(parsedResult.sale_time)} missing={!parsedResult.sale_time} evidenceLabel={evidenceText(parsedResult.evidence.sale_time)} />
+            <ExtractedField label={t.npFieldLabels.saleType} value={textValue(parsedResult.sale_type)} missing={!parsedResult.sale_type} evidenceLabel={evidenceText(parsedResult.evidence.sale_type)} />
+            <ExtractedField label={t.npFieldLabels.caseNumber} value={textValue(parsedResult.case_number)} missing={!parsedResult.case_number} evidenceLabel={evidenceText(parsedResult.evidence.case_number)} />
+            <ExtractedField label={t.npFieldLabels.plaintiff} value={textValue(parsedResult.plaintiff_or_seller)} missing={!parsedResult.plaintiff_or_seller} evidenceLabel={evidenceText(parsedResult.evidence.plaintiff_or_seller)} />
+            <ExtractedField label={t.npFieldLabels.defendant} value={textValue(parsedResult.defendant)} missing={!parsedResult.defendant} evidenceLabel={evidenceText(parsedResult.evidence.defendant)} />
+            <ExtractedField label={t.npFieldLabels.judgment} value={moneyValue(parsedResult.judgment_amount)} missing={parsedResult.judgment_amount === null} evidenceLabel={evidenceText(parsedResult.evidence.judgment_amount)} />
+            <ExtractedField label={t.npFieldLabels.deposit} value={textValue(parsedResult.deposit_terms)} missing={!parsedResult.deposit_terms} evidenceLabel={evidenceText(parsedResult.evidence.deposit_terms)} />
+            <ExtractedField label={t.npFieldLabels.attorney} value={textValue(parsedResult.attorney)} missing={!parsedResult.attorney} evidenceLabel={evidenceText(parsedResult.evidence.attorney)} />
+            <ExtractedField label={t.npFieldLabels.parcel} value={textValue(parsedResult.parcel_or_lot)} missing={!parsedResult.parcel_or_lot} evidenceLabel={evidenceText(parsedResult.evidence.parcel_or_lot)} />
           </div>
 
           {parsedResult.opening_bid_basis === "derived_from_explicit_notice_fraction" ? (
             <div className="rounded-control border border-line bg-paper p-3 text-xs text-ink-2">
-              Opening bid was calculated only because the notice explicitly states the {parsedResult.statutory_bid_fraction ? `${(parsedResult.statutory_bid_fraction * 100).toFixed(2)}%` : "statutory"} fraction of its stated appraisal. Verify the calculation before use.
+              {format(t.npStatutoryFractionNote, { pct: parsedResult.statutory_bid_fraction ? `${(parsedResult.statutory_bid_fraction * 100).toFixed(2)}%` : t.npStatutoryLabel })}
             </div>
           ) : null}
 
           {missingReviewFields.length > 0 ? (
             <div className="rounded-control border border-catch/30 bg-card p-3 text-xs text-ink-2">
-              <strong className="block text-catch-ink">Evidence gaps</strong>
-              <span className="mt-1 block">Not found: {missingReviewFields.join(", ")}. Consult the official notice, docket, and sale terms; these values were not estimated.</span>
+              <strong className="block text-catch-ink">{t.npEvidenceGaps}</strong>
+              <span className="mt-1 block">{format(t.npMissingGapList, { fields: missingReviewFields.join(", ") })}</span>
             </div>
           ) : null}
 
           {/(?:tract\s+[12]|parcel\s+(?:one|two|[12])|lot\s+[12]|permanent parcel nos|parcels:)/i.test(rawText) ? (
             <div className="flex items-start gap-2 rounded-control border border-catch/30 bg-catch-wash p-3 text-xs text-catch-ink">
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-catch-ink" />
-              <div><strong className="block font-bold">Multiple parcel references detected</strong><span>Confirm which stated facts apply to each parcel in the official docket.</span></div>
+              <div><strong className="block font-bold">{t.npMultiParcelTitle}</strong><span>{t.npMultiParcelBody}</span></div>
             </div>
           ) : null}
         </div>

@@ -23,6 +23,9 @@ import {
 import { CountyAlertSubscribe } from "@/components/alerts/county-alert-subscribe";
 import { SiteHeader } from "@/components/site/site-header";
 import { SiteFooter } from "@/components/site/site-footer";
+import { getRequestLocale } from "@/lib/i18n/server";
+import { getMessages } from "@/lib/i18n/messages";
+import { interpolate } from "@/lib/i18n/translator";
 
 export const dynamic = "force-dynamic";
 
@@ -72,11 +75,13 @@ const loadCountyData = cache(async function loadCountyData(stateCode: string, co
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { state: rawState, county: rawCounty } = await params;
+  const locale = await getRequestLocale();
+  const m = getMessages(locale);
   const state = parseValidStateCode(rawState);
   if (!state) {
     return {
-      title: "Jurisdiction Not Found | PerfectProperty",
-      description: "Recognized two-letter US state jurisdiction required.",
+      title: locale === "en" ? "Jurisdiction Not Found | PerfectProperty" : m.meta.countyNotFoundTitle,
+      description: locale === "en" ? "Recognized two-letter US state jurisdiction required." : m.meta.countyNotFoundDescription,
       robots: { index: false, follow: false },
     };
   }
@@ -124,13 +129,13 @@ export default async function CountyDocketPage({ params }: PageProps) {
     notFound();
   }
 
+  const locale = await getRequestLocale();
+  const m = getMessages(locale);
   const countyName = normalizeCountySlug(rawCounty);
   const formalCounty = formatCountyDisplayName(countyName);
   const loaded = await loadCountyData(state, rawCounty);
-  // No records for this slug: a real 404, not an indexable empty page.
   if (loaded.length === 0) notFound();
 
-  // Upcoming sales first (soonest at top), then undated/past records.
   const today = new Date().toISOString().slice(0, 10);
   const weekOut = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10);
   const saleOf = (item: ListingSummary) => (item.saleDate || item.auctionDate || "").slice(0, 10);
@@ -147,7 +152,6 @@ export default async function CountyDocketPage({ params }: PageProps) {
   const gisLink = getCountyCadastralGisLink(state, countyName);
   const feeSchedule = getStatutoryFeeSchedule(state, stats.medianOpeningBid ?? undefined);
 
-  // Fee math only runs on a published median bid; no stand-in price.
   const baselinePrice = stats.medianOpeningBid || 0;
   const feePreset = baselinePrice > 0 ? computeStatutoryFeePreset({ purchasePrice: baselinePrice, state }) : null;
   const carrySchedule = computeStatutoryDeadlinesAndCarry({ state, purchasePrice: baselinePrice, redemptionDays: redemption.days });
@@ -174,97 +178,99 @@ export default async function CountyDocketPage({ params }: PageProps) {
       <div className="min-h-screen bg-paper text-ink">
       <SiteHeader />
       <main id="main-content" tabIndex={-1} className="mx-auto max-w-5xl px-6 pb-20 pt-28 outline-none sm:pt-32">
-        {/* Breadcrumb Navigation */}
         <nav aria-label="Breadcrumb" className="mb-6 flex flex-wrap items-center gap-2 text-xs font-medium text-ink-3">
-          <Link href="/" className="hover:text-ink transition-colors">Home</Link>
+          <Link href="/" className="hover:text-ink transition-colors">{m.states.homeCrumb}</Link>
           <span>/</span>
-          <Link href="/states" className="hover:text-ink transition-colors">States</Link>
+          <Link href="/states" className="hover:text-ink transition-colors">{m.states.statesCrumb}</Link>
           <span>/</span>
           <Link href={`/states/${state}`} className="hover:text-ink transition-colors">{state}</Link>
           <span>/</span>
           <span className="text-ink font-semibold">{formalCounty}</span>
         </nav>
 
-        {/* Page Header */}
         <div className="border-b border-line pb-8">
           <div className="inline-flex items-center gap-2 rounded-full border border-line bg-card px-3 py-1 text-xs font-semibold uppercase tracking-wider text-ink-2">
-            <Gavel className="h-3.5 w-3.5" /> Foreclosure and auction listings
+            <Gavel className="h-3.5 w-3.5" /> {m.states.countyBadge}
           </div>
           <h1 className="mt-3 text-3xl font-bold tracking-tight text-ink sm:text-4xl">
-            Foreclosure and government property auctions in {formalCounty}, {state}
+            {interpolate(m.states.countyHeading, { county: formalCounty, state })}
           </h1>
           <p className="mt-3 max-w-3xl text-sm leading-relaxed text-ink-3 sm:text-base">
-            {upcomingCount > 0
-              ? `${stats.totalCount} listing${stats.totalCount === 1 ? "" : "s"} in ${formalCounty}. ${upcomingCount} ${upcomingCount === 1 ? "sale is" : "sales are"} coming up, ${thisWeekCount} in the next 7 days. Next sale: ${nextSale}.`
-              : `No upcoming sales listed here right now. ${stats.totalCount} past or undated listing${stats.totalCount === 1 ? "" : "s"} below.`}
-            {" "}Always confirm the date and terms with the county before you bid.
+            {locale === "en" ? (
+              upcomingCount > 0
+                ? `${stats.totalCount} listing${stats.totalCount === 1 ? "" : "s"} in ${formalCounty}. ${upcomingCount} ${upcomingCount === 1 ? "sale is" : "sales are"} coming up, ${thisWeekCount} in the next 7 days. Next sale: ${nextSale}.`
+                : `No upcoming sales listed here right now. ${stats.totalCount} past or undated listing${stats.totalCount === 1 ? "" : "s"} below.`
+            ) : (
+              upcomingCount > 0
+                ? interpolate(m.states.countyUpcomingSummary, { totalCount: stats.totalCount, upcomingCount, thisWeekCount, nextSale: nextSale || "—", county: formalCounty })
+                : interpolate(m.states.countyPastSummary, { totalCount: stats.totalCount, county: formalCounty })
+            )}
+            {" "}{m.states.countyConfirmNotice}
           </p>
           <div className="mt-5 flex flex-wrap gap-3 text-sm font-semibold">
-            <Link href={`/listings?state=${encodeURIComponent(state)}&county=${encodeURIComponent(countyName)}`} className="rounded-control bg-ink px-5 py-3 text-white transition hover:bg-ink-2">Browse these listings</Link>
-            <Link href="/hunts" className="self-center text-ink underline hover:text-ink-2">Get email alerts for this county (members)</Link>
+            <Link href={`/listings?state=${encodeURIComponent(state)}&county=${encodeURIComponent(countyName)}`} className="rounded-control bg-ink px-5 py-3 text-white transition hover:bg-ink-2">{m.states.browseTheseListings}</Link>
+            <Link href="/hunts" className="self-center text-ink underline hover:text-ink-2">{m.states.getEmailAlertsCounty}</Link>
           </div>
         </div>
 
-        {/* Key Metrics Grid */}
         <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
           <div className="rounded-card border border-line bg-card p-5 shadow-sm">
-            <div className="text-xs font-semibold uppercase tracking-wider text-ink-3">Sales in the next 7 days</div>
+            <div className="text-xs font-semibold uppercase tracking-wider text-ink-3">{m.states.metricNext7Days}</div>
             <div className="mt-2 text-2xl font-bold text-ink tabular-nums">
               {thisWeekCount}
             </div>
-            <div className="mt-1 text-xs text-ink-3">{upcomingCount} upcoming of {stats.totalCount} listings</div>
+            <div className="mt-1 text-xs text-ink-3">{interpolate(m.states.metricUpcomingOf, { upcomingCount, totalCount: stats.totalCount })}</div>
           </div>
 
           <div className="rounded-card border border-line bg-card p-5 shadow-sm">
-            <div className="text-xs font-semibold uppercase tracking-wider text-ink-3">Typical opening bid</div>
+            <div className="text-xs font-semibold uppercase tracking-wider text-ink-3">{m.states.metricTypicalBid}</div>
             <div className="mt-2 text-2xl font-bold text-ink tabular-nums">
-              {stats.medianOpeningBid ? `$${Math.round(stats.medianOpeningBid).toLocaleString("en-US")}` : "Not published"}
+              {stats.medianOpeningBid ? `$${Math.round(stats.medianOpeningBid).toLocaleString("en-US")}` : m.states.metricNotPublished}
             </div>
-            <div className="mt-1 text-xs text-ink-3">Middle of the published opening bids</div>
+            <div className="mt-1 text-xs text-ink-3">{m.states.metricMedianNote}</div>
           </div>
 
           <div className="rounded-card border border-line bg-card p-5 shadow-sm">
-            <div className="text-xs font-semibold uppercase tracking-wider text-ink-3">Typical Deal Score</div>
+            <div className="text-xs font-semibold uppercase tracking-wider text-ink-3">{m.states.metricTypicalScore}</div>
             <div className="mt-2 text-2xl font-bold text-ink tabular-nums" style={{ color: bandForScore(stats.medianDealScore)?.color }}>
-              {stats.medianDealScore ? `${Math.round(stats.medianDealScore)}/99` : "Not scored yet"}
+              {stats.medianDealScore ? `${Math.round(stats.medianDealScore)}/99` : m.states.metricNotScored}
             </div>
-            <div className="mt-1 text-xs text-ink-3">A quick read on each deal, not an appraisal</div>
+            <div className="mt-1 text-xs text-ink-3">{m.states.metricScoreNote}</div>
           </div>
 
           <div className="rounded-card border border-line bg-card p-5 shadow-sm">
-            <div className="text-xs font-semibold uppercase tracking-wider text-ink-3">Time to redeem after the sale</div>
+            <div className="text-xs font-semibold uppercase tracking-wider text-ink-3">{m.states.metricRedemptionTime}</div>
             <div className="mt-2 text-2xl font-bold text-catch-ink tabular-nums">
-              {redemption.days !== null ? `${redemption.days} Days` : "Set by the court"}
+              {redemption.days !== null ? interpolate(m.states.metricDaysCount, { days: redemption.days }) : m.states.metricCourtSet}
             </div>
-            <div className="mt-1 text-xs text-ink-3">How long the previous owner can buy it back</div>
+            <div className="mt-1 text-xs text-ink-3">{m.states.metricBuybackNote}</div>
           </div>
         </div>
 
-        {/* Statutory Redemption Overview Banner */}
         <div className="mt-6 rounded-card border border-catch/30 bg-catch-wash p-5 text-catch-ink shadow-sm">
           <div className="flex items-start gap-3">
             <Scale className="mt-0.5 h-5 w-5 shrink-0 text-catch-ink" />
             <div>
               <div className="text-sm font-semibold text-catch-ink">
-                The catch in {state}: redemption rule, {redemption.days !== null ? `${redemption.days} days` : "set by the court"}
+                {interpolate(m.states.countyCatchBanner, {
+                  state,
+                  daysText: redemption.days !== null ? interpolate(m.states.metricDaysCount, { days: redemption.days }) : m.states.metricCourtSet,
+                })}
               </div>
               <p className="mt-1 text-xs leading-relaxed text-catch-ink">
-                {redemption.label}. Where a redemption period applies, the previous owner can reclaim the property after the sale,
-                so ownership may not be final right away. Check the exact rules with the county before you bid.
+                {redemption.label}. {m.states.countyCatchSuffix}
               </p>
 
-              {/* Statutory Upset Bid Callout (e.g. NC, SC) */}
               {redemption.upsetBid && redemption.upsetBid.hasUpsetBid && (
                 <div className="mt-3 rounded-control border border-catch/40 bg-card p-3 text-xs text-ink">
-                  <span className="font-bold text-catch-ink">Statutory Upset Bid Rule ({redemption.upsetBid.statute}):</span>{" "}
+                  <span className="font-bold text-catch-ink">{locale === "en" ? `${STATE_NAMES[state] || state} law (${redemption.upsetBid.statute}):` : interpolate(m.states.upsetRulePrefix, { statute: redemption.upsetBid.statute })}</span>{" "}
                   {redemption.upsetBid.description}
                 </div>
               )}
 
-              {/* Homestead vs Non-Homestead Distinction Callout (e.g. AL, TX, MI, IA) */}
               {redemption.homesteadDistinction && redemption.homesteadDistinction.hasDistinction && (
                 <div className="mt-3 rounded-control border border-catch/40 bg-card p-3 text-xs text-ink">
-                  <span className="font-bold text-catch-ink">Homestead vs. Non-Homestead Schedule ({redemption.homesteadDistinction.statute}):</span>{" "}
+                  <span className="font-bold text-catch-ink">{interpolate(m.states.homesteadRulePrefix, { statute: redemption.homesteadDistinction.statute })}</span>{" "}
                   {redemption.homesteadDistinction.description}
                 </div>
               )}
@@ -272,13 +278,12 @@ export default async function CountyDocketPage({ params }: PageProps) {
           </div>
         </div>
 
-        {/* Statutory Bidding & Closing Playbook for State */}
         <div className="mt-8 rounded-card border border-line bg-card p-6 shadow-sm">
           <div className="flex items-center justify-between border-b border-line pb-4">
             <div className="flex items-center gap-2">
               <Calculator className="h-5 w-5 text-ink-2" />
               <h2 className="text-base font-bold text-ink">
-                What to expect at a {state} auction
+                {interpolate(m.states.playbookTitle, { state })}
               </h2>
             </div>
             <span className="text-xs font-semibold text-ink-3">
@@ -288,22 +293,22 @@ export default async function CountyDocketPage({ params }: PageProps) {
 
           <div className="mt-4 grid gap-4 sm:grid-cols-3">
             <div className="rounded-control border border-line bg-paper p-4">
-              <div className="text-xs font-semibold uppercase tracking-wider text-ink-3">Estimated deposit when you win</div>
+              <div className="text-xs font-semibold uppercase tracking-wider text-ink-3">{m.states.estDepositWin}</div>
               <div className="mt-1 text-lg font-bold text-ink">
-                {feePreset ? `$${Math.round(feePreset.creditedDeposit).toLocaleString("en-US")}` : "Per winning bid"}
+                {feePreset ? `$${Math.round(feePreset.creditedDeposit).toLocaleString("en-US")}` : m.states.perWinningBid}
               </div>
               <div className="mt-1 text-label text-ink-3">
-                {feePreset ? feeSchedule.depositRequirement : `${feeSchedule.depositRequirement} (Dollar estimate withheld until a median opening bid is published.)`}
+                {feePreset ? feeSchedule.depositRequirement : `${feeSchedule.depositRequirement} (${m.states.depositWithheldNote})`}
               </div>
             </div>
 
             <div className="rounded-control border border-line bg-paper p-4">
-              <div className="text-xs font-semibold uppercase tracking-wider text-ink-3">Transfer tax and sale fees</div>
+              <div className="text-xs font-semibold uppercase tracking-wider text-ink-3">{m.states.transferAndFees}</div>
               <div className="mt-1 text-lg font-bold text-ink">
                 {feePreset
                   ? `$${Math.round(feePreset.transferTax + feePreset.sheriffPoundage).toLocaleString("en-US")}`
                   : feeSchedule.transferTaxRatePerThousand === 0 && feeSchedule.sheriffPoundageRatePercent === 0
-                    ? "$0 statutory tax & poundage"
+                    ? m.states.zeroTaxPoundage
                     : `$${Number(feeSchedule.transferTaxRatePerThousand || 0).toFixed(2)}/$1k + ${(Number(feeSchedule.sheriffPoundageRatePercent || 0) * 100).toFixed(1)}%`}
               </div>
               <div className="mt-1 text-label text-ink-3">
@@ -312,9 +317,11 @@ export default async function CountyDocketPage({ params }: PageProps) {
             </div>
 
             <div className="rounded-control border border-line bg-paper p-4">
-              <div className="text-xs font-semibold uppercase tracking-wider text-ink-3">Court approval or upset window</div>
+              <div className="text-xs font-semibold uppercase tracking-wider text-ink-3">{m.states.courtApprovalWindow}</div>
               <div className="mt-1 text-lg font-bold text-catch-ink">
-                {carrySchedule.objectionOrConfirmationDays > 0 ? `${carrySchedule.objectionOrConfirmationDays} Days` : (redemption.upsetBid?.hasUpsetBid ? `${redemption.upsetBid.windowDays} Days` : "None")}
+                {carrySchedule.objectionOrConfirmationDays > 0
+                  ? interpolate(m.states.metricDaysCount, { days: carrySchedule.objectionOrConfirmationDays })
+                  : (redemption.upsetBid?.hasUpsetBid ? interpolate(m.states.metricDaysCount, { days: redemption.upsetBid.windowDays }) : m.states.noneLabel)}
               </div>
               <div className="mt-1 text-label text-ink-3">
                 {carrySchedule.objectionLabel || (redemption.upsetBid?.hasUpsetBid ? redemption.upsetBid.statute : feeSchedule.settlementDeadlineDescription)}
@@ -324,7 +331,7 @@ export default async function CountyDocketPage({ params }: PageProps) {
 
           <div className="mt-4 rounded-control border border-line bg-paper p-4">
             <div className="text-xs font-bold text-ink mb-1 flex items-center gap-1.5">
-              <Scale className="h-3.5 w-3.5 text-ink-2" /> Laws behind these numbers:
+              <Scale className="h-3.5 w-3.5 text-ink-2" /> {m.states.lawsBehindNumbers}
             </div>
             <ul className="list-disc pl-5 space-y-1 text-xs text-ink-2">
               {feeSchedule.citations.map((cite, idx) => (
@@ -334,55 +341,38 @@ export default async function CountyDocketPage({ params }: PageProps) {
           </div>
         </div>
 
-        {/* 7 Deal-Killer Due Diligence Checklist for County */}
         <div className="mt-8 rounded-card border border-line bg-card p-6 shadow-sm">
           <div className="flex items-center gap-2 border-b border-line pb-4">
             <CheckSquare className="h-5 w-5 text-catch-ink" />
             <div>
               <h2 className="text-base font-bold text-ink">
-                7 things to check before you bid in {formalCounty}
+                {interpolate(m.states.checklistTitle, { county: formalCounty })}
               </h2>
               <p className="text-xs text-ink-3 mt-0.5">
-                Ask the county clerk and the sheriff&apos;s office about each one. We do not provide title reports, so this list does not replace a title search.
+                {m.states.checklistSub}
               </p>
             </div>
           </div>
 
           <div className="mt-4 grid gap-3 sm:grid-cols-2 text-xs">
-            <div className="rounded-control border border-line bg-paper p-3.5">
-              <span className="font-bold text-ink">1. Is the foreclosing loan first in line?</span> If it is a second mortgage, you take the property and the first mortgage balance too.
-            </div>
-            <div className="rounded-control border border-line bg-paper p-3.5">
-              <span className="font-bold text-ink">2. Unpaid property taxes and water bills:</span> In {state}, these are paid ahead of other debts and usually stay with the property after the sale.
-            </div>
-            <div className="rounded-control border border-line bg-paper p-3.5">
-              <span className="font-bold text-ink">3. IRS liens (§ 7425):</span> If a federal tax lien is involved, 26 U.S.C. § 7425 gives the IRS a 120-day right of redemption.
-            </div>
-            <div className="rounded-control border border-line bg-paper p-3.5">
-              <span className="font-bold text-ink">4. Court approval and objections:</span> {redemption.label}
-            </div>
-            <div className="rounded-control border border-line bg-paper p-3.5">
-              <span className="font-bold text-ink">5. Bankruptcy (11 U.S.C. § 362):</span> A bankruptcy filing usually pauses the sale. Check PACER or CourtListener just before the sale.
-            </div>
-            <div className="rounded-control border border-line bg-paper p-3.5">
-              <span className="font-bold text-ink">6. Deposit rules:</span> Bring certified cashier&apos;s checks meeting county rules ({feeSchedule.depositRequirement}).
-            </div>
-            <div className="rounded-control border border-line bg-paper p-3.5 sm:col-span-2">
-              <span className="font-bold text-ink">7. Who lives there (12 U.S.C. § 5220):</span> Find out if the home is occupied. Tenants with a bona fide lease must receive statutory 90-day notice under the Protecting Tenants at Foreclosure Act.
-            </div>
+            {m.states.checklistItems.map((item, idx) => (
+              <div key={item.lead} className={`rounded-control border border-line bg-paper p-3.5 ${idx === m.states.checklistItems.length - 1 ? "sm:col-span-2" : ""}`}>
+                <span className="font-bold text-ink">{item.lead}</span>{" "}
+                {idx === 3 && locale === "en" ? redemption.label : item.body}
+              </div>
+            ))}
           </div>
         </div>
 
-        {/* Visible FAQ & Statutory Guide for GEO / Search Answer Engines */}
         <div className="mt-8 rounded-card border border-line bg-card p-6 shadow-sm">
           <div className="flex items-center gap-2 border-b border-line pb-4">
             <HelpCircle className="h-5 w-5 text-ink-2" />
             <div>
               <h2 className="text-base font-bold text-ink">
-                Frequently asked questions: {formalCounty} foreclosure &amp; sheriff sales
+                {interpolate(m.states.faqTitle, { county: formalCounty })}
               </h2>
               <p className="text-xs text-ink-3 mt-0.5">
-                Statutory guidance and court auction procedures for {state} buyers.
+                {interpolate(m.states.faqSub, { state })}
               </p>
             </div>
           </div>
@@ -390,71 +380,66 @@ export default async function CountyDocketPage({ params }: PageProps) {
           <div className="mt-4 space-y-4">
             <div className="rounded-control border border-line bg-paper p-4">
               <h3 className="text-sm font-bold text-ink">
-                What are the post-sale redemption and upset bid deadlines in {formalCounty}, {state}?
+                {interpolate(m.states.faqQ1, { county: formalCounty, state })}
               </h3>
               <p className="mt-1.5 text-xs leading-relaxed text-ink-2">
-                In {state}, {redemption.label}.
+                {state}: {redemption.label}.
                 {redemption.upsetBid && redemption.upsetBid.hasUpsetBid
-                  ? ` ${STATE_NAMES[state] || state} law (${redemption.upsetBid.statute}) provides a ${redemption.upsetBid.windowDays}-day upset bid period. Each qualifying upset bid (minimum 5% increase or $750 floor deposited with Clerk of Superior Court) reopens a new 10-day window.`
+                  ? ` ${STATE_NAMES[state] || state} (${redemption.upsetBid.statute}): ${redemption.upsetBid.windowDays}d.`
                   : ""}
                 {redemption.homesteadDistinction && redemption.homesteadDistinction.hasDistinction
                   ? ` ${redemption.homesteadDistinction.description}`
                   : ""}
-                {redemption.days === 0
-                  ? " Bidding concludes upon the gavel drop or judicial confirmation of sale, extinguishing the mortgagor's equitable right of redemption."
-                  : ""}
               </p>
             </div>
 
             <div className="rounded-control border border-line bg-paper p-4">
               <h3 className="text-sm font-bold text-ink">
-                What transfer taxes, sheriff execution poundage, and court fees apply in {state}?
+                {interpolate(m.states.faqQ2, { state })}
               </h3>
               <p className="mt-1.5 text-xs leading-relaxed text-ink-2">
-                {feeSchedule.scheduleLabel}: {feeSchedule.transferTaxCitation} {feeSchedule.sheriffPoundageCitation} Settlement rules: {feeSchedule.settlementDeadlineDescription}
+                {feeSchedule.scheduleLabel}: {feeSchedule.transferTaxCitation} {feeSchedule.sheriffPoundageCitation} {feeSchedule.settlementDeadlineDescription}
               </p>
             </div>
 
             <div className="rounded-control border border-line bg-paper p-4">
               <h3 className="text-sm font-bold text-ink">
-                Does a foreclosure auction wipe out senior mortgages or property taxes in {formalCounty}?
+                {interpolate(m.states.faqQ3, { county: formalCounty })}
               </h3>
               <p className="mt-1.5 text-xs leading-relaxed text-ink-2">
-                No. Foreclosing a junior mortgage or judgment does not extinguish a recorded senior first mortgage. County property taxes, municipal utility liens, and special assessments maintain statutory super-priority and survive the auction. If federal tax liens are recorded, 26 U.S.C. § 7425 gives the IRS a 120-day redemption right. Always order a title search from a licensed title abstractor before bidding.
+                {m.states.faqA3}
               </p>
             </div>
 
             <div className="rounded-control border border-line bg-paper p-4">
               <h3 className="text-sm font-bold text-ink">
-                What funds and deposits are accepted at {formalCounty} auctions?
+                {interpolate(m.states.faqQ4, { county: formalCounty })}
               </h3>
               <p className="mt-1.5 text-xs leading-relaxed text-ink-2">
-                Bidders must tender certified cashier&apos;s checks payable per county sheriff or clerk rules ({feeSchedule.depositRequirement}). Personal checks, credit cards, and delayed financing are strictly prohibited. The remaining purchase balance must be settled within statutory deadlines ({feeSchedule.settlementDeadlineDescription}).
+                {feeSchedule.depositRequirement}. {feeSchedule.settlementDeadlineDescription}
               </p>
             </div>
           </div>
         </div>
 
-        {/* Title Risk & Forensic Disclaimer */}
         <div className="mt-8 rounded-card border border-line bg-card p-6 shadow-sm">
           <div className="flex items-start gap-3">
             <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-catch-ink" />
             <div>
               <h2 className="text-sm font-bold text-ink">
-                Legal disclaimer &amp; title risk warning for {formalCounty}
+                {interpolate(m.states.disclaimerTitle, { county: formalCounty })}
               </h2>
               <p className="mt-1 text-xs leading-relaxed text-ink-3">
-                PerfectProperty is an independent discovery and analytical triage tool indexing public court dockets, sheriff notices, and government asset dispositions. PerfectProperty is not a title insurance company, law firm, or financial advisor. Foreclosure auctions convey property &ldquo;as-is, where-is&rdquo; and winning bids are subject to all prior recorded mortgages, municipal tax liens, code enforcement assessments, and statutory redemption stays not extinguished by the judicial decree. Always retain a licensed title abstractor or real estate attorney to run a certified title examination before tendering funds at auction.
+                {m.states.disclaimerBody}
               </p>
             </div>
           </div>
         </div>
 
-        {/* Source Breakdown */}
         {Object.keys(stats.sourceBreakdown).length > 0 && (
           <div className="mt-8 rounded-card border border-line bg-card p-6 shadow-sm">
             <h2 className="text-sm font-bold uppercase tracking-wider text-ink-2">
-              Where {formalCounty} listings come from
+              {interpolate(m.states.whereFromTitle, { county: formalCounty })}
             </h2>
             <div className="mt-4 flex flex-wrap gap-2">
               {Object.entries(stats.sourceBreakdown).map(([srcKey, count]) => (
@@ -472,14 +457,13 @@ export default async function CountyDocketPage({ params }: PageProps) {
           </div>
         )}
 
-        {/* Official County Cadastral & GIS Parcel Radar */}
         {gisLink && (
           <div className="mt-8 rounded-card border border-line bg-card p-6 shadow-sm">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="space-y-1">
                 <div className="inline-flex items-center gap-1.5 rounded-full border border-line bg-paper px-2.5 py-0.5 text-label font-bold uppercase tracking-wider text-ink-2">
                   <MapPin className="h-3 w-3 text-go" />
-                  {gisLink.authorityType === "county_assessor_gis" ? "Official County Assessor GIS" : "Statewide Cadastral GIS"}
+                  {gisLink.authorityType === "county_assessor_gis" ? m.states.officialCountyGis : m.states.statewideCadastralGis}
                 </div>
                 <h2 className="text-base font-bold text-ink">
                   {gisLink.portalName}
@@ -494,42 +478,40 @@ export default async function CountyDocketPage({ params }: PageProps) {
                 rel="noopener noreferrer"
                 className="inline-flex items-center justify-center gap-1.5 shrink-0 rounded-control border border-line-strong bg-paper px-4 py-2.5 text-xs font-semibold text-ink-2 hover:bg-line transition"
               >
-                Open GIS Parcel Viewer <ExternalLink className="h-3.5 w-3.5" />
+                {locale === "en" ? "Open GIS Parcel Viewer" : m.states.openGisViewer} <ExternalLink className="h-3.5 w-3.5" />
               </a>
             </div>
           </div>
         )}
 
-        {/* Automated Sheriff Sale Notice Alerts */}
         <div className="mt-8">
           <CountyAlertSubscribe state={state} county={countyName} formalCounty={formalCounty} />
         </div>
 
-        {/* Listings Section */}
         <div className="mt-10">
           <div className="flex items-center justify-between border-b border-line pb-4">
             <div>
-              <h2 className="text-xl font-bold text-ink">Listings by sale date</h2>
-              <p className="text-xs text-ink-3 mt-0.5">Upcoming sales first, soonest at the top. Past and undated sales follow.</p>
+              <h2 className="text-xl font-bold text-ink">{m.states.listingsByDateTitle}</h2>
+              <p className="text-xs text-ink-3 mt-0.5">{m.states.listingsByDateSub}</p>
             </div>
             <Link
               href={`/listings?state=${encodeURIComponent(state)}&county=${encodeURIComponent(countyName)}`}
               className="text-xs font-semibold text-ink hover:text-ink-2 underline flex items-center gap-1"
             >
-              Search and filter these listings &rarr;
+              {m.states.searchFilterThese}
             </Link>
           </div>
 
           <div className="mt-6 grid gap-4">
             {listings.map((item) => {
-              const address = item.address || "Address not published";
+              const address = item.address || m.states.addressNotPublished;
               const city = item.city || "";
-              const propType = item.propType || "Property";
-              const openingBid = item.openingBid != null ? `$${Math.round(Number(item.openingBid)).toLocaleString("en-US")}` : "Not published";
+              const propType = item.propType || m.states.propertyFallback;
+              const openingBid = item.openingBid != null ? `$${Math.round(Number(item.openingBid)).toLocaleString("en-US")}` : m.states.metricNotPublished;
               const score = item.dealScore != null ? Number(item.dealScore) : null;
               const saleDate = saleOf(item) || null;
               const band = bandForScore(score);
-              const source = item.source || "Notice";
+              const source = item.source || m.states.noticeFallback;
 
               return (
                 <div
@@ -552,26 +534,26 @@ export default async function CountyDocketPage({ params }: PageProps) {
                       {[city, formalCounty, state, item.zip].filter(Boolean).join(", ")}
                     </div>
                     <div className={`text-xs font-semibold ${saleDate && saleDate >= today ? "text-ink" : "text-ink-3"}`}>
-                      {saleDate ? `${saleDate >= today ? "Sale" : "Sale date passed"}: ${saleDate}` : "Sale date not published"}
+                      {saleDate ? `${saleDate >= today ? m.states.saleLabel : m.states.salePassedLabel}: ${saleDate}` : m.states.saleDateNotPublished}
                     </div>
                   </div>
 
                   <div className="mt-4 sm:mt-0 sm:text-right flex sm:flex-col items-center sm:items-end justify-between w-full sm:w-auto gap-3 sm:gap-1">
                     <div>
-                      <div className="text-xs text-ink-3">Opening bid</div>
+                      <div className="text-xs text-ink-3">{m.states.openingBidLabel}</div>
                       <div className="text-base font-bold text-ink tabular-nums">{openingBid}</div>
                     </div>
                     <div className="flex items-center gap-2">
                       {band && score !== null && (
                         <span className="inline-block rounded px-2 py-0.5 text-xs font-bold" style={{ background: `${band.color}${band.alpha}`, color: band.color }}>
-                          Score: {Math.round(score)}/99 · {band.label}
+                          {m.states.scorePrefix}: {Math.round(score)}/99 · {band.label}
                         </span>
                       )}
                       <Link
                         href={`/listings/${encodeURIComponent(item.id)}`}
                         className="inline-flex items-center gap-1 rounded-control border border-line-strong bg-paper px-2.5 py-1 text-xs font-medium text-ink-2 hover:bg-line"
                       >
-                        View details <ExternalLink className="h-3 w-3" />
+                        {m.states.viewDetails} <ExternalLink className="h-3 w-3" />
                       </Link>
                     </div>
                   </div>
@@ -581,13 +563,12 @@ export default async function CountyDocketPage({ params }: PageProps) {
           </div>
         </div>
 
-        {/* Back Link Footer */}
         <div className="mt-12 border-t border-line pt-6">
           <Link
             href={`/states/${state}`}
             className="inline-flex items-center gap-2 text-sm font-semibold text-ink hover:underline"
           >
-            <ArrowLeft className="h-4 w-4" /> Back to all {state} counties
+            <ArrowLeft className="h-4 w-4" /> {interpolate(m.states.backToStateCounties, { state })}
           </Link>
         </div>
       </main>

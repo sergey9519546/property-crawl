@@ -1,38 +1,40 @@
 import Link from "next/link";
+import { getRequestLocale } from "@/lib/i18n/server";
+import { getMessages } from "@/lib/i18n/messages";
+import { selectPlural } from "@/lib/i18n/translator";
 import type { Metadata } from "next";
 import { SiteHeader } from "@/components/site/site-header";
 import { SiteFooter } from "@/components/site/site-footer";
 import { STATE_NAMES } from "@/lib/hero-market-suggestions";
 import { loadStateCounts as loadStateCountsImpl } from "@/lib/state-coverage";
 
-export const metadata: Metadata = {
-  title: "Foreclosure Auctions by State | PerfectProperty",
-  description: "Browse foreclosure auctions, sheriff sales, and government property dispositions by state. View active inventory, auction dates, and county court records.",
-  alternates: {
-    canonical: "/states",
-  },
-  openGraph: {
-    title: "Foreclosure Auctions by State | PerfectProperty",
-    description: "Browse foreclosure auctions, sheriff sales, and government property dispositions by state.",
-    url: "/states",
-    siteName: "PerfectProperty",
-    type: "website",
-    images: [
-      {
-        url: "/og-image.png",
-        width: 1200,
-        height: 630,
-        alt: "Foreclosure Auctions by State | PerfectProperty",
-      },
-    ],
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "Foreclosure Auctions by State | PerfectProperty",
-    description: "Browse foreclosure auctions, sheriff sales, and government property dispositions by state.",
-    images: ["/og-image.png"],
-  },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getRequestLocale();
+  const m = getMessages(locale);
+  const title = locale === "en" ? "Foreclosure Auctions by State | PerfectProperty" : m.meta.statesTitle;
+  const description = m.meta.statesDescription;
+  return {
+    title,
+    description,
+    alternates: {
+      canonical: "/states",
+    },
+    openGraph: {
+      title,
+      description,
+      url: "/states",
+      siteName: "PerfectProperty",
+      type: "website",
+      images: [{ url: "/og-image.png", width: 1200, height: 630, alt: title }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: ["/og-image.png"],
+    },
+  };
+}
 
 export const dynamic = "force-dynamic";
 
@@ -41,6 +43,8 @@ export async function loadStateCounts(): Promise<{ rows: { state: string; count:
 }
 
 export default async function StatesPage() {
+  const locale = await getRequestLocale();
+  const m = getMessages(locale);
   const { rows, error } = await loadStateCounts();
   return (
     <div className="min-h-screen bg-paper text-ink">
@@ -48,26 +52,26 @@ export default async function StatesPage() {
       <main id="main-content" tabIndex={-1} className="mx-auto max-w-3xl px-6 pb-20 pt-28 outline-none sm:pt-32">
       <p className="inline-flex items-center gap-2 rounded-full border border-line bg-card px-3 py-1 text-label font-semibold uppercase tracking-[0.12em] text-ink-2">
         <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-signature ring-1 ring-ink/20" />
-        Browse by state
+        {m.states.browseByState}
       </p>
-      <h1 className="mt-5 text-balance text-display font-semibold tracking-tight text-ink sm:text-5xl">Foreclosure and government property auctions by state</h1>
+      <h1 className="mt-5 text-balance text-display font-semibold tracking-tight text-ink sm:text-5xl">{m.states.title}</h1>
       <p className="mt-4 max-w-[620px] text-lead leading-relaxed text-ink-2">
-        Pick a state to see its counties, upcoming sales and listings. Sheriff sales, tax sales, bank-owned and government homes are included. Only states with current listings appear here.
+        {m.states.subtitle}
       </p>
       <p className="mt-4 rounded-card border border-[var(--catch-border)] bg-[var(--catch-bg)] p-4 text-sm leading-relaxed text-[var(--catch-ink)]">
-        Every state has its own rules for deposits, buy-back periods and court review. <Link href="/resources" className="font-semibold underline">Read the buyer&apos;s guide</Link> before you bid.
+        {m.states.catchBefore}<Link href="/resources" className="font-semibold underline">{m.states.catchLink}</Link>{m.states.catchAfter}
       </p>
       {error ? (
         <p role="alert" className="mt-6 rounded-control border border-catch/30 bg-catch-wash p-4 text-sm text-catch-ink">{error}</p>
       ) : rows.length === 0 ? (
-        <p className="mt-6 text-sm text-ink-3">No states have listings right now. Check back soon.</p>
+        <p className="mt-6 text-sm text-ink-3">{m.states.emptyList}</p>
       ) : (
         <ul className="mt-6 divide-y divide-line overflow-hidden rounded-card border border-line bg-card">
           {rows.map((row) => (
             <li key={row.state}>
               <Link href={`/states/${row.state}`} className="flex items-center justify-between px-4 py-3 text-sm hover:bg-paper">
                 <span className="font-semibold text-ink">{STATE_NAMES[row.state] ? `${STATE_NAMES[row.state]} (${row.state})` : row.state}</span>
-                <span className="tabular-nums text-ink-3">{row.count} {row.count === 1 ? "listing" : "listings"}</span>
+                <span className="tabular-nums text-ink-3">{row.count} {selectPlural(locale, row.count, m.states.listingWord)}</span>
               </Link>
             </li>
           ))}

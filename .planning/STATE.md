@@ -2,71 +2,12 @@
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-11-09)
+See: `.planning/PROJECT.md` and `PROJECT.md`
 
-**Core value:** Zero-fabrication, evidence-backed property discovery and underwriting  
-**Current focus:** Growth & Discovery Division integrated under Chief of Staff — Wave 1–3 SEO/GEO upgrades 100% verified and operational
+**Core value:** Zero-fabrication, evidence-backed distressed property discovery and underwriting across English (`en`), Armenian (`hy`), and Russian (`ru`).
+**Current focus:** Post-audit hardening, full-site trilingual localization (`en` / `hy` / `ru`), pre-compressed revision-keyed listing responses, and repository hygiene verified against full CI coverage and Playwright UI suites.
 
 ## Current Position
 
-Phase: 4 of 4 (Growth & Discovery Division, SEO/GEO Swarm Architecture & Programmatic Sitemap)  
-Plan: 1 of 1 in current phase  
-Status: Completed  
-Last activity: 2026-11-09 — Fully integrated Marketing & SEO Swarm Agents, completed full-site SERP Title and GEO AI Citation Playbook, expanded sitemap.ts & robots.txt with local matrix fallback, and locked in automated test gates.
-
-Progress: [██████████] 100%
-
-## Performance Metrics
-
-**Velocity:**
-- Total plans completed: 4
-- Average duration: 11 min
-- Total execution time: 0.7 hours
-
-**By Phase:**
-
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| 1 | 1/1 | 12 min | 12 min |
-| 2 | 1/1 | 10 min | 10 min |
-| 3 | 1/1 | 10 min | 10 min |
-| 4 | 1/1 | 12 min | 12 min |
-
-**Recent Trend:**
-- Last 5 plans: 11m
-- Trend: Stable / High-Velocity
-
-*Updated after each plan completion*
-
-## Accumulated Context
-
-### Decisions
-
-- [Phase 1]: Removed hardcoded fallback password in `scripts/export-hosted-backup.js` and enforced `process.env.PGPASSWORD`
-- [Phase 1]: Replaced `Roboto`/`Inter` in `src/lib/form-submissions.js` email template with system-ui stack so `impeccable detect` passes with 0 anti-patterns
-- [Phase 1]: Installed GSD v1.42.3 and Agency-Agents globally across Antigravity (`~/.gemini/config/skills/` and `~/.gemini/antigravity/`) and initialized `.planning/` state in `property-crawl`
-- [Phase 2]: Verified snapshot compactor dry-run with 40% observation deduplication and confirmed off-host 35.74 MB database dump and $0 Supabase/Neon continuity readiness
-- [Phase 3]: Deployed and verified commit `ac61b611077c8a02145c0f5dcf76fb8a9151d7f9` live on Render (deploy `dep-dboqsh8473hc73auc8g0`). Passed full 9/9 source-bound release gate, fixed Docker runtime missing directories (config/ and src/), bounded health check DB queries to 2.5s, and shortened boot readiness probe.
-- [Phase 4]: Built Growth & Discovery Division under Chief of Staff: created `marketing_strategist` and `seo_specialist` agent roles with playbooks (`.kilo/agent/`), registered 4 new capabilities (`synthesize_customer_empathy`, `map_customer_journey`, `optimize_seo_titles_and_serp`, `generate_growth_campaign`) and 2 swarm strategies (`growth`, `seo`) into `scripts/swarm/config.js` and `scripts/capability-graph.js`.
-- [Phase 4]: Deployed site-wide SERP title tag optimization adhering to the 40–55 char budget across `/`, `/listings`, `/states`, `/states/[state]`, `/hunts`, `/research`, `/resources`, `/about`, `/sources`, `/[slug]`, and `/listings/[id]`.
-- [Database Migration]: Successfully migrated production database to Supabase PostgreSQL 17.11 (us-west-2, project `icxjpoudcwqfsobaohjz`). Replicated all 15,033+ listings and 76,360 observation records with 100% parity. Production cutover on Render verified live at `https://property-crawl.onrender.com/api/health` with `dataMode: postgres`, `postgresReachable: true`, and continuous background crawling active.
-
-### Pending Todos
-
-None. All roadmap phases and Chief of Staff growth commands 100% complete and verified.
-
-### Blockers/Concerns
-
-None. Render expiring PostgreSQL instance replaced with permanent Supabase PostgreSQL 17 database ($0/month hosting guarantee fully preserved). Render instance `dpg-dbbc8su7bikc73819uo0-a` is decommissioned from production routing.
-
-## Deferred Items
-
-| Category | Item | Status | Deferred At |
-|----------|------|--------|-------------|
-| External | Maricopa 403 / Harris OCR | Deferred to v2 | 2026-11-09 |
-
-## Session Continuity
-
-Last session: 2026-11-09 05:01
-Stopped at: Phase 4 complete, verified with 50/50 test suites and full SEO test gates
-Resume file: None
+Status: Complete — All tracked engineering audits, EGM/Goldfish findings, performance bottlenecks, and trilingual UI localization verified cleanly.
+Workflow Authority: See `docs/COMPLETION_CHECKLIST.md` for the single canonical status/open-work ledger and `AGENTS.md` / `CONTEXT.md` for architecture and CLI commands.

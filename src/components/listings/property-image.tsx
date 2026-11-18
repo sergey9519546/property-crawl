@@ -3,6 +3,9 @@
 
 import { useEffect, useState } from 'react';
 import Image from 'next/image';
+import { useLocale } from '@/components/i18n/locale-provider';
+import { formatUsd } from '@/lib/i18n/translator';
+import { localizePropType } from '@/lib/i18n/domain';
 
 interface PropertyImageProps {
   src?: string | null;
@@ -20,15 +23,20 @@ interface PropertyImageProps {
 export function PropertyImage({
   src,
   alt,
-  address = 'Distressed Property',
+  address,
   state = 'US',
-  county = 'County',
-  propType = 'Residential',
+  county,
+  propType,
   openingBid = null,
   className = '',
   aspectRatio = '4/3',
   priority = false
 }: PropertyImageProps) {
+  const { locale, messages, format } = useLocale();
+  const t = messages.mediaUi;
+  const resolvedAddress = address || t.blueprintDefaultAddress;
+  const resolvedCounty = county || t.blueprintDefaultCounty;
+  const resolvedPropType = propType ? (localizePropType(propType, messages, locale) || t.blueprintDefaultPropType) : t.blueprintDefaultPropType;
   const [imageError, setImageError] = useState(false);
 
   useEffect(() => {
@@ -44,8 +52,8 @@ export function PropertyImage({
 
   const bidFormatted =
     openingBid && Number.isFinite(openingBid) && openingBid > 0
-      ? `$${openingBid.toLocaleString()}`
-      : 'Auction Scheduled';
+      ? formatUsd(locale, openingBid)
+      : t.blueprintAuctionScheduled;
 
   // Fallback to Blueprint Vector UI if no valid source or image fails to load
   if (!src || imageError) {
@@ -53,7 +61,7 @@ export function PropertyImage({
       <div
         className={`relative w-full ${ratioClass} bg-ink rounded-control overflow-hidden border border-white/10 flex flex-col justify-between p-4 select-none ${className}`}
         role="img"
-        aria-label={`Cadastral blueprint for ${address}`}
+        aria-label={format(t.blueprintAlt, { address: resolvedAddress })}
       >
         {/* Blueprint background grid */}
         <div
@@ -68,10 +76,10 @@ export function PropertyImage({
         {/* Top Badges */}
         <div className="relative z-10 flex items-center justify-between gap-2">
           <span className="px-2.5 py-1 rounded-control text-label font-bold uppercase tracking-wider bg-white/10 text-white border border-white/20">
-            {state} · {county}
+            {state} · {resolvedCounty}
           </span>
           <span className="px-2 py-0.5 rounded-control text-label font-semibold bg-ink-2/90 text-white/75 border border-white/10">
-            {propType}
+            {resolvedPropType}
           </span>
         </div>
 
@@ -92,11 +100,11 @@ export function PropertyImage({
         {/* Bottom Metadata */}
         <div className="relative z-10 bg-ink/90 backdrop-blur-sm p-2.5 rounded-control border border-white/10 flex items-center justify-between text-xs">
           <div className="truncate pr-2">
-            <p className="font-bold text-white truncate">{address}</p>
-            <p className="text-meta text-white/60">Opening Bid: <span className="text-white font-semibold">{bidFormatted}</span></p>
+            <p className="font-bold text-white truncate">{resolvedAddress}</p>
+            <p className="text-meta text-white/60">{t.blueprintBidPrefix} <span className="text-white font-semibold">{bidFormatted}</span></p>
           </div>
           <span className="text-meta uppercase tracking-wider text-white/60 shrink-0 font-bold">
-            Blueprint
+            {t.blueprintBadge}
           </span>
         </div>
       </div>

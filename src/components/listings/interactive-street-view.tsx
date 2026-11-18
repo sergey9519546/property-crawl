@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { ExternalLink, RotateCcw } from "lucide-react";
+import { useLocale } from "@/components/i18n/locale-provider";
 import {
   browserMapsKey,
   loadGoogleMapsStreetView,
@@ -24,6 +25,8 @@ type PanoramaHandle = {
 };
 
 export function InteractiveStreetView({ listingId, address, sourceLabel, metadata, onUnavailable }: Props) {
+  const { messages, format } = useLocale();
+  const t = messages.mediaUi;
   const [staticImageFailed, setStaticImageFailed] = React.useState(false);
   const container = React.useRef<HTMLDivElement>(null);
   const panorama = React.useRef<PanoramaHandle | null>(null);
@@ -112,7 +115,7 @@ export function InteractiveStreetView({ listingId, address, sourceLabel, metadat
 
   const launch = streetViewLaunchUrl(address, metadata);
   const label = metadata.targetLabel
-    || (metadata.coverage === "nearby_street" ? "Nearby street walkthrough" : "Exterior walkthrough");
+    || (metadata.coverage === "nearby_street" ? t.nearbyWalkthrough : t.exteriorWalkthrough);
 
   return (
     <div className="relative h-full min-h-[220px] w-full bg-paper" data-testid="interactive-street-view">
@@ -120,7 +123,7 @@ export function InteractiveStreetView({ listingId, address, sourceLabel, metadat
         <iframe
           key={`${embedUrl}-${attempt}`}
           src={embedUrl}
-          title={`Walkable Google Street View near ${address}`}
+          title={format(t.walkableSvgTitle, { address })}
           referrerPolicy="no-referrer-when-downgrade"
           allowFullScreen
           className="h-full w-full border-0"
@@ -140,13 +143,13 @@ export function InteractiveStreetView({ listingId, address, sourceLabel, metadat
           key={attempt}
           ref={container}
           className="h-full w-full"
-          aria-label={`Walkable Google Street View near ${address}`}
+          aria-label={format(t.walkableSvgTitle, { address })}
         />
       )}
 
       {state === "loading" ? (
         <div role="status" className="pointer-events-none absolute inset-0 grid place-items-center bg-paper text-sm font-semibold text-ink-3">
-          Loading interactive Street View…
+          {t.loadingInteractiveSv}
         </div>
       ) : null}
 
@@ -155,21 +158,21 @@ export function InteractiveStreetView({ listingId, address, sourceLabel, metadat
           <div className="relative h-full w-full bg-paper">
             <img
               src={`/api/property-image?listingId=${encodeURIComponent(listingId)}&mode=image`}
-              alt={`Street-level capture near ${address}`}
+              alt={format(t.streetCaptureNear, { address })}
               className="h-full w-full object-contain"
               onError={() => setStaticImageFailed(true)}
             />
             <a href={launch} target="_blank" rel="noopener noreferrer" className="absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-control bg-ink/90 px-3 py-2 text-xs font-bold text-white shadow hover:bg-ink">
-              Open interactive walkthrough <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+              {t.openInteractiveWalkthrough} <ExternalLink className="h-3.5 w-3.5" aria-hidden />
             </a>
           </div>
         ) : (
         <div className="absolute inset-0 grid place-items-center bg-paper px-5 text-center">
           <div>
-            <p className="text-sm font-bold text-ink">Interactive Street View stays on Google Maps</p>
-            <p className="mt-2 text-xs leading-relaxed text-ink-3">This page does not load a Maps key. The capture date and distance are below.</p>
+            <p className="text-sm font-bold text-ink">{t.svStaysOnMaps}</p>
+            <p className="mt-2 text-xs leading-relaxed text-ink-3">{t.noMapsKeyNote}</p>
             <a href={launch} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex items-center gap-2 rounded-control bg-ink px-3 py-2 text-xs font-bold text-white">
-              Open in Google Maps <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+              {t.openGoogleMaps} <ExternalLink className="h-3.5 w-3.5" aria-hidden />
             </a>
           </div>
         </div>
@@ -179,16 +182,16 @@ export function InteractiveStreetView({ listingId, address, sourceLabel, metadat
       {state === "error" ? (
         <div className="absolute inset-0 grid place-items-center bg-paper px-5 text-center">
           <div>
-            <p className="text-sm font-bold text-ink">Interactive Street View is unavailable here</p>
-            <p className="mt-2 text-xs leading-relaxed text-ink-3">Use Google Maps to check available street-level coverage.</p>
+            <p className="text-sm font-bold text-ink">{t.svUnavailableHere}</p>
+            <p className="mt-2 text-xs leading-relaxed text-ink-3">{t.useMapsCheckCoverage}</p>
             <div className="mt-3 flex flex-wrap justify-center gap-2">
               {embedUrl || browserMapsKey() ? (
                 <button type="button" onClick={() => setAttempt((value) => value + 1)} className="inline-flex items-center gap-2 rounded-control border border-line-strong bg-card px-3 py-2 text-xs font-bold">
-                  <RotateCcw className="h-3.5 w-3.5" aria-hidden /> Retry viewer
+                  <RotateCcw className="h-3.5 w-3.5" aria-hidden /> {t.retryViewer}
                 </button>
               ) : null}
               <a href={launch} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 rounded-control bg-ink px-3 py-2 text-xs font-bold text-white">
-                Open in Google Maps <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+                {t.openGoogleMaps} <ExternalLink className="h-3.5 w-3.5" aria-hidden />
               </a>
             </div>
           </div>
@@ -201,12 +204,12 @@ export function InteractiveStreetView({ listingId, address, sourceLabel, metadat
           onClick={() => setAttempt((value) => value + 1)}
           className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-control bg-card px-3 py-2 text-label font-bold text-ink shadow"
         >
-          <RotateCcw className="h-3 w-3" aria-hidden /> Return to property
+          <RotateCcw className="h-3 w-3" aria-hidden /> {t.returnToProperty}
         </button>
       ) : null}
 
       <div className="pointer-events-none absolute bottom-7 left-3 max-w-[70%] rounded-control bg-ink/85 px-3 py-2 text-meta text-white shadow">
-        <strong>{label}</strong><br />{sourceLabel || "Property source"} · {address}
+        <strong>{label}</strong><br />{sourceLabel || t.propertySourceFallback} · {address}
       </div>
     </div>
   );

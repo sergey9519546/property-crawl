@@ -13,6 +13,7 @@ import {
   X,
 } from "lucide-react";
 import { useWorkspaceSession } from "@/components/workspace/workspace-shell";
+import { useLocale } from "@/components/i18n/locale-provider";
 import { compileHuntQuery } from "@/lib/hunt-query";
 
 type Rule = { field: string; operator: string; value?: string | number };
@@ -188,6 +189,7 @@ const huntTemplates: {
 ];
 
 export function SavedHunts() {
+  const { messages: m } = useLocale();
   const session = useWorkspaceSession();
   const [connected, setConnected] = useState(false);
   const [hunts, setHunts] = useState<Hunt[]>([]);
@@ -312,17 +314,15 @@ export function SavedHunts() {
     <main id="main-content" tabIndex={-1} className="min-h-screen bg-paper text-ink outline-none">
       <div className="mx-auto max-w-7xl px-5 py-12 sm:px-10">
         <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-ink-3">
-          <Crosshair size={17} /> Saved Hunts
+          <Crosshair size={17} /> {m.workspacePages.huntsEyebrow}
         </p>
         <h1 className="mt-4 max-w-3xl text-4xl font-semibold leading-[1.08] tracking-tight sm:text-6xl">
-          Your criteria.
+          {m.workspacePages.huntsHeadingLine1}
           <br />
-          The evidence that fits.
+          {m.workspacePages.huntsHeadingLine2}
         </h1>
         <p className="mt-5 max-w-2xl text-base leading-7 text-ink-3">
-          Save what you are looking for. Run it against collected property
-          records. See why each property matches, what remains unknown, and what
-          changed since your last run.
+          {m.workspacePages.huntsSub}
         </p>
         <div className="mt-8 flex max-w-xl items-center justify-between gap-4 rounded-card border border-line bg-card p-5">
           <div>
@@ -348,7 +348,7 @@ export function SavedHunts() {
               }
               className="shrink-0 rounded-lg border border-line-strong px-4 py-2 text-xs font-semibold"
             >
-              Refresh hunts
+              {m.workspacePages.huntsRefreshBtn}
             </button>
           ) : (
             <div className="flex shrink-0 flex-wrap items-center gap-2">
@@ -356,13 +356,13 @@ export function SavedHunts() {
                 href="/account"
                 className="rounded-control bg-ink px-4 py-2 text-xs font-semibold text-white hover:bg-ink-2"
               >
-                Member sign-in
+                {m.workspacePages.huntsMemberBtn}
               </Link>
               <button
                 onClick={session.requestUnlock}
                 className="rounded-control border border-line-strong bg-card px-4 py-2 text-xs font-semibold text-ink-2 hover:bg-paper"
               >
-                Unlock
+                {m.common.unlock}
               </button>
             </div>
           )}

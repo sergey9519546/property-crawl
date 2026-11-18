@@ -1,7 +1,18 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { RefreshCw, AlertOctagon } from "lucide-react";
+import { DEFAULT_LOCALE, LOCALE_COOKIE, isLocale, type Locale } from "@/lib/i18n/config";
+import { getMessages } from "@/lib/i18n/messages";
+import { interpolate } from "@/lib/i18n/translator";
+
+function readBrowserLocale(): Locale {
+  if (typeof document === "undefined") return DEFAULT_LOCALE;
+  const cookieMatch = document.cookie.match(new RegExp(`(?:^|;\\s*)${LOCALE_COOKIE}=([^;]+)`));
+  if (cookieMatch?.[1] && isLocale(cookieMatch[1])) return cookieMatch[1];
+  if (isLocale(document.documentElement.lang)) return document.documentElement.lang;
+  return DEFAULT_LOCALE;
+}
 
 export default function GlobalError({
   error,
@@ -10,12 +21,15 @@ export default function GlobalError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const [locale, setLocale] = useState<Locale>(DEFAULT_LOCALE);
   useEffect(() => {
+    setLocale(readBrowserLocale());
     console.error("Uncaught root layout error:", error);
   }, [error]);
+  const t = getMessages(locale).errors;
 
   return (
-    <html lang="en">
+    <html lang={locale}>
       <body className="min-h-screen bg-ink text-white antialiased">
         <main id="main-content" tabIndex={-1} className="min-h-screen flex flex-col items-center justify-center p-6 text-center outline-none">
           <div className="max-w-md w-full space-y-6">
@@ -25,17 +39,17 @@ export default function GlobalError({
 
             <div className="space-y-2">
               <p className="text-xs font-mono uppercase tracking-widest text-catch-wash">
-                Application unavailable
+                {t.appUnavailableTag}
               </p>
               <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-                Something went wrong
+                {t.globalErrorTitle}
               </h1>
               <p className="text-sm text-white/75 leading-relaxed">
-                The workspace hit an unexpected error. Try again. Your saved work remains on this machine.
+                {t.globalErrorBody}
               </p>
               {error.digest && (
                 <p className="text-label font-mono text-white/60 pt-1">
-                  Error reference: {error.digest}
+                  {interpolate(t.errorReference, { digest: error.digest })}
                 </p>
               )}
             </div>
@@ -45,7 +59,7 @@ export default function GlobalError({
               className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-control bg-go-fill text-ink text-xs font-bold hover:bg-go-fill/85 transition shadow-sm"
             >
               <RefreshCw className="w-4 h-4" />
-              <span>Try Again</span>
+              <span>{t.tryAgain}</span>
             </button>
           </div>
         </main>

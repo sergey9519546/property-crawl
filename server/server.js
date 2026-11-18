@@ -199,6 +199,15 @@ function decorateResponse(res, req) {
     }
     res.end(json);
   };
+  res.sendPrecompressedJson = ({ json, gzip }) => {
+    res.setHeader('Content-Type', 'application/json');
+    if (acceptsGzip && req.method !== 'HEAD' && gzip && !res.headersSent) {
+      res.setHeader('Content-Encoding', 'gzip');
+      res.setHeader('Vary', 'Origin, Accept-Encoding');
+      return res.end(gzip);
+    }
+    res.end(json);
+  };
   res.status = (code) => {
     res.statusCode = code;
     return res;

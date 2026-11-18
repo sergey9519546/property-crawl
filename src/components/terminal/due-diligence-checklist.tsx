@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import type { Listing } from "@/data/listings";
 import { restoreChecklistStatuses } from "@/lib/evidence";
 import { useWorkspaceSession } from "@/components/workspace/workspace-shell";
+import { useLocale } from "@/components/i18n/locale-provider";
 import { readUnderwriteScenario } from "@/lib/underwrite-scenario";
 import { AdversarialTrialDocket } from "./adversarial-trial-docket";
 import {
@@ -48,6 +49,7 @@ interface CheckItem {
 export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceChecklistProps) {
   const openingBid = positiveNumber(listing.openingBid) ?? 0;
   const stateCode = (listing.state || "US").toUpperCase();
+  const { messages: m } = useLocale();
   const session = useWorkspaceSession();
   const [linkedCaseId, setLinkedCaseId] = useState<string | null>(null);
   const [caseSyncBusy, setCaseSyncBusy] = useState(false);
@@ -329,7 +331,7 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
               <span className="text-xs text-ink-3 font-medium">7 Deal-Killer Audit Matrix</span>
             </div>
             <h2 id="due-diligence-heading" className="mt-1 text-xl font-bold tracking-tight text-ink">
-              Statutory Due Diligence & Lien Waterfall
+              {m.workspacePages.ddChecklistHeading}
             </h2>
             <p className="mt-0.5 text-xs text-ink-3">
               Automated legal risk elimination before tendering cashier&apos;s checks at courthouse auction.
@@ -359,7 +361,7 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
               className="inline-flex items-center gap-1.5 rounded-control border border-line-strong bg-card px-3 py-2 text-xs font-semibold text-ink-2 shadow-sm transition hover:bg-paper hover:text-ink"
             >
               <Printer className="h-3.5 w-3.5 text-ink-3" />
-              Print Bidding Binder
+              {m.workspacePages.ddChecklistPrint}
             </button>
           </div>
           {caseSyncNotice && (

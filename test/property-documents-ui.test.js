@@ -16,9 +16,22 @@ function loadTs(relative) {
   instance.filename = filename;
   instance.paths = Module._nodeModulePaths(path.dirname(filename));
   const originalRequire = instance.require.bind(instance);
-  instance.require = name => name.startsWith('@/')
-    ? loadTs('src/' + name.slice(2) + '.ts')
-    : originalRequire(name);
+  instance.require = name => {
+    if (name.startsWith('@/')) {
+      const base = 'src/' + name.slice(2);
+      const root = path.resolve(__dirname, '..');
+      if (fs.existsSync(path.join(root, base + '.tsx'))) return loadTs(base + '.tsx');
+      return loadTs(base + '.ts');
+    }
+    if (name.startsWith('.')) {
+      const root = path.resolve(__dirname, '..');
+      const resolved = path.resolve(path.dirname(filename), name);
+      const rel = path.relative(root, resolved).replace(/\\/g, '/');
+      if (fs.existsSync(resolved + '.tsx')) return loadTs(rel + '.tsx');
+      if (fs.existsSync(resolved + '.ts')) return loadTs(rel + '.ts');
+    }
+    return originalRequire(name);
+  };
   loaded.set(filename, instance);
   instance._compile(transformSync(fs.readFileSync(filename, 'utf8'), {
     filename, module: { type: 'commonjs' },

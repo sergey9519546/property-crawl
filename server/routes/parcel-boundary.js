@@ -30,8 +30,8 @@ const ARCGIS_REGISTRY = Object.freeze({
     apnField: 'PARCELID'
   },
   FL: {
-    name: 'Florida Geographic Data Library / FDEP Open Data Parcels',
-    endpoint: 'https://ca.dep.state.fl.us/arcgis/rest/services/OpenData/PARCELS/MapServer/0/query',
+    name: 'Florida GIO / FDOR Statewide Cadastral Parcels',
+    endpoint: 'https://services9.arcgis.com/Gh9awoU677aKree0/arcgis/rest/services/Florida_Statewide_Cadastral/FeatureServer/0/query',
     apnField: 'PARCEL_ID'
   },
   TX: {
@@ -328,28 +328,33 @@ async function querySingleArcGisEndpoint(serviceInfo, lat, lng, apn, county, has
     // If point query yielded no polygon but APN is available, try searching by APN
     if (!feature && apn && !isIdentifyService) {
       const cleanApn = normalizeApn(apn);
+      const exactApn = String(apn).trim().toUpperCase().replace(/[^A-Z0-9.\- ]/g, '');
       if (cleanApn) {
-        let whereClause = `UPPER(${apnField}) LIKE '%${cleanApn}%'`;
-        if (countyFilterField && county) {
+        const countyPrefix = (() => {
+          if (!countyFilterField || !county) return '';
           const cleanCounty = String(county).trim().toUpperCase().replace(/\s+(COUNTY|PARISH)$/i, '').replace(/[^A-Z0-9 .]/g, '').trim();
-          if (cleanCounty) {
-            whereClause = `UPPER(${countyFilterField}) LIKE '%${cleanCounty}%' AND (${whereClause})`;
-          }
-        }
-        const apnGeojson = await runQuery({
-          where: whereClause,
+          return cleanCounty ? `UPPER(${countyFilterField}) LIKE '%${cleanCounty}%' AND ` : '';
+        })();
+        const runApnWhere = (predicate) => runQuery({
+          where: `${countyPrefix}(${predicate})`,
           outFields: '*',
           returnGeometry: 'true',
           outSR: '4326',
           f: 'geojson'
         }).catch(() => null);
-
-        const apnFeatures = Array.isArray(apnGeojson?.features) ? apnGeojson.features.map(f => {
-          if (f && f.geometry) f.geometry = normalizeFeatureGeometry(f.geometry);
-          return f;
-        }) : [];
-
-        feature = apnFeatures.find(candidate => isCadastralGeometry(candidate?.geometry));
+        const extractPolygon = (payload) => {
+          const items = Array.isArray(payload?.features) ? payload.features.map(f => {
+            if (f && f.geometry) f.geometry = normalizeFeatureGeometry(f.geometry);
+            return f;
+          }) : [];
+          return items.find(candidate => isCadastralGeometry(candidate?.geometry)) || null;
+        };
+        if (exactApn && exactApn !== cleanApn) {
+          feature = extractPolygon(await runApnWhere(`UPPER(${apnField}) = '${exactApn}'`));
+        }
+        if (!feature) {
+          feature = extractPolygon(await runApnWhere(`UPPER(${apnField}) LIKE '%${cleanApn}%'`));
+        }
       }
     }
 
@@ -382,6 +387,7 @@ async function querySingleArcGisEndpoint(serviceInfo, lat, lng, apn, county, has
 const PARCEL_CACHE = (process.env.NODE_ENV === 'test' || process.env.NODE_TEST_CONTEXT) ? null : new Map();
 const NATIVE_FETCH = typeof globalThis.fetch === 'function' ? globalThis.fetch : null;
 const PARCEL_CACHE_TTL_MS = 60 * 60 * 1000;
+const PARCEL_NEGATIVE_CACHE_TTL_MS = 5 * 60 * 1000;
 
 async function queryArcGisRest(lat, lng, state, apn = null, county = null) {
   const normalizedState = textValue(state)?.toUpperCase() || null;
@@ -389,7 +395,9 @@ async function queryArcGisRest(lat, lng, state, apn = null, county = null) {
   const cacheKey = allowCache ? `${normalizedState || ''}|${String(county || '').trim().toUpperCase()}|${Number.isFinite(lat) ? lat.toFixed(5) : ''}|${Number.isFinite(lng) ? lng.toFixed(5) : ''}|${apn || ''}` : null;
   if (cacheKey && PARCEL_CACHE.has(cacheKey)) {
     const cached = PARCEL_CACHE.get(cacheKey);
-    if (cached && Date.now() - cached.ts < PARCEL_CACHE_TTL_MS) {
+    const ttl = cached?.error ? PARCEL_NEGATIVE_CACHE_TTL_MS : PARCEL_CACHE_TTL_MS;
+    if (cached && Date.now() - cached.ts < ttl) {
+      if (cached.error) throw cached.error;
       return cached.value;
     }
     PARCEL_CACHE.delete(cacheKey);
@@ -440,6 +448,13 @@ async function queryArcGisRest(lat, lng, state, apn = null, county = null) {
     }
   }
 
+  if (notFoundError && !lastError && cacheKey && PARCEL_CACHE) {
+    if (PARCEL_CACHE.size >= 400) {
+      const oldest = PARCEL_CACHE.keys().next().value;
+      if (oldest !== undefined) PARCEL_CACHE.delete(oldest);
+    }
+    PARCEL_CACHE.set(cacheKey, { ts: Date.now(), error: notFoundError });
+  }
   throw notFoundError || lastError;
 }
 

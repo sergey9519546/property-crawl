@@ -3,6 +3,7 @@
 import React, { useEffect } from "react";
 import Link from "next/link";
 import { RefreshCw, Home, AlertOctagon } from "lucide-react";
+import { useLocale } from "@/components/i18n/locale-provider";
 
 export default function ErrorPage({
   error,
@@ -11,6 +12,8 @@ export default function ErrorPage({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const { messages, format } = useLocale();
+  const t = messages.errors;
   useEffect(() => {
     console.error("Uncaught application error:", error);
   }, [error]);
@@ -23,16 +26,16 @@ export default function ErrorPage({
         </div>
 
         <div className="space-y-2">
-          <p className="text-xs font-mono uppercase tracking-widest text-catch-wash">Page unavailable</p>
+          <p className="text-xs font-mono uppercase tracking-widest text-catch-wash">{t.pageUnavailableTag}</p>
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-            This page couldn’t load
+            {t.pageErrorTitle}
           </h1>
           <p className="text-sm text-white/75 leading-relaxed">
-            Try loading the page again, or return to property search. Your saved work remains in the workspace.
+            {t.pageErrorBody}
           </p>
           {error.digest && (
             <p className="text-label font-mono text-white/60 pt-1">
-              Error reference: {error.digest}
+              {format(t.errorReference, { digest: error.digest })}
             </p>
           )}
         </div>
@@ -43,7 +46,7 @@ export default function ErrorPage({
             className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-control bg-go-fill text-ink text-xs font-bold hover:bg-go-fill/85 transition shadow-sm"
           >
             <RefreshCw className="w-4 h-4" />
-            <span>Try Again</span>
+            <span>{t.tryAgain}</span>
           </button>
 
           <Link
@@ -51,7 +54,7 @@ export default function ErrorPage({
             className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-control bg-white/10 border border-white/15 text-white text-xs font-bold hover:bg-white/15 transition shadow-sm"
           >
             <Home className="w-4 h-4" />
-            <span>Return to properties</span>
+            <span>{t.returnProperties}</span>
           </Link>
         </div>
       </div>

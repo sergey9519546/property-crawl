@@ -2,7 +2,12 @@ import React from "react";
 import Link from "next/link";
 import { Home, Search, AlertCircle } from "lucide-react";
 
-export default function NotFound() {
+import { getRequestLocale } from "@/lib/i18n/server";
+import { getMessages } from "@/lib/i18n/messages";
+
+export default async function NotFound() {
+  const locale = await getRequestLocale();
+  const t = getMessages(locale).errors;
   return (
     <main id="main-content" tabIndex={-1} className="min-h-screen bg-ink text-white flex flex-col items-center justify-center p-6 text-center outline-none">
       <div className="max-w-md w-full space-y-6">
@@ -11,12 +16,12 @@ export default function NotFound() {
         </div>
 
         <div className="space-y-2">
-          <p className="text-xs font-mono uppercase tracking-widest text-catch-wash">404 — Not Found</p>
+          <p className="text-xs font-mono uppercase tracking-widest text-catch-wash">{t.notFoundTag}</p>
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-            Listing or Page Unavailable
+            {t.notFoundTitle}
           </h1>
           <p className="text-sm text-white/75 leading-relaxed">
-            The foreclosure docket or route you requested could not be located. It may have cleared auction or been updated.
+            {t.notFoundBody}
           </p>
         </div>
 
@@ -26,7 +31,7 @@ export default function NotFound() {
             className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-card text-ink text-xs font-bold hover:bg-paper transition shadow-sm"
           >
             <Home className="w-4 h-4" />
-            <span>Return to Terminal</span>
+            <span>{t.returnTerminal}</span>
           </Link>
 
           <Link
@@ -34,7 +39,7 @@ export default function NotFound() {
             className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-white/10 border border-white/15 text-white text-xs font-bold hover:bg-white/15 transition shadow-sm"
           >
             <Search className="w-4 h-4 text-go-fill" />
-            <span>Browse All Listings</span>
+            <span>{t.browseListings}</span>
           </Link>
         </div>
       </div>

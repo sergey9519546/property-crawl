@@ -10,8 +10,10 @@ import {
   type AlternativeImageryPayload,
 } from "@/lib/panoramax-client";
 import { formatCaptureDate, requestStreetViewMetadata, type StreetViewMetadata } from "@/lib/street-view-client";
+import { useLocale } from "@/components/i18n/locale-provider";
+import type { Messages } from "@/lib/i18n/messages";
 
-function buildAlternativeMetadata(chosen: AlternativeCandidate): StreetViewMetadata {
+function buildAlternativeMetadata(chosen: AlternativeCandidate, t: Messages["mediaUi"]): StreetViewMetadata {
   return {
     provider: chosen.attribution.provider,
     attribution: chosen.attribution.producer
@@ -24,7 +26,7 @@ function buildAlternativeMetadata(chosen: AlternativeCandidate): StreetViewMetad
     heading: null,
     mapsLaunchUrl: null,
     coverage: "community_alternative",
-    targetLabel: chosen.mediaType === "panorama_360" ? "360 street panorama" : "Directional street photos",
+    targetLabel: chosen.mediaType === "panorama_360" ? t.panorama360 : t.directionalPhotos,
     fallbackProvider: chosen.provider,
   };
 }
@@ -32,6 +34,8 @@ function buildAlternativeMetadata(chosen: AlternativeCandidate): StreetViewMetad
 type Props = { listingId: string; address: string; photo?: string | null; photoCount?: number; observed: boolean; photoProvider?: string | null; photoSourceUrl?: string | null; layout?: "fill" | "card" };
 
 export function ListingThumbnail({ listingId, address, photo, photoCount, observed, photoProvider, photoSourceUrl, layout = "fill" }: Props) {
+  const { messages, format } = useLocale();
+  const t = messages.mediaUi;
   const publisherPhoto = safeImageUrl(photo);
   const [photoFailed, setPhotoFailed] = useState(false);
   const [altImageFailed, setAltImageFailed] = useState(false);
@@ -60,7 +64,7 @@ export function ListingThumbnail({ listingId, address, photo, photoCount, observ
   function applyAlternativeCandidate(chosen: AlternativeCandidate) {
     setAltImageFailed(false);
     setAlternative(chosen);
-    setMetadata(buildAlternativeMetadata(chosen));
+    setMetadata(buildAlternativeMetadata(chosen, t));
     setStatus(chosen.provider === "mapillary" && chosen.thumbUrl ? "image" : "loaded");
   }
 
@@ -77,7 +81,7 @@ export function ListingThumbnail({ listingId, address, photo, photoCount, observ
         ? parseAlternativeCandidate(result.metadata.alternativeCandidate)
         : null;
       if (result.metadata.fallbackProvider && !parsedAlt) {
-        setReason("Fallback street imagery could not be validated.");
+        setReason(t.fallbackAltValidation);
         setStatus("unavailable");
         return;
       }
@@ -86,7 +90,7 @@ export function ListingThumbnail({ listingId, address, photo, photoCount, observ
       setStatus(parsedAlt && !(parsedAlt.provider === "mapillary" && parsedAlt.thumbUrl) ? "loaded" : "image");
     } catch {
       if (request !== generation.current) return;
-      setReason("Coverage could not be checked. Try again later.");
+      setReason(t.coverageCheckError);
       setStatus("unavailable");
     }
   }
@@ -114,7 +118,7 @@ export function ListingThumbnail({ listingId, address, photo, photoCount, observ
       applyAlternativeCandidate(chosen);
     } catch {
       if (request !== generation.current) return;
-      setReason("Open street imagery could not be checked right now.");
+      setReason(t.openImageryError);
       setStatus("unavailable");
     } finally {
       if (request === generation.current) setAltLoading(false);
@@ -123,14 +127,14 @@ export function ListingThumbnail({ listingId, address, photo, photoCount, observ
 
   if (publisherPhoto && !photoFailed) {
     const countLabel = typeof photoCount === "number" && photoCount > 1
-      ? `${photoCount} photos · Review gallery in property details`
+      ? format(t.photosGalleryCount, { count: photoCount })
       : typeof photoCount === "number" && photoCount === 1
-        ? "1 publisher photo · Open details for street view & map"
-        : "Open property details for media & map";
+        ? t.singlePublisherPhoto
+        : t.openDetailsMedia;
     return (
       <div className="flex h-full w-full flex-col">
-        <div className={frame}><img src={publisherPhoto} alt={`${photoProvider || "Publisher"} photo of ${address}`} loading="lazy" decoding="async" className="absolute inset-0 h-full w-full object-cover" onError={() => setPhotoFailed(true)} /></div>
-        {layout === "card" || (photoProvider && photoSourceUrl) ? <div className={caption}>{photoProvider && photoSourceUrl ? <a href={photoSourceUrl} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2">{photoProvider} · Address-matched photo</a> : <span>Publisher photo</span>}<span className="text-ink-3">{countLabel}</span></div> : null}
+        <div className={frame}><img src={publisherPhoto} alt={format(t.publisherPhotoAlt, { provider: photoProvider || t.publisherFallback, address })} loading="lazy" decoding="async" className="absolute inset-0 h-full w-full object-cover" onError={() => setPhotoFailed(true)} /></div>
+        {layout === "card" || (photoProvider && photoSourceUrl) ? <div className={caption}>{photoProvider && photoSourceUrl ? <a href={photoSourceUrl} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2">{format(t.addressMatchedPhoto, { provider: photoProvider })}</a> : <span>{t.publisherPhotoLabel}</span>}<span className="text-ink-3">{countLabel}</span></div> : null}
       </div>
     );
   }
@@ -144,18 +148,18 @@ export function ListingThumbnail({ listingId, address, photo, photoCount, observ
             <>
               <img
                 src={thumb}
-                alt={`${alternative.attribution.provider} street-level context near ${address}`}
+                alt={format(t.streetContextAlt, { provider: alternative.attribution.provider, address })}
                 className={`absolute inset-0 h-full w-full object-contain ${status === "loaded" ? "" : "opacity-0"}`}
                 onLoad={() => setStatus("loaded")}
                 onError={() => setAltImageFailed(true)}
               />
-              {status === "image" ? <p role="status" className="absolute inset-0 grid place-items-center text-xs text-ink-3">Loading street-level context…</p> : null}
+              {status === "image" ? <p role="status" className="absolute inset-0 grid place-items-center text-xs text-ink-3">{t.loadingStreetContext}</p> : null}
             </>
           ) : (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-5 text-center">
               <Camera size={22} className="text-ink-3" aria-hidden />
               <p className="text-xs font-semibold text-ink">
-                {alternative.attribution.provider} · {alternative.mediaType === "panorama_360" ? "360 street panorama" : "Directional street photos"}
+                {alternative.attribution.provider} · {alternative.mediaType === "panorama_360" ? t.panorama360 : t.directionalPhotos}
               </p>
               <a
                 href={alternative.viewerUrl}
@@ -163,7 +167,7 @@ export function ListingThumbnail({ listingId, address, photo, photoCount, observ
                 rel="noopener noreferrer"
                 className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-line-strong bg-card px-3 py-1.5 text-xs font-semibold text-ink underline-offset-2 hover:underline"
               >
-                Open {alternative.attribution.provider} viewer <ExternalLink size={12} aria-hidden />
+                {format(t.openProviderViewer, { provider: alternative.attribution.provider })} <ExternalLink size={12} aria-hidden />
               </a>
             </div>
           )}
@@ -191,14 +195,14 @@ export function ListingThumbnail({ listingId, address, photo, photoCount, observ
               })}
             </div>
           ) : null}
-          <p>{metadata.attribution} · {alternative.license.id || "Recorded license"} · {formatCaptureDate(metadata.captureDate)}</p>
+          <p>{metadata.attribution} · {alternative.license.id || t.recordedLicense} · {formatCaptureDate(metadata.captureDate)}</p>
           <p>
-            {metadata.distanceMeters === null ? "Distance unavailable" : `${Math.round(metadata.distanceMeters)} m from matched location`} · Street context only
+            {metadata.distanceMeters === null ? t.distanceUnavailable : format(t.distanceMetersFrom, { meters: Math.round(metadata.distanceMeters) })} · {t.streetContextOnly}
             {thumb ? (
               <>
                 {" · "}
                 <a href={alternative.viewerUrl} target="_blank" rel="noopener noreferrer" className="underline">
-                  Open viewer
+                  {t.openViewer}
                 </a>
               </>
             ) : null}
@@ -211,12 +215,12 @@ export function ListingThumbnail({ listingId, address, photo, photoCount, observ
   if ((status === "image" || status === "loaded") && metadata) return (
     <div className="flex h-full flex-col bg-paper" data-testid="listing-thumbnail-streetview">
       <div className={frame}>
-        <img src={`/api/property-image?listingId=${encodeURIComponent(listingId)}&mode=image`} alt={`Street-level context near ${address}`} className={`absolute inset-0 h-full w-full object-contain ${status === "loaded" ? "" : "opacity-0"}`} onLoad={() => setStatus("loaded")} onError={() => { setReason("The image could not be loaded. Try again later."); setStatus("unavailable"); }} />
-        {status === "image" && <p role="status" className="absolute inset-0 grid place-items-center text-xs text-ink-3">Loading street-level context…</p>}
+        <img src={`/api/property-image?listingId=${encodeURIComponent(listingId)}&mode=image`} alt={format(t.streetContextFallbackAlt, { address })} className={`absolute inset-0 h-full w-full object-contain ${status === "loaded" ? "" : "opacity-0"}`} onLoad={() => setStatus("loaded")} onError={() => { setReason(t.imageLoadError); setStatus("unavailable"); }} />
+        {status === "image" && <p role="status" className="absolute inset-0 grid place-items-center text-xs text-ink-3">{t.loadingStreetContext}</p>}
       </div>
       <div className={caption}>
         <p>{metadata.attribution.includes(metadata.provider) ? metadata.attribution : `${metadata.provider} · ${metadata.attribution}`} · {formatCaptureDate(metadata.captureDate)}</p>
-        <p>{metadata.distanceMeters === null ? "Distance unavailable" : `${Math.round(metadata.distanceMeters)} m from matched location`} · Street context only</p>
+        <p>{metadata.distanceMeters === null ? t.distanceUnavailable : format(t.distanceMetersFrom, { meters: Math.round(metadata.distanceMeters) })} · {t.streetContextOnly}</p>
       </div>
     </div>
   );
@@ -226,32 +230,32 @@ export function ListingThumbnail({ listingId, address, photo, photoCount, observ
       <div className={`${frame} bg-paper`}>
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5 px-6 py-8 text-center">
           <ImageOff size={25} strokeWidth={1.4} className="text-ink-3" aria-hidden />
-          <p className="text-sm font-medium text-ink-3">Photo unavailable</p>
+          <p className="text-sm font-medium text-ink-3">{t.photoUnavailable}</p>
           {observed ? (() => {
             // One label for both the visible text and the accessible name.
             // They used to be written separately and drifted: the aria-label
             // said "Load Street View" while the button read "Check Street
             // View", so the label named a different action than the one shown.
             const label =
-              status === "loading" ? "Checking coverage…"
-              : status === "unavailable" ? "Retry Street View"
-              : "Check Street View";
+              status === "loading" ? t.checkingCoverage
+              : status === "unavailable" ? t.retryStreetView
+              : t.checkStreetView;
             return (
               <div className="flex flex-wrap items-center justify-center gap-2">
-                <button type="button" disabled={status === "loading" || altLoading} aria-label={`${label} for ${address}`} onClick={loadStreetView} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-line-strong bg-card px-3 py-2 text-xs font-semibold text-ink-2 transition hover:border-ink-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-3 disabled:opacity-60">
+                <button type="button" disabled={status === "loading" || altLoading} aria-label={format(t.actionForAddress, { action: label, address })} onClick={loadStreetView} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-line-strong bg-card px-3 py-2 text-xs font-semibold text-ink-2 transition hover:border-ink-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-3 disabled:opacity-60">
                   {status === "loading" ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <Camera size={14} aria-hidden />}
                   {label}
                 </button>
-                <button type="button" disabled={status === "loading" || altLoading} aria-label={`Check open street imagery for ${address}`} onClick={loadAlternatives} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-line-strong bg-card px-3 py-2 text-xs font-semibold text-ink-2 transition hover:border-ink-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-3 disabled:opacity-60">
+                <button type="button" disabled={status === "loading" || altLoading} aria-label={format(t.checkOpenImageryFor, { address })} onClick={loadAlternatives} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-line-strong bg-card px-3 py-2 text-xs font-semibold text-ink-2 transition hover:border-ink-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-3 disabled:opacity-60">
                   {altLoading ? <Loader2 size={14} className="animate-spin" aria-hidden /> : null}
-                  {altLoading ? "Checking open imagery…" : "Panoramax / Mapillary"}
+                  {altLoading ? t.checkingOpenImagery : t.openProvidersBtn}
                 </button>
               </div>
             );
           })() : null}
         </div>
       </div>
-      {layout === "card" || status === "unavailable" ? <div className={caption}>{status === "unavailable" ? <p role="status">{reason}</p> : <><span>{photoFailed ? "Publisher photo could not load" : "No publisher photo available"}</span><span className="text-ink-3">{observed ? "Street View depends on local coverage" : "See the source record for available media"}</span></>}</div> : null}
+      {layout === "card" || status === "unavailable" ? <div className={caption}>{status === "unavailable" ? <p role="status">{reason}</p> : <><span>{photoFailed ? t.publisherPhotoFailed : t.noPublisherPhoto}</span><span className="text-ink-3">{observed ? t.streetViewDepends : t.seeSourceMedia}</span></>}</div> : null}
     </div>
   );
 }

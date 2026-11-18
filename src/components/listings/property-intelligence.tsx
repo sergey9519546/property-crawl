@@ -7,6 +7,9 @@ import { OpportunitySignalsCard } from '@/components/listings/opportunity-signal
 import type { ComponentScore, OpportunitySignal } from '@/components/listings/opportunity-signals-card';
 import { DiscoveryEvidence, type DiscoveryEvidenceData } from '@/components/listings/discovery-evidence';
 import { useWorkspaceSession } from '@/components/workspace/workspace-shell';
+import { useLocale } from '@/components/i18n/locale-provider';
+import type { Locale } from '@/lib/i18n/config';
+import { formatLocaleDate, formatLocaleNumber, formatUsd, interpolate } from '@/lib/i18n/translator';
 import { cn } from '@/lib/utils';
 
 type Dossier = DiscoveryEvidenceData & {
@@ -137,18 +140,21 @@ type Dossier = DiscoveryEvidenceData & {
 };
 
 const moneyFields = new Set(['openingBid', 'assessed', 'medianHomeValue', 'medianHouseholdIncome', 'justValue', 'assessedValueSchool', 'assessedValueNonSchool']);
-function valueLabel(value: unknown, key?: string): string {
-  if (value === null || value === undefined || value === '') return 'Not established';
+function valueLabel(value: unknown, key: string | undefined, locale: Locale, notEstablished: string): string {
+  if (value === null || value === undefined || value === '') return notEstablished;
   if (typeof value === 'number') {
-    if (key && moneyFields.has(key)) return value.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+    if (key && moneyFields.has(key)) {
+      return locale === 'en'
+        ? value.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
+        : formatUsd(locale, value);
+    }
     if (key === 'vacancyRate') return `${(value * 100).toFixed(1)}%`;
-    return value.toLocaleString();
+    return locale === 'en' ? value.toLocaleString() : formatLocaleNumber(locale, value);
   }
   return sourceDisplayText(String(value));
 }
 const humanize = (value: string) => value.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase());
 const signedPct = (n: number) => `${n > 0 ? '+' : ''}${n}%`;
-const date = (value: string) => new Date(value).toLocaleDateString();
 
 function hasValidUsCoordinates(lat: number | null | undefined, lng: number | null | undefined): boolean {
   return (
@@ -158,6 +164,12 @@ function hasValidUsCoordinates(lat: number | null | undefined, lng: number | nul
 }
 
 export function PropertyIntelligence({ listingId, documentsShown = false, lat, lng }: { listingId: string; documentsShown?: boolean; lat?: number | null; lng?: number | null }) {
+  const { locale, messages } = useLocale();
+  const t = messages.intelUi;
+  const fmtDate = (value: string) => (locale === 'en' ? new Date(value).toLocaleDateString() : formatLocaleDate(locale, value));
+  const fmtNum = (n: number) => (locale === 'en' ? n.toLocaleString() : formatLocaleNumber(locale, n));
+  const fmtUsdVal = (n: number) => (locale === 'en' ? `$${Math.round(n).toLocaleString()}` : formatUsd(locale, n));
+
   const session = useWorkspaceSession();
   const [dossier, setDossier] = useState<Dossier | null>(null);
   const [hazards, setHazards] = useState<any | null>(null);
@@ -175,7 +187,7 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
     try {
       const response = await fetch(`/api/property-intelligence?listingId=${encodeURIComponent(listingId)}`, { cache: 'no-store', signal: controller.signal });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error || 'Property investigation could not be completed');
+      if (!response.ok) throw new Error(result.error || t.investFailed);
       if (requestGeneration !== generation.current || controller.signal.aborted) return;
       setDossier(result);
       const coordinatesProvided = lat !== undefined || lng !== undefined;
@@ -185,9 +197,9 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
           .then((h) => { if (requestGeneration === generation.current && h?.status === 'success') setHazards(h); })
           .catch(() => {});
       }
-    } catch (caught) { if (!(caught instanceof DOMException && caught.name === 'AbortError') && requestGeneration === generation.current) setError(caught instanceof Error ? caught.message : 'Property investigation could not be completed'); }
+    } catch (caught) { if (!(caught instanceof DOMException && caught.name === 'AbortError') && requestGeneration === generation.current) setError(caught instanceof Error ? caught.message : t.investFailed); }
     finally { if (requestGeneration === generation.current && publicRequest.current === controller) setBusy(false); }
-  }, [listingId, lat, lng]);
+  }, [listingId, lat, lng, t.investFailed]);
   useEffect(() => { const requestGeneration=++generation.current;researchRequest.current?.abort();setDossier(null);setHazards(null);void loadPublic(requestGeneration);return()=>{publicRequest.current?.abort();researchRequest.current?.abort();}; }, [loadPublic]);
 
   async function research() {
@@ -196,10 +208,10 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
     const requestGeneration=generation.current;setBusy(true);setError('');
     try {
       const response=await fetch('/api/property-intelligence',{method:'POST',cache:'no-store',credentials:'same-origin',signal:controller.signal,headers:{'Content-Type':'application/json'},body:JSON.stringify({listingId})});
-      if(response.status===401){await session.refresh();session.requestUnlock();throw new Error('Your workspace session expired. Unlock it to check public records.');}
-      const result=await response.json();if(!response.ok)throw new Error(result.error||'Property investigation could not be completed');
+      if(response.status===401){await session.refresh();session.requestUnlock();throw new Error(t.sessionExpired);}
+      const result=await response.json();if(!response.ok)throw new Error(result.error||t.investFailed);
       if(requestGeneration!==generation.current||controller.signal.aborted)return;setDossier(result);
-    } catch(caught){if(!(caught instanceof DOMException&&caught.name==='AbortError')&&requestGeneration===generation.current)setError(caught instanceof Error?caught.message:'Property investigation could not be completed');}
+    } catch(caught){if(!(caught instanceof DOMException&&caught.name==='AbortError')&&requestGeneration===generation.current)setError(caught instanceof Error?caught.message:t.investFailed);}
     finally{if(requestGeneration===generation.current&&researchRequest.current===controller)setBusy(false);}
   }
 
@@ -211,107 +223,107 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
-  return <section className="overflow-hidden rounded-card border border-line bg-card shadow-sm" aria-label="Property intelligence dossier">
+  return <section className="overflow-hidden rounded-card border border-line bg-card shadow-sm" aria-label={t.sectionAria}>
     <div className="border-b border-line p-5 sm:p-6">
-      <h2 className="text-xl font-semibold tracking-tight text-ink">Research &amp; history</h2>
-      <p className="mt-2 text-sm leading-6 text-ink-3">Review changes, compare public records, and check missing details.</p>
-      <div className="mt-4 flex flex-wrap items-center gap-3"><button onClick={() => void research()} disabled={busy || dossier?.source.status !== 'source_observed'} className="flex min-h-11 items-center gap-2 rounded-control bg-ink px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{busy ? <Loader2 size={15} className="animate-spin" /> : <Radar size={15} />}{busy ? 'Checking records…' : 'Check public records'}</button><button onClick={exportDossier} disabled={!dossier} className="flex min-h-11 items-center gap-2 rounded-control border border-line px-4 py-2.5 text-sm font-semibold text-ink-2 disabled:opacity-40"><Download size={14} /> Download evidence</button>{!session.authenticated && <button type="button" onClick={() => session.requestUnlock()} className="text-xs font-semibold text-ink-3 underline underline-offset-2 hover:text-ink">Unlock workspace to refresh live adapters</button>}</div>
+      <h2 className="text-xl font-semibold tracking-tight text-ink">{t.heading}</h2>
+      <p className="mt-2 text-sm leading-6 text-ink-3">{t.subtitle}</p>
+      <div className="mt-4 flex flex-wrap items-center gap-3"><button onClick={() => void research()} disabled={busy || dossier?.source.status !== 'source_observed'} className="flex min-h-11 items-center gap-2 rounded-control bg-ink px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{busy ? <Loader2 size={15} className="animate-spin" /> : <Radar size={15} />}{busy ? t.checkingBtn : t.checkPublicBtn}</button><button onClick={exportDossier} disabled={!dossier} className="flex min-h-11 items-center gap-2 rounded-control border border-line px-4 py-2.5 text-sm font-semibold text-ink-2 disabled:opacity-40"><Download size={14} /> {t.downloadBtn}</button>{!session.authenticated && <button type="button" onClick={() => session.requestUnlock()} className="text-xs font-semibold text-ink-3 underline underline-offset-2 hover:text-ink">{t.unlockAdaptersBtn}</button>}</div>
     </div>
     <div className="space-y-5 p-5 sm:p-6">
       {error && <p role="alert" className="rounded-control bg-catch-wash p-4 text-sm text-catch-ink">{error}</p>}
-      {!dossier && !error && <p className="text-sm text-ink-3">Loading the source evidence…</p>}
+      {!dossier && !error && <p className="text-sm text-ink-3">{t.loadingEvidence}</p>}
       {dossier && <>
-        {dossier.source.status === 'archived_publisher_snapshot' && <p className="rounded-control bg-catch-wash p-4 text-xs leading-6 text-catch-ink">This is a dated archive snapshot. Importing it does not verify current inventory, sale terms, bidding, or a completed sale.</p>}
-        {dossier.source.freshness === 'stale' && <p className="rounded-control bg-catch-wash p-4 text-xs leading-6 text-catch-ink">The saved publisher observation needs refreshing. Confirm current availability and terms at the publisher. New public-record research has its own observation date.</p>}
-        <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-ink-3"><p>{sourceDisplayText(dossier.source.publisher)} · {dossier.source.observedAt ? `Observed ${date(dossier.source.observedAt)}` : 'Snapshot requires source verification'}</p>{dossier.source.url && <a href={dossier.source.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-semibold text-ink underline hover:text-ink-2">Publisher record <ExternalLink size={12} /></a>}</div>
-        <div className="rounded-control bg-paper p-4"><h3 className="text-sm font-semibold text-ink">Changes &amp; discrepancies</h3>
+        {dossier.source.status === 'archived_publisher_snapshot' && <p className="rounded-control bg-catch-wash p-4 text-xs leading-6 text-catch-ink">{t.archiveSnapshotWarn}</p>}
+        {dossier.source.freshness === 'stale' && <p className="rounded-control bg-catch-wash p-4 text-xs leading-6 text-catch-ink">{t.staleWarn}</p>}
+        <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-ink-3"><p>{sourceDisplayText(dossier.source.publisher)} · {dossier.source.observedAt ? interpolate(t.observedAt, { date: fmtDate(dossier.source.observedAt) }) : t.snapshotVerifyNeeded}</p>{dossier.source.url && <a href={dossier.source.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-semibold text-ink underline hover:text-ink-2">{t.publisherRecordLink} <ExternalLink size={12} /></a>}</div>
+        <div className="rounded-control bg-paper p-4"><h3 className="text-sm font-semibold text-ink">{t.changesHeading}</h3>
           {dossier.trajectory && (dossier.trajectory.priorPostponements > 0 || dossier.trajectory.cumulativeBidDropPct !== null) && (
             <div className="mt-2 flex flex-wrap items-center gap-2 text-xs" data-testid="dossier-trajectory-summary">
               {dossier.trajectory.priorPostponements > 0 && (
                 <span className="rounded-full border border-line bg-card px-2.5 py-0.5 font-semibold text-ink-2">
-                  {dossier.trajectory.priorPostponements} prior {dossier.trajectory.priorPostponements === 1 ? 'postponement' : 'postponements'}
+                  {interpolate(dossier.trajectory.priorPostponements === 1 ? t.priorPostponementSingle : t.priorPostponementPlural, { count: dossier.trajectory.priorPostponements })}
                 </span>
               )}
               {dossier.trajectory.statutoryStayExhausted && (
                 <span className="rounded-full border border-catch/30 bg-catch-wash px-2.5 py-0.5 font-semibold text-catch-ink">
-                  Statutory adjournments exhausted
+                  {t.stayExhausted}
                 </span>
               )}
               {dossier.trajectory.cumulativeBidDropPct !== null && (
                 <span className="rounded-full border border-line bg-paper px-2.5 py-0.5 font-semibold text-ink-2">
-                  Cumulative bid drop: -{dossier.trajectory.cumulativeBidDropPct}%
+                  {interpolate(t.cumBidDrop, { pct: dossier.trajectory.cumulativeBidDropPct })}
                 </span>
               )}
             </div>
           )}
           {dossier.signals.length || dossier.contradictions.length ? <div className="mt-3 space-y-4">
-            {(showAllSignals ? dossier.signals : dossier.signals.slice(0, 3)).map((signal) => <div key={signal.id}><p className="text-sm font-semibold">{signal.title}</p><p className="mt-1 text-sm text-ink-3">{valueLabel(signal.before, signal.field)} <ArrowRight className="mx-1 inline" size={13} /> {valueLabel(signal.after, signal.field)}</p><p className="mt-1 text-xs text-ink-3">Observed {date(signal.observedAt)}. Confirm the current offering.</p></div>)}
+            {(showAllSignals ? dossier.signals : dossier.signals.slice(0, 3)).map((signal) => <div key={signal.id}><p className="text-sm font-semibold">{signal.title}</p><p className="mt-1 text-sm text-ink-3">{valueLabel(signal.before, signal.field, locale, t.notEstablished)} <ArrowRight className="mx-1 inline" size={13} /> {valueLabel(signal.after, signal.field, locale, t.notEstablished)}</p><p className="mt-1 text-xs text-ink-3">{interpolate(t.signalObservedConfirm, { date: fmtDate(signal.observedAt) })}</p></div>)}
             {dossier.signals.length > 3 && (
               <button
                 type="button"
                 onClick={() => setShowAllSignals((prev) => !prev)}
                 className="text-xs font-semibold text-ink underline underline-offset-2 hover:text-ink-2"
               >
-                {showAllSignals ? "Show fewer changes" : `Show all ${dossier.signals.length} changes`}
+                {showAllSignals ? t.showFewerChanges : interpolate(t.showAllChanges, { count: dossier.signals.length })}
               </button>
             )}
-            {dossier.contradictions.map((item) => <div key={item.id}><p className="text-sm font-semibold">{item.title}</p><p className="mt-1 text-sm">Listing: {item.listingValue.toLocaleString()} {item.unit} · Parcel record: {item.publicRecordValue.toLocaleString()} {item.unit}</p><p className="mt-2 text-xs leading-6 text-ink-3">{item.explanation}</p><p className="mt-1 text-xs font-semibold">Next: {item.nextAction}</p></div>)}
-          </div> : <p className="mt-2 text-sm leading-6 text-ink-3">{dossier.historyUnavailable ? 'Observation history is temporarily unavailable.' : dossier.history ? `${dossier.history.observations} source ${dossier.history.observations === 1 ? 'observation' : 'observations'} since ${date(dossier.history.firstObservedAt)}. No recorded changes or discrepancies found.` : 'No comparison history yet. Future source captures will show changes here.'}</p>}
+            {dossier.contradictions.map((item) => <div key={item.id}><p className="text-sm font-semibold">{item.title}</p><p className="mt-1 text-sm">{interpolate(t.contradictionLine, { listingVal: fmtNum(item.listingValue), publicVal: fmtNum(item.publicRecordValue), unit: item.unit })}</p><p className="mt-2 text-xs leading-6 text-ink-3">{item.explanation}</p><p className="mt-1 text-xs font-semibold">{t.nextPrefix} {item.nextAction}</p></div>)}
+          </div> : <p className="mt-2 text-sm leading-6 text-ink-3">{dossier.historyUnavailable ? t.historyUnavailable : dossier.history ? interpolate(dossier.history.observations === 1 ? t.noChangesObsSingle : t.noChangesObsPlural, { count: dossier.history.observations, date: fmtDate(dossier.history.firstObservedAt) }) : t.noComparisonHistory}</p>}
         </div>
-        <details className="border-b border-line pb-4"><summary className="cursor-pointer text-sm font-semibold text-ink-2">All recorded facts · {dossier.facts.length}</summary><dl className="mt-3 divide-y divide-line">{dossier.facts.map((fact) => <div key={fact.key} className="grid gap-1 py-2.5 text-sm sm:grid-cols-[1fr_1.4fr]"><dt className="text-ink-3">{fact.title}</dt><dd className="break-words font-medium">{valueLabel(fact.value, fact.key)}{fact.evidenceClass === 'unverified_snapshot' && <span className="ml-2 text-catch-ink">Unverified snapshot</span>}</dd></div>)}</dl></details>
-        {dossier.publicRecords && <details className="border-b border-line pb-4"><summary className="cursor-pointer text-sm font-semibold text-ink-2">Public records &amp; neighborhood</summary><div className="mt-4 space-y-4">
-          {dossier.publicRecords.parcel && <div className="rounded-control border border-line p-4"><h3 className="text-sm font-bold">Parcel evidence · {humanize(dossier.publicRecords.parcel.status)}</h3>{dossier.publicRecords.parcel.status !== 'matched' && <p className="mt-2 text-xs leading-6 text-catch-ink">Parcel identity is not confirmed. These records are candidates for investigation.</p>}<p className="mt-2 text-xs">Parcel identifier: {dossier.publicRecords.parcel.rawParcelId || 'Not established'}</p><dl className="mt-3 grid grid-cols-2 gap-3">{Object.entries(dossier.publicRecords.parcel.properties || {}).filter(([, value]) => value !== null && value !== undefined).map(([key, value]) => <div key={key}><dt className="text-meta text-ink-3">{humanize(key)}</dt><dd className="mt-1 break-words text-xs font-semibold">{valueLabel(value, key)}</dd></div>)}</dl></div>}
-          {dossier.publicRecords.areaContext && <div className="rounded-control border border-line p-4"><h3 className="text-sm font-bold">Neighborhood context</h3><p className="mt-2 text-xs leading-6 text-ink-3">{dossier.publicRecords.areaContext.geographyLabel} · {dossier.publicRecords.areaContext.period}. Area estimates; these do not establish this property’s value, occupancy, or residents’ characteristics.</p><dl className="mt-3 grid grid-cols-2 gap-3">{Object.entries(dossier.publicRecords.areaContext.metrics).map(([key, value]) => <div key={key}><dt className="text-meta text-ink-3">{humanize(key)}</dt><dd className="mt-1 text-sm font-semibold">{valueLabel(value, key)}</dd></div>)}</dl>{dossier.publicRecords.areaContext.marginsOfError && <details className="mt-3 text-xs text-ink-3"><summary className="cursor-pointer">Survey margins of error</summary><dl className="mt-2 space-y-1">{Object.entries(dossier.publicRecords.areaContext.marginsOfError).map(([key, value]) => <div key={key}>{humanize(key)}: ±{valueLabel(value, key)}</div>)}</dl></details>}</div>}
-          {dossier.publicRecords.issues.length > 0 && <details open={!dossier.publicRecords.parcel && !dossier.publicRecords.areaContext} className="text-xs text-ink-3"><summary className="cursor-pointer font-semibold">Research coverage and unresolved lookups</summary><ul className="mt-3 space-y-2">{dossier.publicRecords.issues.map((issue) => <li key={issue}>{sourceDisplayText(issue)}</li>)}</ul></details>}
+        <details className="border-b border-line pb-4"><summary className="cursor-pointer text-sm font-semibold text-ink-2">{interpolate(t.allFactsSummary, { count: dossier.facts.length })}</summary><dl className="mt-3 divide-y divide-line">{dossier.facts.map((fact) => <div key={fact.key} className="grid gap-1 py-2.5 text-sm sm:grid-cols-[1fr_1.4fr]"><dt className="text-ink-3">{fact.title}</dt><dd className="break-words font-medium">{valueLabel(fact.value, fact.key, locale, t.notEstablished)}{fact.evidenceClass === 'unverified_snapshot' && <span className="ml-2 text-catch-ink">{t.unverifiedSnapshot}</span>}</dd></div>)}</dl></details>
+        {dossier.publicRecords && <details className="border-b border-line pb-4"><summary className="cursor-pointer text-sm font-semibold text-ink-2">{t.publicRecordsSummary}</summary><div className="mt-4 space-y-4">
+          {dossier.publicRecords.parcel && <div className="rounded-control border border-line p-4"><h3 className="text-sm font-bold">{interpolate(t.parcelEvidenceHeading, { status: humanize(dossier.publicRecords.parcel.status) })}</h3>{dossier.publicRecords.parcel.status !== 'matched' && <p className="mt-2 text-xs leading-6 text-catch-ink">{t.parcelUnconfirmedWarn}</p>}<p className="mt-2 text-xs">{interpolate(t.parcelIdLine, { id: dossier.publicRecords.parcel.rawParcelId || t.notEstablished })}</p><dl className="mt-3 grid grid-cols-2 gap-3">{Object.entries(dossier.publicRecords.parcel.properties || {}).filter(([, value]) => value !== null && value !== undefined).map(([key, value]) => <div key={key}><dt className="text-meta text-ink-3">{humanize(key)}</dt><dd className="mt-1 break-words text-xs font-semibold">{valueLabel(value, key, locale, t.notEstablished)}</dd></div>)}</dl></div>}
+          {dossier.publicRecords.areaContext && <div className="rounded-control border border-line p-4"><h3 className="text-sm font-bold">{t.neighborhoodHeading}</h3><p className="mt-2 text-xs leading-6 text-ink-3">{interpolate(t.areaEstimateNote, { geo: dossier.publicRecords.areaContext.geographyLabel, period: dossier.publicRecords.areaContext.period })}</p><dl className="mt-3 grid grid-cols-2 gap-3">{Object.entries(dossier.publicRecords.areaContext.metrics).map(([key, value]) => <div key={key}><dt className="text-meta text-ink-3">{humanize(key)}</dt><dd className="mt-1 text-sm font-semibold">{valueLabel(value, key, locale, t.notEstablished)}</dd></div>)}</dl>{dossier.publicRecords.areaContext.marginsOfError && <details className="mt-3 text-xs text-ink-3"><summary className="cursor-pointer">{t.surveyMargins}</summary><dl className="mt-2 space-y-1">{Object.entries(dossier.publicRecords.areaContext.marginsOfError).map(([key, value]) => <div key={key}>{humanize(key)}: ±{valueLabel(value, key, locale, t.notEstablished)}</div>)}</dl></details>}</div>}
+          {dossier.publicRecords.issues.length > 0 && <details open={!dossier.publicRecords.parcel && !dossier.publicRecords.areaContext} className="text-xs text-ink-3"><summary className="cursor-pointer font-semibold">{t.unresolvedLookups}</summary><ul className="mt-3 space-y-2">{dossier.publicRecords.issues.map((issue) => <li key={issue}>{sourceDisplayText(issue)}</li>)}</ul></details>}
           <div className="flex flex-wrap gap-3">{dossier.publicRecords.sources.map((source) => <a key={`${source.id}:${source.url}`} href={source.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-meta font-semibold text-ink underline hover:text-ink-2">{sourceDisplayText(source.label)}<ExternalLink size={11} /></a>)}</div>
         </div></details>}
         <DiscoveryEvidence evidence={dossier} documentsShown={documentsShown} />
         {dossier.publicBenchmarks && (dossier.publicBenchmarks.assessorRoll || dossier.publicBenchmarks.impliedGrm != null || dossier.publicBenchmarks.evidenceAvailabilityRatio !== undefined) && (
           <div className="rounded-control border border-line bg-paper p-4" data-testid="public-benchmarks-summary-card">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3 className="text-sm font-bold text-ink">Benchmark Evidence &amp; Assessor Coverage</h3>
+              <h3 className="text-sm font-bold text-ink">{t.benchHeading}</h3>
               <span className="rounded-full border border-line bg-card px-2.5 py-0.5 text-xs font-semibold text-ink-2">
-                {Math.round((dossier.publicBenchmarks.evidenceAvailabilityRatio ?? 0) * 100)}% observed ({dossier.publicBenchmarks.availableSourceCount} sources)
+                {interpolate(t.benchObservedPct, { pct: Math.round((dossier.publicBenchmarks.evidenceAvailabilityRatio ?? 0) * 100), count: dossier.publicBenchmarks.availableSourceCount })}
               </span>
             </div>
             <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
               <div className="rounded-control border border-line bg-card p-2.5">
-                <span className="text-label font-bold uppercase text-ink-3">County Assessor Roll</span>
+                <span className="text-label font-bold uppercase text-ink-3">{t.assessorRollLabel}</span>
                 <p className="mt-1 text-sm font-bold text-ink">
                   {dossier.publicBenchmarks.assessorRoll?.assessedValue != null
-                    ? `$${Math.round(dossier.publicBenchmarks.assessorRoll.assessedValue).toLocaleString()}`
-                    : 'Not observed'}
+                    ? fmtUsdVal(dossier.publicBenchmarks.assessorRoll.assessedValue)
+                    : t.notObserved}
                 </p>
                 <p className="mt-0.5 text-xs text-ink-3">
                   {dossier.publicBenchmarks.assessorRoll?.apn
-                    ? `APN ${dossier.publicBenchmarks.assessorRoll.apn}${dossier.publicBenchmarks.assessorRoll.county ? ` · ${dossier.publicBenchmarks.assessorRoll.county}` : ''}`
-                    : (dossier.publicBenchmarks.assessorRoll?.citation || 'Assessor valuation absent')}
+                    ? `${interpolate(t.apnPrefix, { apn: dossier.publicBenchmarks.assessorRoll.apn })}${dossier.publicBenchmarks.assessorRoll.county ? ` · ${dossier.publicBenchmarks.assessorRoll.county}` : ''}`
+                    : (dossier.publicBenchmarks.assessorRoll?.citation || t.assessorAbsent)}
                 </p>
               </div>
               <div className="rounded-control border border-line bg-card p-2.5">
-                <span className="text-label font-bold uppercase text-ink-3">Land / Improvements</span>
+                <span className="text-label font-bold uppercase text-ink-3">{t.landImprovLabel}</span>
                 <p className="mt-1 text-sm font-bold text-ink">
                   {dossier.publicBenchmarks.assessorRoll?.landValue != null || dossier.publicBenchmarks.assessorRoll?.improvementValue != null
-                    ? `${dossier.publicBenchmarks.assessorRoll?.landValue != null ? `$${Math.round(dossier.publicBenchmarks.assessorRoll.landValue).toLocaleString()}` : '—'} / ${dossier.publicBenchmarks.assessorRoll?.improvementValue != null ? `$${Math.round(dossier.publicBenchmarks.assessorRoll.improvementValue).toLocaleString()}` : '—'}`
-                    : 'Not itemized'}
+                    ? `${dossier.publicBenchmarks.assessorRoll?.landValue != null ? fmtUsdVal(dossier.publicBenchmarks.assessorRoll.landValue) : '—'} / ${dossier.publicBenchmarks.assessorRoll?.improvementValue != null ? fmtUsdVal(dossier.publicBenchmarks.assessorRoll.improvementValue) : '—'}`
+                    : t.notItemized}
                 </p>
                 <p className="mt-0.5 text-xs text-ink-3">
-                  {dossier.publicBenchmarks.benchmarkType || 'Public benchmark rollup'}
+                  {dossier.publicBenchmarks.benchmarkType || t.publicBenchFallback}
                 </p>
               </div>
               <div className="rounded-control border border-line bg-card p-2.5">
-                <span className="text-label font-bold uppercase text-ink-3">Implied GRM</span>
+                <span className="text-label font-bold uppercase text-ink-3">{t.impliedGrmLabel}</span>
                 <p className="mt-1 text-sm font-bold text-ink">
-                  {dossier.publicBenchmarks.impliedGrm != null ? `${dossier.publicBenchmarks.impliedGrm}x` : 'N/A'}
+                  {dossier.publicBenchmarks.impliedGrm != null ? `${dossier.publicBenchmarks.impliedGrm}x` : t.naLabel}
                 </p>
                 <p className="mt-0.5 text-xs text-ink-3">
-                  Opening bid ÷ annualized SAFMR rent
+                  {t.grmFormula}
                 </p>
               </div>
             </div>
             {Array.isArray(dossier.publicBenchmarks.unobservedReasons) && dossier.publicBenchmarks.unobservedReasons.length > 0 && (
               <details className="mt-2.5 text-xs text-ink-3">
-                <summary className="cursor-pointer font-semibold">Unobserved benchmark checks ({dossier.publicBenchmarks.unobservedReasons.length})</summary>
+                <summary className="cursor-pointer font-semibold">{interpolate(t.unobservedChecks, { count: dossier.publicBenchmarks.unobservedReasons.length })}</summary>
                 <ul className="mt-1.5 list-disc pl-4 space-y-0.5">
                   {dossier.publicBenchmarks.unobservedReasons.map((reason) => <li key={reason}>{reason}</li>)}
                 </ul>
@@ -323,46 +335,50 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
           <div className="rounded-control border border-line bg-paper p-4" data-testid="hpi-trajectory-card">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-ink">
-                FHFA State-Quarter HPI Trajectory · {dossier.publicBenchmarks.assessedTrajectory.state}
+                {interpolate(t.hpiTrajectoryHeading, { state: dossier.publicBenchmarks.assessedTrajectory.state })}
               </h3>
               <span className="rounded-full border border-yours/40 bg-yours-wash px-2 py-0.5 text-xs font-semibold text-yours">
-                {signedPct(dossier.publicBenchmarks.assessedTrajectory.hpiAppreciationPct)} Trajectory
+                {interpolate(t.trajectoryBadge, { pct: signedPct(dossier.publicBenchmarks.assessedTrajectory.hpiAppreciationPct) })}
               </span>
             </div>
             <p className="mt-1 text-xs text-ink-3">
-              Observed Federal Housing Finance Agency quarterly appreciation from {dossier.publicBenchmarks.assessedTrajectory.baselinePeriod} to {dossier.publicBenchmarks.assessedTrajectory.currentPeriod} ({dossier.publicBenchmarks.assessedTrajectory.hpiMultiplier}x index multiplier).
+              {interpolate(t.hpiTrajectoryDesc, {
+                from: dossier.publicBenchmarks.assessedTrajectory.baselinePeriod,
+                to: dossier.publicBenchmarks.assessedTrajectory.currentPeriod,
+                mult: dossier.publicBenchmarks.assessedTrajectory.hpiMultiplier,
+              })}
             </p>
             <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
               <div className="rounded-control border border-line bg-card p-2.5">
-                <span className="text-label font-bold uppercase text-ink-3">Baseline HPI</span>
+                <span className="text-label font-bold uppercase text-ink-3">{t.baselineHpiLabel}</span>
                 <p className="mt-1 text-sm font-bold text-ink">
                   {dossier.publicBenchmarks.assessedTrajectory.baselineHpi}
                 </p>
                 <p className="mt-0.5 text-xs text-ink-3">
-                  Period: {dossier.publicBenchmarks.assessedTrajectory.baselinePeriod}
+                  {interpolate(t.periodLine, { period: dossier.publicBenchmarks.assessedTrajectory.baselinePeriod })}
                 </p>
               </div>
               <div className="rounded-control border border-line bg-card p-2.5">
-                <span className="text-label font-bold uppercase text-ink-3">Current Observed HPI</span>
+                <span className="text-label font-bold uppercase text-ink-3">{t.currentHpiLabel}</span>
                 <p className="mt-1 text-sm font-bold text-ink">
                   {dossier.publicBenchmarks.assessedTrajectory.currentHpi}
                 </p>
                 <p className="mt-0.5 text-xs text-ink-3">
-                  Period: {dossier.publicBenchmarks.assessedTrajectory.currentPeriod}
+                  {interpolate(t.periodLine, { period: dossier.publicBenchmarks.assessedTrajectory.currentPeriod })}
                 </p>
               </div>
               <div className="rounded-control border border-line bg-card p-2.5">
-                <span className="text-label font-bold uppercase text-ink-3">HPI-Indexed Assessed Value</span>
+                <span className="text-label font-bold uppercase text-ink-3">{t.hpiIndexedValueLabel}</span>
                 <p className="mt-1 text-sm font-bold text-yours">
-                  ${Math.round(dossier.publicBenchmarks.assessedTrajectory.hpiAdjustedAssessedValue).toLocaleString()}
+                  {fmtUsdVal(dossier.publicBenchmarks.assessedTrajectory.hpiAdjustedAssessedValue)}
                 </p>
                 <p className="mt-0.5 text-xs text-ink-3">
-                  Assessed baseline adjusted by macro index
+                  {t.hpiBaselineDesc}
                 </p>
               </div>
             </div>
             <p className="mt-2 text-label text-ink-3">
-              Source: {dossier.publicBenchmarks.assessedTrajectory.source}. Macro index observation only; not an appraisal.
+              {interpolate(t.hpiSourceNote, { source: dossier.publicBenchmarks.assessedTrajectory.source })}
             </p>
           </div>
         )}
@@ -370,30 +386,30 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
           <div className="rounded-control border border-line bg-paper p-4" data-testid="fhfa-macro-hpi-card">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-ink">
-                FHFA Statewide Macro HPI Context · {dossier.publicBenchmarks.stateMacroHpi.state}
+                {interpolate(t.fhfaMacroHeading, { state: dossier.publicBenchmarks.stateMacroHpi.state })}
               </h3>
               <span className="rounded-full border border-line bg-card px-2 py-0.5 text-xs font-semibold text-ink-2">
-                Official Summary
+                {t.officialSummaryBadge}
               </span>
             </div>
             <p className="mt-1 text-xs text-ink-3">
-              Federal Housing Finance Agency seasonally-adjusted House Price Index changes across {dossier.publicBenchmarks.stateMacroHpi.state}.
+              {interpolate(t.fhfaMacroDesc, { state: dossier.publicBenchmarks.stateMacroHpi.state })}
             </p>
             <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
               <div className="rounded-control border border-line bg-card p-2 text-center">
-                <span className="text-xs font-bold uppercase text-ink-3">1 Quarter</span>
+                <span className="text-xs font-bold uppercase text-ink-3">{t.oneQuarter}</span>
                 <p className="mt-0.5 text-sm font-bold text-ink">{dossier.publicBenchmarks.stateMacroHpi.quarterPct > 0 ? '+' : ''}{dossier.publicBenchmarks.stateMacroHpi.quarterPct}%</p>
               </div>
               <div className="rounded-control border border-line bg-card p-2 text-center">
-                <span className="text-xs font-bold uppercase text-ink-3">1 Year (YoY)</span>
+                <span className="text-xs font-bold uppercase text-ink-3">{t.oneYearYoy}</span>
                 <p className="mt-0.5 text-sm font-bold text-ink">{dossier.publicBenchmarks.stateMacroHpi.yoyPct > 0 ? '+' : ''}{dossier.publicBenchmarks.stateMacroHpi.yoyPct}%</p>
               </div>
               <div className="rounded-control border border-line bg-card p-2 text-center">
-                <span className="text-xs font-bold uppercase text-ink-3">5 Years</span>
+                <span className="text-xs font-bold uppercase text-ink-3">{t.fiveYears}</span>
                 <p className="mt-0.5 text-sm font-bold text-ink">{signedPct(dossier.publicBenchmarks.stateMacroHpi.fiveYearPct)}</p>
               </div>
               <div className="rounded-control border border-line bg-card p-2 text-center">
-                <span className="text-xs font-bold uppercase text-ink-3">Since 1991</span>
+                <span className="text-xs font-bold uppercase text-ink-3">{t.since1991}</span>
                 <p className="mt-0.5 text-sm font-bold text-ink">{signedPct(dossier.publicBenchmarks.stateMacroHpi.since1991Pct)}</p>
               </div>
             </div>
@@ -402,23 +418,23 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
         {dossier.hudSafmr && (
           <div className="rounded-control border border-line bg-paper p-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-ink">HUD Historical Rent Benchmark · ZIP {dossier.hudSafmr.zip}</h3>
+              <h3 className="text-sm font-bold text-ink">{interpolate(t.hudRentHeading, { zip: dossier.hudSafmr.zip })}</h3>
               <span className="rounded-full border border-line bg-card px-2 py-0.5 text-xs font-semibold text-ink-2">
                 FY2025 SAFMR
               </span>
             </div>
             <p className="mt-1 text-xs text-ink-3">
-              Section 8 Fair Market Rent baseline and statutory voucher payment standards (90%–110% per 24 CFR § 888.113).
+              {t.hudRentDesc}
             </p>
             <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
               {(['0br', '1br', '2br', '3br', '4br'] as const).map((br) => (
                 <div key={br} className="rounded-control border border-line bg-card p-2 text-center">
                   <span className="text-xs font-bold uppercase text-ink-3">{br.toUpperCase()}</span>
                   <p className="mt-0.5 text-sm font-bold text-ink">
-                    ${(dossier.hudSafmr?.rents?.[br] ?? 0).toLocaleString()}
+                    {fmtUsdVal(dossier.hudSafmr?.rents?.[br] ?? 0)}
                   </p>
                   <p className="mt-0.5 text-xs text-ink-3">
-                    ${(dossier.hudSafmr?.paymentStandard90?.[br] ?? 0).toLocaleString()} – ${(dossier.hudSafmr?.paymentStandard110?.[br] ?? 0).toLocaleString()}
+                    {fmtUsdVal(dossier.hudSafmr?.paymentStandard90?.[br] ?? 0)} – {fmtUsdVal(dossier.hudSafmr?.paymentStandard110?.[br] ?? 0)}
                   </p>
                 </div>
               ))}
@@ -428,45 +444,45 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
         {hazards && hazards.status === 'success' && (
           <div className="rounded-control border border-line bg-paper p-4" data-testid="federal-hazard-gis-card">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-ink">Federal Hazard GIS · FEMA / EPA / USGS</h3>
+              <h3 className="text-sm font-bold text-ink">{t.hazardsHeading}</h3>
               <span className={cn(
                 "rounded-full border px-2 py-0.5 text-xs font-semibold",
                 hazards.overallTier === 'critical_hazard' ? "border-catch/60 bg-catch-wash text-catch-ink" :
                 hazards.overallTier === 'high_hazard' ? "border-catch/40 bg-catch-wash text-catch-ink" :
                 "border-line bg-card text-ink-2"
               )}>
-                {hazards.compositeScore}/100 GIS Score
+                {interpolate(t.gisScoreBadge, { score: hazards.compositeScore })}
               </span>
             </div>
             <p className="mt-1 text-xs text-ink-3">
-              Special Flood Hazard Areas (NFHL), CERCLA/SEMS Superfund proximity, and USGS 3DEP terrain slope analysis.
+              {t.hazardsDesc}
             </p>
             <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
               <div className="rounded-control border border-line bg-card p-2.5">
-                <span className="text-label font-bold uppercase text-ink-3">FEMA Flood Zone</span>
+                <span className="text-label font-bold uppercase text-ink-3">{t.femaFloodZoneLabel}</span>
                 <p className="mt-1 text-sm font-bold text-ink">
-                  {hazards.layers?.femaFlood?.floodRisk?.zone || (hazards.layers?.femaFlood?.status === 'unavailable' ? 'Unavailable' : 'Zone X')}
+                  {hazards.layers?.femaFlood?.floodRisk?.zone || (hazards.layers?.femaFlood?.status === 'unavailable' ? t.unavailableLabel : t.zoneXLabel)}
                 </p>
                 <p className="mt-0.5 text-xs text-ink-3">
-                  {hazards.layers?.femaFlood?.status === 'unavailable' ? 'FEMA NFHL query unavailable' : (hazards.layers?.femaFlood?.floodRisk?.isSpecialFloodHazardArea ? 'Mandatory NFIP Insurance' : 'Minimal Flood Hazard')}
+                  {hazards.layers?.femaFlood?.status === 'unavailable' ? t.femaQueryUnavailable : (hazards.layers?.femaFlood?.floodRisk?.isSpecialFloodHazardArea ? t.mandatoryNfip : t.minimalFlood)}
                 </p>
               </div>
               <div className="rounded-control border border-line bg-card p-2.5">
-                <span className="text-label font-bold uppercase text-ink-3">EPA Environmental</span>
+                <span className="text-label font-bold uppercase text-ink-3">{t.epaEnvLabel}</span>
                 <p className="mt-1 text-sm font-bold text-ink capitalize">
-                  {hazards.layers?.epaHazard?.environmentalLiability?.liabilityTier || (hazards.layers?.epaHazard?.status === 'unavailable' ? 'Unavailable' : 'Clean')}
+                  {hazards.layers?.epaHazard?.environmentalLiability?.liabilityTier || (hazards.layers?.epaHazard?.status === 'unavailable' ? t.unavailableLabel : t.cleanLabel)}
                 </p>
                 <p className="mt-0.5 text-xs text-ink-3">
-                  {hazards.layers?.epaHazard?.status === 'unavailable' ? 'EPA SEMS lookup unavailable' : (hazards.underwritingImpact?.phaseOneEsaRequired ? 'Phase I ESA Recommended' : 'No Superfund Sites Detected')}
+                  {hazards.layers?.epaHazard?.status === 'unavailable' ? t.epaUnavailable : (hazards.underwritingImpact?.phaseOneEsaRequired ? t.phaseOneRec : t.noSuperfund)}
                 </p>
               </div>
               <div className="rounded-control border border-line bg-card p-2.5">
-                <span className="text-label font-bold uppercase text-ink-3">USGS Terrain Slope</span>
+                <span className="text-label font-bold uppercase text-ink-3">{t.usgsSlopeLabel}</span>
                 <p className="mt-1 text-sm font-bold text-ink">
-                  {hazards.layers?.usgsTerrain?.status === 'unavailable' ? 'N/A' : `${hazards.layers?.usgsTerrain?.slopeAnalysis?.slopePct ?? 0}% Grade`}
+                  {hazards.layers?.usgsTerrain?.status === 'unavailable' ? t.naLabel : interpolate(t.slopeGradePct, { pct: hazards.layers?.usgsTerrain?.slopeAnalysis?.slopePct ?? 0 })}
                 </p>
                 <p className="mt-0.5 text-xs text-ink-3">
-                  {hazards.layers?.usgsTerrain?.status === 'unavailable' ? 'USGS 3DEP slope unavailable' : (hazards.underwritingImpact?.gradingContingencyRequired ? 'Steep Slope / Engineering Required' : 'Standard Buildable Grade')}
+                  {hazards.layers?.usgsTerrain?.status === 'unavailable' ? t.usgsUnavailable : (hazards.underwritingImpact?.gradingContingencyRequired ? t.steepSlope : t.standardGrade)}
                 </p>
               </div>
             </div>
@@ -476,56 +492,56 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
           <div className="rounded-control border border-line bg-paper p-4" data-testid="auction-deposit-card">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-ink">
-                Auction Escrow &amp; Deposit · {humanize(dossier.auctionDepositTerms.rules.platform || 'Judicial Sheriff')}
+                {interpolate(t.escrowHeading, { platform: humanize(dossier.auctionDepositTerms.rules.platform || t.judicialSheriff) })}
               </h3>
               <span className="rounded-full border border-line bg-card px-2 py-0.5 text-xs font-semibold text-ink-2">
                 {dossier.auctionDepositTerms.requiredDeposit?.depositPercent
-                  ? `${Math.round(dossier.auctionDepositTerms.requiredDeposit.depositPercent * 100)}% Deposit`
-                  : 'Statutory Floor'}
+                  ? interpolate(t.depositPctBadge, { pct: Math.round(dossier.auctionDepositTerms.requiredDeposit.depositPercent * 100) })
+                  : t.statutoryFloorBadge}
               </span>
             </div>
             <p className="mt-1 text-xs text-ink-3">
-              Statutory upfront escrow rules, payment method constraints, and cashier turnaround timelines.
+              {t.escrowDesc}
             </p>
             <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
               <div className="rounded-control border border-line bg-card p-2.5">
-                <span className="text-label font-bold uppercase text-ink-3">Required Deposit</span>
+                <span className="text-label font-bold uppercase text-ink-3">{t.requiredDepositLabel}</span>
                 <p className="mt-1 text-sm font-bold text-ink">
                   {dossier.auctionDepositTerms.requiredDeposit?.requiredDeposit != null
-                    ? `$${dossier.auctionDepositTerms.requiredDeposit.requiredDeposit.toLocaleString()}`
-                    : 'Calculated at bid'}
+                    ? fmtUsdVal(dossier.auctionDepositTerms.requiredDeposit.requiredDeposit)
+                    : t.calculatedAtBid}
                 </p>
                 <p className="mt-0.5 text-xs text-ink-3">
-                  Basis: {humanize(dossier.auctionDepositTerms.requiredDeposit?.basis || 'percentage')}
+                  {interpolate(t.basisLine, { basis: humanize(dossier.auctionDepositTerms.requiredDeposit?.basis || 'percentage') })}
                 </p>
               </div>
               <div className="rounded-control border border-line bg-card p-2.5">
-                <span className="text-label font-bold uppercase text-ink-3">Payment Method</span>
+                <span className="text-label font-bold uppercase text-ink-3">{t.paymentMethodLabel}</span>
                 <p className="mt-1 text-sm font-bold text-ink capitalize">
                   {(dossier.auctionDepositTerms.requiredDeposit?.paymentMethod || dossier.auctionDepositTerms.rules.paymentMethod || 'cashier_check').replace(/_/g, ' ')}
                 </p>
                 <p className="mt-0.5 text-xs text-ink-3">
-                  Lead time: {dossier.auctionDepositTerms.rules.leadTimeHours ?? 24}h prior to gavel
+                  {interpolate(t.leadTimeLine, { hours: dossier.auctionDepositTerms.rules.leadTimeHours ?? 24 })}
                 </p>
               </div>
               <div className="rounded-control border border-line bg-card p-2.5">
-                <span className="text-label font-bold uppercase text-ink-3">Settlement &amp; Refund</span>
+                <span className="text-label font-bold uppercase text-ink-3">{t.settlementRefundLabel}</span>
                 <p className="mt-1 text-sm font-bold text-ink">
-                  {dossier.auctionDepositTerms.rules.settlementWindowDays ?? 30}-day window
+                  {interpolate(t.settlementWindow, { days: dossier.auctionDepositTerms.rules.settlementWindowDays ?? 30 })}
                 </p>
                 <p className="mt-0.5 text-xs text-ink-3">
-                  Refund turnaround: ~{dossier.auctionDepositTerms.rules.refundTurnaroundDays ?? 5} days
+                  {interpolate(t.refundTurnaround, { days: dossier.auctionDepositTerms.rules.refundTurnaroundDays ?? 5 })}
                 </p>
               </div>
             </div>
             {dossier.auctionDepositTerms.rules.forfeitureRiskTerms && (
               <p className="mt-2 rounded border border-catch/30 bg-catch-wash px-2.5 py-1.5 text-xs text-catch-ink">
-                <strong>Forfeiture &amp; default terms:</strong> {dossier.auctionDepositTerms.rules.forfeitureRiskTerms}
+                <strong>{t.forfeiturePrefix}</strong> {dossier.auctionDepositTerms.rules.forfeitureRiskTerms}
               </p>
             )}
             {dossier.auctionDepositTerms.rules.statutoryCitation && (
               <p className="mt-2 text-label text-ink-3">
-                Citation: {dossier.auctionDepositTerms.rules.statutoryCitation}
+                {interpolate(t.citationLine, { citation: dossier.auctionDepositTerms.rules.statutoryCitation })}
               </p>
             )}
           </div>
@@ -534,49 +550,49 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
           <div className="rounded-control border border-line bg-paper p-4" data-testid="possession-timeline-card">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-ink">
-                Post-Sale Possession &amp; Title Timelines
+                {t.possessionHeading}
               </h3>
               <span className="rounded-full border border-line bg-card px-2 py-0.5 text-xs font-semibold text-ink-2">
-                {dossier.possessionTimeline.state || 'Statutory'} Jurisdiction
+                {interpolate(t.jurisdictionBadge, { state: dossier.possessionTimeline.state || t.statutoryFallback })}
               </span>
             </div>
             <p className="mt-1 text-xs text-ink-3">
-              Holding period to legal possession, quiet title requirements, and holding carry cost.
+              {t.possessionDesc}
             </p>
             <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
               <div className="rounded-control border border-line bg-card p-2.5">
-                <span className="text-label font-bold uppercase text-ink-3">Quiet Title Action</span>
+                <span className="text-label font-bold uppercase text-ink-3">{t.quietTitleLabel}</span>
                 <p className="mt-1 text-sm font-bold text-ink">
                   {dossier.possessionTimeline.quietTitle?.minDays != null
-                    ? `${dossier.possessionTimeline.quietTitle.minDays}–${dossier.possessionTimeline.quietTitle.maxDays} days`
-                    : 'Direct deed / not required'}
+                    ? interpolate(t.daysRange, { min: dossier.possessionTimeline.quietTitle.minDays, max: dossier.possessionTimeline.quietTitle.maxDays })
+                    : t.directDeedNotReq}
                 </p>
                 <p className="mt-0.5 text-xs text-ink-3">
-                  {dossier.possessionTimeline.quietTitle?.statutory || 'Judicial foreclosure direct conveyance'}
+                  {dossier.possessionTimeline.quietTitle?.statutory || t.directConveyance}
                 </p>
               </div>
               <div className="rounded-control border border-line bg-card p-2.5">
-                <span className="text-label font-bold uppercase text-ink-3">Writ of Possession</span>
+                <span className="text-label font-bold uppercase text-ink-3">{t.writPossessionLabel}</span>
                 <p className="mt-1 text-sm font-bold text-ink">
                   {dossier.possessionTimeline.writOfPossession?.minDays != null
-                    ? `${dossier.possessionTimeline.writOfPossession.minDays}–${dossier.possessionTimeline.writOfPossession.maxDays} days`
-                    : 'Unencoded timeline'}
+                    ? interpolate(t.daysRange, { min: dossier.possessionTimeline.writOfPossession.minDays, max: dossier.possessionTimeline.writOfPossession.maxDays })
+                    : t.unencodedTimeline}
                 </p>
                 <p className="mt-0.5 text-xs text-ink-3">
-                  {dossier.possessionTimeline.writOfPossession?.statutory || 'Sheriff writ execution'}
+                  {dossier.possessionTimeline.writOfPossession?.statutory || t.sheriffWritExec}
                 </p>
               </div>
               <div className="rounded-control border border-line bg-card p-2.5">
-                <span className="text-label font-bold uppercase text-ink-3">Holding Carry Cost</span>
+                <span className="text-label font-bold uppercase text-ink-3">{t.holdingCarryLabel}</span>
                 <p className="mt-1 text-sm font-bold text-ink">
                   {dossier.possessionTimeline.carryCost?.totalEstimatedCost != null
-                    ? `$${dossier.possessionTimeline.carryCost.totalEstimatedCost.toLocaleString()}`
-                    : 'Unconfirmed'}
+                    ? fmtUsdVal(dossier.possessionTimeline.carryCost.totalEstimatedCost)
+                    : t.unconfirmedLabel}
                 </p>
                 <p className="mt-0.5 text-xs text-ink-3">
                   {dossier.possessionTimeline.carryCost?.missingInputs && dossier.possessionTimeline.carryCost.missingInputs.length > 0
-                    ? `Missing: ${dossier.possessionTimeline.carryCost.missingInputs.join(', ')}`
-                    : `Basis: ${dossier.possessionTimeline.carryCost?.basis || 'Observed carry'}`}
+                    ? interpolate(t.missingInputsLine, { fields: dossier.possessionTimeline.carryCost.missingInputs.join(', ') })
+                    : interpolate(t.basisLine, { basis: dossier.possessionTimeline.carryCost?.basis || t.observedCarryFallback })}
                 </p>
               </div>
             </div>
@@ -585,7 +601,7 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
         {dossier.auctionMicrostructure && (
           <div className="rounded-control border border-line bg-paper p-4" data-testid="auction-microstructure-card">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-ink">Auction Proceed Probability &amp; Microstructure</h3>
+              <h3 className="text-sm font-bold text-ink">{t.microHeading}</h3>
               <span className={cn(
                 "rounded-full border px-2 py-0.5 text-xs font-semibold",
                 dossier.auctionMicrostructure.probability != null && dossier.auctionMicrostructure.probability >= 0.7 ? "border-line-strong bg-card text-ink-2" :
@@ -593,16 +609,16 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
                 "border-line bg-card text-ink-2"
               )}>
                 {dossier.auctionMicrostructure.probability != null
-                  ? `${Math.round(dossier.auctionMicrostructure.probability * 100)}% Proceed Prob (${dossier.auctionMicrostructure.confidence})`
-                  : 'Insufficient Docket Data'}
+                  ? interpolate(t.proceedProbBadge, { pct: Math.round(dossier.auctionMicrostructure.probability * 100), conf: dossier.auctionMicrostructure.confidence })
+                  : t.insufficientDocketData}
               </span>
             </div>
             <p className="mt-1 text-xs text-ink-3">
-              Venue docket clearing rates, debtor stay exhaustion, and venue postponement risks.
+              {t.microDesc}
             </p>
             {dossier.auctionMicrostructure.statutoryContext && (
               <p className="mt-2 text-xs font-medium text-ink-2">
-                Statutory Context ({dossier.auctionMicrostructure.statutoryContext.state}): {dossier.auctionMicrostructure.statutoryContext.rule}
+                {interpolate(t.statutoryCtxLine, { state: dossier.auctionMicrostructure.statutoryContext.state, rule: dossier.auctionMicrostructure.statutoryContext.rule })}
               </p>
             )}
             {dossier.auctionMicrostructure.factors && dossier.auctionMicrostructure.factors.length > 3 && (
@@ -613,8 +629,8 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
                   className="text-xs font-semibold text-ink underline underline-offset-2 hover:text-ink-2"
                 >
                   {showAllFactors
-                    ? "Show top 3 factors"
-                    : `Show all ${dossier.auctionMicrostructure.factors.length} factors`}
+                    ? t.showTop3Factors
+                    : interpolate(t.showAllFactors, { count: dossier.auctionMicrostructure.factors.length })}
                 </button>
               </div>
             )}
@@ -638,50 +654,50 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
         {dossier.surplusWaterfall && (
           <div className="rounded-control border border-line bg-paper p-4" data-testid="surplus-waterfall-card">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-ink">Excess Proceeds Waterfall</h3>
+              <h3 className="text-sm font-bold text-ink">{t.surplusHeading}</h3>
               <span className="rounded-full border border-line bg-card px-2 py-0.5 text-xs font-semibold text-ink-2">
                 Tyler v. Hennepin County (2023)
               </span>
             </div>
             <p className="mt-1 text-xs text-ink-3">
-              Constitutional Fifth Amendment allocation of excess bidding proceeds beyond foreclosing debt.
+              {t.surplusDesc}
             </p>
             <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
               <div className="rounded-control border border-line bg-card p-2.5">
-                <span className="text-label font-bold uppercase text-ink-3">Adjudged Debt</span>
+                <span className="text-label font-bold uppercase text-ink-3">{t.adjudgedDebtLabel}</span>
                 <p className="mt-1 text-sm font-bold text-ink">
                   {dossier.surplusWaterfall.adjudgedDebtSatisfied != null
-                    ? `$${Math.round(dossier.surplusWaterfall.adjudgedDebtSatisfied).toLocaleString()}`
-                    : 'Not published'}
+                    ? fmtUsdVal(dossier.surplusWaterfall.adjudgedDebtSatisfied)
+                    : t.notPublished}
                 </p>
                 <p className="mt-0.5 text-xs text-ink-3">
                   {dossier.surplusWaterfall.deficiencyAmount > 0
-                    ? `Deficiency: $${Math.round(dossier.surplusWaterfall.deficiencyAmount).toLocaleString()}`
-                    : 'Adjudged debt satisfied'}
+                    ? interpolate(t.deficiencyLine, { amount: fmtUsdVal(dossier.surplusWaterfall.deficiencyAmount) })
+                    : t.debtSatisfied}
                 </p>
               </div>
               <div className="rounded-control border border-line bg-card p-2.5">
-                <span className="text-label font-bold uppercase text-ink-3">Junior Lien Claims</span>
+                <span className="text-label font-bold uppercase text-ink-3">{t.juniorLienClaimsLabel}</span>
                 <p className="mt-1 text-sm font-bold text-ink">
                   {dossier.surplusWaterfall.allocatedJuniorClaims != null
-                    ? `$${Math.round(dossier.surplusWaterfall.allocatedJuniorClaims).toLocaleString()}`
-                    : '$0'}
+                    ? fmtUsdVal(dossier.surplusWaterfall.allocatedJuniorClaims)
+                    : fmtUsdVal(0)}
                 </p>
                 <p className="mt-0.5 text-xs text-ink-3">
                   {dossier.surplusWaterfall.uncoveredClaims > 0
-                    ? `Uncovered: $${Math.round(dossier.surplusWaterfall.uncoveredClaims).toLocaleString()}`
-                    : 'Junior priority claims'}
+                    ? interpolate(t.uncoveredLine, { amount: fmtUsdVal(dossier.surplusWaterfall.uncoveredClaims) })
+                    : t.juniorPriorityClaims}
                 </p>
               </div>
               <div className="rounded-control border border-line bg-card p-2.5">
-                <span className="text-label font-bold uppercase text-ink-3">Former Owner Equity</span>
+                <span className="text-label font-bold uppercase text-ink-3">{t.formerOwnerEquityLabel}</span>
                 <p className="mt-1 text-sm font-bold text-ink">
                   {dossier.surplusWaterfall.formerOwnerEquity != null
-                    ? `$${Math.round(dossier.surplusWaterfall.formerOwnerEquity).toLocaleString()}`
-                    : '$0'}
+                    ? fmtUsdVal(dossier.surplusWaterfall.formerOwnerEquity)
+                    : fmtUsdVal(0)}
                 </p>
                 <p className="mt-0.5 text-xs text-ink-3">
-                  Protected surplus equity{dossier.surplusWaterfall.grossSurplus != null ? ` (gross surplus $${Math.round(dossier.surplusWaterfall.grossSurplus).toLocaleString()})` : ''}
+                  {t.protectedSurplus}{dossier.surplusWaterfall.grossSurplus != null ? interpolate(t.grossSurplusPart, { amount: fmtUsdVal(dossier.surplusWaterfall.grossSurplus) }) : ''}
                 </p>
               </div>
             </div>
@@ -694,7 +710,7 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
         )}
         {dossier.opportunitySignals && dossier.opportunitySignals.length > 0 && (
           <details className="border-b border-line pb-4">
-          <summary className="cursor-pointer text-sm font-semibold text-ink-2">Research priority · how it is calculated</summary>
+          <summary className="cursor-pointer text-sm font-semibold text-ink-2">{t.prioritySummary}</summary>
           <div className="mt-4">
           <OpportunitySignalsCard
             listingId={listingId}
@@ -710,7 +726,7 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
           </details>
         )}
         <details className="border-t border-line pt-4">
-          <summary className="cursor-pointer text-sm font-semibold text-ink-2">What still needs checking · {dossier.gaps.length}</summary>
+          <summary className="cursor-pointer text-sm font-semibold text-ink-2">{interpolate(t.gapsSummary, { count: dossier.gaps.length })}</summary>
           <div className="mt-4 space-y-4">
             {dossier.gaps.map((gap) => (
               <div key={gap.id}>
@@ -718,22 +734,22 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
                   <h4 className="text-sm font-semibold">{gap.title}</h4>
                   {gap.priorityTier === 'critical_risk' && (
                     <span className="rounded-full border border-catch/30 bg-catch-wash px-2 py-0.5 text-label font-bold uppercase tracking-wide text-catch-ink">
-                      Critical Risk
+                      {t.criticalRiskBadge}
                     </span>
                   )}
                   {gap.priorityTier === 'high_leverage' && (
                     <span className="rounded-full border border-line-strong bg-paper px-2 py-0.5 text-label font-bold uppercase tracking-wide text-ink-2">
-                      High Leverage
+                      {t.highLeverageBadge}
                     </span>
                   )}
                   {typeof gap.potentialPointsGain === 'number' && (
                     <span className="rounded-full border border-line bg-paper px-2 py-0.5 text-label font-semibold text-ink-2">
-                      +{gap.potentialPointsGain} priority pts if verified
+                      {interpolate(t.potentialPtsBadge, { pts: gap.potentialPointsGain })}
                     </span>
                   )}
                 </div>
                 <p className="mt-1 text-sm leading-6 text-ink-3">{gap.reason}</p>
-                <p className="mt-1 text-sm leading-6 text-ink-2">Next: {gap.nextAction}</p>
+                <p className="mt-1 text-sm leading-6 text-ink-2">{t.nextPrefix} {gap.nextAction}</p>
               </div>
             ))}
           </div>

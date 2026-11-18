@@ -9,6 +9,8 @@ import { displayMoney, displayText, knownNumber } from "@/lib/listing-display";
 import { inspectMapLocation, groupMapLocations, inspectParcelBoundaryInputs } from "@/lib/listing-map-policy";
 import { sourceDisplayText } from "@/lib/source-display";
 import { ListingCompareToggle } from "@/components/listings/listing-compare";
+import { useLocale } from "@/components/i18n/locale-provider";
+import { formatLocaleNumber, formatUsd, interpolate } from "@/lib/i18n/translator";
 import { PropertyListing, SOURCES } from "./property-data";
 
 type MarketMapProps = {
@@ -40,6 +42,21 @@ function usePrefersReducedMotion() {
 }
 
 export function MarketMap({ listings, onUnderwrite, returnTo = "/listings?view=map" }: MarketMapProps) {
+  const { locale, messages } = useLocale();
+  const t = messages.mapsUi;
+  const fmtCount = React.useCallback(
+    (value: number) => (locale === "en" ? String(value) : formatLocaleNumber(locale, value)),
+    [locale],
+  );
+  const money = React.useCallback(
+    (value: unknown, fallback = "—") => {
+      if (locale === "en") return displayMoney(value, fallback);
+      const n = knownNumber(value);
+      return n !== null ? formatUsd(locale, n) : fallback;
+    },
+    [locale],
+  );
+
   const mapContainerRef = React.useRef<HTMLDivElement>(null);
   const mapRef = React.useRef<MapLibreMap | null>(null);
   const maplibreRef = React.useRef<typeof import("maplibre-gl") | null>(null);
@@ -73,7 +90,12 @@ export function MarketMap({ listings, onUnderwrite, returnTo = "/listings?view=m
 
   const selectListing = React.useCallback((listing: GeocodedListing, focus = true) => {
     setSelectedId(listing.id);
-    setAnnouncement(`${listing.address} selected. ${knownNumber(listing.dealScore) !== null ? `Modeled deal score ${listing.dealScore}.` : "No modeled deal score is available."}`);
+    const score = knownNumber(listing.dealScore);
+    setAnnouncement(
+      score !== null
+        ? interpolate(t.mmSelectedWithScore, { address: listing.address, score })
+        : interpolate(t.mmSelectedNoScore, { address: listing.address }),
+    );
     if (!focus || !mapRef.current) return;
     const map = mapRef.current;
     map.stop();
@@ -84,7 +106,7 @@ export function MarketMap({ listings, onUnderwrite, returnTo = "/listings?view=m
     };
     if (reducedMotionRef.current) map.jumpTo(camera);
     else map.easeTo({ ...camera, duration: 500 });
-  }, []);
+  }, [t]);
 
   React.useEffect(() => {
     markersRef.current.forEach(({ ids, element }) => {
@@ -255,14 +277,19 @@ export function MarketMap({ listings, onUnderwrite, returnTo = "/listings?view=m
       element.dataset.testid = "map-marker";
       element.dataset.recordCount = String(group.length);
       element.dataset.active = listing.id === selectedId ? "true" : "false";
-      element.setAttribute("aria-label", group.length > 1 ? `Show ${group.length} source records at ${listing.address}` : `Show ${listing.address} on map`);
+      element.setAttribute(
+        "aria-label",
+        group.length > 1
+          ? interpolate(t.mmAriaMulti, { count: fmtCount(group.length), address: listing.address })
+          : interpolate(t.mmAriaSingle, { address: listing.address }),
+      );
       element.setAttribute("aria-controls", "live-market-map-preview");
       element.setAttribute("aria-pressed", listing.id === selectedId ? "true" : "false");
       element.style.setProperty("--marker-color", source.color);
       for (const [className, value] of [
         ["live-market-marker__halo", ""],
         ["live-market-marker__pin", group.length > 1 ? String(group.length) : "•"],
-        ["live-market-marker__label", group.length > 1 ? `${group.length} source records` : `${displayText(listing.city, listing.county || listing.state)}, ${listing.state}`],
+        ["live-market-marker__label", group.length > 1 ? interpolate(t.mmMultiLabel, { count: fmtCount(group.length) }) : `${displayText(listing.city, listing.county || listing.state)}, ${listing.state}`],
       ]) {
         const span = document.createElement("span");
         span.className = className;
@@ -330,7 +357,7 @@ export function MarketMap({ listings, onUnderwrite, returnTo = "/listings?view=m
       markersRef.current.forEach(({ marker }) => marker.remove());
       markersRef.current = [];
     };
-  }, [mapCreated, locationGroups, selectListing]);
+  }, [mapCreated, locationGroups, selectListing, t, fmtCount]);
 
   const changeZoom = (delta: number) => {
     const map = mapRef.current;
@@ -361,44 +388,50 @@ export function MarketMap({ listings, onUnderwrite, returnTo = "/listings?view=m
       data-map-center={mapView.center}
       data-map-zoom={mapView.zoom}
       data-map-motion={shouldReduceMotion ? "reduced" : "full"}
-      aria-label="Interactive filtered listings map"
+      aria-label={t.mmRegionAria}
       className="overflow-hidden rounded-card border border-line bg-card shadow-sm"
     >
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4">
         <div>
-          <h3 className="mt-1 font-bold text-ink">Market map</h3>
-          <p className="text-xs text-ink-3">{mappable.length} records with verified locations · {locationGroups.length} map locations</p>
-          {listings.length > mappable.length && <p className="mt-1 text-xs text-ink-3">{listings.length - mappable.length} records need verified coordinates and remain available in the feed.</p>}
+          <h3 className="mt-1 font-bold text-ink">{t.mmHeading}</h3>
+          <p className="text-xs text-ink-3">
+            {interpolate(t.mmCountSummary, { records: fmtCount(mappable.length), locations: fmtCount(locationGroups.length) })}
+          </p>
+          {listings.length > mappable.length && (
+            <p className="mt-1 text-xs text-ink-3">
+              {interpolate(t.mmNeedCoords, { count: fmtCount(listings.length - mappable.length) })}
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-1 rounded-control border border-line bg-card p-1 shadow-sm">
-          <MapControl label="Zoom map out" onClick={() => changeZoom(-1)}><Minus className="h-4 w-4" aria-hidden /></MapControl>
-          <MapControl label="Reset map view" onClick={resetView}><LocateFixed className="h-4 w-4" aria-hidden /></MapControl>
-          <MapControl label="Zoom map in" onClick={() => changeZoom(1)}><Plus className="h-4 w-4" aria-hidden /></MapControl>
+          <MapControl label={t.mmZoomOutAria} onClick={() => changeZoom(-1)}><Minus className="h-4 w-4" aria-hidden /></MapControl>
+          <MapControl label={t.mmResetAria} onClick={resetView}><LocateFixed className="h-4 w-4" aria-hidden /></MapControl>
+          <MapControl label={t.mmZoomInAria} onClick={() => changeZoom(1)}><Plus className="h-4 w-4" aria-hidden /></MapControl>
         </div>
       </div>
 
       <div className="relative h-[520px] overflow-hidden bg-line sm:h-[600px] lg:h-[660px]" data-map-center={mapView.center} data-map-zoom={mapView.zoom} data-map-motion={shouldReduceMotion ? "reduced" : "full"}>
-        <div className="absolute inset-0 z-0 grid place-items-center bg-[radial-gradient(circle_at_50%_45%,#f5f6f7,#e5e7eb)] text-center"><div className="max-w-sm px-6 text-ink-3"><MapPin className="mx-auto h-7 w-7" aria-hidden /><p className="mt-2 text-xs font-semibold">Loading the geographic listing layer…</p></div></div>
-        <div ref={mapContainerRef} data-testid="live-market-maplibre" aria-label="Interactive street map of filtered listings" className="live-market-maplibre absolute inset-0 z-[1]" />
+        <div className="absolute inset-0 z-0 grid place-items-center bg-[radial-gradient(circle_at_50%_45%,#f5f6f7,#e5e7eb)] text-center"><div className="max-w-sm px-6 text-ink-3"><MapPin className="mx-auto h-7 w-7" aria-hidden /><p className="mt-2 text-xs font-semibold">{t.mmLoadingLayer}</p></div></div>
+        <div ref={mapContainerRef} data-testid="live-market-maplibre" aria-label={t.mmCanvasAria} className="live-market-maplibre absolute inset-0 z-[1]" />
 
         {mapUnavailable ? (
           <div className="absolute inset-0 z-20 overflow-auto bg-paper/95 p-5 backdrop-blur-sm">
-            <div role="status" className="mx-auto max-w-3xl rounded-card border border-line bg-card p-4 shadow-sm"><p className="font-bold text-ink">Street tiles are temporarily unavailable.</p><p className="mt-1 text-xs leading-5 text-ink-3">The listing coordinates and actions remain available below. Reconnect to restore the interactive street map.</p></div>
+            <div role="status" className="mx-auto max-w-3xl rounded-card border border-line bg-card p-4 shadow-sm"><p className="font-bold text-ink">{t.mmTilesDownTitle}</p><p className="mt-1 text-xs leading-5 text-ink-3">{t.mmTilesDownBody}</p></div>
             <div data-testid="map-fallback-list" className="mx-auto mt-3 grid max-w-3xl gap-2 sm:grid-cols-2">
               {mappable.map((listing) => (
-                <button key={listing.id} type="button" onClick={() => selectListing(listing, false)} className="flex min-h-16 items-center justify-between gap-3 rounded-card border border-line bg-card px-4 py-3 text-left shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink" aria-label={`Inspect ${listing.address} without map tiles`}>
-                  <span className="min-w-0"><span className="block truncate text-sm font-bold text-ink">{listing.address}</span><span className="block text-xs text-ink-3">{listing.city}, {listing.state} · {listing.county} County</span></span>
+                <button key={listing.id} type="button" onClick={() => selectListing(listing, false)} className="flex min-h-16 items-center justify-between gap-3 rounded-card border border-line bg-card px-4 py-3 text-left shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink" aria-label={interpolate(t.mmInspectNoTilesAria, { address: listing.address })}>
+                  <span className="min-w-0"><span className="block truncate text-sm font-bold text-ink">{listing.address}</span><span className="block text-xs text-ink-3">{listing.city}, {listing.state} · {interpolate(t.mmCountySuffix, { county: listing.county })}</span></span>
                   <span className="shrink-0 rounded-control bg-paper px-2 py-1 text-xs font-extrabold text-ink-2">{knownNumber(listing.dealScore) ?? "—"}</span>
                 </button>
               ))}
             </div>
-            <p className="mx-auto mt-4 max-w-3xl text-meta font-semibold text-ink-3">Map data © OpenStreetMap contributors.</p>
+            <p className="mx-auto mt-4 max-w-3xl text-meta font-semibold text-ink-3">{t.mmOsmAttribution}</p>
           </div>
         ) : null}
 
-        {selected ? <MapPreview listing={selected} relatedListings={related} onSelect={(listing) => selectListing(listing, false)} onClose={() => setSelectedId(null)} onUnderwrite={onUnderwrite} parcelBoundary={parcelBoundary} returnTo={returnTo} /> : null}
+        {selected ? <MapPreview listing={selected} relatedListings={related} onSelect={(listing) => selectListing(listing, false)} onClose={() => setSelectedId(null)} onUnderwrite={onUnderwrite} parcelBoundary={parcelBoundary} returnTo={returnTo} money={money} /> : null}
 
-        {mappable.length === 0 ? <div className="absolute inset-0 z-20 grid place-items-center bg-paper px-6 text-center"><div className="max-w-md"><MapPin className="mx-auto h-8 w-8 text-ink-3" aria-hidden /><p className="mt-3 font-bold text-ink-2">No verified property locations match these filters.</p><p className="mt-2 text-sm leading-relaxed text-ink-3">Source coordinates or an exact address match are required before a property pin appears. Browse the feed while location evidence is collected.</p></div></div> : null}
+        {mappable.length === 0 ? <div className="absolute inset-0 z-20 grid place-items-center bg-paper px-6 text-center"><div className="max-w-md"><MapPin className="mx-auto h-8 w-8 text-ink-3" aria-hidden /><p className="mt-3 font-bold text-ink-2">{t.mmEmptyTitle}</p><p className="mt-2 text-sm leading-relaxed text-ink-3">{t.mmEmptyBody}</p></div></div> : null}
       </div>
       <p className="sr-only" aria-live="polite">{announcement}</p>
     </section>
@@ -417,6 +450,7 @@ function MapPreview({
   relatedListings,
   onSelect,
   returnTo,
+  money,
 }: {
   listing: PropertyListing;
   onClose: () => void;
@@ -425,44 +459,71 @@ function MapPreview({
   relatedListings: GeocodedListing[];
   onSelect: (listing: GeocodedListing) => void;
   returnTo: string;
+  money: (value: unknown, fallback?: string) => string;
 }) {
+  const { locale, messages } = useLocale();
+  const t = messages.mapsUi;
   const pProps = parcelBoundary?.properties;
   const parcelSqft = knownNumber(pProps?.lotSqft);
   const parcelAcres = knownNumber(pProps?.lotAcres);
   const parcelFrontage = knownNumber(pProps?.frontageFt);
   const parcelDepth = knownNumber(pProps?.depthFt);
   const parcelArea = parcelSqft !== null
-    ? `${parcelSqft.toLocaleString()} sq ft`
+    ? interpolate(t.mmParcelSqft, { sqft: formatLocaleNumber(locale, parcelSqft) })
     : parcelAcres !== null
-      ? `${parcelAcres.toLocaleString()} ac`
-      : "area not reported";
+      ? interpolate(t.mmParcelAc, { acres: formatLocaleNumber(locale, parcelAcres) })
+      : t.mmAreaNotReported;
   const parcelDimensions = parcelFrontage !== null && parcelDepth !== null
-    ? ` · ${parcelFrontage.toLocaleString()}′ × ${parcelDepth.toLocaleString()}′`
-    : " · dimensions not reported";
+    ? ` · ${formatLocaleNumber(locale, parcelFrontage)}′ × ${formatLocaleNumber(locale, parcelDepth)}′`
+    : t.mmDimsNotReported;
+  const score = knownNumber(listing.dealScore);
 
   return (
-    <article id="live-market-map-preview" data-testid="map-listing-preview" aria-label={`Selected listing: ${listing.address}`} className="absolute bottom-4 left-4 right-4 z-30 rounded-card border border-line bg-card/95 p-4 shadow-overlay backdrop-blur-xl sm:left-auto sm:w-[390px]">
-      <button type="button" onClick={onClose} aria-label="Close map listing preview" className="absolute right-3 top-3 grid h-10 w-10 place-items-center rounded-control text-ink-3 hover:bg-paper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink"><X className="h-4 w-4" aria-hidden /></button>
-      <div className="pr-11"><p className="text-label font-extrabold uppercase tracking-[0.12em] text-ink-3">{sourceDisplayText(SOURCES[listing.source]?.label ?? listing.source)} · {knownNumber(listing.dealScore) !== null ? `Modeled score ${listing.dealScore}` : "Unscored"}</p><h4 className="mt-1 text-lg font-bold tracking-[-0.02em] text-ink">{listing.address}</h4><p className="mt-1 flex items-center gap-1 text-xs text-ink-3"><MapPin className="h-3.5 w-3.5" aria-hidden /> {displayText(listing.city, listing.state)}, {listing.state}{listing.county ? ` · ${listing.county} County` : ""}</p></div>
-      {relatedListings.length > 1 && <div className="mt-3 border-t border-line pt-3"><p className="text-xs font-semibold text-ink-3">{relatedListings.length} source records at this location</p><div className="mt-2 flex max-h-24 flex-wrap gap-2 overflow-auto">{relatedListings.map((record) => <button key={record.id} type="button" aria-pressed={record.id === listing.id} onClick={() => onSelect(record)} className={`rounded-control border px-2 py-1 text-xs ${record.id === listing.id ? "border-ink bg-ink text-white" : "border-line-strong text-ink-2"}`}>{sourceDisplayText(record.id)}</button>)}</div></div>}
+    <article id="live-market-map-preview" data-testid="map-listing-preview" aria-label={interpolate(t.mmSelectedListingAria, { address: listing.address })} className="absolute bottom-4 left-4 right-4 z-30 rounded-card border border-line bg-card/95 p-4 shadow-overlay backdrop-blur-xl sm:left-auto sm:w-[390px]">
+      <button type="button" onClick={onClose} aria-label={t.mmClosePreviewAria} className="absolute right-3 top-3 grid h-10 w-10 place-items-center rounded-control text-ink-3 hover:bg-paper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink"><X className="h-4 w-4" aria-hidden /></button>
+      <div className="pr-11">
+        <p className="text-label font-extrabold uppercase tracking-[0.12em] text-ink-3">
+          {sourceDisplayText(SOURCES[listing.source]?.label ?? listing.source)} · {score !== null ? interpolate(t.mmModeledScore, { score }) : t.mmUnscored}
+        </p>
+        <h4 className="mt-1 text-lg font-bold tracking-[-0.02em] text-ink">{listing.address}</h4>
+        <p className="mt-1 flex items-center gap-1 text-xs text-ink-3">
+          <MapPin className="h-3.5 w-3.5" aria-hidden /> {displayText(listing.city, listing.state)}, {listing.state}{listing.county ? ` · ${interpolate(t.mmCountySuffix, { county: listing.county })}` : ""}
+        </p>
+      </div>
+      {relatedListings.length > 1 && (
+        <div className="mt-3 border-t border-line pt-3">
+          <p className="text-xs font-semibold text-ink-3">{interpolate(t.mmRecordsAtLocation, { count: relatedListings.length })}</p>
+          <div className="mt-2 flex max-h-24 flex-wrap gap-2 overflow-auto">
+            {relatedListings.map((record) => (
+              <button key={record.id} type="button" aria-pressed={record.id === listing.id} onClick={() => onSelect(record)} className={`rounded-control border px-2 py-1 text-xs ${record.id === listing.id ? "border-ink bg-ink text-white" : "border-line-strong text-ink-2"}`}>
+                {sourceDisplayText(record.id)}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       {pProps ? (
         <div className="mt-2.5 flex items-center justify-between gap-3 rounded-control border border-line bg-paper px-2.5 py-1.5 text-label font-mono">
           <span className="flex items-center gap-1.5 font-bold text-ink-2">
             <span className="h-2 w-2 shrink-0 rounded-full bg-ink-3" aria-hidden="true" />
-            Parcel: {parcelArea}{parcelDimensions}
+            {t.mmParcelPrefix} {parcelArea}{parcelDimensions}
           </span>
           <span className="shrink-0 rounded-control bg-catch-wash px-1.5 py-0.5 text-meta font-extrabold uppercase text-catch-ink">
-            Not a survey
+            {t.mmNotASurvey}
           </span>
         </div>
       ) : null}
-      <div className="mt-3 grid grid-cols-3 gap-2 text-center"><MapStat label="Reported" value={displayMoney(listing.openingBid)} /><MapStat label="Modeled value" value={displayMoney(listing.mid, "Not modeled")} /><MapStat label="Bid spread" value={displayMoney(listing.equity, "Not modeled")} green /></div>
+      <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+        <MapStat label={t.mmReportedLabel} value={money(listing.openingBid)} />
+        <MapStat label={t.mmModeledValueLabel} value={money(listing.mid, t.mmNotModeled)} />
+        <MapStat label={t.mmBidSpreadLabel} value={money(listing.equity, t.mmNotModeled)} green />
+      </div>
       <div className="mt-3">
         <ListingCompareToggle listingId={listing.id} className="h-11 w-full" />
       </div>
       <div className="mt-2 grid grid-cols-2 gap-2">
-        <button type="button" onClick={() => onUnderwrite(listing)} className="inline-flex h-11 items-center justify-center gap-1 rounded-control bg-ink px-3 text-xs font-bold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2">Underwrite <ArrowRight className="h-3.5 w-3.5" aria-hidden /></button>
-        <Link href={`/listings/${encodeURIComponent(listing.id)}`} className="inline-flex h-11 items-center justify-center gap-1 rounded-control border border-line-strong px-3 text-xs font-bold text-ink hover:bg-paper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink">Listing page <ArrowRight className="h-3.5 w-3.5" aria-hidden /></Link>
+        <button type="button" onClick={() => onUnderwrite(listing)} className="inline-flex h-11 items-center justify-center gap-1 rounded-control bg-ink px-3 text-xs font-bold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2">{t.mmUnderwriteBtn} <ArrowRight className="h-3.5 w-3.5" aria-hidden /></button>
+        <Link href={`/listings/${encodeURIComponent(listing.id)}`} className="inline-flex h-11 items-center justify-center gap-1 rounded-control border border-line-strong px-3 text-xs font-bold text-ink hover:bg-paper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink">{t.mmListingPageLink} <ArrowRight className="h-3.5 w-3.5" aria-hidden /></Link>
       </div>
     </article>
   );

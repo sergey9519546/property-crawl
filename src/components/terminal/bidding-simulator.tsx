@@ -9,6 +9,7 @@ import { displayMoney, positiveNumber } from "@/lib/listing-display";
 import { readUnderwriteScenario, writeUnderwriteScenario } from "@/lib/underwrite-scenario";
 import { StatutoryDeadlinesTimeline } from "@/components/terminal/statutory-deadlines-timeline";
 import { TitleRiskForensics } from "@/components/terminal/title-risk-forensics";
+import { useLocale } from "@/components/i18n/locale-provider";
 
 interface BiddingSimulatorProps { listing: Listing; }
 
@@ -41,6 +42,7 @@ function enteredAmount(value: string): number | null {
 }
 
 export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
+  const { messages: m } = useLocale();
   const [rehabBudget, setRehabBudget] = useState(25_000);
   const [targetMargin, setTargetMargin] = useState(30);
   const [scenario, setScenario] = useState<Record<ScenarioField, string>>({
@@ -450,7 +452,7 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
           <div className="flex items-start gap-3">
             <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-catch-ink" />
             <div className="flex-1">
-              <h3 className="text-sm font-bold">Price scenario unavailable</h3>
+              <h3 className="text-sm font-bold">{m.detailUi.simUnavailableHeading}</h3>
               <p className="mt-1 text-xs leading-relaxed text-ink-2">This record carries no published opening amount, so no bid scenario can be modeled. Nothing is inferred from the address or the county. Statutory deadlines, lien forensics, and packet export remain available below.</p>
               <div className="mt-3 border-t border-catch/30 pt-3">
                 <label htmlFor="custom-opening-bid-input" className="block text-xs font-semibold text-ink">
@@ -482,7 +484,7 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
         <div className="flex items-start gap-2">
           <Calculator className="mt-0.5 h-5 w-5 text-ink" />
           <div>
-            <h3 className="text-base font-bold text-ink">{estimatedValue === null ? "Bid cost model" : "Max Allowable Offer (MAO) Simulator"}</h3>
+            <h3 className="text-base font-bold text-ink">{estimatedValue === null ? m.detailUi.simCostModelHeading : m.detailUi.simMaoHeading}</h3>
             <p className="mt-1 text-xs leading-relaxed text-ink-3">{estimatedValue === null
               ? "Costs below are modeled from the published opening amount and the assumptions you enter. No fee is inferred from the source or state; enter 0 only when zero is your deliberate assumption. A maximum allowable offer is not shown because this record has no supported valuation."
               : "No fee is inferred from the source or state. Enter a published amount or your own assumption; enter 0 only when zero is your deliberate assumption."}</p>

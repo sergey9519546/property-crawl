@@ -8,6 +8,7 @@ import { requestStreetViewMetadata, formatCaptureDate, streetViewLaunchUrl, type
 import { PropertyEvidenceVisual } from "@/components/listings/property-evidence-visual";
 import { AlternativeStreetView } from "@/components/listings/alternative-street-view";
 import { InteractiveStreetView } from "@/components/listings/interactive-street-view";
+import { useLocale } from "@/components/i18n/locale-provider";
 
 type ListingMediaProps = {
   listingId?: string | null;
@@ -43,6 +44,7 @@ function publisherPhotoUrl(photo: string | null | undefined) {
 }
 
 export function ListingMedia({ listingId, address, photo, gallery = [], lat, lng, locationDisclosure, photoOrigin = "publisher", photoProvider, photoSourceUrl, sourceLabel }: ListingMediaProps) {
+  const { locale, messages: m } = useLocale();
   const canMap = hasCoordinates(lat, lng);
   const publisherPhoto = publisherPhotoUrl(photo);
   const photos = [...new Set([publisherPhoto, ...gallery.map(safeImageUrl)].filter((url): url is string => Boolean(url)))].slice(0, 12);
@@ -249,9 +251,9 @@ export function ListingMedia({ listingId, address, photo, gallery = [], lat, lng
           aria-label="Property media"
           className="absolute inset-x-0 bottom-0 z-20 flex border-t border-line bg-card px-4 py-2"
         >
-          {renderTab("photo", canShowPhoto ? photoLabel : "Photos", <ImageIcon className="h-3.5 w-3.5" aria-hidden />)}
-          {renderTab("streetview", "Street View", <Camera className="h-3.5 w-3.5" aria-hidden />)}
-          {canMap ? renderTab("map", "Map", <MapIcon className="h-3.5 w-3.5" aria-hidden />) : null}
+          {renderTab("photo", canShowPhoto && locale === "en" ? photoLabel : m.detailUi.mediaPhotoTab, <ImageIcon className="h-3.5 w-3.5" aria-hidden />)}
+          {renderTab("streetview", m.detailUi.mediaStreetTab, <Camera className="h-3.5 w-3.5" aria-hidden />)}
+          {canMap ? renderTab("map", m.detailUi.mediaMapTab, <MapIcon className="h-3.5 w-3.5" aria-hidden />) : null}
         </div>
       ) : null}
 
@@ -277,7 +279,7 @@ export function ListingMedia({ listingId, address, photo, gallery = [], lat, lng
                     onClick={loadStreetView}
                     className="inline-flex min-h-11 items-center gap-2 rounded-control border border-white/70 bg-card/95 px-4 py-2.5 text-sm font-bold text-ink shadow-xl backdrop-blur hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-ink disabled:opacity-60"
                   >
-                    <Camera className="h-3.5 w-3.5" aria-hidden /> {streetView.status === "loading" ? "Checking Street View…" : streetView.status === "unavailable" ? "Retry Street View" : "Check Street View"}
+                    <Camera className="h-3.5 w-3.5" aria-hidden /> {streetView.status === "loading" ? m.detailUi.mediaCheckingStreetView : streetView.status === "unavailable" ? m.detailUi.mediaRetryStreetView : m.detailUi.mediaCheckStreetView}
                   </button>
                 ) : null}
                 {streetView.status === "unavailable" ? <p role="status" className="rounded-control bg-ink/90 px-3 py-2 text-right text-xs leading-snug text-white shadow-lg backdrop-blur">{streetView.reason}</p> : null}
@@ -304,8 +306,8 @@ export function ListingMedia({ listingId, address, photo, gallery = [], lat, lng
             <div className="flex items-center justify-between gap-3">
               <span className="rounded-control bg-ink/80 px-3 py-2 text-label font-bold text-white backdrop-blur">{photoLabel}{photos.length > 1 ? ` ${photoIndex + 1} / ${photos.length}` : ""}{photoOrigin === "secondary" ? " · Exact-address matched" : ""}</span>
               {photos.length > 1 ? <div className="flex gap-2">
-                <button type="button" aria-label="Previous property photo" className="rounded-control bg-card px-3 py-2 text-xs font-bold shadow focus-visible:ring-2 focus-visible:ring-ink" onClick={() => movePhoto(-1)}>Previous</button>
-                <button type="button" aria-label="Next property photo" className="rounded-control bg-card px-3 py-2 text-xs font-bold shadow focus-visible:ring-2 focus-visible:ring-ink" onClick={() => movePhoto(1)}>Next</button>
+                <button type="button" aria-label="Previous property photo" className="rounded-control bg-card px-3 py-2 text-xs font-bold shadow focus-visible:ring-2 focus-visible:ring-ink" onClick={() => movePhoto(-1)}>{m.detailUi.mediaPreviousPhoto}</button>
+                <button type="button" aria-label="Next property photo" className="rounded-control bg-card px-3 py-2 text-xs font-bold shadow focus-visible:ring-2 focus-visible:ring-ink" onClick={() => movePhoto(1)}>{m.detailUi.mediaNextPhoto}</button>
               </div> : null}
             </div>
           </div> : null}
@@ -335,7 +337,7 @@ export function ListingMedia({ listingId, address, photo, gallery = [], lat, lng
                 {streetView.metadata.coverage === "nearby_street" ? "Nearby street coverage; this is not verified property frontage. " : "Street-level context only. "}Verify the facade and parcel against the publisher record before relying on this imagery.
               </p>
             </div>
-          </> : streetView.status === "unavailable" && normalizedListingId ? <><div className="min-h-0 flex-1"><AlternativeStreetView key={normalizedListingId} listingId={normalizedListingId} address={address} /></div><div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-line bg-card px-4 py-2.5"><span className="text-xs text-ink-3">Google Street View preview unavailable</span><div className="flex flex-wrap items-center gap-2"><a href={streetViewLaunchUrl(address)} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-9 items-center gap-1.5 rounded-control bg-ink px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-ink-2">Open in Google Maps <ExternalLink className="h-3.5 w-3.5" aria-hidden /></a><button type="button" onClick={loadStreetView} className="inline-flex min-h-9 items-center gap-1.5 rounded-control border border-line-strong bg-card px-3 py-1.5 text-xs font-semibold text-ink transition-colors hover:bg-paper">Retry Google Street View</button>{canMap && <button type="button" onClick={() => selectMode("map")} className="inline-flex min-h-9 items-center gap-1.5 rounded-control border border-line-strong bg-card px-3 py-1.5 text-xs font-semibold text-ink-2 transition-colors hover:bg-paper"><MapIcon className="h-3.5 w-3.5" aria-hidden />Property map</button>}</div></div></> : <div className="grid min-h-0 flex-1 place-items-center px-5 py-4 text-center"><div><Camera className="mx-auto h-7 w-7 text-ink-3" aria-hidden/><p className="mt-2 text-sm font-bold text-ink">Street View</p>{streetView.status === "unavailable" ? <p role="status" className="mt-2 max-w-md text-xs leading-relaxed text-ink-3">{streetView.reason}</p> : <p className="mt-2 max-w-md text-xs leading-relaxed text-ink-3">Check for available outdoor street imagery near this property.</p>}<div className="mt-3 flex flex-wrap justify-center gap-2">{normalizedListingId?<button type="button" disabled={streetView.status === "loading"} onClick={loadStreetView} className="inline-flex min-h-10 items-center gap-2 rounded-control bg-ink px-3 py-2 text-xs font-bold text-white disabled:opacity-60"><Camera className="h-3.5 w-3.5" aria-hidden/>{streetView.status === "loading" ? "Checking…" : streetView.status === "unavailable" ? "Check again" : "Check panorama"}</button>:null}{streetView.status === "unavailable" ? <a href={streetViewLaunchUrl(address)} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-10 items-center gap-2 rounded-control border border-line-strong bg-card px-3 py-2 text-xs font-bold text-ink">Open in Google Maps <ExternalLink className="h-3.5 w-3.5" aria-hidden/></a> : null}{streetView.status === "unavailable" && canMap ? <button type="button" onClick={()=>selectMode("map")} className="inline-flex min-h-10 items-center gap-2 rounded-control border border-line-strong bg-card px-3 py-2 text-xs font-bold text-ink"><MapIcon className="h-3.5 w-3.5" aria-hidden/>Property map</button> : null}</div></div></div>}
+          </> : streetView.status === "unavailable" && normalizedListingId ? <><div className="min-h-0 flex-1"><AlternativeStreetView key={normalizedListingId} listingId={normalizedListingId} address={address} /></div><div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-line bg-card px-4 py-2.5"><span className="text-xs text-ink-3">Google Street View preview unavailable</span><div className="flex flex-wrap items-center gap-2"><a href={streetViewLaunchUrl(address)} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-9 items-center gap-1.5 rounded-control bg-ink px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-ink-2">{m.detailUi.mediaOpenGoogleMaps} <ExternalLink className="h-3.5 w-3.5" aria-hidden /></a><button type="button" onClick={loadStreetView} className="inline-flex min-h-9 items-center gap-1.5 rounded-control border border-line-strong bg-card px-3 py-1.5 text-xs font-semibold text-ink transition-colors hover:bg-paper">{m.detailUi.mediaRetryGoogleStreetView}</button>{canMap && <button type="button" onClick={() => selectMode("map")} className="inline-flex min-h-9 items-center gap-1.5 rounded-control border border-line-strong bg-card px-3 py-1.5 text-xs font-semibold text-ink-2 transition-colors hover:bg-paper"><MapIcon className="h-3.5 w-3.5" aria-hidden />{m.detailUi.mediaPropertyMap}</button>}</div></div></> : <div className="grid min-h-0 flex-1 place-items-center px-5 py-4 text-center"><div><Camera className="mx-auto h-7 w-7 text-ink-3" aria-hidden/><p className="mt-2 text-sm font-bold text-ink">Street View</p>{streetView.status === "unavailable" ? <p role="status" className="mt-2 max-w-md text-xs leading-relaxed text-ink-3">{streetView.reason}</p> : <p className="mt-2 max-w-md text-xs leading-relaxed text-ink-3">Check for available outdoor street imagery near this property.</p>}<div className="mt-3 flex flex-wrap justify-center gap-2">{normalizedListingId?<button type="button" disabled={streetView.status === "loading"} onClick={loadStreetView} className="inline-flex min-h-10 items-center gap-2 rounded-control bg-ink px-3 py-2 text-xs font-bold text-white disabled:opacity-60"><Camera className="h-3.5 w-3.5" aria-hidden/>{streetView.status === "loading" ? "Checking…" : streetView.status === "unavailable" ? "Check again" : "Check panorama"}</button>:null}{streetView.status === "unavailable" ? <a href={streetViewLaunchUrl(address)} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-10 items-center gap-2 rounded-control border border-line-strong bg-card px-3 py-2 text-xs font-bold text-ink">{m.detailUi.mediaOpenGoogleMaps} <ExternalLink className="h-3.5 w-3.5" aria-hidden/></a> : null}{streetView.status === "unavailable" && canMap ? <button type="button" onClick={()=>selectMode("map")} className="inline-flex min-h-10 items-center gap-2 rounded-control border border-line-strong bg-card px-3 py-2 text-xs font-bold text-ink"><MapIcon className="h-3.5 w-3.5" aria-hidden/>{m.detailUi.mediaPropertyMap}</button> : null}</div></div></div>}
         </div>
       ) : mode === "map" && canMap ? (
         <div
@@ -352,18 +354,18 @@ export function ListingMedia({ listingId, address, photo, gallery = [], lat, lng
           )}
           {!mapReady && !mapUnavailable ? (
             <div className="pointer-events-none absolute inset-0 grid place-items-center bg-paper/70 text-sm font-semibold text-ink-3">
-              Loading map…
+              {m.detailUi.mediaLoadingMap}
             </div>
           ) : null}
           {mapUnavailable ? (
             <div className="absolute inset-0 grid place-items-center bg-paper px-6 text-center">
-              <div><MapPin className="mx-auto h-7 w-7 text-ink-3" aria-hidden /><p className="mt-3 text-sm font-bold text-ink-2">Map tiles are unavailable</p><p className="mt-1 text-xs text-ink-3">The stored coordinates remain attached to this record.</p></div>
+              <div><MapPin className="mx-auto h-7 w-7 text-ink-3" aria-hidden /><p className="mt-3 text-sm font-bold text-ink-2">{m.detailUi.mediaMapUnavailable}</p><p className="mt-1 text-xs text-ink-3">The stored coordinates remain attached to this record.</p></div>
             </div>
           ) : null}
           {!canShowPhoto && normalizedListingId ? (
             <div className="absolute right-4 top-4 z-10 rounded-control border border-white/70 bg-card/90 p-2 shadow backdrop-blur">
               <button type="button" disabled={streetView.status === "loading"} onClick={loadStreetView} className="inline-flex items-center gap-2 rounded-control px-2 py-1 text-label font-semibold text-ink-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-3 disabled:opacity-60">
-                <Camera className="h-3.5 w-3.5" aria-hidden /> {streetView.status === "loading" ? "Checking Street View…" : streetView.status === "unavailable" ? "Retry Street View" : "Check Street View"}
+                <Camera className="h-3.5 w-3.5" aria-hidden /> {streetView.status === "loading" ? m.detailUi.mediaCheckingStreetView : streetView.status === "unavailable" ? m.detailUi.mediaRetryStreetView : m.detailUi.mediaCheckStreetView}
               </button>
               {streetView.status === "unavailable" ? <p role="status" className="mt-1 max-w-52 text-meta leading-snug text-ink-3">{streetView.reason}</p> : null}
             </div>
@@ -373,9 +375,9 @@ export function ListingMedia({ listingId, address, photo, gallery = [], lat, lng
         <div className="grid h-[calc(100%-56px)] place-items-center px-6 text-center">
           <div>
             <MapPin className="mx-auto h-8 w-8 text-ink-3" aria-hidden />
-            <p className="mt-3 text-sm font-bold text-ink-2">No source photo or coordinates</p>
-            <p className="mt-1 text-xs text-ink-3">{streetView.status === "unavailable" ? streetView.reason : "No substitute property image is shown."}</p>
-            {normalizedListingId ? <button type="button" disabled={streetView.status === "loading"} onClick={loadStreetView} className="mt-4 inline-flex items-center gap-2 rounded-control border border-line-strong bg-card px-3 py-2 text-xs font-bold text-ink-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-3 disabled:opacity-60"><Camera className="h-3.5 w-3.5" aria-hidden /> {streetView.status === "loading" ? "Checking Street View…" : streetView.status === "unavailable" ? "Retry Street View" : "Check Street View"}</button> : null}
+            <p className="mt-3 text-sm font-bold text-ink-2">{m.detailUi.mediaNoPhotoOrCoords}</p>
+            <p className="mt-1 text-xs text-ink-3">{streetView.status === "unavailable" ? streetView.reason : m.detailUi.mediaNoSubstitute}</p>
+            {normalizedListingId ? <button type="button" disabled={streetView.status === "loading"} onClick={loadStreetView} className="mt-4 inline-flex items-center gap-2 rounded-control border border-line-strong bg-card px-3 py-2 text-xs font-bold text-ink-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-3 disabled:opacity-60"><Camera className="h-3.5 w-3.5" aria-hidden /> {streetView.status === "loading" ? m.detailUi.mediaCheckingStreetView : streetView.status === "unavailable" ? m.detailUi.mediaRetryStreetView : m.detailUi.mediaCheckStreetView}</button> : null}
           </div>
         </div>
       )}

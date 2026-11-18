@@ -1,6 +1,6 @@
 'use strict';
 
-const fs = require('fs');
+const { loadJsonDiskCache, saveJsonDiskCache } = require('./disk-cache');
 const path = require('path');
 const crypto = require('crypto');
 
@@ -32,35 +32,14 @@ function hashAddress(address) {
  * Loads the disk cache safely.
  */
 function loadCache(cachePath = DEFAULT_CACHE_PATH) {
-  try {
-    if (fs.existsSync(cachePath)) {
-      const raw = fs.readFileSync(cachePath, 'utf8');
-      return JSON.parse(raw);
-    }
-  } catch (err) {
-    // Return empty cache on read error or corrupted json
-  }
-  return {};
+  return loadJsonDiskCache(cachePath);
 }
 
 /**
  * Saves cache entry safely to disk.
  */
 function saveCache(cache, cachePath = DEFAULT_CACHE_PATH) {
-  try {
-    const dir = path.dirname(cachePath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    // Crash-safe write: a killed process must never truncate the cache file.
-    // Write to a temp sibling and rename over the target (same directory, so
-    // the rename stays on one filesystem).
-    const tmpPath = `${cachePath}.tmp-${process.pid}-${Date.now()}`;
-    fs.writeFileSync(tmpPath, JSON.stringify(cache, null, 2), 'utf8');
-    fs.renameSync(tmpPath, cachePath);
-  } catch (err) {
-    // Non-fatal if cache cannot be written
-  }
+  saveJsonDiskCache(cache, cachePath);
 }
 
 /**

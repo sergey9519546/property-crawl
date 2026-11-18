@@ -16,6 +16,8 @@ import { Faq } from "@/components/site/faq";
 import { FinalCta } from "@/components/site/final-cta";
 import { SiteFooter } from "@/components/site/site-footer";
 import { WorkspaceSessionProvider } from "@/components/workspace/workspace-shell";
+import { getMessages } from "@/lib/i18n/messages";
+import { getRequestLocale } from "@/lib/i18n/server";
 
 /**
  * The page reads as one story:
@@ -23,7 +25,11 @@ import { WorkspaceSessionProvider } from "@/components/workspace/workspace-shell
  *   (the catch, on a real listing) -> how to use it (four steps) -> try it
  *   (live search) -> why members pay (price drops, pricing) -> doubts (FAQ) -> go.
  */
-export default function PerfectPropertyPage() {
+export default async function PerfectPropertyPage() {
+  const locale = await getRequestLocale();
+  const m = getMessages(locale);
+  const live = m.home.liveSearchSection;
+
   return (
     <WorkspaceSessionProvider>
     <div className="relative min-h-screen max-w-full overflow-x-hidden bg-paper text-ink">
@@ -42,13 +48,10 @@ export default function PerfectPropertyPage() {
 
       <AuroraDivider index={2} />
       <section id="live-search" className="scroll-mt-24 px-5 pt-20 pb-4 lg:px-8">
-        <SectionHeading eyebrow="Try it" title="Search every listing we have.">
-          Filter by state, sale type and price. Open any listing to see its catch.
+        <SectionHeading eyebrow={live.eyebrow} title={live.title}>
+          {live.subtitle}
         </SectionHeading>
       </section>
-      {/* The honesty banner sits directly above the feed. A visitor meeting deals
-          here for the first time must be told if part of the inventory is past
-          its source's refresh cadence. */}
       <DataModeBanner />
       <InteractiveTerminal />
 

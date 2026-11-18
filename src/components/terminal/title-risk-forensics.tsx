@@ -4,6 +4,8 @@ import React, { useId, useState } from "react";
 import { AlertOctagon, Layers, Scale, ShieldAlert, ShieldCheck } from "lucide-react";
 import { computeLienWaterfall, LienWaterfallResult } from "@/lib/underwriting";
 import { displayMoney } from "@/lib/listing-display";
+import { useLocale } from "@/components/i18n/locale-provider";
+import { formatUsd, interpolate } from "@/lib/i18n/translator";
 
 export interface TitleRiskForensicsProps {
   plaintiff?: string | null;
@@ -57,6 +59,10 @@ export function TitleRiskForensics({
   state = "",
   source = "",
 }: TitleRiskForensicsProps) {
+  const { locale, messages } = useLocale();
+  const t = messages.underwritingDeep;
+  const money = (value: number) => (locale === "en" ? displayMoney(value) : formatUsd(locale, value));
+
   const seniorDebtInputId = useId();
   const assumedBidInputId = useId();
   const [foreclosingType, setForeclosingType] = useState<ForeclosingLienType>(() =>
@@ -117,7 +123,7 @@ export function TitleRiskForensics({
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line pb-3">
         <div className="flex items-center gap-2">
           <Layers className="h-4 w-4 text-yours" />
-          <span className="text-sm font-bold text-ink">Title &amp; Senior Lien Survival Forensics</span>
+          <span className="text-sm font-bold text-ink">{t.trfTitle}</span>
         </div>
         <div className="flex items-center gap-2">
           <span
@@ -129,7 +135,7 @@ export function TitleRiskForensics({
                 : "bg-paper text-ink-2 border-line"
             }`}
           >
-            {calculatedRisk === "CRITICAL" ? "Critical Title Defect" : calculatedRisk === "HIGH" ? "Elevated Title Risk" : "Standard Senior Position"}
+            {calculatedRisk === "CRITICAL" ? t.trfCriticalBadge : calculatedRisk === "HIGH" ? t.trfHighBadge : t.trfStandardBadge}
           </span>
         </div>
       </div>
@@ -137,27 +143,25 @@ export function TitleRiskForensics({
       {/* Foreclosing Party & Context */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="rounded-lg border border-line bg-paper p-2.5 space-y-1">
-          <span className="font-semibold text-ink-3 uppercase block text-xs">Foreclosing Petitioner / Plaintiff</span>
-          <p className="font-bold text-ink truncate text-xs">{plaintiff || "Published foreclosing mortgagee / trustee"}</p>
+          <span className="font-semibold text-ink-3 uppercase block text-xs">{t.trfPetitionerLabel}</span>
+          <p className="font-bold text-ink truncate text-xs">{plaintiff || t.trfPetitionerFallback}</p>
           {judgment && judgment > 0 && (
-            <p className="text-xs text-ink-2">Foreclosure Judgment Debt: {displayMoney(judgment)}</p>
+            <p className="text-xs text-ink-2">{interpolate(t.trfJudgmentDebt, { amount: money(judgment) })}</p>
           )}
         </div>
         <div className="rounded-lg border border-line bg-paper p-2.5 space-y-1">
-          <span className="font-semibold text-ink-3 uppercase block text-xs">Senior Mortgage Survival Rule</span>
+          <span className="font-semibold text-ink-3 uppercase block text-xs">{t.trfSurvivalRuleLabel}</span>
           <p className="font-bold text-ink text-xs">
             {foreclosingType === "first_mortgage"
-              ? "Wipes junior subordinate deeds (1st position)"
+              ? t.trfWipesJunior
               : foreclosingType === "tax_deed"
-              ? "Super-priority ad valorem tax primes private mortgages"
+              ? t.trfTaxPrimes
               : foreclosingType === "hoa_assessment" && state.toUpperCase() === "NV"
-              ? "Nevada NRS 116.3116 9-month super-priority primes 1st mortgage"
-              : "Senior 1st Mortgage SURVIVES foreclosure in full"}
+              ? t.trfNvHoaPrimes
+              : t.trfSeniorSurvives}
           </p>
           <p className="text-xs text-ink-3">
-            {isJunior
-              ? "Winning bidder takes title subject to unpaid senior deeds."
-              : "Subordinate junior encumbrances extinguished upon confirmation."}
+            {isJunior ? t.trfJuniorTakesSubject : t.trfSubordinateWiped}
           </p>
         </div>
       </div>
@@ -165,16 +169,16 @@ export function TitleRiskForensics({
       {/* Interactive Foreclosing Lien Position Selector */}
       <div className="space-y-2 pt-1">
         <div className="flex items-center justify-between">
-          <span className="font-bold text-ink">Simulate Foreclosing Lien Priority Position:</span>
-          <span className="text-xs text-ink-3">Click to simulate alternate party status</span>
+          <span className="font-bold text-ink">{t.trfSimulateLabel}</span>
+          <span className="text-xs text-ink-3">{t.trfSimulateHint}</span>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
           {[
-            { id: "first_mortgage" as const, label: "1st Mortgage (Senior)" },
-            { id: "second_mortgage" as const, label: "2nd Mortgage / HELOC" },
-            { id: "hoa_assessment" as const, label: "HOA Assessment Lien" },
-            { id: "tax_deed" as const, label: "County Tax Collector" },
-            { id: "mechanic_lien" as const, label: "Mechanic's Lien" },
+            { id: "first_mortgage" as const, label: t.trfTypeFirst },
+            { id: "second_mortgage" as const, label: t.trfTypeSecond },
+            { id: "hoa_assessment" as const, label: t.trfTypeHoa },
+            { id: "tax_deed" as const, label: t.trfTypeTax },
+            { id: "mechanic_lien" as const, label: t.trfTypeMechanic },
           ].map((type) => (
             <button
               key={type.id}
@@ -198,9 +202,9 @@ export function TitleRiskForensics({
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-1.5">
               <Scale className="h-4 w-4 text-yours" />
-              <label htmlFor={seniorDebtInputId} className="font-bold text-ink text-xs">Buyer Assumed Surviving Senior 1st Mortgage Balance:</label>
+              <label htmlFor={seniorDebtInputId} className="font-bold text-ink text-xs">{t.trfSeniorDebtLabel}</label>
             </div>
-            <span className="text-xs text-ink-3">Zero-Fabrication: Supply explicit loan balance</span>
+            <span className="text-xs text-ink-3">{t.trfZeroFabLoan}</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-sm font-bold text-ink-2">$</span>
@@ -209,7 +213,7 @@ export function TitleRiskForensics({
               type="number"
               min="0"
               step="5000"
-              placeholder="e.g. 185000 (unpaid 1st mortgage)"
+              placeholder={t.trfSeniorDebtPlaceholder}
               value={assumedSeniorDebt}
               onChange={(e) => setAssumedSeniorDebt(e.target.value)}
               className="w-full rounded-md border border-line bg-card px-3 py-1.5 text-xs text-ink font-semibold focus:outline-hidden focus:ring-1 focus:ring-ink"
@@ -217,7 +221,7 @@ export function TitleRiskForensics({
           </div>
           {validSeniorDebt === null && (
             <p className="text-xs text-catch-ink">
-              ⚠️ In junior lien foreclosures, effective acquisition cost cannot be computed until the surviving senior debt balance is supplied.
+              ⚠️ {t.trfJuniorWarning}
             </p>
           )}
         </div>
@@ -228,7 +232,7 @@ export function TitleRiskForensics({
         <div className="rounded-lg border border-catch/30 bg-catch-wash p-3 text-xs text-catch-ink space-y-1">
           <div className="flex items-center gap-1.5 font-bold">
             <AlertOctagon className="h-4 w-4 shrink-0" />
-            <span>Title Priority Invariant Warning</span>
+            <span>{t.trfInvariantWarn}</span>
           </div>
           <p className="leading-relaxed">{waterfall.criticalAlert}</p>
         </div>
@@ -239,9 +243,9 @@ export function TitleRiskForensics({
         <div className="rounded-lg border border-line bg-paper p-3 space-y-2">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <label htmlFor={assumedBidInputId} className="font-bold text-ink text-xs">
-              Assumed Auction Winning Bid (Opening Bid Not Published):
+              {t.trfAssumedBidLabel}
             </label>
-            <span className="text-xs text-ink-3">Zero-Fabrication: No synthetic bid assumed</span>
+            <span className="text-xs text-ink-3">{t.trfZeroFabBid}</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-sm font-bold text-ink-2">$</span>
@@ -250,7 +254,7 @@ export function TitleRiskForensics({
               type="number"
               min="1"
               step="1000"
-              placeholder="Enter assumed winning bid ($)"
+              placeholder={t.trfAssumedBidPlaceholder}
               value={assumedBidInput}
               onChange={(e) => setAssumedBidInput(e.target.value)}
               className="w-full rounded-md border border-line bg-card px-3 py-1.5 text-xs text-ink font-semibold focus:outline-hidden focus:ring-1 focus:ring-ink"
@@ -262,34 +266,34 @@ export function TitleRiskForensics({
       {/* True Effective Acquisition Cost Callout */}
       <div className="rounded-lg border border-line bg-paper p-3 space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="font-bold text-ink text-xs">Total Effective Acquisition Capital:</span>
+          <span className="font-bold text-ink text-xs">{t.trfTotalCapitalLabel}</span>
           <span className="text-sm font-bold text-ink">
             {currentBid === null
-              ? "Not published — supply winning bid assumption"
+              ? t.trfSupplyWinningBid
               : waterfall?.totalEffectiveAcquisitionCost !== null && waterfall?.totalEffectiveAcquisitionCost !== undefined
-              ? displayMoney(waterfall.totalEffectiveAcquisitionCost)
-              : `${displayMoney(currentBid)} (Plus Unknown Surviving Debt)`}
+              ? money(waterfall.totalEffectiveAcquisitionCost)
+              : interpolate(t.trfPlusUnknownDebt, { amount: money(currentBid) })}
           </span>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t border-line text-xs">
           <div>
             <span className="text-ink-3 block">
-              {publishedOpeningBid !== null ? "Auction Winning Bid Baseline:" : "Buyer-Assumed Winning Bid:"}
+              {publishedOpeningBid !== null ? t.trfBaselineBidLabel : t.trfAssumedBidBaselineLabel}
             </span>
             <span className="font-semibold text-ink">
-              {currentBid !== null ? displayMoney(currentBid) : "Not published"}
+              {currentBid !== null ? money(currentBid) : t.trfNotPublished}
             </span>
           </div>
           <div>
-            <span className="text-ink-3 block">Surviving Senior Liens to Satisfy:</span>
+            <span className="text-ink-3 block">{t.trfSurvivingLiensLabel}</span>
             <span className="font-semibold text-ink">
               {waterfall && waterfall.totalSurvivingDebtOnProperty !== null
-                ? displayMoney(waterfall.totalSurvivingDebtOnProperty)
+                ? money(waterfall.totalSurvivingDebtOnProperty)
                 : isJunior
-                ? (validSeniorDebt !== null ? displayMoney(validSeniorDebt) : "Unknown (Title Search Required)")
+                ? (validSeniorDebt !== null ? money(validSeniorDebt) : t.trfUnknownTitleSearch)
                 : currentBid === null
-                ? "$0 (Subordinate junior liens wiped)"
-                : "Unknown (Title Search Required)"}
+                ? t.trfZeroWiped
+                : t.trfUnknownTitleSearch}
             </span>
           </div>
         </div>
@@ -297,12 +301,12 @@ export function TitleRiskForensics({
 
       {/* Federal Tax Lien & Super-Priority Statutory Toggles */}
       <div className="space-y-2 pt-1">
-        <span className="font-bold text-ink text-xs block">Federal Encumbrances &amp; Statutory Defenses:</span>
+        <span className="font-bold text-ink text-xs block">{t.trfFederalDefensesLabel}</span>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {/* IRS Federal Tax Lien Badge */}
           <div className="rounded-lg border border-line bg-paper p-2.5 space-y-1">
             <div className="flex items-center justify-between">
-              <span className="font-bold text-ink text-xs">26 U.S.C. § 7425 Federal Tax Lien</span>
+              <span className="font-bold text-ink text-xs">{t.trfIrsLienTitle}</span>
               <button
                 type="button"
                 onClick={() => setHasIrsLienOverride(!hasIrsLienOverride)}
@@ -312,32 +316,28 @@ export function TitleRiskForensics({
                     : "bg-card text-ink-3 border-line"
                 }`}
               >
-                {hasIrsLienOverride ? "IRS Lien Detected" : "No IRS Lien"}
+                {hasIrsLienOverride ? t.trfIrsDetected : t.trfNoIrsLien}
               </button>
             </div>
             <p className="text-xs text-ink-3 leading-tight">
-              {hasIrsLienOverride
-                ? "Verify proof of timely 25-day IRS certified-mail notice under 26 U.S.C. § 7425(b)(1) — lien survives foreclosure unless timely notice is confirmed. Even when discharged, IRS retains a 120-day redemption right under 26 U.S.C. § 7425(d)."
-                : "No IRS notice phrase detected; 120-day statutory redemption right does not apply."}
+              {hasIrsLienOverride ? t.trfIrsDetectedDesc : t.trfNoIrsDesc}
             </p>
           </div>
 
           {/* HOA Super-Priority Badge */}
           <div className="rounded-lg border border-line bg-paper p-2.5 space-y-1">
             <div className="flex items-center justify-between">
-              <span className="font-bold text-ink text-xs">HOA Super-Priority Assessment</span>
+              <span className="font-bold text-ink text-xs">{t.trfHoaTitle}</span>
               <span className={`px-2 py-0.5 rounded text-xs font-bold border ${
                 isSuperPriorityState
                   ? "bg-catch-wash text-catch-ink border-catch/30"
                   : "bg-card text-ink-3 border-line"
               }`}>
-                {isSuperPriorityState ? `${state} Super-Priority` : `${state} Standard Priority`}
+                {interpolate(isSuperPriorityState ? t.trfHoaSuperBadge : t.trfHoaStandardBadge, { state })}
               </span>
             </div>
             <p className="text-xs text-ink-3 leading-tight">
-              {isSuperPriorityState
-                ? `${state} statute grants HOA assessments super-priority (typically 6-9 months of common charges), requiring purchaser satisfaction prior to obtaining clear insurable title.`
-                : `${state} does not give HOA dues super-priority over senior mortgages; HOA assessment liens are wiped by first mortgage foreclosure.`}
+              {interpolate(isSuperPriorityState ? t.trfHoaSuperDesc : t.trfHoaStandardDesc, { state })}
             </p>
           </div>
         </div>
@@ -347,7 +347,7 @@ export function TitleRiskForensics({
       <div className="flex items-start gap-2 pt-1 text-xs text-ink-3 leading-tight">
         <ShieldCheck className="h-4 w-4 shrink-0 text-ink-2 mt-0.5" />
         <p>
-          <strong>Zero-Fabrication Underwriting Standard:</strong> Priority determinations are statutory estimates based on petitioner naming conventions. Certified 40-year title examination by a licensed title insurer is required before bidding at any distressed judicial or non-judicial auction.
+          <strong>{t.trfStdBold}</strong> {t.trfStdBody}
         </p>
       </div>
     </div>

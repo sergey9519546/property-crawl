@@ -6,6 +6,8 @@ import { usePathname } from "next/navigation";
 import { Settings, UserRound, Activity, BookOpenCheck, Crosshair, Database, FileWarning, Home, KeyRound, ListFilter, LockKeyhole, LogOut, PieChart, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/site/logo";
+import { LanguageSwitcher } from "@/components/i18n/language-switcher";
+import { useLocale } from "@/components/i18n/locale-provider";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 
 export type MemberState = { email: string; entitled: boolean } | null;
@@ -31,17 +33,6 @@ type SessionState = {
 };
 
 const SessionContext = React.createContext<SessionState | null>(null);
-
-const navigation = [
-  { href: "/listings", label: "Discover", icon: ListFilter },
-  { href: "/research", label: "Research", icon: BookOpenCheck },
-  { href: "/hunts", label: "Hunts", icon: Crosshair },
-  { href: "/portfolio", label: "Portfolio", icon: PieChart },
-  { href: "/sources", label: "Sources", icon: Database },
-  { href: "/activity", label: "Activity", icon: Activity },
-  { href: "/workspace/documents-review", label: "Reviews", icon: FileWarning },
-  { href: "/workspace/settings", label: "Status", icon: Settings },
-];
 
 function readMember(value: unknown): MemberState {
   const m = value as { email?: unknown; entitled?: unknown } | null;
@@ -74,27 +65,11 @@ export function useWorkspaceSession() {
   return value ?? defaultSession;
 }
 
-/**
- * The session, or null while it is still unknown.
- *
- * `useWorkspaceSession` returns `defaultSession` when there is no provider
- * above, which reports authenticated: false. That is a fine default for
- * anything that only renders, but it is a lie to anything that *acts*: a
- * caller cannot tell "not signed in" from "have not asked yet", and a badge
- * that fetches on that answer issues a request guaranteed to 401.
- *
- * The home page has no WorkspaceShell -- it keeps the marketing header -- so it
- * has no provider and no real answer. Rather than force the whole marketing
- * page into the workspace shell, this hook asks the server itself when there is
- * no provider, and returns null until that answer lands. Pages that do have a
- * shell keep using it and make no extra request.
- */
 export function useResolvedWorkspaceSession(): SessionState | null {
   const fromContext = React.useContext(SessionContext);
   const [probed, setProbed] = React.useState<SessionState | null>(null);
 
   React.useEffect(() => {
-    // A provider exists: it already probes, and it owns the answer.
     if (fromContext) return;
     let cancelled = false;
     void (async () => {
@@ -130,6 +105,22 @@ export function useResolvedWorkspaceSession(): SessionState | null {
 
 export function WorkspaceSessionProvider({ children, includeChrome = false }: { children: React.ReactNode; includeChrome?: boolean }) {
   const pathname = usePathname();
+  const { messages } = useLocale();
+  const nav = messages.workspace.nav;
+  const navigation = React.useMemo(
+    () => [
+      { href: "/listings", label: nav.discover, icon: ListFilter },
+      { href: "/research", label: nav.research, icon: BookOpenCheck },
+      { href: "/hunts", label: nav.hunts, icon: Crosshair },
+      { href: "/portfolio", label: nav.portfolio, icon: PieChart },
+      { href: "/sources", label: nav.sources, icon: Database },
+      { href: "/activity", label: nav.activity, icon: Activity },
+      { href: "/workspace/documents-review", label: "Reviews", labelText: nav.reviews, icon: FileWarning },
+      { href: "/workspace/settings", label: nav.status, icon: Settings },
+    ],
+    [nav],
+  );
+
   const [authenticated, setAuthenticated] = React.useState(false);
   const [role, setRole] = React.useState<WorkspaceRole | null>(null);
   const [permissions, setPermissions] = React.useState<string[]>([]);
@@ -192,7 +183,6 @@ export function WorkspaceSessionProvider({ children, includeChrome = false }: { 
     ++authRequest.current;
     setSubmitting(true); setError("");
     try {
-      // Per-session rate-limit bucket key.
       let sid = "";
       try {
         sid = sessionStorage.getItem("pp_unlock_sid") || "";
@@ -242,23 +232,26 @@ export function WorkspaceSessionProvider({ children, includeChrome = false }: { 
     refresh,
   }), [authenticated, role, permissions, member, configured, expiresAt, loading, refresh, openUnlock]);
 
+  const dlg = messages.workspace.unlockDialog;
+
   return <SessionContext.Provider value={context}>
     <div className="workspace-shell min-h-screen bg-paper text-ink">
       {includeChrome ? (<header className="sticky top-0 z-40 border-b border-line bg-card/95 px-4 py-3 shadow-sm backdrop-blur sm:px-8">
         <div className="mx-auto flex max-w-[1480px] flex-wrap items-center gap-3">
-          <Link href="/" className="mr-2 flex items-center" aria-label="PerfectProperty home"><Logo className="text-body" /></Link>
-          <nav aria-label="Research workspace" className="order-3 flex w-full flex-nowrap overflow-x-auto gap-1 sm:order-none sm:w-auto sm:flex-1">
+          <Link href="/" className="mr-2 flex items-center" aria-label={messages.common.homeAria}><Logo className="text-body" /></Link>
+          <nav aria-label="Research workspace" data-i18n-label={messages.workspace.navAria} className="order-3 flex w-full flex-nowrap overflow-x-auto gap-1 sm:order-none sm:w-auto sm:flex-1">
             {navigation.map((item) => {
               const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
               const Icon = item.icon;
-              return <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} className={cn("shrink-0 inline-flex flex-col items-center justify-center gap-1 rounded-control px-2 py-2 text-label font-semibold transition sm:shrink-0 sm:flex-row sm:gap-1.5 sm:px-3 sm:text-xs", active ? "bg-ink text-white" : "text-ink-2 hover:bg-line hover:text-ink")}><Icon size={14} />{item.label}</Link>;
+              return <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} className={cn("shrink-0 inline-flex flex-col items-center justify-center gap-1 rounded-control px-2 py-2 text-label font-semibold transition sm:shrink-0 sm:flex-row sm:gap-1.5 sm:px-3 sm:text-xs", active ? "bg-ink text-white" : "text-ink-2 hover:bg-line hover:text-ink")}><Icon size={14} />{"labelText" in item ? item.labelText : item.label}</Link>;
             })}
           </nav>
           <div className="ml-auto flex items-center gap-2">
-            <Link href="/" className="hidden items-center gap-1 rounded-control px-2 py-2 text-xs font-semibold text-ink-3 hover:bg-line md:flex"><Home size={14} />Site</Link>
-            <Link href={member ? "/account" : "/sign-in"} className="inline-flex items-center gap-1 rounded-control border border-line-strong px-3 py-2 text-xs font-semibold text-ink hover:bg-line"><UserRound size={14} />{member ? (member.entitled ? "Account" : "Subscribe") : "Sign in"}</Link>
-            {authenticated ? <button type="button" disabled={submitting} onClick={() => void logout()} className="inline-flex items-center gap-1.5 rounded-control border border-line-strong bg-card px-3 py-2 text-xs font-semibold disabled:opacity-50"><LogOut size={14} />{submitting ? "Locking…" : "Lock"}</button>
-              : <button type="button" onClick={openUnlock} className="inline-flex items-center gap-1.5 rounded-control bg-ink px-3 py-2 text-xs font-semibold text-white hover:bg-ink-2"><LockKeyhole size={14} />{loading ? "Checking…" : "Unlock"}</button>}
+            <LanguageSwitcher />
+            <Link href="/" className="hidden items-center gap-1 rounded-control px-2 py-2 text-xs font-semibold text-ink-3 hover:bg-line md:flex"><Home size={14} />{messages.common.site}</Link>
+            <Link href={member ? "/account" : "/sign-in"} className="inline-flex items-center gap-1 rounded-control border border-line-strong px-3 py-2 text-xs font-semibold text-ink hover:bg-line"><UserRound size={14} />{member ? (member.entitled ? messages.common.account : messages.common.subscribe) : messages.common.signIn}</Link>
+            {authenticated ? <button type="button" disabled={submitting} onClick={() => void logout()} className="inline-flex items-center gap-1.5 rounded-control border border-line-strong bg-card px-3 py-2 text-xs font-semibold disabled:opacity-50"><LogOut size={14} />{submitting ? messages.common.locking : messages.common.lock}</button>
+              : <button type="button" onClick={openUnlock} className="inline-flex items-center gap-1.5 rounded-control bg-ink px-3 py-2 text-xs font-semibold text-white hover:bg-ink-2"><LockKeyhole size={14} />{loading ? messages.common.checking : messages.common.unlock}</button>}
           </div>
         </div>
       </header>) : null}
@@ -268,17 +261,17 @@ export function WorkspaceSessionProvider({ children, includeChrome = false }: { 
     </div>
     <Dialog open={unlockOpen} onOpenChange={(value) => { if (!submitting) { setUnlockOpen(value); if (!value) setCredential(""); } }}>
       <DialogContent showCloseButton={false} onCloseAutoFocus={(event) => { event.preventDefault(); (unlockOpener.current || document.body).focus(); }} className="z-[100] gap-0 rounded-card bg-card p-6 text-ink sm:max-w-md">
-        <div className="flex items-start justify-between gap-4"><div><p className="text-label font-bold uppercase tracking-[0.16em] text-ink">Operator access</p><DialogTitle className="mt-2 text-2xl font-semibold">Unlock operator tools</DialogTitle></div><button type="button" disabled={submitting} aria-label="Close unlock dialog" onClick={() => { setUnlockOpen(false); setCredential(""); }} className="rounded-control p-2 hover:bg-line"><X size={18} /></button></div>
-        <DialogDescription className="mt-3 text-sm leading-6 text-ink-3">Subscribers use hunts, alerts, the watchlist, and the portfolio with their own account.</DialogDescription>
-        <Link href={member && !member.entitled ? "/account" : "/sign-in"} onClick={() => setUnlockOpen(false)} className="mt-4 flex w-full items-center justify-center gap-2 rounded-control border border-ink px-4 py-3 text-sm font-semibold text-ink hover:bg-paper"><UserRound size={16} />{member && !member.entitled ? "Your subscription is inactive. Manage it" : "Sign in with email"}</Link>
-        <p className="mt-5 text-xs font-semibold uppercase tracking-[0.14em] text-ink-3">Operator key</p>
-        <p className="mt-1 text-xs leading-5 text-ink-3">The shared operator key also opens research, sources, reviews, and collection controls.</p>
+        <div className="flex items-start justify-between gap-4"><div><p className="text-label font-bold uppercase tracking-[0.16em] text-ink">{dlg.eyebrow}</p><DialogTitle className="mt-2 text-2xl font-semibold">{dlg.title}</DialogTitle></div><button type="button" disabled={submitting} aria-label={dlg.closeAria} onClick={() => { setUnlockOpen(false); setCredential(""); }} className="rounded-control p-2 hover:bg-line"><X size={18} /></button></div>
+        <DialogDescription className="mt-3 text-sm leading-6 text-ink-3">{dlg.description}</DialogDescription>
+        <Link href={member && !member.entitled ? "/account" : "/sign-in"} onClick={() => setUnlockOpen(false)} className="mt-4 flex w-full items-center justify-center gap-2 rounded-control border border-ink px-4 py-3 text-sm font-semibold text-ink hover:bg-paper"><UserRound size={16} />{member && !member.entitled ? dlg.inactiveSubCta : dlg.emailSignInCta}</Link>
+        <p className="mt-5 text-xs font-semibold uppercase tracking-[0.14em] text-ink-3">{dlg.operatorKeyHeading}</p>
+        <p className="mt-1 text-xs leading-5 text-ink-3">{dlg.operatorKeyDesc}</p>
         <form onSubmit={unlock} className="mt-5">
-          <label htmlFor="workspace-credential" className="text-xs font-semibold">Operator key <span className="sr-only">(Workspace access key)</span></label>
+          <label htmlFor="workspace-credential" className="text-xs font-semibold">{dlg.operatorKeyLabel} <span className="sr-only">{dlg.operatorKeySrOnly}</span></label>
           <div className="mt-2 flex items-center gap-2 rounded-control border border-line-strong bg-card px-3 focus-within:border-yours focus-within:ring-2 focus-within:ring-yours/20"><KeyRound size={16} className="text-ink-3" /><input id="workspace-credential" autoFocus required disabled={submitting} type="password" autoComplete="current-password" value={credential} onChange={(event) => setCredential(event.target.value)} className="min-w-0 flex-1 bg-transparent py-3 text-sm outline-none focus-visible:shadow-none" /></div>
-          {!configured && <p className="mt-3 rounded-control bg-paper p-3 text-xs leading-5 text-ink-2">Enter the operator key configured for this deployment.</p>}
+          {!configured && <p className="mt-3 rounded-control bg-paper p-3 text-xs leading-5 text-ink-2">{dlg.configuredHint}</p>}
           {error && <p role="alert" className="mt-3 rounded-control bg-catch-wash p-3 text-xs leading-5 text-catch-ink">{error}</p>}
-          <button disabled={submitting || !configured} className="mt-4 w-full rounded-control bg-ink px-4 py-3 text-sm font-semibold text-white hover:bg-ink-2 disabled:opacity-50">{submitting ? "Unlocking…" : "Unlock workspace"}</button>
+          <button disabled={submitting || !configured} className="mt-4 w-full rounded-control bg-ink px-4 py-3 text-sm font-semibold text-white hover:bg-ink-2 disabled:opacity-50">{submitting ? dlg.unlockingBtn : dlg.unlockBtn}</button>
         </form>
       </DialogContent>
     </Dialog>
@@ -289,24 +282,13 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
   return <WorkspaceSessionProvider includeChrome>{children}</WorkspaceSessionProvider>;
 }
 
-export function PrivateWorkspaceGate({ title = "Unlock your research workspace", headingLevel = 2, children }: { title?: string; headingLevel?: 1 | 2 | 3; children?: React.ReactNode }) {
-
+export function PrivateWorkspaceGate({ title, headingLevel = 2, children }: { title?: string; headingLevel?: 1 | 2 | 3; children?: React.ReactNode }) {
   const session = useWorkspaceSession();
-  // headingLevel exists because the answer is not uniform.
-  //
-  // Four of the five consumers put their own <h1> inside the children, so the
-  // default of 2 is right for them: the page keeps its h1 and the lock screen
-  // is a subsection of it.
-  //
-  // research-case.tsx is the exception. Its h1 lives inside `detail &&`, so
-  // while locked there is no page heading at all, and the lock screen was the
-  // only thing on the page carrying an <h2> under no <h1>. It opts into 1.
-  //
-  // This cannot be checked statically: the h1 is in a child that the locked
-  // branch never renders. It is why the accessibility audit asserts h1 presence
-  // in the live DOM.
+  const { messages } = useLocale();
+  const gate = messages.workspace.privateGate;
+  const resolvedTitle = title || gate.defaultTitle;
   const Heading = `h${headingLevel}` as 'h1' | 'h2' | 'h3';
-  if (session.loading) return <section className="rounded-card border border-line bg-card p-7 text-sm text-ink-3 shadow-sm"><Heading className="text-xl font-semibold text-ink">Checking the private workspace</Heading><p className="mt-2">Confirming your operator session…</p></section>;
+  if (session.loading) return <section className="rounded-card border border-line bg-card p-7 text-sm text-ink-3 shadow-sm"><Heading className="text-xl font-semibold text-ink">{gate.checkingTitle}</Heading><p className="mt-2">{gate.checkingBody}</p></section>;
   if (session.authenticated) return <>{children}</>;
-  return <section className="rounded-card border border-line bg-card p-7 shadow-sm"><LockKeyhole className="text-ink" /><Heading className="mt-4 text-xl font-semibold">{title}</Heading><p className="mt-2 max-w-xl text-sm leading-6 text-ink-3">Cases and decision history are private. Unlock once to use every research and collection tool in this workspace.</p><button type="button" onClick={session.requestUnlock} className="mt-5 rounded-control bg-ink px-4 py-2.5 text-sm font-semibold text-white hover:bg-ink-2">Unlock workspace</button></section>;
+  return <section className="rounded-card border border-line bg-card p-7 shadow-sm"><LockKeyhole className="text-ink" /><Heading className="mt-4 text-xl font-semibold">{resolvedTitle}</Heading><p className="mt-2 max-w-xl text-sm leading-6 text-ink-3">{gate.body}</p><button type="button" onClick={session.requestUnlock} className="mt-5 rounded-control bg-ink px-4 py-2.5 text-sm font-semibold text-white hover:bg-ink-2">{gate.unlockBtn}</button></section>;
 }

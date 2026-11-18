@@ -19,7 +19,7 @@
 
 ## 1. Executive Summary
 
-While `property-crawl` has achieved a 100% verified production deployment on Render (PostgreSQL 16 + PostGIS 3.6, 15,502 listings and 82,777 observations, strictly $0/month cost), multiple ambitious engineering and data acquisition plans were drafted in prior sessions.
+While `property-crawl` implements the core production architecture across Next.js 16, Node API, and PostgreSQL + PostGIS at $0/month baseline cost (see `CONTEXT.md` for generated catalog/seed/route counts and `/api/health` for live inventory metrics), multiple engineering and data acquisition plans were drafted across earlier development waves.
 
 Across recent workstreams, a substantial number of these flagship subsystems have been fully implemented, control-tested, and shipped into the verified production codebase. This document compiles the complete inventory, explicitly differentiating what is **NOW IMPLEMENTED & SHIPPED** from what remains **PROSPECTIVE OR POLICY-DEFERRED** (such as autonomous 24/7 background IMAP polling daemons, live Stripe billing webhooks, or statutory/robots exclusions).
 
@@ -125,7 +125,7 @@ From `docs/discovery-brain-runbook.md` and `MEMORY.md` §14.11:
 2. **PostgreSQL Publisher-Absence Reconciliation & Observation Compaction:**
    - **Implemented & Shipped:**
      - `server/db/client.js` (`reconcileMissingPublisherRecords`) & `server/scrapers/scheduler.js`: Reconciles publisher absence against active inventory without false deletions.
-     - `server/db/observations-persistence.js` (`compactPgObservations`) & `scripts/compact-snapshots.js` (`--pg`, `--apply`): Prunes redundant heartbeat observations from the hosted PostgreSQL database (`82,510` observations) while preserving state transitions, valuation updates, and status changes.
+     - `server/db/observations-persistence.js` (`compactPgObservations`) & `scripts/compact-snapshots.js` (`--pg`, `--apply`): Prunes redundant heartbeat observations from PostgreSQL (`source_observations`) while preserving state transitions, valuation updates, and status changes.
 3. **Property Intelligence Source Atlas Automated Ingestion:**
    - 288 sources cataloged and verified in `server/sources/catalog.js`.
    - Continuous automated ingestion of all 501 registry entries from `Property_Intelligence_Source_Atlas_VERIFIED_2026-09-05.docx` remains prospective.

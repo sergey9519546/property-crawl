@@ -5,6 +5,8 @@ import type { PointerEvent as ReactPointerEvent } from "react";
 import { AlertTriangle, Box, Compass, Layers, LoaderCircle, MapPin, RotateCcw } from "lucide-react";
 import { Listing } from "@/data/listings";
 import { inspectParcelBoundaryInputs } from "@/lib/listing-map-policy";
+import { useLocale } from "@/components/i18n/locale-provider";
+import { formatLocaleNumber } from "@/lib/i18n/translator";
 
 interface Parcel3DProps {
   listing: Listing;
@@ -216,8 +218,10 @@ function Fact({ label, value }: { label: string; value: string }) {
 }
 
 export function Parcel3DVisualizer({ listing }: Parcel3DProps) {
+  const { locale, messages, format } = useLocale();
+  const t = messages.docketParcel;
   const preflight = useMemo(() => inspectParcelBoundaryInputs(listing), [listing]);
-  const unavailableMessage = preflight.message || "Parcel geometry is unavailable.";
+  const unavailableMessage = preflight.message || t.parcelUnavailableMsg;
   const [loadState, setLoadState] = useState<LoadState>(() =>
     preflight.eligible
       ? { status: "loading", feature: null, message: null }
@@ -259,7 +263,7 @@ export function Parcel3DVisualizer({ listing }: Parcel3DProps) {
       .then(async (response) => {
         const body = await response.json().catch(() => null);
         if (!response.ok) {
-          throw new Error(body?.error || "No source-provided parcel geometry is available for this listing.");
+          throw new Error(body?.error || t.parcelNoSourceGeo);
         }
         return body as ParcelFeature;
       })
@@ -267,13 +271,13 @@ export function Parcel3DVisualizer({ listing }: Parcel3DProps) {
         if (!active) return;
         const ring = outerRing(feature);
         if (feature?.type !== "Feature" || ring.length < 4 || feature.properties?.evidenceStatus !== "source_observed") {
-          throw new Error("The parcel source did not return usable cadastral geometry.");
+          throw new Error(t.parcelUnusableGeo);
         }
         setLoadState({ status: "ready", feature, message: null });
       })
       .catch((error: unknown) => {
         if (!active || controller.signal.aborted) return;
-        const message = error instanceof Error ? error.message : "Parcel geometry is unavailable.";
+        const message = error instanceof Error ? error.message : t.parcelUnavailableMsg;
         setLoadState({ status: "unavailable", feature: null, message });
       });
 
@@ -281,7 +285,7 @@ export function Parcel3DVisualizer({ listing }: Parcel3DProps) {
       active = false;
       controller.abort();
     };
-  }, [listing.id, preflight.eligible, unavailableMessage, preflight.state, preflight.county, preflight.apn, preflight.lat, preflight.lng]);
+  }, [listing.id, preflight.eligible, unavailableMessage, preflight.state, preflight.county, preflight.apn, preflight.lat, preflight.lng, t.parcelNoSourceGeo, t.parcelUnusableGeo, t.parcelUnavailableMsg]);
 
   const ring = useMemo(() => outerRing(loadState.feature), [loadState.feature]);
   const localGeo = useMemo(() => buildLocalParcelGeometry(ring), [ring]);
@@ -290,8 +294,8 @@ export function Parcel3DVisualizer({ listing }: Parcel3DProps) {
   const coordCount = metadata?.coordinatesCount ?? (ring.length > 0 ? ring.length : null);
   const dimensions = metadata?.frontageFt !== null && metadata?.frontageFt !== undefined
     && metadata?.depthFt !== null && metadata?.depthFt !== undefined
-    ? `${metadata.frontageFt.toLocaleString()}′ × ${metadata.depthFt.toLocaleString()}′`
-    : "Not reported";
+    ? `${formatLocaleNumber(locale, metadata.frontageFt)}′ × ${formatLocaleNumber(locale, metadata.depthFt)}′`
+    : t.parcelNotReported;
   const resolvedApn = (metadata?.parcelId || preflight.apn || "").toString().trim();
   const hasObservedTopography = Boolean(metadata?.topography && metadata.topography.trim());
 
@@ -473,19 +477,19 @@ export function Parcel3DVisualizer({ listing }: Parcel3DProps) {
   return (
     <section
       className={`overflow-hidden rounded-card border border-line shadow-sm ${loadState.status === "ready" ? "bg-ink text-white shadow-xl" : "bg-card text-ink"}`}
-      aria-label="Parcel geometry reference"
+      aria-label={t.parcelSectionAria}
       data-testid="parcel-3d-visualizer"
     >
       <div className={`flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3 ${loadState.status === "ready" ? "border-white/10 bg-black/25" : "border-line bg-paper"}`}>
         <div>
           <p className={`text-xs font-bold uppercase tracking-wider ${loadState.status === "ready" ? "text-white/60" : "text-ink-3"}`}>
-            Cadastral Spatial Reference
+            {t.parcelEyebrow}
           </p>
-          <h2 className={`text-sm font-bold ${loadState.status === "ready" ? "text-white" : "text-ink"}`}>3D Parcel &amp; Topography</h2>
+          <h2 className={`text-sm font-bold ${loadState.status === "ready" ? "text-white" : "text-ink"}`}>{t.parcelHeading}</h2>
         </div>
         <span className={`inline-flex items-center gap-1.5 rounded-control border px-3 py-1.5 text-xs font-semibold uppercase tracking-wider ${loadState.status === "ready" ? "border-catch/30 bg-black/60 text-catch" : "border-catch/30 bg-catch-wash text-catch-ink"}`}>
           <MapPin className="h-3.5 w-3.5" />
-          {NOT_A_SURVEY}
+          {t.parcelNotSurvey || NOT_A_SURVEY}
         </span>
       </div>
 
@@ -493,7 +497,7 @@ export function Parcel3DVisualizer({ listing }: Parcel3DProps) {
         {loadState.status === "loading" ? (
           <div className="flex min-h-[160px] items-center justify-center gap-2 text-sm text-ink-3" role="status">
             <LoaderCircle className="h-4 w-4 animate-spin" />
-            Resolving cadastral boundary overlay…
+            {t.parcelLoading}
           </div>
         ) : null}
 
@@ -502,9 +506,9 @@ export function Parcel3DVisualizer({ listing }: Parcel3DProps) {
             <span className="mb-3 grid h-10 w-10 place-items-center rounded-full border border-catch/30 bg-catch-wash">
               <AlertTriangle className="h-5 w-5 text-catch-ink" />
             </span>
-            <h3 className="text-base font-semibold">Cadastral boundary unavailable</h3>
+            <h3 className="text-base font-semibold">{t.parcelUnavailableHeading}</h3>
             <p className="mt-1.5 text-sm leading-6 text-ink-2">{loadState.message}</p>
-            <p className="mt-2 text-xs text-ink-3">No boundary polygon was confirmed by the county or state cadastral GIS source.</p>
+            <p className="mt-2 text-xs text-ink-3">{t.parcelUnavailableSub}</p>
           </div>
         ) : null}
 
@@ -646,7 +650,7 @@ export function Parcel3DVisualizer({ listing }: Parcel3DProps) {
               ))}
 
               {/* Interactive rotating N / E / S / W Compass Rose */}
-              <g aria-label="Compass rose">
+              <g aria-label={t.parcelCompassAria}>
                 <circle cx="590" cy="288" r="29" fill="#090d16" fillOpacity="0.8" stroke="#ffffff" strokeOpacity="0.2" strokeWidth="1" />
                 <line
                   x1="590"
@@ -675,11 +679,11 @@ export function Parcel3DVisualizer({ listing }: Parcel3DProps) {
             <div className="pointer-events-none absolute inset-x-3 top-3 flex flex-wrap items-center justify-between gap-2">
               <span className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-black/65 px-3 py-1.5 text-xs font-semibold backdrop-blur-md">
                 <Box className="h-3.5 w-3.5 text-white/75" />
-                Source cadastral footprint · Drag to orbit
+                {t.parcelOrbitHint}
               </span>
               {effectiveExtrusion > 0 ? (
                 <span className="rounded-xl border border-white/10 bg-black/65 px-2.5 py-1 text-xs text-white/75 backdrop-blur-md">
-                  Visual parcel extrusion (not building height)
+                  {t.parcelExtrusionNote}
                 </span>
               ) : null}
             </div>
@@ -692,7 +696,7 @@ export function Parcel3DVisualizer({ listing }: Parcel3DProps) {
                   onClick={() => setViewMode("3d")}
                   className={`rounded-lg border px-2.5 py-1 font-semibold transition ${viewMode === "3d" ? "border-white/40 bg-white/15 text-white" : "border-white/10 bg-transparent text-white/65 hover:text-white"}`}
                 >
-                  3D Isometric
+                  {t.parcel3dIsometric || "3D Isometric"}
                 </button>
                 <button
                   type="button"
@@ -700,7 +704,7 @@ export function Parcel3DVisualizer({ listing }: Parcel3DProps) {
                   onClick={() => setViewMode("2d")}
                   className={`rounded-lg border px-2.5 py-1 font-semibold transition ${viewMode === "2d" ? "border-white/40 bg-white/15 text-white" : "border-white/10 bg-transparent text-white/65 hover:text-white"}`}
                 >
-                  2D Top-Down
+                  {t.parcel2dTopDown || "2D Top-Down"}
                 </button>
                 <button
                   type="button"
@@ -710,7 +714,7 @@ export function Parcel3DVisualizer({ listing }: Parcel3DProps) {
                   className="inline-flex items-center gap-1 rounded-lg border border-white/15 px-2.5 py-1 font-medium text-white/85 hover:bg-white/10 disabled:opacity-40"
                 >
                   <Layers className="h-3.5 w-3.5" />
-                  {extruded ? "Extrude On" : "Flat Footprint"}
+                  {extruded ? t.parcelExtrudeOn : t.parcelFlatFootprint}
                 </button>
                 <button
                   type="button"
@@ -718,7 +722,7 @@ export function Parcel3DVisualizer({ listing }: Parcel3DProps) {
                   onClick={() => setShowSetbackGuide((prev) => !prev)}
                   className="rounded-lg border border-white/15 px-2.5 py-1 font-medium text-white/85 hover:bg-white/10"
                 >
-                  {showSetbackGuide ? "Hide Setback Inset" : "Show Setback Inset"}
+                  {showSetbackGuide ? t.parcelHideSetback : t.parcelShowSetback}
                 </button>
                 {hasObservedTopography ? (
                   <button
@@ -727,7 +731,7 @@ export function Parcel3DVisualizer({ listing }: Parcel3DProps) {
                     onClick={() => setShowContours((prev) => !prev)}
                     className="rounded-lg border border-white/35 bg-white/10 px-2.5 py-1 font-medium text-white hover:bg-white/20"
                   >
-                    {showContours ? "Contours On" : "Contours Off"}
+                    {showContours ? t.parcelContoursOn : t.parcelContoursOff}
                   </button>
                 ) : null}
                 <button
@@ -736,17 +740,17 @@ export function Parcel3DVisualizer({ listing }: Parcel3DProps) {
                   className="inline-flex items-center gap-1 rounded-lg border border-white/15 px-2.5 py-1 font-medium text-white/75 hover:bg-white/10 hover:text-white"
                 >
                   <RotateCcw className="h-3.5 w-3.5" />
-                  Reset
+                  {t.parcelReset}
                 </button>
               </div>
 
               <div className="flex flex-wrap items-center gap-4 text-xs text-white/80">
                 <label className="flex items-center gap-2">
                   <Compass className="h-3.5 w-3.5 text-white/60" />
-                  <span>Azimuth {yawDeg}&deg;</span>
+                  <span>{t.parcelAzimuth} {yawDeg}&deg;</span>
                   <input
                     type="range"
-                    aria-label="Parcel rotation azimuth"
+                    aria-label={t.parcelAzimuthAria}
                     min={0}
                     max={360}
                     value={yawDeg}
@@ -758,10 +762,10 @@ export function Parcel3DVisualizer({ listing }: Parcel3DProps) {
                   />
                 </label>
                 <label className="flex items-center gap-2">
-                  <span>Tilt {is2d ? 90 : tiltDeg}&deg;</span>
+                  <span>{t.parcelTilt} {is2d ? 90 : tiltDeg}&deg;</span>
                   <input
                     type="range"
-                    aria-label="Parcel elevation tilt"
+                    aria-label={t.parcelTiltAria}
                     min={15}
                     max={85}
                     value={is2d ? 85 : tiltDeg}
@@ -782,25 +786,25 @@ export function Parcel3DVisualizer({ listing }: Parcel3DProps) {
         <div className="border-t border-white/10 bg-black/20 p-4">
           <div className="flex flex-wrap gap-x-7 gap-y-4">
             <Fact
-              label="Lot area"
-              value={metadata.lotAcres !== null ? `${formatNumber(metadata.lotAcres)} ac (${formatNumber(metadata.lotSqft)} sq ft)` : metadata.lotSqft !== null ? `${formatNumber(metadata.lotSqft)} sq ft` : "Not reported"}
+              label={t.parcelLotArea}
+              value={metadata.lotAcres !== null ? `${metadata.lotAcres !== null ? formatLocaleNumber(locale, metadata.lotAcres) : t.parcelNotReported} ac (${metadata.lotSqft !== null ? formatLocaleNumber(locale, metadata.lotSqft) : t.parcelNotReported} sq ft)` : metadata.lotSqft !== null ? `${formatLocaleNumber(locale, metadata.lotSqft)} sq ft` : t.parcelNotReported}
             />
             <Fact
-              label="Perimeter (Haversine)"
-              value={perimeter !== null ? `${perimeter.toLocaleString()} ft` : "Not reported"}
+              label={t.parcelPerimeter}
+              value={perimeter !== null ? `${formatLocaleNumber(locale, perimeter)} ft` : t.parcelNotReported}
             />
             <Fact
-              label="Vertices"
-              value={coordCount !== null ? `${coordCount} points` : "Not reported"}
+              label={t.parcelVertices}
+              value={coordCount !== null ? format(t.parcelPoints, { count: coordCount }) : t.parcelNotReported}
             />
-            <Fact label="Dimensions" value={dimensions} />
-            <Fact label="Zoning" value={metadata.zoning || "Not reported"} />
-            <Fact label="Topography" value={metadata.topography || "Not reported by GIS"} />
-            <Fact label="Parcel / APN" value={resolvedApn || "Not reported"} />
+            <Fact label={t.parcelDimensions} value={dimensions} />
+            <Fact label={t.parcelZoning} value={metadata.zoning || t.parcelNotReported} />
+            <Fact label={t.parcelTopography} value={metadata.topography || t.parcelNotReportedGis} />
+            <Fact label={t.parcelApn} value={resolvedApn || t.parcelNotReported} />
           </div>
           <div className="mt-4 flex flex-wrap items-start justify-between gap-2 border-t border-white/10 pt-3 text-xs leading-5 text-white/60">
-            <span className="font-semibold text-white/80">Cadastral Source: {metadata.sourceName}</span>
-            <span className="max-w-xl text-right">{metadata.disclaimer || NOT_A_SURVEY}</span>
+            <span className="font-semibold text-white/80">{format(t.parcelCadastralSource, { source: metadata.sourceName })}</span>
+            <span className="max-w-xl text-right">{metadata.disclaimer || t.parcelNotSurvey || NOT_A_SURVEY}</span>
           </div>
         </div>
       ) : null}

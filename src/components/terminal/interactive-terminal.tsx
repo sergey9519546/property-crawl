@@ -77,6 +77,8 @@ import {
 } from "@/lib/terminal-filter-store";
 import { DEAL_SCORE_MEANING, SCORE_BANDS, bandForScore } from "@/lib/score-bands";
 import { terminalFiltersToDiscovery } from "@/lib/discovery-query";
+import { useLocale } from "@/components/i18n/locale-provider";
+import { localizeDisplayDate } from "@/lib/i18n/domain";
 
 function isObservedSourceRecord(listing: PropertyListing) {
   const provenance = listing.provenance;
@@ -109,6 +111,9 @@ const STATE_LABELS: Record<string, string> = {
 };
 
 export function InteractiveTerminal() {
+  const { locale, messages: m, format } = useLocale();
+  const tUi = m.terminalUi;
+  const lUi = m.listingsUi;
   // Start empty, never seeded with the fixture records in property-data.ts. Those
   // are demo listings with invented addresses, opening bids and valuation bands;
   // seeding the feed with them meant a visitor whose inventory request failed saw
@@ -536,9 +541,9 @@ export function InteractiveTerminal() {
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
           <div>
             <span className="text-label font-extrabold uppercase tracking-wider text-go">
-              LIVE TRIAGE TERMINAL
+              {tUi.liveTriageEyebrow}
             </span>
-            <h2 className="text-3xl font-bold text-ink">Property Intelligence Engine</h2>
+            <h2 className="text-3xl font-bold text-ink">{tUi.engineHeading}</h2>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
@@ -548,7 +553,7 @@ export function InteractiveTerminal() {
                 type="button"
                 aria-pressed={activeView === "grid"}
                 onClick={() => dispatchFilters({ type: "setView", view: "grid" })}
-                aria-label={`Deal Grid (${filtered.length} records)`}
+                aria-label={locale === "en" ? `Deal Grid (${filtered.length} records)` : format(tUi.dealGridCount, { count: filtered.length })}
                 className={cn(
                   "px-3.5 py-1.5 rounded-control text-xs font-bold transition flex items-center gap-1.5",
                   activeView === "grid"
@@ -557,14 +562,14 @@ export function InteractiveTerminal() {
                 )}
               >
                 <LayoutGrid className="w-3.5 h-3.5" />
-                <span>Deal Grid ({filtered.length} records)</span>
+                <span>{locale === "en" ? `Deal Grid (${filtered.length} records)` : format(tUi.dealGridCount, { count: filtered.length })}</span>
               </button>
 
               <button
                 type="button"
                 aria-pressed={activeView === "map"}
                 onClick={() => dispatchFilters({ type: "setView", view: "map" })}
-                aria-label={`Map (${filtered.length} records)`}
+                aria-label={locale === "en" ? `Map (${filtered.length} records)` : format(tUi.mapCount, { count: filtered.length })}
                 className={cn(
                   "px-3.5 py-1.5 rounded-control text-xs font-bold transition flex items-center gap-1.5",
                   activeView === "map"
@@ -573,7 +578,7 @@ export function InteractiveTerminal() {
                 )}
               >
                 <MapIcon className="w-3.5 h-3.5" />
-                <span>Map ({filtered.length} records)</span>
+                <span>{locale === "en" ? `Map (${filtered.length} records)` : format(tUi.mapCount, { count: filtered.length })}</span>
               </button>
 
               <button
@@ -588,7 +593,7 @@ export function InteractiveTerminal() {
                 )}
               >
                 <Sparkles className="w-3.5 h-3.5 fill-current" />
-                <span>Notice Parser</span>
+                <span>{tUi.noticeParserBtn}</span>
               </button>
             </div>
 
@@ -599,7 +604,7 @@ export function InteractiveTerminal() {
                 className="px-3 py-1.5 bg-card border border-line hover:border-ink text-ink text-xs font-bold rounded-control transition flex items-center gap-1.5 shadow-xs"
               >
                 <Bookmark className="w-3.5 h-3.5 text-ink fill-ink" />
-                <span>Watchlist ({savedIds.size})</span>
+                <span>{format(tUi.watchlistCount, { count: savedIds.size })}</span>
               </button>
 
               <button
@@ -608,7 +613,7 @@ export function InteractiveTerminal() {
                 aria-label="Open Saved Searches Manager"
               >
                 <Bell className="w-3.5 h-3.5 text-ink-2 fill-ink/10" />
-                <span>Saved searches</span>
+                <span>{tUi.savedSearchesBtn}</span>
                 {unreadAlertCount > 0 && (
                   <span className="ml-1 inline-flex min-w-[16px] items-center justify-center rounded-full bg-ink px-1 text-label font-bold text-white" aria-label={`${unreadAlertCount} unread alerts`}>
                     {unreadAlertCount > 9 ? "9+" : unreadAlertCount}
@@ -622,7 +627,7 @@ export function InteractiveTerminal() {
                 title="Durable saved hunts criteria engine"
               >
                 <Crosshair className="w-3.5 h-3.5 text-ink-2" />
-                <span>Hunts</span>
+                <span>{m.workspace.nav.hunts}</span>
               </Link>
 
               <Link
@@ -684,7 +689,7 @@ export function InteractiveTerminal() {
                     value={searchQuery}
                     onChange={(e) => dispatchFilters({ type: "set", key: "searchQuery", value: e.target.value })}
                     aria-label="Search listings"
-                    placeholder="Search address, county, court docket..."
+                    placeholder={tUi.searchPlaceholder}
                     className="w-full pl-9 pr-4 py-2 text-xs rounded-control border border-line-strong bg-card focus:outline-none focus:border-ink"
                   />
                 </div>
@@ -696,7 +701,7 @@ export function InteractiveTerminal() {
                   aria-label="State filter"
                   className="px-3 py-2 text-xs font-semibold rounded-control border border-line-strong bg-card text-ink-2 outline-none focus:outline-none focus:ring-2 focus:ring-ink/20"
                 >
-                  <option value="all">All States</option>
+                  <option value="all">{lUi.allStates}</option>
                   {selectedState !== "all" && !availableStates.includes(selectedState) && (
                     <option value={selectedState}>{selectedState.split(",").join(" / ")}</option>
                   )}
@@ -714,7 +719,7 @@ export function InteractiveTerminal() {
                   aria-label="Source filter"
                   className="px-3 py-2 text-xs font-semibold rounded-control border border-line-strong bg-card text-ink-2 outline-none focus:outline-none focus:ring-2 focus:ring-ink/20"
                 >
-                  <option value="all">All Sources</option>
+                  <option value="all">{lUi.allSources}</option>
                   {availableSources.map((key) => {
                     const s = SOURCES[key];
                     return (
@@ -769,7 +774,7 @@ export function InteractiveTerminal() {
                   aria-label="Toggle institutional filters"
                 >
                   <SlidersHorizontal className="w-3.5 h-3.5" />
-                  <span>Institutional Filters {activeFiltersCount > 0 ? `(${activeFiltersCount})` : ""}</span>
+                  <span>{tUi.filtersBtn} {activeFiltersCount > 0 ? `(${activeFiltersCount})` : ""}</span>
                   <ChevronDown className={cn("w-3.5 h-3.5 transition-transform", isAdvancedOpen && "rotate-180")} />
                 </button>
 
@@ -782,7 +787,7 @@ export function InteractiveTerminal() {
                     aria-label="Reset all filters"
                   >
                     <RotateCcw className="w-3 h-3" />
-                    <span>Reset ({activeFiltersCount})</span>
+                    <span>{tUi.resetBtn} ({activeFiltersCount})</span>
                   </button>
                 )}
               </div>
@@ -1094,7 +1099,7 @@ export function InteractiveTerminal() {
                     sent them to tune filters that were never the problem. */}
                 {syncStatus === "error" ? (
                   <>
-                    <h3 className="text-lg font-bold text-ink">Inventory could not be loaded</h3>
+                    <h3 className="text-lg font-bold text-ink">{locale === "en" ? "Inventory could not be loaded" : tUi.inventoryLoadError}</h3>
                     <p className="text-xs text-ink-3 max-w-md mx-auto">
                       The listing feed did not load, so no properties were available to compare against
                       your criteria. This is a connection or data-mode problem, not a filter problem.
@@ -1102,7 +1107,7 @@ export function InteractiveTerminal() {
                   </>
                 ) : (
                   <>
-                    <h3 className="text-lg font-bold text-ink">No properties match these underwriting criteria</h3>
+                    <h3 className="text-lg font-bold text-ink">{locale === "en" ? "No properties match these underwriting criteria" : tUi.noCriteriaMatch}</h3>
                     <p className="text-xs text-ink-3 max-w-md mx-auto">
                       {unvaluedFilterReason
                         ?? "Try adjusting your modeled score, bid spread, or opening amount range to capture more published records."}
@@ -1217,7 +1222,7 @@ export function InteractiveTerminal() {
                         {/* Metric Row */}
                         <div className="grid grid-cols-2 gap-2 pt-2 border-t border-line text-xs">
                           <div>
-                            <span className="text-ink-3 block">Opening Bid:</span>
+                            <span className="text-ink-3 block">{lUi.openingAmountLabel}:</span>
                             <span data-testid="listing-opening-bid" className="font-bold text-ink text-sm">{displayMoney(listing.openingBid)}</span>
                           </div>
                           <div>
@@ -1228,7 +1233,7 @@ export function InteractiveTerminal() {
 
                         <p className="text-xs text-ink-3 flex items-center gap-1 pt-1">
                           <Calendar className="w-3.5 h-3.5 text-ink-3" />
-                          Auction: <span className="font-semibold text-ink">{displayDate(listing.saleDate)}</span>
+                          {lUi.saleDateLabel}: <span className="font-semibold text-ink">{locale === "en" ? displayDate(listing.saleDate) : localizeDisplayDate(listing.saleDate, locale, m.common.notPublished)}</span>
                         </p>
                       </div>
                     </div>
@@ -1242,7 +1247,7 @@ export function InteractiveTerminal() {
                         onClick={() => compare.toggle(listing.id)}
                         className="inline-flex min-h-11 w-full items-center justify-center rounded-control border border-line-strong bg-card px-3 text-xs font-bold text-ink hover:bg-paper disabled:cursor-not-allowed disabled:opacity-50"
                       >
-                        {compare.ids.includes(listing.id) ? "In compare" : compare.full ? "Compare is full" : "Compare"}
+                        {compare.ids.includes(listing.id) ? lUi.inCompareBtn : compare.full ? lUi.compareFullBtn : lUi.compareBtn}
                       </button>
                     </div>
                     {/* Card Action */}
@@ -1260,7 +1265,7 @@ export function InteractiveTerminal() {
                         aria-label={`Open listing page for ${listing.address}`}
                         className="w-full inline-flex h-10 items-center justify-center rounded-control border border-line-strong bg-card text-ink text-xs font-bold hover:bg-paper transition gap-1 shadow-sm"
                       >
-                        <span>Listing page</span>
+                        <span>{lUi.viewPropertyBtn}</span>
                         <ArrowRight className="w-3.5 h-3.5" />
                       </Link>
                       <CaseAction listingId={listing.id} />
@@ -1316,7 +1321,7 @@ export function InteractiveTerminal() {
                   onClick={() => setVisibleCount((n) => n + PAGE_SIZE)}
                   className="px-6 py-3 rounded-control bg-ink text-white text-sm font-bold transition hover:bg-ink-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2"
                 >
-                  Show {Math.min(remaining, PAGE_SIZE).toLocaleString()} more
+                  {format(tUi.showMoreBtn, { count: Math.min(remaining, PAGE_SIZE).toLocaleString() })}
                 </button>
                 {/* ink-3 is the lightest text the palette allows, not a
                     guess: it measures 5.9:1 on the paper page background, and

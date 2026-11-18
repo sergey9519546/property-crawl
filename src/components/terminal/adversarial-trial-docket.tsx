@@ -11,6 +11,8 @@ import {
 } from "@/lib/adversarial-docket";
 import { useWorkspaceSession } from "@/components/workspace/workspace-shell";
 import { readUnderwriteScenario } from "@/lib/underwrite-scenario";
+import { useLocale } from "@/components/i18n/locale-provider";
+import { interpolate } from "@/lib/i18n/translator";
 import {
   Scale,
   Gavel,
@@ -33,11 +35,16 @@ interface AdversarialTrialDocketProps {
   onJumpToWaterfall?: () => void;
 }
 
+type UnderwritingDeepMessages = ReturnType<typeof useLocale>["messages"]["underwritingDeep"];
+
 export function AdversarialTrialDocket({
   listing,
   className = "",
   onJumpToWaterfall,
 }: AdversarialTrialDocketProps) {
+  const { messages } = useLocale();
+  const t = messages.underwritingDeep;
+
   const router = useRouter();
   const session = useWorkspaceSession();
   const [busy, setBusy] = useState(false);
@@ -67,11 +74,11 @@ export function AdversarialTrialDocket({
 
       if (res.status === 401) {
         session.requestUnlock();
-        throw new Error("Workspace session expired. Unlock it to transfer this case.");
+        throw new Error(t.atdErrSessionExpired);
       }
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to initialize research case");
+      if (!res.ok) throw new Error(data.error || t.atdErrInitCase);
 
       const caseId = data.case.id;
 
@@ -97,7 +104,7 @@ export function AdversarialTrialDocket({
       const returnTo = `${window.location.pathname}${window.location.search}`;
       router.push(`/research/${encodeURIComponent(caseId)}?returnTo=${encodeURIComponent(returnTo)}`);
     } catch (err) {
-      setTransferError(err instanceof Error ? err.message : "Failed to transfer trial docket");
+      setTransferError(err instanceof Error ? err.message : t.atdErrTransfer);
     } finally {
       setBusy(false);
     }
@@ -122,10 +129,10 @@ export function AdversarialTrialDocket({
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <span className="rounded bg-card px-2 py-0.5 text-label font-bold uppercase tracking-wider text-ink-2 border border-line">
-                  Adversarial Underwriting
+                  {t.atdTag}
                 </span>
                 <span className="text-xs text-ink-3">·</span>
-                <span className="text-xs font-semibold text-ink-3">Property on Trial</span>
+                <span className="text-xs font-semibold text-ink-3">{t.atdPropOnTrial}</span>
                 <span className="text-xs text-ink-3">·</span>
                 <span className="text-xs font-medium text-ink-3">
                   {listing.county ? `${listing.county}, ` : ""}
@@ -136,11 +143,10 @@ export function AdversarialTrialDocket({
                 id="trial-docket-heading"
                 className="mt-1.5 text-xl font-bold tracking-tight text-ink sm:text-2xl"
               >
-                The Trial: Prosecution vs. Defense Audit
+                {t.atdHeading}
               </h2>
               <p className="mt-0.5 text-xs text-ink-3 leading-relaxed">
-                Adversarial deal-killer interrogation. The Prosecution attacks with 7 statutory title defects;
-                the Defense responds with recording acts, cadastral proof, and walk-away math.
+                {t.atdSubtitle}
               </p>
             </div>
           </div>
@@ -158,7 +164,7 @@ export function AdversarialTrialDocket({
               ) : (
                 <BookOpenCheck className="h-3.5 w-3.5" aria-hidden="true" />
               )}
-              <span>{busy ? "Transferring…" : "Transfer to Research Case"}</span>
+              <span>{busy ? t.atdTransferring : t.atdTransferBtn}</span>
             </button>
           </div>
         </div>
@@ -186,7 +192,7 @@ export function AdversarialTrialDocket({
                 </span>
                 <span className="text-meta opacity-75">·</span>
                 <span className="text-meta font-semibold opacity-90">
-                  Recommended Workspace Action:{" "}
+                  {t.atdRecAction}{" "}
                   <strong className="uppercase">{docket.recommendedDecision}</strong>
                 </span>
               </div>
@@ -199,22 +205,22 @@ export function AdversarialTrialDocket({
         <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs sm:gap-3">
           <div className="rounded-control border border-catch/30 bg-catch-wash/80 p-2.5">
             <span className="text-label font-bold uppercase tracking-wider text-catch-ink">
-              Fatal Disqualifiers
+              {t.atdFatalDisq}
             </span>
             <p className="mt-0.5 text-lg font-black text-ink">{docket.fatalCount}</p>
           </div>
           <div className="rounded-control border border-catch/25 bg-catch-wash/40 p-2.5">
             <span className="text-label font-bold uppercase tracking-wider text-catch-ink">
-              Caution Points
+              {t.atdCautionPts}
             </span>
             <p className="mt-0.5 text-lg font-black text-ink">{docket.cautionCount}</p>
           </div>
           <div className="rounded-control border border-line-strong bg-card p-2.5">
             <span className="text-label font-bold uppercase tracking-wider text-ink">
-              Defenses Verified
+              {t.atdDefensesVer}
             </span>
             <p className="mt-0.5 text-lg font-black text-ink">
-              {docket.defenseCount} of {docket.defensePoints.length}
+              {interpolate(t.atdOfTotal, { count: docket.defenseCount, total: docket.defensePoints.length })}
             </p>
           </div>
         </div>
@@ -230,21 +236,21 @@ export function AdversarialTrialDocket({
                 <Gavel className="h-4 w-4" aria-hidden="true" />
               </div>
               <h3 className="text-sm font-bold tracking-tight text-ink">
-                The Prosecution
+                {t.atdProsecutionHeading}
               </h3>
             </div>
             <span className="rounded bg-paper px-2 py-0.5 text-label font-bold uppercase text-ink-3 border border-line">
-              7 Attack Vectors
+              {t.atdAttackVectorsBadge}
             </span>
           </div>
 
           <p className="text-xs text-ink-3">
-            Statutory attack vectors seeking to prove why tendering funds on this property will result in capital forfeiture or surviving debt.
+            {t.atdProsecutionSub}
           </p>
 
           <div className="space-y-2.5">
             {docket.prosecutionPoints.map((item) => (
-              <ProsecutionCard key={item.id} item={item} />
+              <ProsecutionCard key={item.id} item={item} t={t} />
             ))}
           </div>
         </div>
@@ -257,32 +263,32 @@ export function AdversarialTrialDocket({
                 <ShieldCheck className="h-4 w-4" aria-hidden="true" />
               </div>
               <h3 className="text-sm font-bold tracking-tight text-ink">
-                The Defense
+                {t.atdDefenseHeading}
               </h3>
             </div>
             <span className="rounded bg-paper px-2 py-0.5 text-label font-bold uppercase text-ink-3 border border-line">
-              4 Value Shields
+              {t.atdDefenseShieldsBadge}
             </span>
           </div>
 
           <p className="text-xs text-ink-3">
-            Legal recording acts, cadastral proof, and mathematical underwriting limits that shield the buyer&apos;s capital.
+            {t.atdDefenseSub}
           </p>
 
           <div className="space-y-2.5">
             {docket.defensePoints.map((item) => (
-              <DefenseCard key={item.id} item={item} />
+              <DefenseCard key={item.id} item={item} t={t} />
             ))}
           </div>
 
           {/* Transfer & Cross-Navigation Box */}
           <div className="mt-4 rounded-control border border-line bg-paper/80 p-4 text-xs space-y-3 print:hidden">
             <div className="flex items-center justify-between gap-2">
-              <span className="font-bold text-ink">Direct Decision Bridge</span>
-              <span className="text-meta text-ink-3">Syncs with /research</span>
+              <span className="font-bold text-ink">{t.atdBridgeHeading}</span>
+              <span className="text-meta text-ink-3">{t.atdBridgeSync}</span>
             </div>
             <p className="text-ink-2 leading-relaxed">
-              Transfer this trial docket to your Research Case to version the findings, apply statutory reason codes, and lock your decision packet.
+              {t.atdBridgeBody}
             </p>
 
             {transferError && (
@@ -303,7 +309,7 @@ export function AdversarialTrialDocket({
                 ) : (
                   <BookOpenCheck className="h-3.5 w-3.5" aria-hidden="true" />
                 )}
-                <span>Transfer Trial Docket to Research Case</span>
+                <span>{t.atdBridgeBtn}</span>
                 <ArrowRight className="h-3 w-3" aria-hidden="true" />
               </button>
 
@@ -314,7 +320,7 @@ export function AdversarialTrialDocket({
                   className="inline-flex items-center gap-1.5 rounded-control border border-line-strong bg-card px-3 py-2 text-xs font-semibold text-ink-2 hover:bg-paper hover:text-ink"
                 >
                   <Scale className="h-3.5 w-3.5 text-ink-3" aria-hidden="true" />
-                  <span>Simulate Lien Waterfall</span>
+                  <span>{t.atdSimWaterfall}</span>
                 </button>
               ) : (
                 <a
@@ -322,7 +328,7 @@ export function AdversarialTrialDocket({
                   className="inline-flex items-center gap-1.5 rounded-control border border-line-strong bg-card px-3 py-2 text-xs font-semibold text-ink-2 hover:bg-paper hover:text-ink"
                 >
                   <Scale className="h-3.5 w-3.5 text-ink-3" aria-hidden="true" />
-                  <span>Simulate Lien Waterfall</span>
+                  <span>{t.atdSimWaterfall}</span>
                 </a>
               )}
             </div>
@@ -333,7 +339,7 @@ export function AdversarialTrialDocket({
   );
 }
 
-function ProsecutionCard({ item }: { item: DocketCheckItem }) {
+function ProsecutionCard({ item, t }: { item: DocketCheckItem; t: UnderwritingDeepMessages }) {
   const isFatal = item.isFatal && item.status === "disqualified";
   const isCaution = item.status === "caution";
 
@@ -361,17 +367,17 @@ function ProsecutionCard({ item }: { item: DocketCheckItem }) {
           {isFatal ? (
             <span className="inline-flex items-center gap-1 rounded bg-catch/15 px-2 py-0.5 text-label font-black uppercase text-catch-ink">
               <ShieldAlert className="h-3 w-3" aria-hidden="true" />
-              Fatal Disqualifier
+              {t.atdFatalBadge}
             </span>
           ) : isCaution ? (
             <span className="inline-flex items-center gap-1 rounded border border-catch/20 bg-catch-wash px-2 py-0.5 text-label font-bold uppercase text-catch-ink">
               <AlertTriangle className="h-3 w-3" aria-hidden="true" />
-              Caution Flagged
+              {t.atdCautionBadge}
             </span>
           ) : (
             <span className="inline-flex items-center gap-1 rounded bg-paper px-2 py-0.5 text-label font-semibold text-ink-3 border border-line">
               <Search className="h-3 w-3" aria-hidden="true" />
-              Pre-Auction Inquiry
+              {t.atdPreAuctionBadge}
             </span>
           )}
         </div>
@@ -380,11 +386,11 @@ function ProsecutionCard({ item }: { item: DocketCheckItem }) {
       <p className={`mt-1.5 leading-relaxed ${isFatal || isCaution ? "font-medium text-ink" : "text-ink-2"}`}>{item.finding}</p>
       {isFatal || isCaution ? (
         <div className="mt-2 pt-2 border-t border-line/60 text-meta text-ink-3">
-          <strong className="text-ink-2">Statute:</strong> {item.statute}
+          <strong className="text-ink-2">{t.atdStatuteLabel}</strong> {item.statute}
         </div>
       ) : (
         <details className="mt-1.5 text-meta text-ink-3">
-          <summary className="cursor-pointer font-semibold hover:text-ink">Statute reference</summary>
+          <summary className="cursor-pointer font-semibold hover:text-ink">{t.atdStatuteRefSummary}</summary>
           <p className="mt-1">{item.statute}</p>
         </details>
       )}
@@ -392,7 +398,7 @@ function ProsecutionCard({ item }: { item: DocketCheckItem }) {
   );
 }
 
-function DefenseCard({ item }: { item: DocketCheckItem }) {
+function DefenseCard({ item, t }: { item: DocketCheckItem; t: UnderwritingDeepMessages }) {
   const isVerified = item.status === "verified";
 
   return (
@@ -415,12 +421,12 @@ function DefenseCard({ item }: { item: DocketCheckItem }) {
           {isVerified ? (
             <span className="inline-flex items-center gap-1 rounded border border-line-strong bg-paper px-2 py-0.5 text-label font-bold uppercase text-ink">
               <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
-              Defense Verified
+              {t.atdDefenseVerifiedBadge}
             </span>
           ) : (
             <span className="inline-flex items-center gap-1 rounded bg-paper px-2 py-0.5 text-label font-semibold text-ink-3 border border-line">
               <Clock className="h-3 w-3" aria-hidden="true" />
-              Confirmation Pending
+              {t.atdDefensePendingBadge}
             </span>
           )}
         </div>
@@ -430,7 +436,7 @@ function DefenseCard({ item }: { item: DocketCheckItem }) {
 
       <div className="mt-2.5 pt-2 border-t border-line/60 flex flex-wrap items-center justify-between gap-2 text-meta text-ink-3">
         <span>
-          <strong className="text-ink-2">Authority:</strong> {item.statute}
+          <strong className="text-ink-2">{t.atdAuthorityLabel}</strong> {item.statute}
         </span>
       </div>
     </article>

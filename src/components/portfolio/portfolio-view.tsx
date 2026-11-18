@@ -26,6 +26,7 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { useWorkspaceSession } from "@/components/workspace/workspace-shell";
+import { useLocale } from "@/components/i18n/locale-provider";
 import { sourceDisplayText } from "@/lib/source-display";
 import { bandForScore } from "@/lib/score-bands";
 
@@ -100,6 +101,7 @@ function formatMoney(amount: number | null | undefined): string {
 const STORAGE_PIPELINE_KEY = "perfectproperty_pipeline_stages_v1";
 
 export function PortfolioView() {
+  const { locale, messages: m } = useLocale();
   const session = useWorkspaceSession();
   const [tab, setTab] = React.useState<"watchlist" | "pipeline" | "drops" | "schedule" | "allocation">("pipeline");
   const [dashboard, setDashboard] = React.useState<DashboardPayload | null>(null);
@@ -230,29 +232,29 @@ export function PortfolioView() {
     return (
       <div className="mx-auto max-w-4xl px-6 py-20 text-center">
         <ShieldCheck className="mx-auto h-12 w-12 text-ink-3 mb-4" />
-        <h1 className="text-2xl font-bold text-ink">Member Access Required</h1>
+        <h1 className="text-2xl font-bold text-ink">{locale === "en" ? "Member Access Required" : m.workspacePages.portfolioLockedTitle}</h1>
         <p className="mt-2 text-sm text-ink-3 max-w-md mx-auto">
-          Your saved properties, price drops, and upcoming sale schedule are available to active members and staff operators. Sign in to your account or unlock an operator session to view this dashboard.
+          {m.workspacePages.portfolioLockedSub}
         </p>
         <div className="mt-6 flex flex-wrap justify-center gap-3">
           <Link
             href="/sign-in"
             className="rounded-control bg-ink px-6 py-3 text-sm font-semibold text-white hover:bg-ink-2 transition"
           >
-            Member sign-in
+            {m.workspacePages.huntsMemberBtn}
           </Link>
           <button
             type="button"
             onClick={() => session.requestUnlock()}
             className="rounded-control border border-line-strong bg-card px-5 py-3 text-sm font-semibold text-ink-2 hover:bg-paper transition"
           >
-            Operator Unlock
+            {m.workspacePages.portfolioUnlockBtn}
           </button>
           <Link
             href="/listings"
             className="rounded-control border border-line-strong bg-card px-5 py-3 text-sm font-semibold text-ink-2 hover:bg-paper transition"
           >
-            Explore Listings
+            {m.common.browseListings}
           </Link>
         </div>
       </div>
@@ -263,7 +265,7 @@ export function PortfolioView() {
     return (
       <div className="mx-auto max-w-6xl px-6 py-20 text-center">
         <Loader2 className="mx-auto h-8 w-8 animate-spin text-ink-3 mb-4" />
-        <p className="text-sm font-medium text-ink-3">Loading your saved properties…</p>
+        <p className="text-sm font-medium text-ink-3">{m.workspacePages.portfolioLoading}</p>
       </div>
     );
   }
@@ -306,12 +308,12 @@ export function PortfolioView() {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-line pb-8">
         <div>
-          <p className="text-label font-bold uppercase tracking-[0.14em] text-ink-3">Portfolio</p>
+          <p className="text-label font-bold uppercase tracking-[0.14em] text-ink-3">{m.workspacePages.portfolioEyebrow}</p>
           <h1 className="mt-1 text-3xl font-extrabold tracking-tight text-ink">
-            Saved Properties &amp; Price Drops
+            {m.workspacePages.portfolioHeading}
           </h1>
           <p className="mt-1.5 text-xs text-ink-3">
-            Track saved listings across six research stages, watch for opening bid drops, and prepare for upcoming sale dates.
+            {m.workspacePages.portfolioSub}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2.5">

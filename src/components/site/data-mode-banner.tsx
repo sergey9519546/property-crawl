@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { fetchHealthSnapshot } from "@/lib/health-client";
+import { useLocale } from "@/components/i18n/locale-provider";
 
 type InventoryFreshness = {
   listings?: number | null;
@@ -26,6 +27,8 @@ type Health = {
  * serve, and file-only reviews are not a production-durable deployment.
  */
 export function DataModeBanner() {
+  const { locale, messages } = useLocale();
+  const dm = messages.workspace.dataModeBanner;
   // `undefined` = not yet loaded, `null` = the health probe FAILED. The two must
   // not collapse: a failed probe used to set health to null, and the
   // `!health` guard then removed the banner entirely — so a broken health check
@@ -75,7 +78,7 @@ export function DataModeBanner() {
             claim two lines up front, so the answer to the probe can change the
             words without changing the geometry. */}
         <div className="mx-auto flex min-h-[65px] max-w-[1380px] items-start justify-between gap-4">
-          <p className="leading-6">Checking for the latest listings…</p>
+          <p className="leading-6">{locale === "en" ? "Checking for the latest listings…" : dm.checking}</p>
         </div>
       </div>
     );
@@ -92,9 +95,9 @@ export function DataModeBanner() {
       >
         <div className="mx-auto flex min-h-[65px] max-w-[1380px] items-start justify-between gap-4">
           <p className="leading-6">
-            <strong className="font-semibold">Listings may be out of date:</strong>{" "}
-            we could not check whether the listings on this page are up to date.
-            Treat what you see as unconfirmed and check each sale at its source.
+            <strong className="font-semibold">{dm.failedTitle}</strong>{" "}
+            {dm.failedBody}
+
           </p>
           <button
             type="button"

@@ -13,7 +13,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { createLedgerBlock, GENESIS_HASH, appendLedgerToFile, loadLedgerFromFile, getLedgerHealth, getLedgerAnchorStatus } = require('../discovery/evidence-ledger');
 
-const DEFAULT_SNAPSHOT_DIR = path.resolve(__dirname, '../../.cache/discovery-snapshots');
+const DEFAULT_SNAPSHOT_DIR = path.resolve(/*turbopackIgnore: true*/ __dirname, '../../.cache/discovery-snapshots');
 
 function decodeHtmlEntities(text) {
   if (!text) return '';

@@ -21,7 +21,7 @@ const GENESIS_HASH = '0'.repeat(64);
 const DEFAULT_LEDGER_PATH = path.resolve(__dirname, '../../.cache/evidence-ledger.json');
 
 function defaultSnapshotLedgerPath() {
-  const dir = process.env.PROPERTY_EVIDENCE_DIR || path.resolve(__dirname, '../../.cache/discovery-snapshots');
+  const dir = process.env.PROPERTY_EVIDENCE_DIR || path.resolve(/*turbopackIgnore: true*/ __dirname, '../../.cache/discovery-snapshots');
   return path.resolve(/*turbopackIgnore: true*/ dir, 'evidence-ledger.jsonl');
 }
 

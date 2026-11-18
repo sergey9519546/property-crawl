@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { EnrichmentView } from "@/components/listings/enrichment-view";
+import { useLocale } from "@/components/i18n/locale-provider";
 
 type AssessorReadingResponse = {
   enrolled?: boolean;
@@ -29,6 +30,7 @@ function money(value: number | null | undefined): string {
 }
 
 export function AssessorReading({ listingId, hasServerParcelKey = false }: { listingId: string; hasServerParcelKey?: boolean }) {
+  const { messages: m } = useLocale();
   const [reading, setReading] = React.useState<AssessorReadingResponse | null>(null);
   const [status, setStatus] = React.useState<"loading" | "ready" | "error">("loading");
 
@@ -56,10 +58,10 @@ export function AssessorReading({ listingId, hasServerParcelKey = false }: { lis
   }, [listingId]);
 
   if (status === "loading") {
-    return <p className="mt-4 text-sm text-ink-3">Reading the county assessor layer…</p>;
+    return <p className="mt-4 text-sm text-ink-3">{m.detailUi.assessorLoading}</p>;
   }
   if (status === "error" || !reading) {
-    return <p className="mt-4 text-sm text-ink-2">Assessor lookup failed.</p>;
+    return <p className="mt-4 text-sm text-ink-2">{m.detailUi.assessorFailed}</p>;
   }
 
   const host = (() => {
@@ -74,15 +76,15 @@ export function AssessorReading({ listingId, hasServerParcelKey = false }: { lis
     <div data-testid="assessor-reading" className="mt-5">
       <dl className="grid gap-3 sm:grid-cols-3">
         <div className="rounded-2xl bg-paper p-4">
-          <dt className="text-xs font-bold uppercase tracking-wide text-ink-3">County figure{reading.field ? ` · ${reading.field}` : ""}</dt>
+          <dt className="text-xs font-bold uppercase tracking-wide text-ink-3">{m.detailUi.countyFigureLabel}{reading.field ? ` · ${reading.field}` : ""}</dt>
           <dd className="mt-1 text-lg font-bold text-ink">{money(reading.rawFigure)}</dd>
         </div>
         <div className="rounded-2xl bg-paper p-4">
-          <dt className="text-xs font-bold uppercase tracking-wide text-ink-3">Market comparison</dt>
+          <dt className="text-xs font-bold uppercase tracking-wide text-ink-3">{m.detailUi.marketCompLabel}</dt>
           <dd className="mt-1 text-lg font-bold text-ink">{money(reading.marketComparison)}</dd>
         </div>
         <div className="rounded-2xl bg-paper p-4">
-          <dt className="text-xs font-bold uppercase tracking-wide text-ink-3">Opening ÷ comparison</dt>
+          <dt className="text-xs font-bold uppercase tracking-wide text-ink-3">{m.detailUi.openingDivCompLabel}</dt>
           <dd className="mt-1 text-lg font-bold text-ink">
             {reading.dealScore != null ? reading.dealScore : "—"}
             {reading.ratio != null ? <span className="ml-2 text-sm font-semibold text-ink-3">{reading.ratio.toFixed(2)}</span> : null}

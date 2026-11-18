@@ -1,5 +1,8 @@
 "use client";
 
+import { useLocale } from "@/components/i18n/locale-provider";
+import { formatUsd, formatLocaleDate, formatLocaleNumber } from "@/lib/i18n/translator";
+
 import React, { useEffect, useRef, useState } from "react";
 import { X, Search, Trash2, ArrowRight, Bookmark, Play, Check } from "lucide-react";
 import type { PropertyListing } from "./property-data";
@@ -29,6 +32,8 @@ interface AlertsModalProps {
 }
 
 export function AlertsModal({ isOpen, onClose, availableStates, listings, onApply }: AlertsModalProps) {
+  const { locale, messages, format } = useLocale();
+  const t = messages.modalsAndParser;
   const [serverSearches, setServerSearches] = useState<ServerSavedSearch[]>([]);
   const [alertMatches, setAlertMatches] = useState<AlertMatch[]>([]);
   const [loading, setLoading] = useState(false);
@@ -56,14 +61,14 @@ export function AlertsModal({ isOpen, onClose, availableStates, listings, onAppl
       setAlertMatches(matchesRes);
     } catch (e: any) {
       const status = (e as any)?.status;
-      if (status === 401) setError("Unlock the workspace to use saved searches and alerts.");
-      else if (status === 503) setError("Workspace is not configured for private features.");
-      else setError(e?.message || "Failed to load saved searches.");
+      if (status === 401) setError(t.alertsUnlockRequired);
+      else if (status === 503) setError(t.alertsNotConfigured);
+      else setError(e?.message || t.alertsLoadFailed);
       // Keep previous data visible; do not wipe on transient error.
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t.alertsLoadFailed, t.alertsNotConfigured, t.alertsUnlockRequired]);
 
   useEffect(() => {
     if (isOpen) void loadAll();
@@ -98,18 +103,18 @@ export function AlertsModal({ isOpen, onClose, availableStates, listings, onAppl
     setFeedback(""); setError("");
     const filters = buildServerFilters(state, minScore, maxBid, notifyEmail);
     if (!filters.states && !filters.minScore && !filters.maxBid) {
-      setFeedback("Add at least one filter (state, min score, or max bid).");
+      setFeedback(t.alertsAddOneFilter);
       return;
     }
     try {
       await createSavedSearch(name.trim() || null, filters);
       setName("");
       await loadAll();
-      setFeedback("Search saved to workspace.");
+      setFeedback(t.alertsSavedMsg);
     } catch (e: any) {
       const status = (e as any)?.status;
-      if (status === 401) setError("Unlock the workspace first.");
-      else setError(e?.message || "Failed to save search.");
+      if (status === 401) setError(t.alertsUnlockFirst);
+      else setError(e?.message || t.alertsSaveFailed);
     }
   }
 
@@ -118,9 +123,9 @@ export function AlertsModal({ isOpen, onClose, availableStates, listings, onAppl
     try {
       await deleteSavedSearch(id);
       await loadAll();
-      setFeedback("Saved search removed.");
+      setFeedback(t.alertsRemovedMsg);
     } catch (e: any) {
-      setError(e?.message || "Failed to remove search.");
+      setError(e?.message || t.alertsRemoveFailed);
     }
   }
 
@@ -129,9 +134,9 @@ export function AlertsModal({ isOpen, onClose, availableStates, listings, onAppl
     try {
       const res = await runSavedSearch(id);
       await loadAll();
-      setFeedback(`Run complete. ${res.newMatches} new match(es) recorded (scanned ${res.scanned}).`);
+      setFeedback(format(t.alertsRunCompleteMsg, { newMatches: res.newMatches, scanned: res.scanned }));
     } catch (e: any) {
-      setError(e?.message || "Run failed.");
+      setError(e?.message || t.alertsRunFailed);
     } finally {
       setRunningId(null);
     }
@@ -142,11 +147,11 @@ export function AlertsModal({ isOpen, onClose, availableStates, listings, onAppl
     try {
       const hunt = await promoteSavedSearchToHunt(search, server);
       setPromotedHunts((prev) => ({ ...prev, [search.id]: hunt.id }));
-      setFeedback(`Promoted "${search.name}" to an automated Hunt with baseline tracking.`);
+      setFeedback(format(t.alertsPromotedMsg, { name: search.name }));
     } catch (e: any) {
       const status = (e as any)?.status;
-      if (status === 401) setError("Unlock the workspace first.");
-      else setError(e?.message || "Failed to promote search to Hunt.");
+      if (status === 401) setError(t.alertsUnlockFirst);
+      else setError(e?.message || t.alertsPromoteFailed);
     } finally {
       setPromotingId(null);
     }
@@ -158,9 +163,9 @@ export function AlertsModal({ isOpen, onClose, availableStates, listings, onAppl
     try {
       await markAlertMatchesRead(unread);
       await loadAll();
-      setFeedback("All matches marked read.");
+      setFeedback(t.alertsAllReadMsg);
     } catch (e: any) {
-      setError(e?.message || "Failed to mark read.");
+      setError(e?.message || t.alertsMarkReadFailed);
     }
   }
 
@@ -175,63 +180,64 @@ export function AlertsModal({ isOpen, onClose, availableStates, listings, onAppl
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <div ref={panelRef} role="dialog" aria-modal="true" aria-label="Deal Alerts Manager" className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-card bg-card text-ink shadow-2xl">
+      <div ref={panelRef} role="dialog" aria-modal="true" aria-label={t.alertsDialogAria} className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-card bg-card text-ink shadow-2xl">
         <header className="flex items-start justify-between gap-4 border-b border-line p-6">
           <div>
-            <p className="text-label font-bold uppercase tracking-[0.16em] text-ink-3">Your research workspace</p>
-            <h2 className="mt-1 text-2xl font-semibold tracking-tight">Saved searches</h2>
-            <p className="mt-2 text-sm leading-relaxed text-ink-3">Save your criteria, see matching inventory, and reopen the search in one click.</p>
+            <p className="text-label font-bold uppercase tracking-[0.16em] text-ink-3">{t.alertsEyebrow}</p>
+            <h2 className="mt-1 text-2xl font-semibold tracking-tight">{t.alertsTitle || "Saved searches"}</h2>
+            <p className="mt-2 text-sm leading-relaxed text-ink-3">{t.alertsSubtitle}</p>
           </div>
-          <button type="button" onClick={onClose} aria-label="Close Alerts Dialog" className="rounded-full p-2 text-ink-3 hover:bg-paper"><X className="h-5 w-5" /></button>
+          <button type="button" onClick={onClose} aria-label={t.alertsCloseAria} className="rounded-full p-2 text-ink-3 hover:bg-paper"><X className="h-5 w-5" /></button>
         </header>
 
         <div className="space-y-6 overflow-y-auto p-6">
           <div className="flex items-center justify-between">
             <p className="rounded-control bg-paper px-4 py-3 text-xs leading-relaxed text-ink-2">
-              Workspace-backed. Runs against the live pool on demand and records matches for later review. Email is sent only when this search stores an address and the server has RESEND_API_KEY and RESEND_FROM. Otherwise matches stay in this workspace.
+              {t.alertsWorkspaceIntro}{" "}
+              {t.alertsDeliveryLimit || "Email is sent only when this search stores an address and the server has RESEND_API_KEY and RESEND_FROM. Otherwise matches stay in this workspace."}
             </p>
             {unreadCount > 0 && (
               <button onClick={handleMarkAllRead} className="inline-flex items-center gap-1 rounded-control border border-line-strong bg-paper px-2 py-1 text-label font-semibold text-ink-2 hover:bg-line">
-                <Check className="h-3.5 w-3.5" /> Mark {unreadCount} read
+                <Check className="h-3.5 w-3.5" /> {format(t.alertsMarkNRead, { count: unreadCount })}
               </button>
             )}
           </div>
 
           <form className="space-y-4" onSubmit={handleCreate}>
             <div>
-              <label htmlFor="saved-search-name" className="text-xs font-semibold text-ink-3">Search name</label>
-              <input id="saved-search-name" value={name} maxLength={80} onChange={(event) => setName(event.target.value)} placeholder="e.g. New Jersey under $250k" className="mt-1 h-11 w-full rounded-control border border-line-strong bg-card px-3 text-sm focus:outline-none" />
+              <label htmlFor="saved-search-name" className="text-xs font-semibold text-ink-3">{t.alertsSearchName}</label>
+              <input id="saved-search-name" value={name} maxLength={80} onChange={(event) => setName(event.target.value)} placeholder={t.alertsSearchPlaceholder} className="mt-1 h-11 w-full rounded-control border border-line-strong bg-card px-3 text-sm focus:outline-none" />
             </div>
             <div className="grid gap-3 sm:grid-cols-3">
               <div>
-                <label htmlFor="saved-search-state" className="text-xs font-semibold text-ink-3">State market</label>
+                <label htmlFor="saved-search-state" className="text-xs font-semibold text-ink-3">{t.alertsStateMarket}</label>
                 <select id="saved-search-state" value={state} onChange={(event) => setState(event.target.value)} className="mt-1 h-11 w-full rounded-control border border-line-strong bg-card px-3 text-sm">
-                  <option value="All">All available states</option>
+                  <option value="All">{t.alertsAllStatesOption}</option>
                   {availableStates.map((item) => <option key={item} value={item}>{item}</option>)}
                 </select>
               </div>
               <div>
-                <label htmlFor="saved-search-score" className="text-xs font-semibold text-ink-3">Minimum modeled score</label>
+                <label htmlFor="saved-search-score" className="text-xs font-semibold text-ink-3">{t.alertsMinScore}</label>
                 <select id="saved-search-score" value={minScore} onChange={(event) => setMinScore(Number(event.target.value))} className="mt-1 h-11 w-full rounded-control border border-line-strong bg-card px-3 text-sm">
-                  <option value={0}>Any / not modeled</option>
-                  {[50, 60, 70, 80, 90].map((value) => <option key={value} value={value}>{value} or higher</option>)}
+                  <option value={0}>{t.alertsAnyScoreOpt}</option>
+                  {[50, 60, 70, 80, 90].map((value) => <option key={value} value={value}>{format(t.alertsScoreOrHigher, { score: value })}</option>)}
                 </select>
               </div>
               <div>
-                <label htmlFor="saved-search-bid" className="text-xs font-semibold text-ink-3">Maximum opening bid</label>
+                <label htmlFor="saved-search-bid" className="text-xs font-semibold text-ink-3">{t.alertsMaxBid}</label>
                 <select id="saved-search-bid" value={maxBid} onChange={(event) => setMaxBid(Number(event.target.value))} className="mt-1 h-11 w-full rounded-control border border-line-strong bg-card px-3 text-sm">
-                  <option value={0}>Any / not published</option>
-                  {[100000, 150000, 250000, 500000, 1000000].map((value) => <option key={value} value={value}>$ {value.toLocaleString()}</option>)}
+                  <option value={0}>{t.alertsAnyBidOpt}</option>
+                  {[100000, 150000, 250000, 500000, 1000000].map((value) => <option key={value} value={value}>{formatUsd(locale, value)}</option>)}
                 </select>
               </div>
             </div>
             <div>
-              <label htmlFor="saved-search-email" className="text-xs font-semibold text-ink-3">Notify email (optional)</label>
+              <label htmlFor="saved-search-email" className="text-xs font-semibold text-ink-3">{t.alertsNotifyEmail}</label>
               <input id="saved-search-email" type="email" value={notifyEmail} maxLength={320} onChange={(event) => setNotifyEmail(event.target.value)} placeholder="you@company.com" className="mt-1 h-11 w-full rounded-control border border-line-strong bg-card px-3 text-sm focus:outline-none" />
             </div>
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-sm text-ink-3" aria-live="polite">{draftMatches} matching records in loaded inventory</p>
-              <button type="submit" disabled={loading} className="inline-flex items-center gap-2 rounded-control bg-ink px-4 py-3 text-sm font-semibold text-white hover:bg-ink-2 disabled:opacity-60"><Bookmark className="h-4 w-4" /> Save search</button>
+              <p className="text-sm text-ink-3" aria-live="polite">{format(t.alertsMatchingLoaded, { count: formatLocaleNumber(locale, draftMatches) })}</p>
+              <button type="submit" disabled={loading} className="inline-flex items-center gap-2 rounded-control bg-ink px-4 py-3 text-sm font-semibold text-white hover:bg-ink-2 disabled:opacity-60"><Bookmark className="h-4 w-4" /> {t.alertsSaveSearchBtn}</button>
             </div>
           </form>
 
@@ -241,15 +247,15 @@ export function AlertsModal({ isOpen, onClose, availableStates, listings, onAppl
             </p>
           )}
 
-          <section aria-label="Your saved searches" className="space-y-3 border-t border-line pt-5">
+          <section aria-label={t.alertsSectionAria} className="space-y-3 border-t border-line pt-5">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold">Your searches ({serverSearches.length})</h3>
-              {loading && <span className="text-label text-ink-3">Loading…</span>}
+              <h3 className="text-sm font-semibold">{format(t.alertsYourSearches, { count: serverSearches.length })}</h3>
+              {loading && <span className="text-label text-ink-3">{t.alertsLoading}</span>}
             </div>
             {!serverSearches.length && !loading && (
               <div className="rounded-control border border-dashed border-line p-6 text-center">
                 <Search className="mx-auto h-6 w-6 text-ink-3" />
-                <p className="mt-2 text-sm text-ink-3">No saved searches yet. Add filters above and save.</p>
+                <p className="mt-2 text-sm text-ink-3">{t.alertsEmpty}</p>
               </div>
             )}
             {clientSearches.map((search, idx) => {
@@ -263,26 +269,26 @@ export function AlertsModal({ isOpen, onClose, availableStates, listings, onAppl
                     <div className="min-w-0">
                       <h4 className="break-words font-semibold">{search.name}</h4>
                       <p className="mt-1 text-xs text-ink-3">
-                        {search.state === "All" ? "All markets" : search.state} · {search.minScore > 0 ? "Score ≥ " + search.minScore : "Any score"} · {search.maxBid > 0 ? "Bid ≤ $" + search.maxBid.toLocaleString() : "Any bid"}
-                        {server?.lastRunAt ? ` · last run ${new Date(server.lastRunAt).toLocaleDateString()}` : ""}
+                        {search.state === "All" ? t.alertsAllMarkets : search.state} · {search.minScore > 0 ? format(t.alertsScoreGte, { score: search.minScore }) : t.alertsAnyScore} · {search.maxBid > 0 ? format(t.alertsBidLte, { amount: formatUsd(locale, search.maxBid) }) : t.alertsAnyBid}
+                        {server?.lastRunAt ? ` · ${format(t.alertsLastRunPrefix, { date: formatLocaleDate(locale, server.lastRunAt) })}` : ""}
                       </p>
-                      {unreadForSearch > 0 && <span className="mt-1 inline-block rounded bg-line px-1.5 py-0.5 text-label font-semibold text-ink">{unreadForSearch} new</span>}
+                      {unreadForSearch > 0 && <span className="mt-1 inline-block rounded bg-line px-1.5 py-0.5 text-label font-semibold text-ink">{format(t.alertsNewCount, { count: unreadForSearch })}</span>}
                     </div>
                     <div className="flex items-center gap-1">
                       <button
                         type="button"
                         onClick={() => handleRun(search.id)}
                         disabled={runningId === search.id}
-                        aria-label={"Run saved search " + search.name}
+                        aria-label={format(t.alertsRunAria, { name: search.name })}
                         className="rounded-lg p-2 text-go hover:bg-go-wash disabled:opacity-50"
-                        title="Run now against live pool"
+                        title={t.alertsRunTitle}
                       >
                         <Play className={`h-4 w-4 ${runningId === search.id ? "animate-pulse" : ""}`} />
                       </button>
                       <button
                         type="button"
                         onClick={() => handleDelete(search.id)}
-                        aria-label={"Delete saved search " + search.name}
+                        aria-label={format(t.alertsDeleteAria, { name: search.name })}
                         className="rounded-lg p-2 text-ink-3 hover:bg-catch-wash hover:text-catch-ink"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -291,10 +297,10 @@ export function AlertsModal({ isOpen, onClose, availableStates, listings, onAppl
                   </div>
                   <div className="mt-3 flex flex-wrap items-center gap-2">
                     <button type="button" onClick={() => onApply(search)} className="inline-flex items-center gap-2 text-sm font-semibold text-go">
-                      View {matches.length} matches in current inventory <ArrowRight className="h-4 w-4" />
+                      {format(t.alertsViewCurrentMatches, { count: matches.length })} <ArrowRight className="h-4 w-4" />
                     </button>
                     <button type="button" onClick={() => handleRun(search.id)} disabled={runningId === search.id} className="inline-flex items-center gap-1 rounded-lg border border-go/30 bg-go-wash px-2 py-1 text-xs font-semibold text-go hover:bg-go-fill/20 disabled:opacity-60">
-                      {runningId === search.id ? "Running…" : "Run against live pool"}
+                      {runningId === search.id ? t.alertsRunningBtn : t.alertsRunBtn}
                     </button>
                     <button
                       type="button"
@@ -302,21 +308,21 @@ export function AlertsModal({ isOpen, onClose, availableStates, listings, onAppl
                       disabled={promotingId === search.id}
                       className="inline-flex items-center gap-1 rounded-lg border border-line-strong bg-paper px-2 py-1 text-xs font-semibold text-ink-2 hover:bg-line disabled:opacity-60"
                     >
-                      {promotingId === search.id ? "Promoting…" : promotedHunts[search.id] ? "Promoted to Hunt" : "Promote to Hunt"}
+                      {promotingId === search.id ? t.alertsPromotingBtn : promotedHunts[search.id] ? t.alertsPromotedHunt : t.alertsPromoteHunt}
                     </button>
                     {promotedHunts[search.id] && (
                       <a
                         href={`/hunts?hunt=${encodeURIComponent(promotedHunts[search.id])}`}
                         className="inline-flex items-center gap-1 text-xs font-semibold text-go hover:underline"
                       >
-                        Open Hunt →
+                        {t.alertsOpenHunt}
                       </a>
                     )}
                     {matchCountForSearch > 0 && (
-                      <span className="text-label text-ink-3">· {matchCountForSearch} recorded match{matchCountForSearch === 1 ? "" : "es"}</span>
+                      <span className="text-label text-ink-3">· {format(matchCountForSearch === 1 ? t.alertsMatchesSingular : t.alertsMatchesPlural, { count: matchCountForSearch })}</span>
                     )}
                   </div>
-                  <p className="mt-1 text-label text-ink-3">Includes explicitly labeled demo / unverified records. This is not an alert-delivery service.</p>
+                  <p className="mt-1 text-label text-ink-3">{t.alertsDemoNotice}</p>
                 </article>
               );
             })}

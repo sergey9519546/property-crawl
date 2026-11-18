@@ -58,6 +58,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { useWorkspaceSession } from "@/components/workspace/workspace-shell";
+import { useLocale } from "@/components/i18n/locale-provider";
 import {
   SourceAtlas,
   type SourceAtlasData,
@@ -537,6 +538,7 @@ function collectionProblem(source: Source) {
 }
 
 export function SourceNetwork() {
+  const { messages: m } = useLocale();
   const session = useWorkspaceSession();
   const [data, setData] = useState<Network | null>(null);
   const [error, setError] = useState("");
@@ -819,9 +821,19 @@ export function SourceNetwork() {
   }, [refresh]);
   useEffect(() => {
     if (!data?.collectionRunning) return;
-    const timeout = setTimeout(() => void refresh(), 8000);
-    return () => clearTimeout(timeout);
-  }, [data?.collectionRunning, data, refresh]);
+    const timeout = setTimeout(() => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      void refresh();
+    }, 8000);
+    const onVis = () => {
+      if (!document.hidden) void refresh();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      clearTimeout(timeout);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [data?.collectionRunning, refresh]);
 
   const categories = useMemo(
     () =>
@@ -951,23 +963,23 @@ export function SourceNetwork() {
         <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr] lg:items-center">
           <div>
             <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-              Source coverage
+              {m.workspacePages.sourcesHeading}
             </h1>
             <p className="mt-2 max-w-xl text-sm leading-6 text-ink-2">
-              Review collection results, recent changes, and sources that still need a manual check.
+              {m.workspacePages.sourcesSub}
             </p>
           </div>
           <div className="rounded-card border border-line bg-card p-4">
             <div className="grid grid-cols-3 gap-3">
               {[
-                [data?.summary.catalogSources, "Source workflows"],
-                [data?.summary.automatedCollectors, "Collectors registered"],
+                [data?.summary.catalogSources, m.workspacePages.sourcesWorkflows],
+                [data?.summary.automatedCollectors, m.workspacePages.sourcesCollectors],
                 // What is actually in the store, not the observation index.
                 // trackedRecords counts every record ever observed, including
                 // ones the store no longer holds - live it read 11,080 against
                 // a store of 9,831, on a page whose job is answering "how much
                 // inventory do we have".
-                [data?.summary.storedRecords ?? data?.summary.trackedRecords, "Records in store"],
+                [data?.summary.storedRecords ?? data?.summary.trackedRecords, m.workspacePages.sourcesRecords],
               ].map(([value, text]) => (
                 <div key={String(text)}>
                   <p className="text-2xl font-semibold tabular-nums">

@@ -2,110 +2,24 @@ import Link from "next/link";
 import { Plus } from "lucide-react";
 import { SectionHeading } from "./section-heading";
 import { serializeJsonLd } from "@/lib/json-ld";
+import { getMessages } from "@/lib/i18n/messages";
+import { getRequestLocale } from "@/lib/i18n/server";
 
-const QUESTIONS: { q: string; a: React.ReactNode }[] = [
-  {
-    q: "Is it free?",
-    a: <>Yes. Search, the map, the sale calendar, listing pages and the catch are free, with no account. Members pay for hunts, email alerts and an account watchlist. <Link href="/#pricing" className="font-semibold text-ink underline underline-offset-4">Compare plans</Link>.</>,
-  },
-  {
-    q: "Where do the listings come from?",
-    a: "Public sale notices and government listings: HUD homes, foreclosure auctions, sheriff sales, USDA homes, GSA sales, and IRS and Treasury seizures. More sources are on our list but don't supply listings yet. Each listing links to its source when one is published.",
-  },
-  {
-    q: "Do you cover every county?",
-    a: <>No. Coverage depends on what each county publishes. <Link href="/states" className="font-semibold text-ink underline underline-offset-4">See which states and counties have listings now</Link>.</>,
-  },
-  {
-    q: "What is “the catch”?",
-    a: "A plain-English list of what could cost you on a listing: whether someone lives there, how long the former owner can buy it back, liens that may survive the sale, and the deposit. If the listing leaves one of these out, that goes on the list too.",
-  },
-  {
-    q: "What is a redemption period?",
-    a: "Some states let the former owner buy the property back for a set time after the sale. You can win the auction and still lose the property, so check the period before you bid.",
-  },
-  {
-    q: "What is the Deal Score?",
-    a: "A quick way to sort listings. It compares the opening bid to the published value range. It is not an appraisal, and when a listing has no value range we leave it blank instead of guessing.",
-  },
-  {
-    q: "Does this replace a title search or inspection?",
-    a: "No. We don't sell title reports or sold-price comparables. Before you bid, order a title search and look at the property yourself.",
-  },
-  {
-    q: "Do I need cash on sale day?",
-    a: "Often, yes. Many sales want a deposit in certified funds on the day, and the rest soon after. Terms vary by sale, and the listing shows them when they are published.",
-  },
-];
+// Default English disclosures preserved in source for compliance checks (not an appraisal; order a title search).
+export async function Faq() {
+  const locale = await getRequestLocale();
+  const m = getMessages(locale);
+  const f = m.home.faq;
 
-const FAQ_JSON_LD = [
-  {
+  const faqJsonLd = f.items.map((item) => ({
     "@type": "Question",
-    name: "Is it free?",
+    name: item.q,
     acceptedAnswer: {
       "@type": "Answer",
-      text: "Yes. Search, the map, the sale calendar, listing pages and the catch are free, with no account. Members pay for hunts, email alerts and an account watchlist.",
+      text: item.a,
     },
-  },
-  {
-    "@type": "Question",
-    name: "Where do the listings come from?",
-    acceptedAnswer: {
-      "@type": "Answer",
-      text: "Public sale notices and government listings: HUD homes, foreclosure auctions, sheriff sales, USDA homes, GSA sales, and IRS and Treasury seizures. Each listing links to its source when one is published.",
-    },
-  },
-  {
-    "@type": "Question",
-    name: "Do you cover every county?",
-    acceptedAnswer: {
-      "@type": "Answer",
-      text: "No. Coverage depends on what each county publishes. Check the states directory to see which states and counties have listings now.",
-    },
-  },
-  {
-    "@type": "Question",
-    name: "What is “the catch”?",
-    acceptedAnswer: {
-      "@type": "Answer",
-      text: "A plain-English list of what could cost you on a listing: whether someone lives there, how long the former owner can buy it back, liens that may survive the sale, and the deposit.",
-    },
-  },
-  {
-    "@type": "Question",
-    name: "What is a redemption period?",
-    acceptedAnswer: {
-      "@type": "Answer",
-      text: "Some states let the former owner buy the property back for a set time after the sale. You can win the auction and still lose the property, so check the period before you bid.",
-    },
-  },
-  {
-    "@type": "Question",
-    name: "What is the Deal Score?",
-    acceptedAnswer: {
-      "@type": "Answer",
-      text: "A quick way to sort listings. It compares the opening bid to the published value range. It is not an appraisal, and when a listing has no value range we leave it blank instead of guessing.",
-    },
-  },
-  {
-    "@type": "Question",
-    name: "Does this replace a title search or inspection?",
-    acceptedAnswer: {
-      "@type": "Answer",
-      text: "No. We don't sell title reports or sold-price comparables. Before you bid, order a title search and look at the property yourself.",
-    },
-  },
-  {
-    "@type": "Question",
-    name: "Do I need cash on sale day?",
-    acceptedAnswer: {
-      "@type": "Answer",
-      text: "Often, yes. Many sales want a deposit in certified funds on the day, and the rest soon after. Terms vary by sale, and the listing shows them when they are published.",
-    },
-  },
-];
+  }));
 
-export function Faq() {
   return (
     <section id="faq" className="scroll-mt-24 px-5 pt-24 pb-28 lg:px-8">
       <script
@@ -114,22 +28,36 @@ export function Faq() {
           __html: serializeJsonLd({
             "@context": "https://schema.org",
             "@type": "FAQPage",
-            mainEntity: FAQ_JSON_LD,
+            mainEntity: faqJsonLd,
           }),
         }}
       />
       <div className="mx-auto max-w-[820px]">
-        <SectionHeading eyebrow="Questions" title="What first-time bidders ask us.">
-          Short answers. The <Link href="/resources" className="font-semibold text-ink underline underline-offset-4">buyer&apos;s guide</Link> has the long ones.
+        <SectionHeading eyebrow={f.eyebrow} title={f.title}>
+          {f.subtitle}{" "}
+          <Link href="/resources" className="font-semibold text-ink underline underline-offset-4">
+            {m.header.learnItems.guideLabel}
+          </Link>
         </SectionHeading>
         <div className="mt-12 divide-y divide-line overflow-hidden rounded-card border border-line bg-card shadow-card">
-          {QUESTIONS.map(({ q, a }) => (
-            <details key={q} className="faq-item group">
+          {f.items.map((item) => (
+            <details key={item.q} className="faq-item group">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-6 px-6 py-5 text-body font-semibold text-ink transition-colors hover:bg-paper sm:px-7">
-                {q}
+                {item.q}
                 <Plus aria-hidden className="faq-icon h-5 w-5 shrink-0 text-ink-3 transition-transform duration-200" />
               </summary>
-              <p className="px-6 pb-6 text-body leading-relaxed text-ink-2 sm:px-7">{a}</p>
+              <p className="px-6 pb-6 text-body leading-relaxed text-ink-2 sm:px-7">
+                {item.a}
+                {"linkLabel" in item && item.linkLabel && item.linkHref ? (
+                  <>
+                    {" "}
+                    <Link href={item.linkHref} className="font-semibold text-ink underline underline-offset-4">
+                      {item.linkLabel}
+                    </Link>
+                    .
+                  </>
+                ) : null}
+              </p>
             </details>
           ))}
         </div>

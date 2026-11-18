@@ -6,6 +6,7 @@ import { Building2, MapPin, ExternalLink, Loader2, Compass } from "lucide-react"
 import { getWatchlistComps, type WatchlistCompsResponse, type WatchlistCompItem } from "@/lib/intelligence-client";
 import { sourceDisplayText } from "@/lib/source-display";
 import { bandForScore } from "@/lib/score-bands";
+import { useLocale } from "@/components/i18n/locale-provider";
 
 interface NearbyCompsProps {
   listingId: string;
@@ -25,6 +26,7 @@ export function NearbyComps({
   targetSqft,
   targetOpeningBid,
 }: NearbyCompsProps) {
+  const { messages: m, plural } = useLocale();
   const [data, setData] = React.useState<WatchlistCompsResponse | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -56,7 +58,7 @@ export function NearbyComps({
       <div className="rounded-card border border-line bg-card p-6 shadow-sm">
         <div className="flex items-center gap-3">
           <Loader2 className="h-4 w-4 animate-spin text-ink-3" />
-          <p className="text-xs font-medium text-ink-3">Searching active comps within 8 km...</p>
+          <p className="text-xs font-medium text-ink-3">{m.detailUi.compsLoading}</p>
         </div>
       </div>
     );
@@ -65,7 +67,7 @@ export function NearbyComps({
   if (error) {
     return (
       <div className="rounded-card border border-line bg-card p-6 shadow-sm">
-        <p className="text-xs font-medium text-catch-ink">Comparable auctions could not be loaded: {error}</p>
+        <p className="text-xs font-medium text-catch-ink">{m.detailUi.compsFailed}: {error}</p>
       </div>
     );
   }
@@ -82,7 +84,7 @@ export function NearbyComps({
         <div>
           <h2 className="text-base font-bold text-ink flex items-center gap-2">
             <Compass className="h-4 w-4 text-ink-3" />
-            Nearby Comparable Auctions & Filings
+            {m.detailUi.nearbyCompsTitle}
           </h2>
           <p className="mt-1 text-xs text-ink-3">
             Active distressed listings within 8 km with ±30% interior area matching {targetAddress || "this subject"}.
@@ -91,11 +93,11 @@ export function NearbyComps({
         {comps.length > 0 && (
           <div className="flex items-center gap-2 text-xs">
             <span className="rounded-control bg-paper px-2.5 py-1 font-bold text-ink border border-line">
-              {comps.length} {comps.length === 1 ? "comp" : "comps"} found
+              {plural(comps.length, m.detailUi.compsFound)}
             </span>
             {data.stats.medianOpeningBid !== null && (
               <span className="rounded-control bg-line px-2.5 py-1 font-medium text-ink-2">
-                Median: {formatMoney(data.stats.medianOpeningBid)}
+                {m.detailUi.medianLabel} {formatMoney(data.stats.medianOpeningBid)}
               </span>
             )}
           </div>
@@ -153,7 +155,7 @@ export function NearbyComps({
 
                 <div className="mt-4 flex items-center justify-between border-t border-line pt-3 text-xs">
                   <div>
-                    <span className="block text-meta text-ink-3 uppercase font-medium">Opening Amount</span>
+                    <span className="block text-meta text-ink-3 uppercase font-medium">{m.listingsUi.openingAmountLabel}</span>
                     <span className="font-bold text-ink">{formatMoney(openingBid)}</span>
                   </div>
                   {sqft != null && sqft > 0 && (

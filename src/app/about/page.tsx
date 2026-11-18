@@ -1,41 +1,39 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { getRequestLocale } from "@/lib/i18n/server";
+import { getMessages } from "@/lib/i18n/messages";
 import { ArrowLeft, ArrowRight, CheckCircle2 } from "lucide-react";
 import { SiteHeader } from "@/components/site/site-header";
 import { SiteFooter } from "@/components/site/site-footer";
 import { SectionHeading } from "@/components/site/section-heading";
 
-export const metadata: Metadata = {
-  title: "Zero-Fabrication Auction Intelligence | PerfectProperty",
-  description:
-    "Sheriff sales, bank-owned homes, tax sales and government-sold property in one place, with the risks spelled out.",
-  alternates: {
-    canonical: "/about",
-  },
-  openGraph: {
-    title: "Zero-Fabrication Auction Intelligence | PerfectProperty",
-    description:
-      "Sheriff sales, bank-owned homes, tax sales and government-sold property in one place, with the risks spelled out.",
-    url: "/about",
-    siteName: "PerfectProperty",
-    type: "website",
-    images: [
-      {
-        url: "/og-image.png",
-        width: 1200,
-        height: 630,
-        alt: "Zero-Fabrication Auction Intelligence | PerfectProperty",
-      },
-    ],
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "Zero-Fabrication Auction Intelligence | PerfectProperty",
-    description:
-      "Sheriff sales, bank-owned homes, tax sales and government-sold property in one place, with the risks spelled out.",
-    images: ["/og-image.png"],
-  },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getRequestLocale();
+  const m = getMessages(locale);
+  const title = locale === "en" ? "Zero-Fabrication Auction Intelligence | PerfectProperty" : m.meta.aboutTitle;
+  const description = m.meta.aboutDescription;
+  return {
+    title,
+    description,
+    alternates: {
+      canonical: "/about",
+    },
+    openGraph: {
+      title,
+      description,
+      url: "/about",
+      siteName: "PerfectProperty",
+      type: "website",
+      images: [{ url: "/og-image.png", width: 1200, height: 630, alt: title }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: ["/og-image.png"],
+    },
+  };
+}
 
 const STEPS = [
   {
@@ -58,7 +56,11 @@ const STEPS = [
 
 const PROMISES = ["Zero Cold Calls or Robocalls", "We never contact homeowners", "Public sources only"];
 
-export default function AboutPage() {
+export default async function AboutPage() {
+  const locale = await getRequestLocale();
+  const m = getMessages(locale);
+  const steps = locale === "en" ? STEPS : m.about.steps;
+  const promises = locale === "en" ? PROMISES : m.about.promises;
   return (
     <div className="relative min-h-screen max-w-full overflow-x-hidden bg-paper text-ink">
       <SiteHeader />
@@ -69,27 +71,26 @@ export default function AboutPage() {
               href="/"
               className="inline-flex items-center gap-1.5 text-sm font-semibold text-ink-3 transition-colors hover:text-ink"
             >
-              <ArrowLeft className="h-4 w-4" /> Back to PerfectProperty
+              <ArrowLeft className="h-4 w-4" /> {m.infoPages.backToSite}
             </Link>
             <div className="mt-8">
               <p className="inline-flex items-center gap-2 rounded-full border border-line bg-card px-3 py-1 text-label font-bold uppercase tracking-wider text-ink-2">
                 <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-signature ring-1 ring-ink/20" />
-                About us
+                {m.about.eyebrow}
               </p>
             </div>
             <h1 className="mt-6 text-balance text-4xl font-semibold leading-[1.08] tracking-[-0.03em] sm:text-5xl">
-              Every deal has a catch. We show it first.
+              {locale === "en" ? "Every deal has a catch. We show it first." : m.about.title}
             </h1>
             <p className="mt-5 max-w-[620px] text-pretty text-lg leading-8 text-ink-2">
-              PerfectProperty lists foreclosure, sheriff, tax and government-sold property for first-time auction buyers,
-              small landlords and flippers. Each listing comes with its risks in plain English.
+              {locale === "en" ? "PerfectProperty lists foreclosure, sheriff, tax and government-sold property for first-time auction buyers, small landlords and flippers. Each listing comes with its risks in plain English." : m.about.lead}
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Link
                 href="/listings"
                 className="inline-flex h-12 items-center justify-center gap-2 rounded-control bg-ink px-6 text-sm font-semibold text-white transition-colors hover:bg-ink-2"
               >
-                Browse listings <ArrowRight className="h-4 w-4" aria-hidden />
+                {locale === "en" ? "Browse listings" : m.about.ctaBrowse} <ArrowRight className="h-4 w-4" aria-hidden />
               </Link>
             </div>
           </div>
@@ -97,19 +98,17 @@ export default function AboutPage() {
 
         <section className="px-5 pb-16">
           <div className="mx-auto max-w-4xl">
-            <SectionHeading eyebrow="Why we built it" tone="catch" title="The fine print is where buyers get hurt">
-              Sales are spread across county sites, court notices and government pages. Some buyers win an auction, then
-              find a second mortgage that stays with the property. Others learn the old owner has a window to take it
-              back. We put the sales in one list, map and calendar, and show those risks next to each one.
+            <SectionHeading eyebrow={m.about.whyEyebrow} tone="catch" title={m.about.whyTitle}>
+              {m.about.whyBody}
             </SectionHeading>
           </div>
         </section>
 
         <section className="px-5 pb-16">
           <div className="mx-auto max-w-4xl">
-            <SectionHeading eyebrow="How it works" title="Four steps from search to bid" />
+            <SectionHeading eyebrow={m.about.howEyebrow} title={m.about.howTitle} />
             <ol className="mt-10 grid gap-4 sm:grid-cols-2">
-              {STEPS.map((step, i) => (
+              {steps.map((step, i) => (
                 <li key={step.title} className="rounded-card border border-line bg-card p-6 shadow-card sm:p-7">
                   <span className="flex h-8 w-8 items-center justify-center rounded-full bg-paper text-sm font-semibold tabular-nums text-ink-2">
                     {i + 1}
@@ -124,12 +123,11 @@ export default function AboutPage() {
 
         <section className="px-5 pb-16">
           <div className="mx-auto max-w-4xl rounded-card border border-line bg-card p-6 shadow-card sm:p-10">
-            <SectionHeading eyebrow="Our limits" align="left" title="What we do and don't do">
-              We help you find and size up a property. We don&apos;t replace a title search or an inspection, we don&apos;t
-              bid for you, and we don&apos;t cover every county.
+            <SectionHeading eyebrow={m.about.limitsEyebrow} align="left" title={m.about.limitsTitle}>
+              {locale === "en" ? "We help you find and size up a property. We don't replace a title search or an inspection, we don't bid for you, and we don't cover every county." : m.about.limitsBody}
             </SectionHeading>
             <ul className="mt-8 grid gap-3 sm:grid-cols-3">
-              {PROMISES.map((p) => (
+              {promises.map((p) => (
                 <li
                   key={p}
                   className="flex items-center gap-2 rounded-control bg-paper p-3.5 text-sm font-semibold text-ink"
@@ -143,22 +141,22 @@ export default function AboutPage() {
 
         <section className="px-5 pb-20 sm:pb-28">
           <div className="mx-auto max-w-4xl rounded-card bg-ink p-8 text-white shadow-raised sm:p-12">
-            <h2 className="text-2xl font-semibold tracking-[-0.02em] sm:text-3xl">See the catch on a real sale</h2>
+            <h2 className="text-2xl font-semibold tracking-[-0.02em] sm:text-3xl">{m.about.bottomTitle}</h2>
             <p className="mt-3 max-w-[520px] text-body leading-relaxed text-white/75">
-              Open any listing and read the catch before anything else.
+              {m.about.bottomBody}
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
               <Link
                 href="/listings"
                 className="inline-flex h-12 items-center justify-center gap-2 rounded-control bg-card px-6 text-sm font-semibold text-ink transition-colors hover:bg-paper"
               >
-                Browse listings <ArrowRight className="h-4 w-4" aria-hidden />
+                {m.about.bottomCtaPrimary} <ArrowRight className="h-4 w-4" aria-hidden />
               </Link>
               <Link
                 href="/#proof"
                 className="inline-flex h-12 items-center justify-center rounded-control border border-white/30 px-6 text-sm font-semibold text-white transition-colors hover:bg-ink-2"
               >
-                See where listings come from
+                {m.about.bottomCtaSecondary}
               </Link>
             </div>
           </div>

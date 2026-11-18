@@ -6,6 +6,7 @@ import { Check, Loader2, Save, X } from "lucide-react";
 import { useWorkspaceSession } from "@/components/workspace/workspace-shell";
 import type { DiscoveryFilters } from "@/lib/discovery-query";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { useLocale } from "@/components/i18n/locale-provider";
 
 const MATCH_FILTERS = [
   "q", "state", "county", "source", "type", "program", "lifecycle", "saleFrom", "saleTo",
@@ -14,9 +15,11 @@ const MATCH_FILTERS = [
 ] as const;
 
 export function SaveSearchButton({ filters }: { filters: DiscoveryFilters }) {
+  const { messages } = useLocale();
+  const t = messages.modalsAndParser;
   const session = useWorkspaceSession();
   const [open, setOpen] = useState(false);
-  const [name, setName] = useState("My property search");
+  const [name, setName] = useState(t.saveSearchDefaultName);
   const [webhookUrl, setWebhookUrl] = useState("");
   const [notifyEmail, setNotifyEmail] = useState("");
   const [busy, setBusy] = useState(false);
@@ -41,12 +44,12 @@ export function SaveSearchButton({ filters }: { filters: DiscoveryFilters }) {
     event.preventDefault();
     const cleanName = name.trim();
     if (!cleanName) {
-      setError("Enter a name for this search.");
+      setError(t.saveSearchNameRequired);
       return;
     }
     const cleanWebhook = webhookUrl.trim();
     if (cleanWebhook && !/^https:\/\/.+/i.test(cleanWebhook)) {
-      setError("Webhook URL must be a public https address.");
+      setError(t.saveSearchWebhookHttps);
       return;
     }
     const discoveryFilters: Record<string, string> = {};
@@ -73,15 +76,15 @@ export function SaveSearchButton({ filters }: { filters: DiscoveryFilters }) {
       if (response.status === 401) {
         setOpen(false);
         session.requestUnlock();
-        throw new Error("Your workspace session expired. Unlock it, then save again.");
+        throw new Error(t.saveSearchSessionExpired);
       }
-      if (!response.ok) throw new Error(result.error || result.details?.[0] || "The search could not be saved.");
+      if (!response.ok) throw new Error(result.error || result.details?.[0] || t.saveSearchFailed);
       setSavedId(result.hunt.id);
       if (result?.hunt?.id) {
         void fetch(`/api/hunts/${encodeURIComponent(result.hunt.id)}/evaluate`, { method: "POST", credentials: "same-origin" }).catch(() => {});
       }
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "The search could not be saved.");
+      setError(caught instanceof Error ? caught.message : t.saveSearchFailed);
     } finally {
       setBusy(false);
     }
@@ -89,32 +92,32 @@ export function SaveSearchButton({ filters }: { filters: DiscoveryFilters }) {
 
   return <>
     <button ref={triggerRef} type="button" onClick={begin} className="inline-flex items-center justify-center gap-2 rounded-lg border border-line-strong bg-card px-3 py-2 text-sm font-semibold text-ink-2 hover:bg-paper">
-      <Save size={15} /> Save search
+      <Save size={15} /> {t.saveSearchBtn}
     </button>
     <Dialog open={open} onOpenChange={(value) => { if (!busy) setOpen(value); }}>
       <DialogContent showCloseButton={false} className="gap-0 rounded-2xl bg-card p-5 sm:max-w-md" onOpenAutoFocus={(event) => { event.preventDefault(); inputRef.current?.focus(); }} onCloseAutoFocus={(event) => { event.preventDefault(); triggerRef.current?.focus(); }}>
         <div className="flex items-start justify-between gap-4">
-          <div><DialogTitle className="text-lg font-bold text-ink">Save this search</DialogTitle><DialogDescription className="mt-1 text-sm text-ink-3">Monitor properties matching your current filters.</DialogDescription></div>
-          <button type="button" aria-label="Close" disabled={busy} onClick={() => setOpen(false)} className="rounded-md p-1.5 text-ink-3 hover:bg-line"><X size={18} /></button>
+          <div><DialogTitle className="text-lg font-bold text-ink">{t.saveSearchDialogTitle}</DialogTitle><DialogDescription className="mt-1 text-sm text-ink-3">{t.saveSearchDialogDesc}</DialogDescription></div>
+          <button type="button" aria-label={t.closeDialogAria} disabled={busy} onClick={() => setOpen(false)} className="rounded-md p-1.5 text-ink-3 hover:bg-line"><X size={18} /></button>
         </div>
         {savedId ? <div className="mt-5 rounded-xl bg-go-wash p-4 text-sm text-go">
-          <p className="flex items-center gap-2 font-semibold"><Check size={17} /> Search saved</p>
-          <Link href={`/hunts?hunt=${encodeURIComponent(savedId)}`} className="mt-3 inline-flex font-semibold underline">Review saved search</Link>
+          <p className="flex items-center gap-2 font-semibold"><Check size={17} /> {t.saveSearchSaved}</p>
+          <Link href={`/hunts?hunt=${encodeURIComponent(savedId)}`} className="mt-3 inline-flex font-semibold underline">{t.saveSearchReviewLink}</Link>
         </div> : <form onSubmit={save} className="mt-5">
-          <label htmlFor="saved-search-name" className="text-sm font-semibold text-ink-2">Name</label>
+          <label htmlFor="saved-search-name" className="text-sm font-semibold text-ink-2">{t.saveSearchNameLabel}</label>
           <input ref={inputRef} id="saved-search-name" value={name} onChange={(event) => setName(event.target.value)} maxLength={80} disabled={busy} className="mt-2 w-full rounded-lg border border-line-strong px-3 py-2.5 text-sm outline-none focus:border-ink" />
           <label htmlFor="saved-search-email" className="mt-4 block text-sm font-semibold text-ink-2">
-            Email alerts <span className="text-xs font-normal text-ink-3">(Sent when a later run finds a new match or a changed fact.)</span>
+            {t.saveSearchEmailLabel} <span className="text-xs font-normal text-ink-3">{t.saveSearchEmailHint}</span>
           </label>
           <input id="saved-search-email" type="email" placeholder="you@example.com" value={notifyEmail} onChange={(event) => setNotifyEmail(event.target.value)} maxLength={254} disabled={busy} className="mt-2 w-full rounded-lg border border-line-strong px-3 py-2.5 text-sm outline-none focus:border-ink" />
           <label htmlFor="saved-search-webhook" className="mt-4 block text-sm font-semibold text-ink-2">
-            Webhook URL <span className="text-xs font-normal text-ink-3">(Public https address. Posted when a later run finds a new match or a changed fact.)</span>
+            {t.saveSearchWebhookLabel} <span className="text-xs font-normal text-ink-3">{t.saveSearchWebhookHint}</span>
           </label>
           <input id="saved-search-webhook" type="url" placeholder="https://example.com/api/webhooks/property-alerts" value={webhookUrl} onChange={(event) => setWebhookUrl(event.target.value)} maxLength={256} disabled={busy} className="mt-2 w-full rounded-lg border border-line-strong px-3 py-2.5 text-sm outline-none focus:border-ink" />
           {error && <p role="alert" className="mt-3 text-sm text-catch-ink">{error}</p>}
           <div className="mt-5 flex justify-end gap-2">
-            <button type="button" disabled={busy} onClick={() => setOpen(false)} className="rounded-lg px-3 py-2 text-sm font-semibold text-ink-2 hover:bg-line">Cancel</button>
-            <button type="submit" disabled={busy} className="inline-flex items-center gap-2 rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">{busy && <Loader2 size={15} className="animate-spin" />} Save</button>
+            <button type="button" disabled={busy} onClick={() => setOpen(false)} className="rounded-lg px-3 py-2 text-sm font-semibold text-ink-2 hover:bg-line">{t.saveSearchCancel}</button>
+            <button type="submit" disabled={busy} className="inline-flex items-center gap-2 rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">{busy && <Loader2 size={15} className="animate-spin" />} {t.saveSearchSubmit}</button>
           </div>
         </form>}
       </DialogContent>

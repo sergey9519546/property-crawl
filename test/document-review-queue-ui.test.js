@@ -54,6 +54,14 @@ function loadTs(relative) {
       if (fs.existsSync(path.join(root, base + '.tsx'))) return loadTs(base + '.tsx');
       return loadTs(base + '.ts');
     }
+    if (name.startsWith('.')) {
+      const root = path.resolve(__dirname, '..');
+      const resolved = path.resolve(path.dirname(filename), name);
+      const rel = path.relative(root, resolved).replace(/\\/g, '/');
+      if (fs.existsSync(resolved + '.tsx')) return loadTs(rel + '.tsx');
+      if (fs.existsSync(resolved + '.ts')) return loadTs(rel + '.ts');
+      if (fs.existsSync(path.join(resolved, 'index.ts'))) return loadTs(rel + '/index.ts');
+    }
     return originalRequire(name);
   };
   loaded.set(filename, instance);

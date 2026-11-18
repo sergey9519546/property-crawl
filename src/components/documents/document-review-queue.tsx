@@ -3,7 +3,10 @@
 import * as React from "react";
 import { Check, Columns2, FileWarning, Inbox, LayoutList, Loader2, MessageSquareWarning, RefreshCw, ShieldQuestion, ThumbsDown } from "lucide-react";
 import { PrivateWorkspaceGate, useWorkspaceSession } from "@/components/workspace/workspace-shell";
-import { ReviewSplitPane, type DocumentReviewItem } from "@/components/workspace/review-split-pane";
+import { ReviewSplitPane } from "@/components/workspace/review-split-pane";
+import { useLocale } from "@/components/i18n/locale-provider";
+import type { Locale } from "@/lib/i18n/config";
+import { formatLocaleDate, formatLocaleNumber, interpolate } from "@/lib/i18n/translator";
 
 type Review = {
   status: "pending" | "approved" | "rejected" | "needs_more";
@@ -43,13 +46,6 @@ type QueueSummary = {
   reviews: ReviewEntry[];
 };
 
-const STATUS_LABEL: Record<Review["status"], string> = {
-  pending: "Awaiting review",
-  approved: "Approved",
-  rejected: "Rejected",
-  needs_more: "Needs more",
-};
-
 const STATUS_TONE: Record<Review["status"], string> = {
   pending: "bg-paper text-ink-2",
   approved: "bg-go-wash text-go",
@@ -69,12 +65,24 @@ function safeHref(value: string | null | undefined): string | null {
   }
 }
 
-function formatDate(value?: string | null): string {
+function formatDate(locale: Locale, value?: string | null): string {
   if (!value || !Number.isFinite(Date.parse(value))) return "—";
-  return new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+  return formatLocaleDate(locale, value, { dateStyle: "medium", timeStyle: "short" });
 }
 
 export function DocumentReviewQueue() {
+  const { locale, messages } = useLocale();
+  const t = messages.reviewB2;
+  const statusLabel: Record<Review["status"], string> = React.useMemo(
+    () => ({
+      pending: t.statusPending,
+      approved: t.statusApproved,
+      rejected: t.statusRejected,
+      needs_more: t.statusNeedsMore,
+    }),
+    [t],
+  );
+
   const session = useWorkspaceSession();
   const [data, setData] = React.useState<QueueSummary | null>(null);
   const [loading, setLoading] = React.useState(false);
@@ -100,9 +108,9 @@ export function DocumentReviewQueue() {
       if (response.status === 401) {
         await session.refresh();
         session.requestUnlock();
-        throw new Error("Workspace locked. Unlock to refresh the document review queue.");
+        throw new Error(t.errLockedRefresh);
       }
-      if (!response.ok) throw new Error(result.error || "Document reviews could not be loaded");
+      if (!response.ok) throw new Error(result.error || t.errLoad);
       setData({
         total: Number(result.total) || 0,
         byStatus: {
@@ -115,11 +123,11 @@ export function DocumentReviewQueue() {
       });
       setError("");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Document reviews could not be loaded");
+      setError(caught instanceof Error ? caught.message : t.errLoad);
     } finally {
       if (!quiet) setLoading(false);
     }
-  }, [session]);
+  }, [session, t.errLoad, t.errLockedRefresh]);
 
   React.useEffect(() => {
     if (!session.authenticated) {
@@ -158,12 +166,12 @@ export function DocumentReviewQueue() {
     const reviewer = reviewerDraft.trim();
     if (TERMINAL_STATUSES.includes(status) && !reviewer) {
       setStatusMessage("");
-      setError("Reviewer identifier is required for terminal actions.");
+      setError(t.errReviewerRequired);
       return false;
     }
     if ((status === "rejected" || status === "needs_more") && !rawNote.trim()) {
       setStatusMessage("");
-      setError("A note is required when rejecting a document or marking it for follow-up.");
+      setError(t.errNoteRequired);
       return false;
     }
     setPendingId(entry.id);
@@ -188,10 +196,14 @@ export function DocumentReviewQueue() {
       if (response.status === 401) {
         await session.refresh();
         session.requestUnlock();
-        throw new Error("Workspace locked. Unlock to record reviews.");
+        throw new Error(t.errLockedRecord);
       }
-      if (!response.ok) throw new Error(result.error || "Review could not be recorded");
-      setStatusMessage(`Recorded ${STATUS_LABEL[status]} on document ${entry.documentIndex ?? 0} for ${entry.listingId}.`);
+      if (!response.ok) throw new Error(result.error || t.errRecord);
+      setStatusMessage(interpolate(t.msgRecorded, {
+        status: statusLabel[status],
+        index: entry.documentIndex ?? 0,
+        listingId: entry.listingId,
+      }));
       setNotesDraft((prev) => {
         if (!prev[entry.id]) return prev;
         const next = { ...prev };
@@ -201,25 +213,24 @@ export function DocumentReviewQueue() {
       await refresh(true);
       return true;
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Review could not be recorded");
+      setError(caught instanceof Error ? caught.message : t.errRecord);
       return false;
     } finally {
       setPendingId(null);
     }
-  }, [notesDraft, refresh, reviewerDraft, session]);
+  }, [notesDraft, refresh, reviewerDraft, session, statusLabel, t.errLockedRecord, t.errNoteRequired, t.errRecord, t.errReviewerRequired, t.msgRecorded]);
 
   return (
     <div className="mx-auto max-w-[1380px] px-5 py-10 sm:px-8">
       <div className="flex flex-wrap items-end justify-between gap-5">
         <div>
           <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-ink-2">
-            <FileWarning size={17} /> Document review
+            <FileWarning size={17} /> {t.kicker}
           </p>
-          <h1 className="mt-3 text-3xl font-semibold tracking-tight">Document review queue</h1>
+          <h1 className="mt-3 text-3xl font-semibold tracking-tight">{t.heading || "Document review queue"}</h1>
           <p className="mt-4 max-w-3xl text-sm leading-7 text-ink-2">
-            Publisher documents from the listing evidence pipeline, plus any
-            decisions recorded by operators. Approve, reject, or request more evidence
-            before an item is treated as reviewed.
+            {t.subtitle}{" "}
+            {t.durabilityNote}
           </p>
         </div>
         <button
@@ -229,19 +240,19 @@ export function DocumentReviewQueue() {
           className="inline-flex items-center gap-2 rounded-control border border-line bg-card px-4 py-2.5 text-sm font-semibold disabled:opacity-50"
         >
           <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
-          Refresh queue
+          {t.refreshBtn}
         </button>
       </div>
 
-      <PrivateWorkspaceGate title="Unlock the document review queue">
+      <PrivateWorkspaceGate title={t.gateTitle || "Unlock the document review queue"}>
         <div className="mt-6 grid gap-3 sm:grid-cols-4">
           {(["pending", "approved", "rejected", "needs_more"] as const).map((key) => (
             <div key={key} className="rounded-card border border-line bg-card p-4 shadow-sm">
               <p className={`inline-block rounded-full px-2 py-1 text-label font-bold uppercase tracking-wider ${STATUS_TONE[key]}`}>
-                {STATUS_LABEL[key]}
+                {statusLabel[key]}
               </p>
-              <p className="mt-3 text-3xl font-semibold tabular-nums">{data?.byStatus[key] ?? 0}</p>
-              <p className="mt-1 text-xs text-ink-3">documents</p>
+              <p className="mt-3 text-3xl font-semibold tabular-nums">{formatLocaleNumber(locale, data?.byStatus[key] ?? 0)}</p>
+              <p className="mt-1 text-xs text-ink-3">{t.unitDocuments}</p>
             </div>
           ))}
         </div>
@@ -252,13 +263,13 @@ export function DocumentReviewQueue() {
         <div className="mt-8 flex flex-wrap items-center justify-between gap-4 rounded-card border border-line bg-card p-5 shadow-sm">
           <div className="flex flex-1 flex-wrap items-center gap-3">
             <ShieldQuestion size={16} className="text-ink-3" />
-            <label htmlFor="document-review-reviewer" className="text-xs font-semibold text-ink-2">Reviewer identifier</label>
+            <label htmlFor="document-review-reviewer" className="text-xs font-semibold text-ink-2">{t.reviewerLabel || "Reviewer identifier"}</label>
             <input
               id="document-review-reviewer"
               type="text"
               value={reviewerDraft}
               onChange={(event) => setReviewerDraft(event.target.value)}
-              placeholder="operator-7"
+              placeholder={t.reviewerPlaceholder}
               className="min-w-[12rem] flex-1 rounded-control border border-line-strong px-3 py-2 text-sm"
             />
           </div>
@@ -269,7 +280,7 @@ export function DocumentReviewQueue() {
               className={`inline-flex items-center gap-1.5 rounded-control px-3.5 py-1.5 text-xs font-semibold transition ${viewMode === "cards" ? "bg-card text-ink shadow-sm" : "text-ink-2 hover:text-ink"}`}
             >
               <LayoutList size={14} />
-              Card view
+              {t.cardViewBtn}
             </button>
             <button
               type="button"
@@ -277,7 +288,7 @@ export function DocumentReviewQueue() {
               className={`inline-flex items-center gap-1.5 rounded-control px-3.5 py-1.5 text-xs font-semibold transition ${viewMode === "split" ? "bg-card text-ink shadow-sm" : "text-ink-2 hover:text-ink"}`}
             >
               <Columns2 size={14} />
-              Split-pane speed review
+              {t.splitViewBtn}
             </button>
           </div>
         </div>
@@ -320,15 +331,15 @@ export function DocumentReviewQueue() {
             {loading && !data && (
               <p className="flex items-center gap-2 rounded-card border border-line bg-card p-6 text-sm">
                 <Loader2 size={17} className="animate-spin" />
-                Loading pending reviews…
+                {t.loadingPending}
               </p>
             )}
             {!loading && data && data.reviews.length === 0 && (
               <div className="rounded-card border border-dashed border-line bg-card p-8">
                 <Inbox className="text-ink" />
-                <h2 className="mt-4 text-xl font-semibold">No pending documents.</h2>
+                <h2 className="mt-4 text-xl font-semibold">{t.emptyTitle}</h2>
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-2">
-                  The build-data extraction pipeline has nothing waiting for review. Refresh the page after the next cycle to inspect new captures.
+                  {t.emptyBody}
                 </p>
               </div>
             )}
@@ -342,13 +353,20 @@ export function DocumentReviewQueue() {
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className={`rounded-full px-2.5 py-1 text-label font-bold uppercase tracking-wider ${STATUS_TONE[entry.review.status]}`}>
-                        {STATUS_LABEL[entry.review.status]}
+                        {statusLabel[entry.review.status]}
                       </span>
                       <span className="text-xs text-ink-3">
-                        Document {entry.documentIndex != null ? `#${entry.documentIndex}` : "(unindexed)"} · Revision {entry.review.revision}
+                        {interpolate(t.docRevMeta, {
+                          index: entry.documentIndex != null ? `#${entry.documentIndex}` : t.docUnindexed,
+                          revision: entry.review.revision,
+                        })}
                       </span>
                       {entry.review.priorStatus && (
-                        <span className="text-xs text-ink-3">Previously {STATUS_LABEL[entry.review.priorStatus as Review["status"]] ?? entry.review.priorStatus}</span>
+                        <span className="text-xs text-ink-3">
+                          {interpolate(t.previouslyStatus, {
+                            status: statusLabel[entry.review.priorStatus as Review["status"]] ?? entry.review.priorStatus,
+                          })}
+                        </span>
                       )}
                     </div>
                     <h2 className="mt-3 font-mono text-sm font-semibold">{entry.listingId}</h2>
@@ -358,7 +376,13 @@ export function DocumentReviewQueue() {
                       </a>
                     )}
                     <p className="mt-1 text-xs text-ink-3">
-                      Extracted {formatDate(entry.review.extractedAt)}{entry.review.reviewedAt ? ` · Last decision ${formatDate(entry.review.reviewedAt)}` : ""}{entry.review.reviewer ? ` · ${entry.review.reviewer}` : ""}
+                      {interpolate(t.timelineMeta, {
+                        extracted: formatDate(locale, entry.review.extractedAt),
+                        reviewedPart: entry.review.reviewedAt
+                          ? interpolate(t.lastDecisionPart, { date: formatDate(locale, entry.review.reviewedAt) })
+                          : "",
+                        reviewerPart: entry.review.reviewer ? ` · ${entry.review.reviewer}` : "",
+                      })}
                     </p>
                     {entry.reason && (
                       <div className="mt-2 flex flex-wrap items-center gap-1.5">
@@ -374,7 +398,7 @@ export function DocumentReviewQueue() {
                     )}
                     {entry.review.notes && (
                       <p className="mt-3 rounded-control bg-paper px-3 py-2 text-xs leading-5 text-ink-2">
-                        <strong>Latest note:</strong> {entry.review.notes}
+                        <strong>{t.latestNotePrefix}</strong> {entry.review.notes}
                       </p>
                     )}
                   </div>
@@ -382,12 +406,12 @@ export function DocumentReviewQueue() {
 
                 <div className="mt-4 grid gap-2 sm:grid-cols-[1fr_auto]">
                   <label className="block">
-                    <span className="text-xs font-semibold text-ink-2">Reviewer note (required for reject / needs more)</span>
+                    <span className="text-xs font-semibold text-ink-2">{t.noteLabel}</span>
                     <textarea
                       rows={2}
                       value={note}
                       onChange={(event) => setNotesDraft((prev) => ({ ...prev, [entry.id]: event.target.value }))}
-                      placeholder="What did you observe? Why is this approval / rejection the right call?"
+                      placeholder={t.notePlaceholder}
                       className="mt-2 w-full rounded-control border border-line-strong px-3 py-2 text-sm"
                     />
                   </label>
@@ -399,7 +423,7 @@ export function DocumentReviewQueue() {
                       className="inline-flex items-center gap-2 rounded-control bg-go px-3 py-2 text-sm font-semibold text-white hover:bg-go/90 disabled:opacity-50"
                       data-action="approve"
                     >
-                      <Check size={14} /> Approve
+                      <Check size={14} /> {t.approveBtn}
                     </button>
                     <button
                       type="button"
@@ -408,7 +432,7 @@ export function DocumentReviewQueue() {
                       className="inline-flex items-center gap-2 rounded-control border border-catch/40 bg-catch-wash px-3 py-2 text-sm font-semibold text-catch-ink hover:bg-catch-wash/80 disabled:opacity-50"
                       data-action="needs_more"
                     >
-                      <MessageSquareWarning size={14} /> Needs more
+                      <MessageSquareWarning size={14} /> {t.needsMoreBtn}
                     </button>
                     <button
                       type="button"
@@ -417,7 +441,7 @@ export function DocumentReviewQueue() {
                       className="inline-flex items-center gap-2 rounded-control bg-catch-ink px-3 py-2 text-sm font-semibold text-white hover:bg-catch disabled:opacity-50"
                       data-action="reject"
                     >
-                      <ThumbsDown size={14} /> Reject
+                      <ThumbsDown size={14} /> {t.rejectBtn}
                     </button>
                   </div>
                 </div>
@@ -425,7 +449,7 @@ export function DocumentReviewQueue() {
                 {pendingId === entry.id && (
                   <p className="mt-3 flex items-center gap-2 text-xs text-ink-3">
                     <Loader2 size={14} className="animate-spin" />
-                    Saving review…
+                    {t.savingReview}
                   </p>
                 )}
               </article>
@@ -437,7 +461,7 @@ export function DocumentReviewQueue() {
         {data && (data.byStatus.approved + data.byStatus.rejected + data.byStatus.needs_more) > 0 && data.byStatus.pending === 0 && (
           <div className="mt-4 flex items-center gap-2 rounded-control border border-go/30 bg-go-wash p-4 text-sm text-ink">
             <Check size={16} className="text-go" />
-            All extracted documents have been reviewed.
+            {t.allReviewedBanner}
           </div>
         )}
       </PrivateWorkspaceGate>

@@ -11,6 +11,8 @@ import { SOURCES } from "@/components/terminal/property-data";
 import { Fact } from "@/components/evidence/fact";
 import { sourceDisplayText } from "@/lib/source-display";
 import { SectionHeading } from "./section-heading";
+import { useLocale } from "@/components/i18n/locale-provider";
+import type { Messages } from "@/lib/i18n/messages";
 
 type Listing = Parameters<typeof listingCatch>[0] & {
   id: string;
@@ -41,23 +43,13 @@ const SOURCE_NAMES: Record<string, string> = {
   va: "VA home",
 };
 
-function getMitigationHeuristic(flag: string): string | null {
+function getMitigationHeuristic(flag: string, m: Messages["home"]["catchReveal"]["mitigations"]): string | null {
   const lower = flag.toLowerCase();
-  if (lower.includes("occupied") || lower.includes("eviction")) {
-    return "Mitigation: Budget $4,000–$7,500 legal carry and writ of possession reserve.";
-  }
-  if (lower.includes("redemption")) {
-    return "Mitigation: Check county court docket for former owner notice filing window.";
-  }
-  if (lower.includes("senior-lien") || lower.includes("lien")) {
-    return "Mitigation: Run preliminary title / abstract search before certified check deposit.";
-  }
-  if (lower.includes("deposit") || lower.includes("certified")) {
-    return "Mitigation: Verify acceptable payment instrument (wire vs. cashier's check).";
-  }
-  if (lower.includes("stale") || lower.includes("checked")) {
-    return "Mitigation: Confirm listing with court clerk docket 24h prior to sale.";
-  }
+  if (lower.includes("occupied") || lower.includes("eviction")) return m.occupied;
+  if (lower.includes("redemption")) return m.redemption;
+  if (lower.includes("senior-lien") || lower.includes("lien")) return m.lien;
+  if (lower.includes("deposit") || lower.includes("certified")) return m.deposit;
+  if (lower.includes("stale") || lower.includes("checked")) return m.stale;
   return null;
 }
 
@@ -67,6 +59,8 @@ function getMitigationHeuristic(flag: string): string | null {
  * Real data only. If listings can't load, it says so and links to search.
  */
 export function CatchReveal() {
+  const { locale, messages, plural } = useLocale();
+  const cr = messages.home.catchReveal;
   const [listings, setListings] = React.useState<Listing[]>([]);
   const [status, setStatus] = React.useState<"loading" | "ready" | "error">("loading");
   const [index, setIndex] = React.useState(0);
@@ -74,8 +68,6 @@ export function CatchReveal() {
 
   React.useEffect(() => {
     let cancelled = false;
-    // maxBid limits the sample to listings that publish an opening bid, so the
-    // "price first" side always has a real price to show.
     fetch("/api/listings?limit=12&maxBid=5000000", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
       .then((data: { listings?: Listing[] }) => {
@@ -104,9 +96,8 @@ export function CatchReveal() {
   return (
     <section id="the-catch" className="scroll-mt-24 px-5 pt-24 pb-28 lg:px-8">
       <div className="mx-auto max-w-[1080px]">
-        <SectionHeading eyebrow="The catch" tone="catch" title={<>Every deal has a catch.<br className="hidden sm:block" /> We show it first.</>}>
-          Auction listings lead with the price. We read the sale details and list what could cost you:
-          who lives there, how long the owner can buy it back, the deposit, and anything the notice leaves out.
+        <SectionHeading eyebrow={cr.eyebrow} tone="catch" title={cr.title}>
+          {cr.subtitle}
         </SectionHeading>
 
         <div className="relative mt-12 grid gap-4 lg:grid-cols-2">
@@ -119,7 +110,7 @@ export function CatchReveal() {
                 <img src={photo} alt="" loading="lazy" referrerPolicy="no-referrer" className="relative h-full w-full object-cover" onError={(e) => { e.currentTarget.style.display = "none"; }} />
               ) : null}
               <span className="absolute left-4 top-4 rounded-full bg-card/90 px-3 py-1 text-label font-semibold text-ink shadow-sm backdrop-blur">
-                What the sale posts
+                {cr.whatPostsBadge}
               </span>
             </div>
             <div className="p-6 sm:p-7">
@@ -138,19 +129,19 @@ export function CatchReveal() {
                   {place ? <p className="mt-1 text-meta text-ink-3">{place}</p> : null}
                   <div className="mt-6 flex items-end justify-between gap-4 border-t border-paper pt-5">
                     <div>
-                      <p className="text-label font-medium text-ink-3">Opening bid</p>
+                      <p className="text-label font-medium text-ink-3">{cr.openingBid}</p>
                       <p className="text-title font-semibold tracking-tight text-ink tabular-nums"><Fact value={listing.openingBid} format="money" /></p>
                     </div>
                     <div className="text-right">
-                      <p className="text-label font-medium text-ink-3">Sale date</p>
+                      <p className="text-label font-medium text-ink-3">{cr.saleDate}</p>
                       <p className="text-meta font-semibold text-ink"><Fact value={listing.saleDate} format="date" /></p>
                     </div>
                   </div>
                 </>
               ) : (
                 <p className="text-body text-ink-2">
-                  We couldn&apos;t load a listing just now.{" "}
-                  <Link href="/listings" className="font-semibold text-ink underline underline-offset-4">Search listings instead</Link>.
+                  {cr.loadError}{" "}
+                  <Link href="/listings" className="font-semibold text-ink underline underline-offset-4">{cr.searchInstead}</Link>.
                 </p>
               )}
             </div>
@@ -164,16 +155,16 @@ export function CatchReveal() {
             }`}
           >
             <p className="inline-flex w-fit items-center gap-1.5 rounded-full bg-catch-wash px-3 py-1 text-label font-semibold text-[var(--catch-ink)]">
-              <AlertTriangle className="h-3.5 w-3.5" aria-hidden /> The catch
+              <AlertTriangle className="h-3.5 w-3.5" aria-hidden /> {cr.theCatchBadge}
             </p>
 
             {!revealed ? (
               <div className="flex flex-1 flex-col items-start justify-center py-8">
                 <p className="text-title font-semibold leading-snug text-ink">
-                  {found ? `${found.flags.length} thing${found.flags.length === 1 ? "" : "s"} to check before you bid.` : "The price is only half the story."}
+                  {found ? plural(found.flags.length, cr.checksCount) : cr.defaultHeadline}
                 </p>
                 <p className="mt-2 max-w-[400px] text-body text-ink-3">
-                  This is the part most listings leave for you to find out on sale day.
+                  {cr.unshownSub}
                 </p>
                 <button
                   type="button"
@@ -181,14 +172,14 @@ export function CatchReveal() {
                   onClick={() => setRevealed(true)}
                   className="mt-6 inline-flex h-11 items-center gap-2 rounded-control bg-ink px-5 text-meta font-semibold text-white transition-colors hover:bg-ink-2 disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  <Eye className="h-4 w-4" aria-hidden /> Show the catch
+                  <Eye className="h-4 w-4" aria-hidden /> {cr.showCatchBtn}
                 </button>
               </div>
             ) : found ? (
               <div className="mt-5 flex-1">
                 <ol className="space-y-3">
                   {found.flags.map((flag, i) => {
-                    const mitigation = getMitigationHeuristic(flag);
+                    const mitigation = getMitigationHeuristic(flag, cr.mitigations);
                     return (
                       <li key={flag} className="catch-item flex flex-col gap-1.5" style={{ animationDelay: `${i * 70}ms` }}>
                         <div className="flex gap-3">
@@ -215,7 +206,9 @@ export function CatchReveal() {
                   ))}
                 </ol>
                 <p className="mt-5 border-t border-catch/25 pt-4 text-label leading-5 text-catch-ink">
-                  Built only from what the listing publishes. Title, liens and condition still need your own check.
+                  {locale === "en"
+                    ? "Built only from what the listing publishes. Title, liens and condition still need your own check."
+                    : cr.disclaimer}
                 </p>
               </div>
             ) : null}
@@ -225,14 +218,14 @@ export function CatchReveal() {
         {listing ? (
           <div className="mt-5 flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-meta font-semibold">
             <button type="button" onClick={next} className="inline-flex items-center gap-1.5 text-ink hover:underline underline-offset-4">
-              <RefreshCw className="h-4 w-4" aria-hidden /> Show another listing
+              <RefreshCw className="h-4 w-4" aria-hidden /> {cr.showAnother}
             </button>
             <Link href={`/listings/${encodeURIComponent(listing.id)}`} className="inline-flex items-center gap-1.5 text-ink hover:underline underline-offset-4">
-              Open the full listing <ArrowRight className="h-4 w-4" aria-hidden />
+              {cr.openFull} <ArrowRight className="h-4 w-4" aria-hidden />
             </Link>
             {exactSourceUrl ? (
               <a href={exactSourceUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-ink-3 hover:text-ink">
-                Original notice <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+                {cr.originalNotice} <ExternalLink className="h-3.5 w-3.5" aria-hidden />
               </a>
             ) : null}
           </div>

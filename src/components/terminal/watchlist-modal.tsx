@@ -1,4 +1,5 @@
 "use client";
+
 import React, { useEffect } from "react";
 import { PropertyListing, SOURCES } from "./property-data";
 import { displayDate, displayMoney, knownNumber, positiveNumber, safeImageUrl } from "@/lib/listing-display";
@@ -6,6 +7,8 @@ import { sourceDisplayText } from "@/lib/source-display";
 import { X, Bookmark, FileText, Copy, Trash2, ImageOff } from "lucide-react";
 import { ListingCompareToggle } from "@/components/listings/listing-compare";
 import { bandForScore } from "@/lib/score-bands";
+import { useLocale } from "@/components/i18n/locale-provider";
+import { formatUsd, formatLocaleDate, formatLocaleNumber } from "@/lib/i18n/translator";
 
 interface WatchlistProps {
   isOpen: boolean;
@@ -64,6 +67,21 @@ function publicWatchlistListing(listing: PropertyListing) {
 }
 
 export function WatchlistModal({ isOpen, onClose, savedListings, onRemove, onSelectListing }: WatchlistProps) {
+  const { locale, messages, format } = useLocale();
+  const t = messages.modalsAndParser;
+  const showMoney = (val: number | null | undefined, fallback = messages.drawerExtra.unpublished) =>
+    locale === "en"
+      ? displayMoney(val)
+      : val !== null && val !== undefined && Number.isFinite(val)
+        ? formatUsd(locale, val)
+        : fallback;
+  const showDate = (val: string | null | undefined) =>
+    locale === "en"
+      ? displayDate(val)
+      : val
+        ? formatLocaleDate(locale, val)
+        : messages.drawerExtra.unpublished;
+
   const [portfolioRollup, setPortfolioRollup] = React.useState<{
     count: number;
     totalEstimatedValue: number | null;
@@ -87,12 +105,12 @@ export function WatchlistModal({ isOpen, onClose, savedListings, onRemove, onSel
       const body = await response.json().catch(() => ({}));
       if (!response.ok) {
         setPortfolioRollup(null);
-        setPortfolioStatus(body.error || "Unlock the private workspace to load server portfolio rollups.");
+        setPortfolioStatus(body.error || t.unlockRollupMsg);
         return;
       }
       setPortfolioRollup(body);
     } catch {
-      setPortfolioStatus("Portfolio rollup service could not be reached.");
+      setPortfolioStatus(t.rollupServiceError);
     } finally {
       setPortfolioLoading(false);
     }
@@ -233,9 +251,9 @@ export function WatchlistModal({ isOpen, onClose, savedListings, onRemove, onSel
         <div className="px-6 py-4 border-b border-line flex items-center justify-between bg-card">
           <div className="flex items-center gap-2">
             <Bookmark className="w-5 h-5 text-ink fill-ink" />
-            <h3 id="watchlist-title" className="text-lg font-bold text-ink">Saved Watchlist ({savedListings.length})</h3>
+            <h3 id="watchlist-title" className="text-lg font-bold text-ink">{format(t.watchlistTitle, { count: formatLocaleNumber(locale, savedListings.length) })}</h3>
           </div>
-          <button onClick={onClose} aria-label="Close watchlist" className="p-2 rounded-control text-ink-3 hover:text-ink hover:bg-paper">
+          <button onClick={onClose} aria-label={t.watchlistCloseAria} className="p-2 rounded-control text-ink-3 hover:text-ink hover:bg-paper">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -246,34 +264,34 @@ export function WatchlistModal({ isOpen, onClose, savedListings, onRemove, onSel
             <div className="px-6 py-2.5 bg-ink text-white flex flex-wrap items-center justify-between gap-3 text-xs">
               <div className="flex items-center gap-4">
                 <div>
-                  <span className="text-label uppercase font-bold text-white/75 block">Known opening amounts</span>
+                  <span className="text-label uppercase font-bold text-white/75 block">{t.knownOpeningAmounts}</span>
                   <span className="font-extrabold text-sm text-white">
-                    {displayMoney(totalOpeningBids)}
+                    {showMoney(totalOpeningBids)}
                   </span>
-                  <span className="block text-meta text-white/75">{knownOpeningBids.length}/{savedListings.length} published</span>
+                  <span className="block text-meta text-white/75">{format(t.watchlistPublishedRatio, { known: knownOpeningBids.length, total: savedListings.length })}</span>
                 </div>
                 <div>
-                  <span className="text-label uppercase font-bold text-white/75 block">Known bid spread</span>
+                  <span className="text-label uppercase font-bold text-white/75 block">{t.knownBidSpread}</span>
                   <span className="font-extrabold text-sm text-white">
-                    {displayMoney(totalBidSpread)}
+                    {showMoney(totalBidSpread)}
                   </span>
-                  <span className="block text-meta text-white/75">{knownBidSpreads.length}/{savedListings.length} modeled</span>
+                  <span className="block text-meta text-white/75">{format(t.watchlistModeledRatio, { known: knownBidSpreads.length, total: savedListings.length })}</span>
                 </div>
                 <div>
-                  <span className="text-label uppercase font-bold text-white/75 block">Avg modeled score</span>
+                  <span className="text-label uppercase font-bold text-white/75 block">{t.avgModeledScore}</span>
                   <span className="font-extrabold text-sm text-white">
-                    {averageModeledScore === null ? "Not modeled" : `${averageModeledScore}/99`}
+                    {averageModeledScore === null ? t.notModeled : `${averageModeledScore}/99`}
                   </span>
-                  <span className="block text-meta text-white/75">{knownScores.length}/{savedListings.length} scored</span>
+                  <span className="block text-meta text-white/75">{format(t.watchlistScoredRatio, { known: knownScores.length, total: savedListings.length })}</span>
                 </div>
               </div>
               <span className="text-label font-semibold text-white/75 uppercase tracking-wider">
-                {savedListings.length} tracked opportunities
+                {format(t.watchlistTrackedOpps, { count: formatLocaleNumber(locale, savedListings.length) })}
               </span>
             </div>
 
             <div className="px-6 py-3 bg-paper border-b border-line flex flex-wrap items-center justify-between gap-2">
-              <span className="text-xs text-ink-3 font-medium">Saved source records</span>
+              <span className="text-xs text-ink-3 font-medium">{t.savedSourceRecords}</span>
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
@@ -281,51 +299,51 @@ export function WatchlistModal({ isOpen, onClose, savedListings, onRemove, onSel
                   disabled={portfolioLoading}
                   className="px-3 py-1.5 bg-card border border-line-strong text-xs font-bold text-ink rounded-control hover:bg-paper transition flex items-center gap-1 shadow-sm disabled:opacity-50"
                 >
-                  <span>{portfolioLoading ? "Loading Rollup…" : "Portfolio Rollup"}</span>
+                  <span>{portfolioLoading ? t.loadingRollup : t.portfolioRollup}</span>
                 </button>
                 <button
                   onClick={exportCsv}
                   className="px-3 py-1.5 bg-card border border-line-strong text-xs font-bold text-ink rounded-control hover:bg-paper transition flex items-center gap-1 shadow-sm"
                 >
                   <FileText className="w-3.5 h-3.5 text-ink" />
-                  <span>Export CSV</span>
+                  <span>{t.exportCsv}</span>
                 </button>
                 <button
                   onClick={exportJson}
                   className="px-3 py-1.5 bg-card border border-line-strong text-xs font-bold text-ink rounded-control hover:bg-paper transition flex items-center gap-1 shadow-sm"
                 >
                   <Copy className="w-3.5 h-3.5 text-ink" />
-                  <span>Export JSON</span>
+                  <span>{t.exportJson}</span>
                 </button>
               </div>
             </div>
             {portfolioStatus && (
               <div className="px-6 py-2.5 bg-paper border-b border-line-strong text-xs text-ink-2 flex items-center justify-between gap-2">
                 <span>{portfolioStatus}</span>
-                <a href="/sign-in" className="font-bold underline shrink-0">Unlock workspace</a>
+                <a href="/sign-in" className="font-bold underline shrink-0">{t.unlockWorkspace}</a>
               </div>
             )}
             {portfolioRollup && (
               <div className="px-6 py-3 bg-paper border-b border-line text-xs space-y-2" data-testid="portfolio-dashboard-rollup">
                 <div className="grid grid-cols-3 gap-2">
                   <div className="rounded-control bg-card border border-line p-2">
-                    <span className="block text-label font-bold uppercase text-ink-3">Server Est. Value</span>
-                    <strong className="text-sm text-ink">{displayMoney(portfolioRollup.totalEstimatedValue)}</strong>
+                    <span className="block text-label font-bold uppercase text-ink-3">{t.serverEstValue}</span>
+                    <strong className="text-sm text-ink">{showMoney(portfolioRollup.totalEstimatedValue)}</strong>
                   </div>
                   <div className="rounded-control bg-card border border-line p-2">
-                    <span className="block text-label font-bold uppercase text-ink-3">Server Est. Spread</span>
-                    <strong className="text-sm text-ink">{displayMoney(portfolioRollup.totalEstimatedEquity)}</strong>
+                    <span className="block text-label font-bold uppercase text-ink-3">{t.serverEstSpread}</span>
+                    <strong className="text-sm text-ink">{showMoney(portfolioRollup.totalEstimatedEquity)}</strong>
                   </div>
                   <div className="rounded-control bg-card border border-line p-2">
-                    <span className="block text-label font-bold uppercase text-ink-3">Median Discount</span>
+                    <span className="block text-label font-bold uppercase text-ink-3">{t.medianDiscount}</span>
                     <strong className="text-sm text-ink">
-                      {portfolioRollup.medianDiscount !== null ? `${Math.round(portfolioRollup.medianDiscount * 100)}%` : "Not modeled"}
+                      {portfolioRollup.medianDiscount !== null ? `${Math.round(portfolioRollup.medianDiscount * 100)}%` : t.notModeled}
                     </strong>
                   </div>
                 </div>
                 {Object.keys(portfolioRollup.perState || {}).length > 0 && (
                   <p className="text-label text-ink-3">
-                    <strong className="text-ink">States:</strong>{" "}
+                    <strong className="text-ink">{t.statesPrefix}</strong>{" "}
                     {Object.entries(portfolioRollup.perState).map(([st, c]) => `${st} (${c})`).join(", ")}
                   </p>
                 )}
@@ -339,8 +357,8 @@ export function WatchlistModal({ isOpen, onClose, savedListings, onRemove, onSel
           {savedListings.length === 0 ? (
             <div className="text-center py-12 text-ink-3 space-y-2">
               <Bookmark className="w-10 h-10 mx-auto text-ink-3" />
-              <p className="font-semibold text-ink">No saved properties yet</p>
-              <p className="text-xs">Click the bookmark icon on any auction listing or parsed notice to track it here.</p>
+              <p className="font-semibold text-ink">{t.noSavedTitle}</p>
+              <p className="text-xs">{t.noSavedBody}</p>
             </div>
           ) : (
             savedListings.map((l) => {
@@ -360,14 +378,14 @@ export function WatchlistModal({ isOpen, onClose, savedListings, onRemove, onSel
                   {photoUrl ? (
                     <img src={photoUrl} alt="" className="h-14 w-14 rounded-control object-cover" />
                   ) : (
-                    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-control bg-paper text-ink-3" aria-label="No source photo published">
+                    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-control bg-paper text-ink-3" aria-label={t.noPhotoAria}>
                       <ImageOff className="h-4 w-4" />
                     </div>
                   )}
                   <div className="min-w-0">
                     <p className="font-bold text-sm text-ink truncate">{l.address}</p>
                     <p className="text-xs text-ink-3 truncate">
-                      {displayMoney(l.openingBid)} · Sale: {displayDate(l.saleDate)}
+                      {showMoney(l.openingBid)} · {t.watchlistSalePrefix} {showDate(l.saleDate)}
                     </p>
                   </div>
                 </button>
@@ -382,13 +400,13 @@ export function WatchlistModal({ isOpen, onClose, savedListings, onRemove, onSel
                         : { backgroundColor: "var(--color-line)", color: "var(--color-ink-3)" }
                     }
                   >
-                    {score === null ? "Not modeled" : `${Math.round(score)}/99`}
+                    {score === null ? t.notModeled : `${Math.round(score)}/99`}
                   </span>
                   <button
                     onClick={() => onRemove(l.id)}
-                    aria-label={`Remove ${l.address} from watchlist`}
+                    aria-label={format(t.removeFromWatchlistAria, { address: l.address })}
                     className="p-1.5 text-ink-3 hover:text-catch-ink transition"
-                    title="Remove from watchlist"
+                    title={t.removeFromWatchlistTitle}
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>

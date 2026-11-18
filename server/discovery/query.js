@@ -899,6 +899,17 @@ function getReadPool(database) {
     ? database.getReadPool()
     : database.pool;
 }
+const REVISION_INFLIGHT = new WeakMap();
+async function pgRevisionCoalesced(database) {
+  const pool = database?.pool;
+  if (!pool) return null;
+  if (REVISION_INFLIGHT.has(pool)) return REVISION_INFLIGHT.get(pool);
+  const p = pgRevision(database).finally(() => {
+    if (REVISION_INFLIGHT.get(pool) === p) REVISION_INFLIGHT.delete(pool);
+  });
+  REVISION_INFLIGHT.set(pool, p);
+  return p;
+}
 async function pgRevision(database) {
   const pool = getReadPool(database);
   if (!REVISION_SEQ_MISSING.has(database.pool) && !REVISION_TABLE_MISSING.has(database.pool)) {
@@ -1298,4 +1309,6 @@ module.exports = {
   // runs. It was referenced there but missing here, which meant that suite only
   // ever proved itself when DATABASE_URL was set and otherwise stayed silent.
   pgWhere,
+  pgRevision,
+  pgRevisionCoalesced,
 };

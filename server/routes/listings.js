@@ -1,3 +1,4 @@
+const zlib = require('node:zlib');
 const defaultDb = require('../db/client');
 const Validator = require('../security/validation');
 const { readMediaStore, attachMedia } = require('../db/property-media-store');
@@ -33,6 +34,21 @@ function neutralCustomerText(value) {
   return typeof value === 'string'
     ? value.replace(/servicelink(?:[\s_-]*auction)?/gi, 'Public Auction Network')
     : value;
+}
+
+const LISTINGS_RESPONSE_CACHE = (process.env.NODE_ENV === 'test' || process.env.NODE_TEST_CONTEXT) ? null : new WeakMap();
+const LISTINGS_CACHE_TTL_MS = 20_000;
+const LISTINGS_CACHE_MAX_ENTRIES = 32;
+
+function resolveListingsCacheStore(db, options) {
+  if (options && options.responseCache) return options.responseCache;
+  if (!LISTINGS_RESPONSE_CACHE || !db || (typeof db !== 'object' && typeof db !== 'function')) return null;
+  let store = LISTINGS_RESPONSE_CACHE.get(db);
+  if (!store) {
+    store = new Map();
+    LISTINGS_RESPONSE_CACHE.set(db, store);
+  }
+  return store;
 }
 
 const parcelLookupCache = new Map();
@@ -80,7 +96,7 @@ function presentListing(listing) {
   presented.evidenceCompleteness={known:evidenceFields.length-missing.length,total:evidenceFields.length,missing};
   // Triage + parcel identity are presentation-layer fields: they are computed
   // here so both the in-memory and Postgres listing paths emit the same shape.
-  presented.triage = computeTriage({ ...listing, ...presented });
+  presented.triage = computeTriage(presented);
   const hudSafmr = listing.hudSafmr || (listing.zip ? getHudSafmrBenchmark({ zip: listing.zip, bedrooms: listing.beds ?? 2 }) : null);
   if (hudSafmr) presented.hudSafmr = hudSafmr;
   const apn = extractRawApn(listing) ?? listing.apn ?? listing.parcelNumber ?? listing.parcelId
@@ -491,6 +507,26 @@ async function handleListings(req, res, dbOverride = null, options = {}) {
     if (filters.mode && filters.mode !== 'autocomplete' && filters.mode !== 'default') {
       return res.status(400).json({ error: 'Invalid mode' });
     }
+    const isSummaryRequest = url.searchParams.get('summary') === '1' || url.searchParams.get('summary') === 'true';
+    const cacheStore = (!isAutocomplete && !isSummaryRequest && sinceMs === null && !options?.signal && (typeof db.dataMode !== 'function' || db.dataMode() !== 'unavailable'))
+      ? resolveListingsCacheStore(db, options)
+      : null;
+    const cacheRev = cacheStore
+      ? (db.isPg && typeof discovery.pgRevisionCoalesced === 'function'
+          ? await discovery.pgRevisionCoalesced(db).catch(() => null)
+          : (typeof discovery.revisionOf === 'function' ? discovery.revisionOf(db) : null))
+      : null;
+    const cacheKey = cacheStore && cacheRev !== null && cacheRev !== undefined ? `${cacheRev}|${url.search}` : null;
+    if (cacheKey) {
+      const cached = cacheStore.get(cacheKey);
+      if (cached && Date.now() - cached.ts < LISTINGS_CACHE_TTL_MS) {
+        if (typeof res.sendPrecompressedJson === 'function') {
+          return res.sendPrecompressedJson(cached);
+        }
+        return res.json(JSON.parse(cached.json));
+      }
+      if (cached) cacheStore.delete(cacheKey);
+    }
     let result;
     try {
       if (usesDiscovery) {
@@ -560,7 +596,6 @@ async function handleListings(req, res, dbOverride = null, options = {}) {
     }
 
     const page = result.page || { nextCursor: null, hasMore: filters.offset + result.listings.length < result.total };
-    const isSummaryRequest = url.searchParams.get('summary') === '1' || url.searchParams.get('summary') === 'true';
     const isIntelligenceView = INTELLIGENCE_SORTS.has(String(filters.sort)) || (Number(filters.minQuality) || 0) > 0;
     // Fast summary path (used by sitemap pagination): skips media disk scans,
     // bake-off, intelligence scoring, and full provenance serialization.
@@ -666,6 +701,18 @@ async function handleListings(req, res, dbOverride = null, options = {}) {
     if (sinceMs !== null) {
       body.delta = true;
       body.since = sinceIso;
+    }
+    if (cacheKey && cacheStore) {
+      const json = JSON.stringify(body);
+      const gzip = Buffer.byteLength(json) >= 1024 ? zlib.gzipSync(json, { level: 1 }) : null;
+      if (cacheStore.size >= LISTINGS_CACHE_MAX_ENTRIES) {
+        const oldest = cacheStore.keys().next().value;
+        if (oldest !== undefined) cacheStore.delete(oldest);
+      }
+      cacheStore.set(cacheKey, { ts: Date.now(), json, gzip });
+      if (typeof res.sendPrecompressedJson === 'function') {
+        return res.sendPrecompressedJson({ json, gzip });
+      }
     }
     return res.json(body);
   }

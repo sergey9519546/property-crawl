@@ -4,16 +4,11 @@ import * as React from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  ChevronDown,
   Menu,
-  X,
   LayoutDashboard,
-  Eye,
   Radar,
   Gauge,
-  Plug,
   Target,
-  Send,
   Calculator,
   Landmark,
   BookOpen,
@@ -21,11 +16,13 @@ import {
   History,
   BarChart3,
   PieChart,
-  ArrowRight,
   KeyRound,
   type LucideIcon,
 } from "lucide-react";
 import { Logo } from "./logo";
+import { LanguageSwitcher } from "@/components/i18n/language-switcher";
+import { useLocale } from "@/components/i18n/locale-provider";
+import type { Messages } from "@/lib/i18n/messages";
 import {
   Sheet,
   SheetContent,
@@ -55,43 +52,47 @@ type MenuGroup = {
   simple?: { label: string; href: string }[];
 };
 
-// Product nav maps to shipped beta surfaces. Phantom roadmap names are labeled.
-const GROUPS: MenuGroup[] = [
-  {
-    key: "product",
-    label: "Product",
-    columns: [
-      [
-        { label: "Search listings", desc: "Upcoming sales on a list, a map or a calendar", icon: LayoutDashboard, href: "/listings", tint: "#e7f8f0" },
-        { label: "The catch", desc: "What could cost you, on every listing", icon: Target, href: "/#the-catch", tint: "#fff0e9" },
-        { label: "Run your numbers", desc: "Work out your top bid from your own estimates", icon: Calculator, href: "/#product", tint: "#eef1ff" },
+// Product nav maps to shipped beta surfaces. Keep exact hrefs visible for route checks.
+function buildMenuGroups(m: Messages): MenuGroup[] {
+  const p = m.header.productItems;
+  const l = m.header.learnItems;
+  return [
+    {
+      key: "product",
+      label: m.header.productLabel,
+      columns: [
+        [
+          { label: p.listingsLabel, desc: p.listingsDesc, icon: LayoutDashboard, href: "/listings", tint: "#e7f8f0" },
+          { label: p.catchLabel, desc: p.catchDesc, icon: Target, href: "/#the-catch", tint: "#fff0e9" },
+          { label: p.underwriteLabel, desc: p.underwriteDesc, icon: Calculator, href: "/#product", tint: "#eef1ff" },
+        ],
+        [
+          { label: p.huntsLabel, desc: p.huntsDesc, icon: Radar, href: "/hunts", tint: "#e7f8f0" },
+          { label: p.portfolioLabel, desc: p.portfolioDesc, icon: PieChart, href: "/portfolio", tint: "#eef1ff" },
+          { label: p.researchLabel, desc: p.researchDesc, icon: BookOpen, href: "/research", tint: "#fff0e9" },
+        ],
       ],
-      [
-        { label: "Hunts", desc: "Members get an email when a new listing fits", icon: Radar, href: "/hunts", tint: "#e7f8f0" },
-        { label: "Portfolio", desc: "Your tracked properties, price drops and sale dates", icon: PieChart, href: "/portfolio", tint: "#eef1ff" },
-        { label: "Research cases", desc: "Case files, title risk, and lien checks", icon: BookOpen, href: "/research", tint: "#fff0e9" },
+    },
+    {
+      key: "learn",
+      label: m.header.learnLabel,
+      columns: [
+        [
+          { label: l.guideLabel, desc: l.guideDesc, icon: BookOpen, href: "/resources#knowledge-base", tint: "#e5e7eb" },
+          { label: l.faqLabel, desc: l.faqDesc, icon: Gauge, href: "/#faq", tint: "#e5e7eb" },
+          { label: l.statesLabel, desc: l.statesDesc, icon: Map, href: "/states", tint: "#e5e7eb" },
+        ],
+        [
+          { label: l.changelogLabel, desc: l.changelogDesc, icon: History, href: "/resources#changelog", tint: "#e5e7eb" },
+          { label: l.sourcesLabel, desc: l.sourcesDesc, icon: BarChart3, href: "/sources", tint: "#e5e7eb" },
+          { label: l.caseStudiesLabel, desc: l.caseStudiesDesc, icon: BookOpen, href: "/case-studies", tint: "#e5e7eb" },
+          { label: l.enterpriseLabel, desc: l.enterpriseDesc, icon: Landmark, href: "/enterprise", tint: "#e5e7eb" },
+          { label: l.staffSignInLabel, desc: l.staffSignInDesc, icon: KeyRound, href: "/sign-in", tint: "#e5e7eb" },
+        ],
       ],
-    ],
-  },
-  {
-    key: "learn",
-    label: "Learn",
-    columns: [
-      [
-        { label: "Buyer's guide", desc: "How auction sales work, step by step", icon: BookOpen, href: "/resources#knowledge-base", tint: "#e5e7eb" },
-        { label: "Questions", desc: "Short answers for first-time bidders", icon: Gauge, href: "/#faq", tint: "#e5e7eb" },
-        { label: "States and counties", desc: "Where we have listings right now", icon: Map, href: "/states", tint: "#e5e7eb" },
-      ],
-      [
-        { label: "What's new", desc: "Recent changes to the site", icon: History, href: "/resources#changelog", tint: "#e5e7eb" },
-        { label: "Sources & coverage", desc: "Where listings come from and how fresh they are", icon: BarChart3, href: "/sources", tint: "#e5e7eb" },
-        { label: "Case studies", desc: "How buyers review auctions, step by step", icon: BookOpen, href: "/case-studies", tint: "#e5e7eb" },
-        { label: "For teams", desc: "Individual accounts, access rules and roadmap", icon: Landmark, href: "/enterprise", tint: "#e5e7eb" },
-        { label: "Staff sign-in", desc: "Sign in as a member or staff reviewer", icon: KeyRound, href: "/sign-in", tint: "#e5e7eb" },
-      ],
-    ],
-  },
-];
+    },
+  ];
+}
 
 function MegaPanel({ group }: { group: MenuGroup }) {
   if (group.simple) {
@@ -100,7 +101,7 @@ function MegaPanel({ group }: { group: MenuGroup }) {
         <div className="grid grid-cols-2 gap-1 sm:grid-cols-3">
           {group.simple.map((l) => (
             <Link
-              key={l.label}
+              key={l.href}
               href={l.href}
               className="rounded-control px-3 py-2 text-meta font-medium text-ink hover:bg-paper"
             >
@@ -118,7 +119,7 @@ function MegaPanel({ group }: { group: MenuGroup }) {
           <div key={ci} className="grid gap-1.5">
             {col.map((l) => (
               <Link
-                key={l.label}
+                key={l.href}
                 href={l.href}
                 className="group flex items-start gap-3 rounded-control p-2.5 hover:bg-paper"
               >
@@ -146,6 +147,8 @@ function MegaPanel({ group }: { group: MenuGroup }) {
 }
 
 export function SiteHeader() {
+  const { messages } = useLocale();
+  const groups = React.useMemo(() => buildMenuGroups(messages), [messages]);
   const [open, setOpen] = React.useState<string | null>(null);
   const [scrolled, setScrolled] = React.useState(false);
   const [mobileOpen, setMobileOpen] = React.useState(false);
@@ -167,37 +170,29 @@ export function SiteHeader() {
 
   return (
     <div
-      // Outer layer: fixed, full-width, transparent. Handles sticky positioning only.
       className="fixed inset-x-0 top-4 z-50"
       style={{ padding: "12px 0" }}
     >
       <div className="mx-auto w-[calc(100%-32px)] sm:w-[calc(100%-48px)] lg:w-[calc(100%-64px)]">
-        {/* Inner capsule: the visual nav shell. Transparent at top, white+blur+rounded when scrolled.
-            Arcade: transition 0.2s, scroll threshold ~100px, wider container, tighter nav spacing */}
         <header
-          className={`relative flex items-center justify-between rounded-control px-4 py-3 sm:px-8 transition-all duration-500 ease-[cubic-bezier(0.25,0.46,0.45,0.94)] ${
+          className={`relative flex items-center justify-between gap-4 xl:grid xl:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] rounded-control px-4 py-3 sm:px-8 transition-all duration-500 ease-[cubic-bezier(0.25,0.46,0.45,0.94)] ${
             scrolled || open
               ? "bg-card/70 backdrop-blur-2xl backdrop-saturate-[2] border border-white/40 shadow-[0_8px_32px_rgba(0,0,0,0.08),inset_0_1px_0_rgba(255,255,255,0.8)]"
               : "bg-transparent shadow-none border border-transparent"
           }`}
           style={{ willChange: scrolled || open ? "backdrop-filter" : "auto" }}
         >
-        {/* Brand is pinned left; desktop nav is centered independently.
-            min-w-0 on both lets the brand compress instead of colliding with the
-            menu trigger: at 320px the content box is 256px and the 40px trigger
-            leaves 216px, which the full lockup does not fit. Without this the
-            brand's box ran under the trigger by a pixel. */}
-        <div className="flex min-w-0 items-center">
-          <Link href="/" className="flex min-w-0 items-center gap-3" aria-label="PerfectProperty home">
+        <div className="flex min-w-0 shrink-0 items-center xl:justify-self-start">
+          <Link href="/" className="flex min-w-0 items-center gap-3" aria-label={messages.common.homeAria}>
             <Logo className="text-sm min-[375px]:text-base sm:text-lg" />
           </Link>
         </div>
 
         <nav
-          className="absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 items-center gap-[34px] xl:flex"
+          className="hidden items-center justify-center gap-6 xl:flex xl:justify-self-center 2xl:gap-8"
           onMouseLeave={() => setOpen(null)}
         >
-            {GROUPS.map((g) => (
+            {groups.map((g) => (
               <button
                 key={g.key}
                 onMouseEnter={() => setOpen(g.key)}
@@ -205,7 +200,7 @@ export function SiteHeader() {
                 onClick={() => setOpen(g.key)}
                 aria-haspopup="menu"
                 aria-expanded={open === g.key}
-                className="inline-flex h-10 items-center text-meta font-semibold text-ink-2 transition-colors hover:text-ink"
+                className="inline-flex h-10 shrink-0 items-center whitespace-nowrap text-meta font-semibold text-ink-2 transition-colors hover:text-ink"
               >
                 {g.label}
               </button>
@@ -213,43 +208,46 @@ export function SiteHeader() {
             <Link
               href="/#pricing"
               onMouseEnter={() => setOpen(null)}
-              className="inline-flex h-10 items-center text-meta font-semibold text-ink-2 transition-colors hover:text-ink"
+              className="inline-flex h-10 shrink-0 items-center whitespace-nowrap text-meta font-semibold text-ink-2 transition-colors hover:text-ink"
             >
-              Pricing
+              {messages.common.pricing}
             </Link>
         </nav>
 
-        {/* Right: CTA — single dark button, rounded-control */}
-        <div className="hidden xl:flex items-center gap-2">
+        <div className="hidden shrink-0 items-center gap-2 xl:flex xl:justify-self-end">
+          <LanguageSwitcher />
           <Link
             href="/listings"
             onMouseEnter={() => setOpen(null)}
-            className="inline-flex h-10 items-center justify-center rounded-control bg-ink px-4 text-meta font-bold text-white transition-colors hover:bg-ink-2"
+            className="inline-flex h-10 shrink-0 items-center justify-center whitespace-nowrap rounded-control bg-ink px-4 text-meta font-bold text-white transition-colors hover:bg-ink-2"
           >
-            Browse listings
+            {messages.common.browseListings}
           </Link>
           <Link
             href="/account"
             onMouseEnter={() => setOpen(null)}
-            title="Members sign in with a one-time email link"
-            className="inline-flex h-10 items-center justify-center rounded-control border border-line-strong px-3 text-meta font-semibold text-ink-2 transition-colors hover:bg-card"
+            title={messages.header.signInTitle}
+            className="inline-flex h-10 shrink-0 items-center justify-center whitespace-nowrap rounded-control border border-line-strong px-3 text-meta font-semibold text-ink-2 transition-colors hover:bg-card"
           >
-            Sign in
+            {messages.common.signIn}
           </Link>
         </div>
 
-        {/* Mobile trigger */}
-        <button
-          className="xl:hidden inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-control text-ink hover:bg-paper"
-          aria-label="Open menu"
-          onClick={() => setMobileOpen(true)}
-        >
-          <Menu className="h-5 w-5" />
-        </button>
+        {/* Mobile actions */}
+        <div className="flex items-center gap-1.5 xl:hidden">
+          <LanguageSwitcher />
+          <button
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-control text-ink hover:bg-paper"
+            aria-label={messages.header.openMenu}
+            onClick={() => setMobileOpen(true)}
+          >
+            <Menu className="h-5 w-5" />
+          </button>
+        </div>
         </header>
       </div>
 
-      {/* Mega panel (desktop) — outside the capsule, inside the fixed outer */}
+      {/* Mega panel (desktop) */}
       <AnimatePresence>
         {open && (
           <motion.div
@@ -264,7 +262,7 @@ export function SiteHeader() {
           >
             <div className="mx-auto w-[calc(100%-32px)] sm:w-[calc(100%-48px)] lg:w-[calc(100%-64px)]">
               <div className="mt-2 overflow-hidden rounded-card border border-line bg-card shadow-[0_1px_2px_rgba(0,0,0,0.05),0_12px_32px_rgba(0,0,0,0.08)]">
-                {GROUPS.filter((g) => g.key === open).map((g) => (
+                {groups.filter((g) => g.key === open).map((g) => (
                   <MegaPanel key={g.key} group={g} />
                 ))}
               </div>
@@ -278,7 +276,7 @@ export function SiteHeader() {
         {mobileOpen && (
           <SheetContent side="right" className="w-[320px] overflow-y-auto p-0">
             <SheetDescription className="sr-only">
-              PerfectProperty navigation menu
+              {messages.header.navMenuAria}
             </SheetDescription>
             <SheetHeader className="flex flex-row items-center border-b border-paper px-5 py-4 pr-12">
               <SheetTitle asChild>
@@ -288,7 +286,7 @@ export function SiteHeader() {
               </SheetTitle>
             </SheetHeader>
             <Accordion type="multiple" className="px-2 py-2">
-              {GROUPS.map((g) => (
+              {groups.map((g) => (
                 <AccordionItem key={g.key} value={g.key} className="border-b-0">
                   <AccordionTrigger className="px-3 text-body font-semibold text-ink hover:no-underline">
                     {g.label}
@@ -298,7 +296,7 @@ export function SiteHeader() {
                       {g.simple
                         ? g.simple.map((l) => (
                             <Link
-                              key={l.label}
+                              key={l.href}
                               href={l.href}
                               onClick={() => setMobileOpen(false)}
                               className="rounded-control px-3 py-2 text-meta text-ink-2 hover:bg-paper"
@@ -308,7 +306,7 @@ export function SiteHeader() {
                           ))
                         : g.columns?.flat().map((l) => (
                             <Link
-                              key={l.label}
+                              key={l.href}
                               href={l.href}
                               onClick={() => setMobileOpen(false)}
                               className="flex items-start gap-3 rounded-control px-3 py-2 hover:bg-paper"
@@ -334,23 +332,29 @@ export function SiteHeader() {
                 </AccordionItem>
               ))}
               <Link href="/#pricing" onClick={() => setMobileOpen(false)} className="block rounded-control px-3 py-3 text-body font-semibold text-ink hover:bg-paper">
-                Pricing
+                {messages.common.pricing}
               </Link>
             </Accordion>
-            <div className="mt-2 grid gap-2 border-t border-paper px-5 py-4">
+            <div className="border-t border-paper px-5 py-4">
+              <p className="mb-2 text-label font-bold uppercase tracking-wider text-ink-3">
+                {messages.common.languageLabel}
+              </p>
+              <LanguageSwitcher variant="inline" />
+            </div>
+            <div className="grid gap-2 border-t border-paper px-5 py-4">
               <Link
                 href="/listings"
                 onClick={() => setMobileOpen(false)}
                 className="inline-flex h-10 items-center justify-center rounded-control bg-ink px-4 text-meta font-semibold text-white"
               >
-                Browse listings
+                {messages.common.browseListings}
               </Link>
               <Link
                 href="/account"
                 onClick={() => setMobileOpen(false)}
                 className="inline-flex h-10 items-center justify-center rounded-control border border-line-strong px-4 text-meta font-semibold text-ink-2"
               >
-                Sign in
+                {messages.common.signIn}
               </Link>
             </div>
           </SheetContent>

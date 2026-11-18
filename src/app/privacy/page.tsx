@@ -1,42 +1,42 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { getRequestLocale } from "@/lib/i18n/server";
+import { getMessages } from "@/lib/i18n/messages";
 import { Lock, Shield, EyeOff, Cookie, ArrowLeft } from "lucide-react";
 import { SiteHeader } from "@/components/site/site-header";
 import { SiteFooter } from "@/components/site/site-footer";
 
-export const metadata: Metadata = {
-  title: "Privacy Policy | PerfectProperty",
-  description:
-    "Data minimization policies, zero third-party monetization, and privacy protections for the PerfectProperty platform.",
-  alternates: {
-    canonical: "/privacy",
-  },
-  openGraph: {
-    title: "Privacy Policy | PerfectProperty",
-    description:
-      "Data minimization policies, zero third-party monetization, and privacy protections for the PerfectProperty platform.",
-    url: "/privacy",
-    siteName: "PerfectProperty",
-    type: "website",
-    images: [
-      {
-        url: "/og-image.png",
-        width: 1200,
-        height: 630,
-        alt: "Privacy Policy | PerfectProperty",
-      },
-    ],
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "Privacy Policy | PerfectProperty",
-    description:
-      "Data minimization policies, zero third-party monetization, and privacy protections for the PerfectProperty platform.",
-    images: ["/og-image.png"],
-  },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getRequestLocale();
+  const m = getMessages(locale);
+  const title = locale === "en" ? "Privacy Policy | PerfectProperty" : m.meta.privacyTitle;
+  const description = m.meta.privacyDescription;
+  return {
+    title,
+    description,
+    alternates: {
+      canonical: "/privacy",
+    },
+    openGraph: {
+      title,
+      description,
+      url: "/privacy",
+      siteName: "PerfectProperty",
+      type: "website",
+      images: [{ url: "/og-image.png", width: 1200, height: 630, alt: title }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: ["/og-image.png"],
+    },
+  };
+}
 
-export default function PrivacyPage() {
+export default async function PrivacyPage() {
+  const locale = await getRequestLocale();
+  const m = getMessages(locale);
   return (
     <div className="min-h-screen bg-paper text-ink">
       <SiteHeader />
@@ -46,21 +46,23 @@ export default function PrivacyPage() {
           href="/"
           className="inline-flex items-center gap-2 text-sm font-semibold text-ink-3 hover:text-ink transition-colors"
         >
-          <ArrowLeft className="h-4 w-4" /> Back to home
+          <ArrowLeft className="h-4 w-4" /> {m.common.backToHome}
         </Link>
       </div>
 
       <div className="border-b border-line pb-8">
-        <p className="text-label font-bold uppercase tracking-[0.14em] text-ink-3">Privacy & Data Governance</p>
+        <p className="text-label font-bold uppercase tracking-[0.14em] text-ink-3">{m.privacy.eyebrow}</p>
         <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-ink sm:text-4xl">
-          Privacy Policy
+          {m.privacy.title}
         </h1>
         <p className="mt-3 text-sm text-ink-3">
           Last revised: October 22, 2026 · Committed to absolute data minimization
         </p>
       </div>
 
-      <div className="mt-8 space-y-10 text-sm leading-7 text-ink-2">
+      {locale === "en" ? (
+<>
+<div className="mt-8 space-y-10 text-sm leading-7 text-ink-2">
         {/* Section 1 */}
         <section className="space-y-3">
           <h2 className="text-lg font-bold text-ink flex items-center gap-2">
@@ -156,17 +158,54 @@ export default function PrivacyPage() {
           </ul>
         </section>
       </div>
+</>
+) : (
+<>
+      <div className="mt-8 space-y-10 text-sm leading-7 text-ink-2">
+        <section className="space-y-3">
+          <h2 className="text-lg font-bold text-ink flex items-center gap-2"><EyeOff className="h-5 w-5 text-ink-2" />{m.privacy.s1Title}</h2>
+          <p>{m.privacy.s1P1}</p>
+          <p>{m.privacy.s1P2}</p>
+        </section>
+        <section className="space-y-3">
+          <h2 className="text-lg font-bold text-ink flex items-center gap-2"><Shield className="h-5 w-5 text-ink-2" />{m.privacy.s2Title}</h2>
+          <p>{m.privacy.s2P1}</p>
+          <p>{m.privacy.s2P2}</p>
+        </section>
+        <section className="space-y-3">
+          <h2 className="text-lg font-bold text-ink flex items-center gap-2"><Cookie className="h-5 w-5 text-ink-2" />{m.privacy.s3Title}</h2>
+          <p>{m.privacy.s3P1}</p>
+          <ul className="list-disc pl-5 space-y-1.5 text-xs text-ink-3">
+            {m.privacy.s3Cookies.map((c) => (<li key={c.name}><code>{c.name}</code>: {c.desc}</li>))}
+          </ul>
+          <p className="mt-2">{m.privacy.s3P2}</p>
+        </section>
+        <section className="space-y-3">
+          <h2 className="text-lg font-bold text-ink flex items-center gap-2"><Lock className="h-5 w-5 text-ink-2" />{m.privacy.s4Title}</h2>
+          <p>{m.privacy.s4P1Before}<Link href="/newsletter/unsubscribe" className="text-ink font-semibold underline">{m.privacy.s4P1Link}</Link>{m.privacy.s4P1After}</p>
+          <p>{m.privacy.s4P2}</p>
+        </section>
+        <section className="space-y-3 border-t border-line pt-6">
+          <h2 className="text-lg font-bold text-ink">{m.privacy.s5Title}</h2>
+          <p>{m.privacy.s5P1}</p>
+          <ul className="list-disc pl-5 space-y-1 text-xs text-ink-3">
+            {m.privacy.s5Rights.map((r) => (<li key={r.label}><strong>{r.label}</strong> {r.body}</li>))}
+          </ul>
+        </section>
+      </div>
+      </>
+)}
 
       <div className="mt-12 rounded-card border border-line bg-paper p-6 flex items-center justify-between">
         <div>
-          <h3 className="font-semibold text-ink">Privacy or Data Inquiries</h3>
-          <p className="text-xs text-ink-3 mt-1">Submit a data subject access or deletion request.</p>
+          <h3 className="font-semibold text-ink">{m.privacy.ctaTitle}</h3>
+          <p className="text-xs text-ink-3 mt-1">{m.privacy.ctaSub}</p>
         </div>
         <Link
           href="/contact"
           className="rounded-control bg-ink px-4 py-2.5 text-xs font-semibold text-white hover:bg-ink-2 transition"
         >
-          Contact Privacy Team
+          {m.privacy.ctaBtn}
         </Link>
       </div>
     </main>

@@ -12,6 +12,8 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { priorityBand } from '@/lib/triage-bands';
+import { useLocale } from '@/components/i18n/locale-provider';
+import { formatLocaleDate } from '@/lib/i18n/translator';
 
 export type OpportunitySignal = {
   key: string;
@@ -49,22 +51,13 @@ interface Props {
   compact?: boolean;
 }
 
-// Descriptions live with the UI; the numeric weights are single-sourced from
-// the backend evaluation payload (data.weights) so they can never drift.
-const WEIGHT_DETAILS: Record<string, { label: string; desc: string }> = {
-  bidToValueRatio: { label: 'Bid-to-Value Ratio', desc: 'Compares confirmed opening bid to estimated valuation midpoint.' },
-  saleDateKnown: { label: 'Published Sale Date', desc: 'Validates that a future active auction date is publisher-confirmed.' },
-  bidReduction: { label: 'Bid Reduction', desc: 'Detects same-record opening bid drops in source observation history.' },
-  areaDiscrepancy: { label: 'Building Area Discrepancy', desc: 'Flags discrepancies between publisher sqft and official cadastral records.' },
-  returnedToMarket: { label: 'Returned to Market', desc: 'Detects relisting notices, auction restarts, or back-on-market tags.' },
-  dataCompleteness: { label: 'Data Completeness', desc: 'Measures how many of the three canonical research artifacts — title facts, area corroboration, and a valuation band — resolved to supported evidence.' },
-};
-
 function weightPercent(value: number): string {
   return `${Math.round(value * 100)}%`;
 }
 
 export function OpportunitySignalsCard({ listingId, initialData = null, compact = false }: Props) {
+  const { locale, messages, format } = useLocale();
+  const t = messages.modalsAndParser;
   const [data, setData] = useState<OpportunitySignalsData | null>(initialData);
   const [loading, setLoading] = useState<boolean>(!initialData);
   const [error, setError] = useState<string | null>(null);
@@ -89,9 +82,9 @@ export function OpportunitySignalsCard({ listingId, initialData = null, compact 
         if (!cancelled) {
           setData(json);
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (!cancelled) {
-          setError(err?.message || 'Failed to evaluate signals');
+          setError(err instanceof Error ? err.message : t.sigLoadErr);
         }
       } finally {
         if (!cancelled) {
@@ -103,13 +96,13 @@ export function OpportunitySignalsCard({ listingId, initialData = null, compact 
     return () => {
       cancelled = true;
     };
-  }, [listingId, initialData]);
+  }, [listingId, initialData, t.sigLoadErr]);
 
   if (loading) {
     return (
       <div className="flex items-center justify-center p-6 bg-paper rounded-card border border-line text-xs text-ink-3 gap-2">
         <Loader2 className="w-4 h-4 animate-spin text-ink-2" />
-        <span>Checking research signals…</span>
+        <span>{t.sigLoading}</span>
       </div>
     );
   }
@@ -117,7 +110,7 @@ export function OpportunitySignalsCard({ listingId, initialData = null, compact 
   if (error || !data) {
     return (
       <div className="p-4 bg-catch-wash rounded-card border border-catch/30 text-xs text-catch-ink flex items-center justify-between">
-        <span>{error || 'Signals currently unavailable for this listing'}</span>
+        <span>{error || t.sigUnavailable}</span>
       </div>
     );
   }
@@ -128,39 +121,37 @@ export function OpportunitySignalsCard({ listingId, initialData = null, compact 
   const isHigh = band === 'high';
   const isMed = band === 'moderate';
 
-const supportedCount = data.summary?.supported ?? data.signals.filter((s) => s.status === 'supported').length;
+  const supportedCount = data.summary?.supported ?? data.signals.filter((s) => s.status === 'supported').length;
   const contradictedCount = data.summary?.contradicted ?? data.signals.filter((s) => s.status === 'contradicted').length;
   // Say the unresolved ones out loud. The score is a headline number resting on
   // whichever signals actually resolved, and "1 supported · 0 conflicting" alone
   // reads like a clean bill of health — a mostly-unknown score is an invitation
-  // to open the record, not a verdict. Resolution rates across the live set are
-  // measured by `npm run triage:measure` (see reports/triage-resolution-*.md);
-  // valuation bands in particular arrive from harvested assessor rolls, so a
-  // record without one says so instead of guessing.
+  // to open the record, not a verdict.
   const unknownCount = data.summary?.unknown
     ?? data.signals.filter((s) => s.status === 'unknown').length;
   const weights = data.weights ?? {};
+  const unknownPart = unknownCount ? format(t.sigNeedingChecksPart, { count: unknownCount }) : '';
 
   return (
     <div className={cn("bg-card rounded-card border border-line shadow-sm overflow-hidden text-ink", compact && "p-4")}>
       {/* Header Banner */}
       <div className="bg-ink p-5 text-white flex flex-wrap items-center justify-between gap-4">
         <div className="space-y-1">
-          <h3 className="text-base font-bold text-white">Research priority</h3>
-<p className="text-xs text-white/75">
-            {data.disclaimer || 'Deterministic evaluation with published weights. Not an appraisal or predictive distress score.'}
+          <h3 className="text-base font-bold text-white">{t.sigPriorityTitle}</h3>
+          <p className="text-xs text-white/75">
+            {data.disclaimer || t.sigDisclaimerFallback}
           </p>
         </div>
 
         {/* Score Dial / Badge */}
-<div className="flex items-center gap-3 bg-white/10 px-4 py-2.5 rounded-control border border-white/10">
+        <div className="flex items-center gap-3 bg-white/10 px-4 py-2.5 rounded-control border border-white/10">
           <div className="text-right">
-            <p className="text-xs font-semibold text-white/60">Priority score</p>
+            <p className="text-xs font-semibold text-white/60">{t.sigPriorityScore}</p>
             <div className="flex items-center gap-1.5 justify-end">
               <span className="text-2xl font-black text-white">{priority}</span>
               <span className="text-xs font-semibold text-white/60">/99</span>
             </div>
-            <p className="text-meta text-white/60 mt-0.5">{data.signals.length}-signal · independent of modeled Deal Score</p>
+            <p className="text-meta text-white/60 mt-0.5">{format(t.sigIndependentSub, { count: data.signals.length })}</p>
           </div>
           <div
             className={cn(
@@ -170,7 +161,7 @@ const supportedCount = data.summary?.supported ?? data.signals.filter((s) => s.s
               !isHigh && !isMed && "bg-white/5 text-white/60 border border-white/10"
             )}
           >
-            {unscored ? "No score" : isHigh ? "High Priority" : isMed ? "Moderate" : "Routine"}
+            {unscored ? t.sigNoScore : isHigh ? t.sigHighPriority : isMed ? t.sigModerate : t.sigRoutine}
           </div>
         </div>
       </div>
@@ -180,10 +171,7 @@ const supportedCount = data.summary?.supported ?? data.signals.filter((s) => s.s
       {data.historyUnavailable && (
         <div className="flex items-start gap-2 border-b border-catch/30 bg-catch-wash px-5 py-3 text-xs text-catch-ink">
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-          <p>
-            Observation history could not be read, so this score is incomplete. Signals that
-            depend on prior observations are unverified rather than clear.
-          </p>
+          <p>{t.sigHistoryUnavailable}</p>
         </div>
       )}
 
@@ -196,15 +184,15 @@ const supportedCount = data.summary?.supported ?? data.signals.filter((s) => s.s
         >
           <span className="flex items-center gap-1.5">
             <Scale className="w-3.5 h-3.5 text-ink-3" />
-            <span>How this score works ({supportedCount} supported{unknownCount ? ` · ${unknownCount} needing checks` : ''} · {contradictedCount} conflicting)</span>
+            <span>{format(t.sigHowWorksSummary, { supported: supportedCount, unknownPart, conflicting: contradictedCount })}</span>
           </span>
           {showWeights ? <ChevronUp className="w-4 h-4 text-ink-3" /> : <ChevronDown className="w-4 h-4 text-ink-3" />}
         </button>
 
-{showWeights && (
+        {showWeights && (
           <div className="mt-3 pt-3 border-t border-line grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
             {Object.entries(weights).map(([key, value]) => {
-              const detail = WEIGHT_DETAILS[key];
+              const detail = t.sigWeights[key as keyof typeof t.sigWeights];
               if (!detail) return null;
               const comp = data.componentScores?.[key];
               const maxPts = comp?.maxPoints ?? Math.round(value * 100);
@@ -217,7 +205,7 @@ const supportedCount = data.summary?.supported ?? data.signals.filter((s) => s.s
                     <div className="flex items-center gap-1.5 text-right">
                       {comp ? (
                         <span className="font-mono text-label font-bold text-ink-2">
-                          {earnedPts} / {maxPts} <span className="text-meta text-ink-3 font-normal">pts</span>
+                          {earnedPts} / {maxPts} <span className="text-meta text-ink-3 font-normal">{t.sigPts}</span>
                         </span>
                       ) : (
                         <span className="text-ink font-extrabold">{weightPercent(value)}</span>
@@ -236,7 +224,7 @@ const supportedCount = data.summary?.supported ?? data.signals.filter((s) => s.s
                   </div>
                   <div className="flex items-center justify-between text-label text-ink-3">
                     <p className="leading-snug text-meta">{detail.desc}</p>
-                    <span className="text-meta font-semibold text-ink-3 shrink-0 ml-1.5">{weightPercent(value)} wt</span>
+                    <span className="text-meta font-semibold text-ink-3 shrink-0 ml-1.5">{format(t.sigWeightSuffix, { pct: weightPercent(value) })}</span>
                   </div>
                 </div>
               );
@@ -248,7 +236,7 @@ const supportedCount = data.summary?.supported ?? data.signals.filter((s) => s.s
       {/* Candidate Signals List */}
       <div className="p-5 space-y-3">
         <h4 className="text-xs font-bold uppercase tracking-wider text-ink-3 mb-2">
-          Evidence checks ({data.signals.length})
+          {format(t.sigEvidenceChecksCount, { count: data.signals.length })}
         </h4>
 
         <div className="space-y-2.5">
@@ -286,7 +274,7 @@ const supportedCount = data.summary?.supported ?? data.signals.filter((s) => s.s
                       !isSupported && !isContradicted && "bg-catch-wash text-catch-ink"
                     )}
                   >
-                    {signal.status === 'unknown' ? 'Needs checking' : signal.status === 'contradicted' ? 'Conflicting' : 'Supported'}
+                    {signal.status === 'unknown' ? t.sigNeedsCheckBadge : signal.status === 'contradicted' ? t.sigConflictingBadge : t.sigSupportedBadge}
                   </span>
                 </div>
 
@@ -294,7 +282,7 @@ const supportedCount = data.summary?.supported ?? data.signals.filter((s) => s.s
 
                 <div className="mt-2 pt-2 border-t border-line pl-6 flex flex-wrap items-center justify-between gap-2 text-label">
                   <div className="text-ink-2 font-semibold flex items-center gap-1">
-                    <span>Next:</span>
+                    <span>{t.sigNextPrefix}</span>
                     <span>{signal.nextAction}</span>
                   </div>
 
@@ -302,7 +290,7 @@ const supportedCount = data.summary?.supported ?? data.signals.filter((s) => s.s
                     <span className="text-xs">{signal.evidenceClass.replace(/_/g, ' ')}</span>
                     {signal.observedAt && (
                       <span className="text-meta">
-                        observed {new Date(signal.observedAt).toLocaleDateString()}
+                        {format(t.sigObservedPrefix, { date: formatLocaleDate(locale, signal.observedAt) })}
                       </span>
                     )}
                   </div>

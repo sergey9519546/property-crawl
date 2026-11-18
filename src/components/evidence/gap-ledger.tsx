@@ -6,6 +6,7 @@ import { Check, ExternalLink } from "lucide-react";
 import { findGaps, type GapListing } from "@/lib/evidence";
 import { useWorkspaceSession } from "@/components/workspace/workspace-shell";
 import { readUnderwriteScenario } from "@/lib/underwrite-scenario";
+import { useLocale } from "@/components/i18n/locale-provider";
 
 /**
  * "What this listing can't tell you": the facts a buyer needs that the listing
@@ -40,6 +41,7 @@ function useTicks(id: string) {
 }
 
 export function GapLedger({ listing, className = "" }: { listing: GapListing; className?: string }) {
+  const { locale, messages: m } = useLocale();
   const gaps = findGaps(listing);
   const [ticks, toggle] = useTicks(listing.id);
   const done = gaps.filter((g) => ticks[g.key]).length;
@@ -138,7 +140,7 @@ export function GapLedger({ listing, className = "" }: { listing: GapListing; cl
     <section aria-labelledby={`gaps-${listing.id}`} className={`rounded-card border border-catch/30 bg-card p-5 sm:p-6 ${className}`}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 id={`gaps-${listing.id}`} className="text-title font-semibold tracking-[-0.01em] text-ink">
-          What this listing can&apos;t tell you
+          {m.detailUi.gapLedgerHeading}
         </h2>
         <div className="flex flex-wrap items-center gap-3">
           {gaps.length ? (
@@ -153,7 +155,7 @@ export function GapLedger({ listing, className = "" }: { listing: GapListing; cl
               onClick={() => void syncToWorkspaceCase()}
               className="rounded-control border border-line-strong bg-paper px-2.5 py-1 text-xs font-semibold text-ink-2 transition hover:bg-line disabled:opacity-50"
             >
-              {syncBusy ? "Syncing…" : linkedCaseId ? "Sync case state" : "Save to case"}
+              {syncBusy ? m.common.checking : linkedCaseId ? m.detailUi.openResearchCaseBtn : m.detailUi.syncToResearchBtn}
             </button>
           ) : null}
         </div>
@@ -166,7 +168,7 @@ export function GapLedger({ listing, className = "" }: { listing: GapListing; cl
 
       {gaps.length === 0 ? (
         <p className="mt-2 text-meta text-ink-2">
-          This listing publishes every fact we track. Title, liens and condition still need your own check.
+          {locale === "en" ? "This listing publishes every fact we track. Title, liens and condition still need your own check." : m.detailUi.allGapsChecked}
         </p>
       ) : (
         <ol className="mt-4 space-y-2">

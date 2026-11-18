@@ -4,6 +4,7 @@ import * as React from "react";
 import { FileText, Home, Sparkles, TrendingDown } from "lucide-react";
 import type { PropertyListing } from "@/components/terminal/property-data";
 import { chipToneClasses, computeTriageChips } from "@/lib/triage-chips";
+import { useLocale } from "@/components/i18n/locale-provider";
 
 const ICON: Record<"Sparkles" | "TrendingDown" | "FileText" | "Home", typeof Sparkles> = {
   Sparkles,
@@ -19,27 +20,37 @@ type Props = {
 };
 
 export function TriageChips({ listing, className, iconSize = 11 }: Props) {
+  const { locale, messages: m } = useLocale();
   const chips = computeTriageChips(listing);
   if (chips.length === 0) return null;
 
+  const listClass = ["flex flex-wrap items-center gap-1.5", className].filter(Boolean).join(" ");
+  const items = chips.map((rawChip) => {
+    const Icon = ICON[rawChip.icon];
+    const chip = locale === "en" ? rawChip : { ...rawChip, label: m.listingsUi.triageChips[rawChip.key] };
+    return (
+      <li
+        key={chip.key}
+        className={`inline-flex items-center gap-1 rounded-control px-1.5 py-0.5 text-label font-semibold ${chipToneClasses(chip.tone)}`}
+        data-triage-chip={chip.key}
+      >
+        <Icon size={iconSize} aria-hidden />
+        <span>{chip.label}</span>
+      </li>
+    );
+  });
+
+  if (locale === "en") {
+    return (
+      <ul aria-label="Listing triage flags" className={listClass}>
+        {items}
+      </ul>
+    );
+  }
+
   return (
-    <ul
-      aria-label="Listing triage flags"
-      className={["flex flex-wrap items-center gap-1.5", className].filter(Boolean).join(" ")}
-    >
-      {chips.map((chip) => {
-        const Icon = ICON[chip.icon];
-        return (
-          <li
-            key={chip.key}
-            className={`inline-flex items-center gap-1 rounded-control px-1.5 py-0.5 text-label font-semibold ${chipToneClasses(chip.tone)}`}
-            data-triage-chip={chip.key}
-          >
-            <Icon size={iconSize} aria-hidden />
-            <span>{chip.label}</span>
-          </li>
-        );
-      })}
+    <ul aria-label={m.listingsUi.triageChips.groupAria} className={listClass}>
+      {items}
     </ul>
   );
 }

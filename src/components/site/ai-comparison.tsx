@@ -4,7 +4,8 @@ import { GsapStaggerGroup } from "./gsap-reveal";
 import { SectionHeading } from "./section-heading";
 import { Check, Sparkles } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useLocale } from "@/components/i18n/locale-provider";
 
 type Col = {
   name: string;
@@ -14,62 +15,88 @@ type Col = {
   cta?: boolean;
 };
 
-const COLS: Col[] = [
-  {
-    name: "Free",
-    tag: "No account needed",
-    features: [
-      { label: "Search, map and sale calendar", ok: true },
-      { label: "The catch on every listing page", ok: true },
-      { label: "Deal Score where a value range is published", ok: true },
-      { label: "Watchlist saved on this device", ok: true },
-    ],
-  },
-  {
-    name: "Member",
-    tag: "Membership",
-    highlight: true,
-    cta: true,
-    features: [
-      { label: "Everything in Free", ok: true },
-      { label: "Hunts that re-check for new listings", ok: true },
-      { label: "Email when a new listing fits your hunt, or one it found changes", ok: true },
-      { label: "Price drops on saved listings, in your portfolio", ok: true },
-      { label: "Account watchlist and portfolio on any device", ok: true },
-    ],
-  },
-];
-
-function useMemberPrice() {
+function useMemberPrice(targetRef: React.RefObject<HTMLElement | null>) {
+  const { intlLocale } = useLocale();
   const [label, setLabel] = useState<string | null>(null);
+  const [inView, setInView] = useState(false);
+
   useEffect(() => {
+    const el = targetRef.current;
+    if (!el || inView) return;
+    if (typeof IntersectionObserver === "undefined") {
+      setInView(true);
+      return;
+    }
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setInView(true);
+          obs.disconnect();
+        }
+      },
+      { rootMargin: "400px" },
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [inView, targetRef]);
+
+  useEffect(() => {
+    if (!inView) return;
     let cancelled = false;
     fetch("/api/checkout", { cache: "no-store" })
       .then((response) => response.json())
       .then((body) => {
         const price = body?.price;
         if (cancelled || !price || typeof price.unitAmount !== "number" || typeof price.currency !== "string") return;
-        const amount = new Intl.NumberFormat("en-US", { style: "currency", currency: price.currency.toUpperCase() }).format(price.unitAmount / 100);
+        const safeCurrencyLocale = intlLocale === "hy-AM" ? "en-US" : intlLocale;
+        const amount = new Intl.NumberFormat(safeCurrencyLocale, { style: "currency", currency: price.currency.toUpperCase() }).format(price.unitAmount / 100);
         setLabel(price.interval ? `${amount} / ${price.interval}` : amount);
       })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, []);
+  }, [inView, intlLocale]);
   return label;
 }
 
 export function AiComparison() {
-  const memberPrice = useMemberPrice();
+  const { locale, messages } = useLocale();
+  const p = messages.home.aiComparison;
+  const sectionRef = useRef<HTMLElement | null>(null);
+  const memberPrice = useMemberPrice(sectionRef);
+
+  const cols: Col[] = [
+    {
+      name: p.freeName,
+      tag: p.freeTag,
+      features: p.freeFeatures.map((label) => ({ label, ok: true })),
+    },
+    {
+      name: p.memberName,
+      tag: p.memberTag,
+      highlight: true,
+      cta: true,
+      features: p.memberFeatures.map((label) => ({ label, ok: true })),
+    },
+  ];
+
+  const startSearchingLabel = locale === "hy" ? "Սկսել որոնումը" : locale === "ru" ? "Начать поиск" : "Start searching";
+  const becomeMemberLabel = messages.home.secondLook.becomeMember;
+  const footnote = locale === "hy"
+    ? "Երկու պլաններում էլ ներառված չեն՝ title report-ներ, վաճառված համադրելի գործարքներ կամ բոլոր շրջանների վաճառքներ։"
+    : locale === "ru"
+      ? "Ни в один тариф не входят отчёты по титулу, архив рыночных сделок или лоты в каждом округе."
+      : "Not included in either plan: title reports, sold-price comparables, or a sale in every county.";
+  const whyLabel = locale === "hy" ? "Ինչո՞ւ" : locale === "ru" ? "Почему?" : "Why?";
+
   return (
-    <section id="pricing" className="scroll-mt-24 px-5 pt-24 pb-28 lg:px-8">
+    <section ref={sectionRef} id="pricing" className="scroll-mt-24 px-5 pt-24 pb-28 lg:px-8">
       <div className="mx-auto max-w-[880px]">
-        <SectionHeading eyebrow="Pricing" title="Browse free. Pay when you want us to watch for you.">
-          Everything you need to find a sale and see its catch is free. Members get an email when a new
-          listing fits their hunt, or one it found changes.
+        <SectionHeading eyebrow={p.eyebrow} title={p.title}>
+          {p.subtitle}
         </SectionHeading>
 
         <GsapStaggerGroup className="mt-12 grid grid-cols-1 gap-4 md:grid-cols-2" stagger={0.15}>
-          {COLS.map((col) => (
+          {cols.map((col) => (
             <div
               key={col.name}
               data-stagger-item
@@ -83,14 +110,14 @@ export function AiComparison() {
                 <h3 className="text-title font-semibold text-ink">{col.name}</h3>
                 {col.highlight && (
                   <span className="inline-flex items-center gap-1 rounded-full bg-ink px-2.5 py-0.5 text-label font-bold text-white">
-                    <Sparkles className="h-3 w-3" /> Alerts
+                    <Sparkles className="h-3 w-3" /> {p.alertsBadge}
                   </span>
                 )}
               </div>
               <p className="mt-3 text-title font-semibold tracking-[-0.02em] text-ink sm:text-display">
-                {col.cta ? memberPrice ?? "Membership" : "$0"}
+                {col.cta ? memberPrice ?? p.memberFallbackPrice : "$0"}
               </p>
-              <p className="text-meta font-medium text-ink-3">{col.cta ? "Cancel any time from your account" : col.tag}</p>
+              <p className="text-meta font-medium text-ink-3">{col.cta ? p.cancelAnytime : col.tag}</p>
               <ul className="mt-6 flex-1 space-y-3">
                 {col.features.map((f) => (
                   <li key={f.label} className="flex items-start gap-2.5">
@@ -103,18 +130,18 @@ export function AiComparison() {
               </ul>
               {col.cta ? (
                 <Link href="/account" className="mt-7 inline-flex h-11 w-full items-center justify-center rounded-control bg-ink text-meta font-semibold text-white hover:bg-ink-2">
-                  Become a member
+                  {becomeMemberLabel}
                 </Link>
               ) : (
                 <Link href="/listings" className="mt-7 inline-flex h-11 w-full items-center justify-center rounded-control border border-line-strong text-meta font-semibold text-ink hover:bg-card">
-                  Start searching
+                  {startSearchingLabel}
                 </Link>
               )}
             </div>
           ))}
         </GsapStaggerGroup>
         <p className="mt-6 text-center text-meta text-ink-3">
-          Not included in either plan: title reports, sold-price comparables, or a sale in every county. <a href="#faq" className="font-semibold text-ink underline underline-offset-4">Why?</a>
+          {footnote} <a href="#faq" className="font-semibold text-ink underline underline-offset-4">{whyLabel}</a>
         </p>
       </div>
     </section>

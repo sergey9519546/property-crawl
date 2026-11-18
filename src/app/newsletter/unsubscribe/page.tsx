@@ -4,8 +4,10 @@ import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { SiteHeader } from "@/components/site/site-header";
 import { SiteFooter } from "@/components/site/site-footer";
+import { useLocale } from "@/components/i18n/locale-provider";
 
 export default function UnsubscribePage() {
+  const { locale, messages: m } = useLocale();
   const [email, setEmail] = useState("");
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
@@ -24,11 +26,13 @@ export default function UnsubscribePage() {
         body: JSON.stringify({ email: email.trim() }),
       });
       const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(typeof body?.error === "string" ? body.error : "Removal failed");
-      setNote(typeof body?.message === "string" ? body.message : "If that address was on the newsletter list, it has been removed.");
+      if (!response.ok) {
+        throw new Error(typeof body?.error === "string" && locale === "en" ? body.error : m.accountUi.removalFailed);
+      }
+      setNote(locale === "en" && typeof body?.message === "string" ? body.message : m.accountUi.removedNote);
       setEmail("");
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Removal failed");
+      setError(cause instanceof Error && locale === "en" ? cause.message : m.accountUi.removalFailed);
     } finally {
       setPending(false);
     }
@@ -38,14 +42,14 @@ export default function UnsubscribePage() {
     <div className="min-h-screen bg-paper text-ink">
       <SiteHeader />
       <main id="main-content" tabIndex={-1} className="mx-auto flex min-h-[70vh] max-w-2xl flex-col justify-center px-6 py-16 outline-none">
-      <p className="text-label font-bold uppercase tracking-[0.14em] text-ink-3">Newsletter</p>
-      <h1 className="mt-2 text-3xl font-bold tracking-tight text-ink">Remove a newsletter address</h1>
+      <p className="text-label font-bold uppercase tracking-[0.14em] text-ink-3">{m.accountUi.unsubscribeEyebrow}</p>
+      <h1 className="mt-2 text-3xl font-bold tracking-tight text-ink">{m.accountUi.unsubscribeTitle}</h1>
       <p className="mt-4 text-sm leading-6 text-ink-3">
-        This removes an exact email from the newsletter list. Contact messages are not changed. Member accounts are not deleted here; ask through the contact form.
+        {m.accountUi.unsubscribeDesc}
       </p>
       <form onSubmit={submit} className="mt-6 space-y-4 rounded-card border border-line bg-card p-6 shadow-sm">
         <label htmlFor="unsubscribe-email" className="block text-xs font-bold uppercase tracking-wide text-ink-3">
-          Email
+          {m.accountUi.emailLabel}
         </label>
         <input
           id="unsubscribe-email"
@@ -62,10 +66,10 @@ export default function UnsubscribePage() {
           disabled={pending}
           className="inline-flex h-12 items-center rounded-control bg-ink px-5 text-sm font-semibold text-white disabled:opacity-60"
         >
-          {pending ? "Removing…" : "Remove address"}
+          {pending ? m.accountUi.removingBtn : m.accountUi.removeAddressBtn}
         </button>
       </form>
-      <Link href="/privacy" className="mt-6 text-sm font-semibold text-ink underline">Privacy notice</Link>
+      <Link href="/privacy" className="mt-6 text-sm font-semibold text-ink underline">{m.accountUi.privacyNoticeLink}</Link>
     </main>
       <SiteFooter />
     </div>

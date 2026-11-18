@@ -18,6 +18,7 @@ import {
   type EnrichmentAdapterOutcome,
 } from "@/lib/enrichment-api";
 import { useWorkspaceSession } from "@/components/workspace/workspace-shell";
+import { useLocale } from "@/components/i18n/locale-provider";
 
 interface EnrichmentViewProps {
   parcelKey: string | null | undefined;
@@ -32,6 +33,7 @@ const ADAPTER_LABELS: Record<string, string> = {
 };
 
 export function EnrichmentView({ parcelKey, fetchImpl, showRefreshButton = true }: EnrichmentViewProps) {
+  const { locale, messages: m } = useLocale();
   const session = useWorkspaceSession();
   const [view, setView] = useState<EnrichmentAggregateResponse | null>(null);
   const [adapters, setAdapters] = useState<string[]>(() => Object.keys(ADAPTER_LABELS));
@@ -122,7 +124,7 @@ export function EnrichmentView({ parcelKey, fetchImpl, showRefreshButton = true 
   if (!isValidKey) {
     return (
       <section className="rounded-card border border-line bg-card p-6 text-sm text-ink-3">
-        <header className="mb-2 text-base font-semibold text-ink-2">Enrichment view</header>
+        <header className="mb-2 text-base font-semibold text-ink-2">{m.detailUi.enrichmentTitle}</header>
         <p>No parcelKey is attached to this listing yet, so the cross-source enrichment view is unavailable.</p>
       </section>
     );
@@ -175,8 +177,8 @@ export function EnrichmentView({ parcelKey, fetchImpl, showRefreshButton = true 
   if (!view || !view.found) {
     return (
       <section className="rounded-card border border-line bg-card p-6 text-sm text-ink-3">
-        <header className="mb-2 text-base font-semibold text-ink-2">Enrichment view</header>
-        <p>No other source has reported a listing that shares the parcelKey <code>{parcelKey}</code>.</p>
+        <header className="mb-2 text-base font-semibold text-ink-2">{m.detailUi.enrichmentTitle}</header>
+        <p>{locale === "en" ? <>No other source has reported a listing that shares the parcelKey <code>{parcelKey}</code>.</> : <>{m.detailUi.enrichmentTitle}: <code>{parcelKey}</code></>}</p>
         {error ? <p className="mt-2 text-xs text-catch-ink">{error}</p> : null}
         {adapterSelector}
         {showRefreshButton && (
@@ -200,7 +202,7 @@ export function EnrichmentView({ parcelKey, fetchImpl, showRefreshButton = true 
       <header className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 id="enrichment-view-heading" className="text-base font-semibold text-ink-2">
-            Cross-source enrichment
+            {m.detailUi.crossSourceEnrichment}
           </h2>
           <p className="mt-1 text-xs text-ink-3">
             parcelKey <code>{parcelKey}</code> · {view.listingCount} listing{view.listingCount === 1 ? '' : 's'} across {view.sourceCount} source{view.sourceCount === 1 ? '' : 's'}

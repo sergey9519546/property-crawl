@@ -21,6 +21,7 @@ import dynamic from "next/dynamic";
 import { SectionHeading } from "./section-heading";
 import { Fact, YoursTag, type FactFormat } from "@/components/evidence/fact";
 import { factText } from "@/lib/evidence";
+import { useLocale } from "@/components/i18n/locale-provider";
 
 /**
  * The atlas is a MapLibre GL canvas — around 1 MB of JavaScript, shipped as one
@@ -221,12 +222,22 @@ function useLoadPublishedListing(): { listing: PublishedListing | null; status: 
 }
 
 export function Storyteller() {
+  const { messages } = useLocale();
+  const st = messages.home.storyteller;
+  const stages = React.useMemo<StageDefinition[]>(
+    () =>
+      STAGES.map((base) => {
+        const loc = st.stages[base.key];
+        return loc ? { ...base, ...loc } : base;
+      }),
+    [st],
+  );
   const published = useLoadPublishedListing();
   const [stage, setStage] = React.useState<StageKey>("find");
   const [modeledCeiling, setModeledCeiling] = React.useState<number | null>(null);
   const tabRefs = React.useRef<Array<HTMLButtonElement | null>>([]);
-  const activeIndex = STAGES.findIndex((item) => item.key === stage);
-  const activeStage = STAGES[activeIndex];
+  const activeIndex = stages.findIndex((item) => item.key === stage);
+  const activeStage = stages[activeIndex];
 
   const selectFromKeyboard = (
     event: React.KeyboardEvent<HTMLButtonElement>,
@@ -253,7 +264,7 @@ export function Storyteller() {
   };
 
   const headline = published.listing?.address
-    || (published.status === "loading" ? "Loading a sample listing" : published.status === "error" ? "Listing unavailable right now" : "No listing to show yet");
+    || (published.status === "loading" ? st.loadingSample : published.status === "error" ? st.unavailableSample : st.emptySample);
   const place = [published.listing?.city, published.listing?.state].filter(Boolean).join(", ");
 
   const contextValue = React.useMemo<PublishedState>(
@@ -274,8 +285,8 @@ export function Storyteller() {
       />
 
       <div className="mx-auto max-w-[1280px] px-5 lg:px-8">
-        <SectionHeading eyebrow="How it works" title="Four steps from first look to bid day.">
-          The same order an experienced bidder follows. Click through them with a real listing.
+        <SectionHeading eyebrow={st.eyebrow} title={st.title}>
+          {st.subtitle}
         </SectionHeading>
 
         <div className="mt-14 overflow-hidden rounded-card border border-card/90 bg-card/90 shadow-raised backdrop-blur-xl">
@@ -300,7 +311,7 @@ export function Storyteller() {
               aria-label="Property decision workflow"
               className="relative grid grid-cols-2 gap-px border-b border-line bg-line sm:grid-cols-4"
             >
-              {STAGES.map((item, index) => {
+              {stages.map((item, index) => {
                 const selected = item.key === stage;
                 return (
                   <button

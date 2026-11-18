@@ -2,11 +2,17 @@ import type { Metadata } from "next";
 import { WorkspaceShell, PrivateWorkspaceGate } from "@/components/workspace/workspace-shell";
 import { DataModeBanner } from "@/components/site/data-mode-banner";
 import { WorkspaceSettingsView } from "./settings-view";
+import { getMessages } from "@/lib/i18n/messages";
+import { getRequestLocale } from "@/lib/i18n/server";
 
-export const metadata: Metadata = {
-  title: "Workspace Settings | PerfectProperty",
-  description: "Operator configuration, active source tiers, and session boundaries.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getRequestLocale();
+  const t = getMessages(locale).metaExtra;
+  return {
+    title: t.workspaceSettingsTitle || "Workspace Settings | PerfectProperty",
+    description: t.workspaceSettingsDesc,
+  };
+}
 
 export default function WorkspaceSettingsPage() {
   return (

@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { getRequestLocale } from "@/lib/i18n/server";
+import { getMessages } from "@/lib/i18n/messages";
 import { KeyRound } from "lucide-react";
 import { OperatorUnlockForm } from "@/components/workspace/operator-unlock-form";
 import { MemberSignInForm } from "@/components/account/account-panel";
@@ -17,19 +19,21 @@ export const metadata: Metadata = {
  * Members sign in with an emailed one-time link. The operator section below
  * keeps the shared operator credential for research and collection tools.
  */
-export default function SignInPage() {
+export default async function SignInPage() {
+  const locale = await getRequestLocale();
+  const m = getMessages(locale);
   return (
     <WorkspaceSessionProvider>
       <div className="min-h-screen bg-paper text-ink">
         <SiteHeader />
         <main id="main-content" tabIndex={-1} className="mx-auto flex min-h-[70vh] max-w-2xl flex-col justify-center px-6 py-16 outline-none">
-      <p className="text-label font-bold uppercase tracking-[0.14em] text-ink-3">Access</p>
-      <h1 className="mt-2 text-3xl font-bold tracking-tight text-ink">Sign in</h1>
+      <p className="text-label font-bold uppercase tracking-[0.14em] text-ink-3">{m.signIn.accessEyebrow}</p>
+      <h1 className="mt-2 text-3xl font-bold tracking-tight text-ink">{m.signIn.title}</h1>
       <div className="mt-6 rounded-card border border-line bg-card p-6 shadow-sm">
-        <p className="mb-4 text-sm leading-6 text-ink-3">Subscribers sign in with their email. We send a one-time link; there is no password. New here? The same link creates your account.</p>
+        <p className="mb-4 text-sm leading-6 text-ink-3">{m.signIn.memberSubtitle}</p>
         <MemberSignInForm />
       </div>
-      <h2 className="mt-12 text-2xl font-bold tracking-tight text-ink">Operator sign-in</h2>
+      <h2 className="mt-12 text-2xl font-bold tracking-tight text-ink">{m.signIn.staffHeading}</h2>
       <div className="mt-4 space-y-4 rounded-card border border-line bg-card p-6 text-sm leading-6 text-ink-3 shadow-sm">
         <p>
           Research, sources, document review, and collection controls use a <strong className="text-ink">shared operator credential</strong>
@@ -47,10 +51,10 @@ export default function SignInPage() {
       <OperatorUnlockForm />
       <div className="mt-6 flex flex-wrap gap-3">
         <Link href="/listings" className="inline-flex h-12 items-center rounded-control bg-ink px-5 text-sm font-semibold text-white hover:bg-ink-2">
-          Continue to listings
+          {m.signIn.continueListings}
         </Link>
         <Link href="/#live-feed" className="inline-flex h-12 items-center rounded-control border border-line-strong px-5 text-sm font-semibold text-ink-2 hover:bg-paper">
-          Back to home
+          {m.signIn.backHome}
         </Link>
       </div>
     </main>

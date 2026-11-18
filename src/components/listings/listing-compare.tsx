@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { displayMoney } from "@/lib/listing-display";
 import { sourceDisplayText } from "@/lib/source-display";
+import { useLocale } from "@/components/i18n/locale-provider";
 import {
   COMPARE_LIMIT,
   makeCompareTarget,
@@ -188,6 +189,14 @@ export function CompareTray({
   onMakeTarget: (id: string) => void;
   onClear: () => void;
 }) {
+  const { locale, messages: m, format } = useLocale();
+  const fieldNames: Record<string, string> = locale === "en" ? {} : {
+    openingBid: m.listingsUi.openingAmountLabel,
+    dealScore: "Deal Score",
+    sqft: m.detailUi.livingAreaLabel,
+    year: m.detailUi.yearBuiltLabel,
+    propType: m.detailUi.typeLabel,
+  };
   const [payload, setPayload] = React.useState<ComparePayload | null>(null);
   const [error, setError] = React.useState("");
   const [loading, setLoading] = React.useState(false);
@@ -236,23 +245,23 @@ export function CompareTray({
     <section aria-label="Listing comparison" data-testid="listing-compare" className="mt-5 rounded-card border border-line bg-card p-4 shadow-sm sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-lg font-bold text-ink">Compare</h2>
-          <p className="mt-1 text-xs leading-5 text-ink-3">The first listing is the target. Deltas are signed against it. A blank cell was not published and is not treated as zero. At most {COMPARE_LIMIT} listings.</p>
+          <h2 className="text-lg font-bold text-ink">{m.listingsUi.compareTitle}</h2>
+          <p className="mt-1 text-xs leading-5 text-ink-3">{format(m.listingsUi.compareNote, { limit: COMPARE_LIMIT })}</p>
         </div>
-        <button type="button" onClick={onClear} className="rounded-control border border-line-strong px-3 py-2 text-xs font-semibold text-ink-2 hover:bg-paper">Clear</button>
+        <button type="button" onClick={onClear} className="rounded-control border border-line-strong px-3 py-2 text-xs font-semibold text-ink-2 hover:bg-paper">{m.listingsUi.clearBtn}</button>
       </div>
       <ul className="mt-3 flex flex-wrap gap-2">
         {ids.map((id, index) => (
           <li key={id} className="flex items-center gap-1 rounded-full border border-line bg-paper py-1 pl-3 pr-1 text-xs">
             <span className="max-w-[16rem] truncate font-semibold text-ink">{labels[id] || id}</span>
-            <span className="text-ink-3">{index === 0 ? "Target" : `#${index + 1}`}</span>
-            {index > 0 ? <button type="button" onClick={() => onMakeTarget(id)} className="rounded-full px-2 py-1 font-semibold text-ink-2 hover:bg-card">Make target</button> : null}
-            <button type="button" onClick={() => onRemove(id)} aria-label={`Remove ${labels[id] || id} from compare`} className="rounded-full px-2 py-1 font-semibold text-ink-2 hover:bg-card">Remove</button>
+            <span className="text-ink-3">{index === 0 ? m.listingsUi.targetTag : `#${index + 1}`}</span>
+            {index > 0 ? <button type="button" onClick={() => onMakeTarget(id)} className="rounded-full px-2 py-1 font-semibold text-ink-2 hover:bg-card">{m.listingsUi.makeTargetBtn}</button> : null}
+            <button type="button" onClick={() => onRemove(id)} aria-label={`Remove ${labels[id] || id} from compare`} className="rounded-full px-2 py-1 font-semibold text-ink-2 hover:bg-card">{m.listingsUi.removeBtn}</button>
           </li>
         ))}
       </ul>
-      {ids.length < 2 ? <p className="mt-3 text-sm text-ink-3">Select one more listing to compare.</p> : null}
-      {loading ? <p role="status" className="mt-3 text-sm text-ink-3">Loading comparison…</p> : null}
+      {ids.length < 2 ? <p className="mt-3 text-sm text-ink-3">{m.listingsUi.selectOneMore}</p> : null}
+      {loading ? <p role="status" className="mt-3 text-sm text-ink-3">{m.listingsUi.loadingComparison}</p> : null}
       {error ? <p role="alert" className="mt-3 rounded-control bg-catch-wash p-3 text-sm text-catch-ink">{error}</p> : null}
       {rows.length >= 2 ? (
         <div className="mt-4 overflow-x-auto">
@@ -260,14 +269,14 @@ export function CompareTray({
             <caption className="sr-only">Side-by-side listing comparison. The first column is the target.</caption>
             <thead>
               <tr className="border-b border-line">
-                <th scope="col" className="py-2 pr-4 text-xs font-semibold text-ink-3">Field</th>
+                <th scope="col" className="py-2 pr-4 text-xs font-semibold text-ink-3">{m.listingsUi.fieldCol}</th>
                 {rows.map((row, index) => {
                   const id = row.id || "";
                   const label = rowLabel(row, labels);
                   return (
                     <th key={id || index} scope="col" className="min-w-[10rem] py-2 pr-4 align-bottom">
                       {id ? <Link href={`/listings/${encodeURIComponent(id)}`} className="font-semibold text-ink underline-offset-2 hover:underline">{label}</Link> : <span className="font-semibold">{label}</span>}
-                      <span className="mt-1 block text-label font-medium text-ink-3">{index === 0 ? "Target" : "Compared"}</span>
+                      <span className="mt-1 block text-label font-medium text-ink-3">{index === 0 ? m.listingsUi.targetTag : m.listingsUi.comparedLabel}</span>
                     </th>
                   );
                 })}
@@ -276,7 +285,7 @@ export function CompareTray({
             <tbody>
               {FIELDS.map((field) => (
                 <tr key={field.key} className="border-b border-line">
-                  <th scope="row" className="py-2 pr-4 text-xs font-semibold text-ink-3">{field.label}</th>
+                  <th scope="row" className="py-2 pr-4 text-xs font-semibold text-ink-3">{fieldNames[field.key] || field.label}</th>
                   {rows.map((row, index) => {
                     const raw = row[field.key];
                     const winnerId = payload?.winnerByField?.[field.key];
@@ -289,8 +298,8 @@ export function CompareTray({
                     return (
                       <td key={`${row.id || index}-${field.key}`} className="py-2 pr-4 align-top">
                         <span className="font-semibold text-ink">{text}</span>
-                        {winner ? <span className="ml-2 rounded-control bg-line px-1.5 py-0.5 text-label font-bold uppercase text-ink-2">Best</span> : null}
-                        {deltaLabel ? <span className="mt-0.5 block text-label text-ink-3">vs target {deltaLabel}</span> : null}
+                        {winner ? <span className="ml-2 rounded-control bg-line px-1.5 py-0.5 text-label font-bold uppercase text-ink-2">{m.listingsUi.bestBadge}</span> : null}
+                        {deltaLabel ? <span className="mt-0.5 block text-label text-ink-3">{m.listingsUi.vsTarget} {deltaLabel}</span> : null}
                       </td>
                     );
                   })}
@@ -305,6 +314,7 @@ export function CompareTray({
 }
 
 export function ListingCompareToggle({ listingId, className = "" }: { listingId: string; className?: string }) {
+  const { messages: m } = useLocale();
   const compare = useCompareSelection();
   const selected = compare.ids.includes(listingId);
   const disabled = compare.full && !selected;
@@ -316,7 +326,7 @@ export function ListingCompareToggle({ listingId, className = "" }: { listingId:
       onClick={() => compare.toggle(listingId)}
       className={`inline-flex min-h-11 items-center justify-center rounded-control border border-line-strong bg-card px-3 text-xs font-semibold text-ink-2 hover:bg-paper disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
     >
-      {selected ? "In compare" : disabled ? "Compare is full" : "Add to compare"}
+      {selected ? m.listingsUi.inCompareBtn : disabled ? m.listingsUi.compareFullBtn : m.listingsUi.addToCompareBtn}
     </button>
   );
 }

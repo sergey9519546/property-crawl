@@ -12,6 +12,8 @@ import {
 } from "lucide-react";
 import { SiteHeader } from "@/components/site/site-header";
 import { SiteFooter } from "@/components/site/site-footer";
+import { getRequestLocale } from "@/lib/i18n/server";
+import { getMessages } from "@/lib/i18n/messages";
 
 type InfoSection = {
   id?: string;
@@ -70,13 +72,47 @@ const INFO_PAGES: Record<string, InfoPage> = {
   },
 };
 
+function resolveLocalizedPage(slug: string, locale: string): InfoPage | null {
+  const enPage = INFO_PAGES[slug];
+  if (!enPage) return null;
+  if (locale === "en") return enPage;
+  const m = getMessages(locale as "en" | "hy" | "ru");
+  const entry =
+    slug === "enterprise"
+      ? m.infoPages.enterprise
+      : slug === "case-studies"
+        ? m.infoPages.caseStudies
+        : slug === "security"
+          ? m.infoPages.security
+          : null;
+  if (!entry) return enPage;
+  return {
+    eyebrow: entry.eyebrow,
+    title: entry.title,
+    intro: entry.intro,
+    sections: enPage.sections.map((sec, idx) => ({
+      id: sec.id,
+      title: entry.sections[idx]?.title ?? sec.title,
+      body: entry.sections[idx]?.body ?? sec.body,
+      link: sec.link ? { label: entry.actionLabel, href: sec.link.href } : undefined,
+    })),
+    cta: {
+      heading: entry.ctaHeading,
+      body: entry.ctaBody,
+      label: entry.ctaLabel,
+      href: enPage.cta.href,
+    },
+  };
+}
+
 export function generateStaticParams() {
   return Object.keys(INFO_PAGES).map((slug) => ({ slug }));
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
-  const page = INFO_PAGES[slug];
+  const locale = await getRequestLocale();
+  const page = resolveLocalizedPage(slug, locale);
   if (!page) return {};
   const title = `${page.title} | PerfectProperty`;
   const description = page.intro;
@@ -113,7 +149,9 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 
 export default async function InformationPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const page = INFO_PAGES[slug];
+  const locale = await getRequestLocale();
+  const m = getMessages(locale);
+  const page = resolveLocalizedPage(slug, locale);
 
   if (!page) notFound();
 
@@ -132,7 +170,7 @@ export default async function InformationPage({ params }: { params: Promise<{ sl
             className="inline-flex items-center gap-1.5 text-sm font-semibold text-ink-3 transition-colors hover:text-ink"
           >
             <ArrowLeft className="h-4 w-4" />
-            Back to PerfectProperty
+            {m.infoPages.backToSite}
           </Link>
           <div className="mt-8 flex items-center gap-3">
             <span className="flex h-11 w-11 items-center justify-center rounded-control bg-ink text-white shadow-sm">
@@ -183,7 +221,7 @@ export default async function InformationPage({ params }: { params: Promise<{ sl
 
           {isLegal && (
             <p className="mt-4 px-2 text-sm leading-6 text-ink-3">
-              This page is a plain description, not legal advice.
+              {m.infoPages.legalNote}
             </p>
           )}
 
@@ -201,10 +239,8 @@ export default async function InformationPage({ params }: { params: Promise<{ sl
         </div>
       </section>
 
-  
       </main>
       <SiteFooter />
     </div>
-
   );
 }

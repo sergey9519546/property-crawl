@@ -1,39 +1,40 @@
 import React from "react";
 import { Suspense } from "react";
 import { Metadata } from "next";
+import { getRequestLocale } from "@/lib/i18n/server";
+import { getMessages } from "@/lib/i18n/messages";
 import { WorkspaceShell } from "@/components/workspace/workspace-shell";
 import { DiscoveryWorkbench, type DiscoveryPayload } from "@/components/listings/discovery-workbench";
 import { DataModeBanner } from "@/components/site/data-mode-banner";
 import { discoverySearchParams, readDiscoveryFilters } from "@/lib/discovery-query";
 
-export const metadata: Metadata = {
-  title: "Foreclosure Auctions & Distressed Homes | PerfectProperty",
-  description: "Search foreclosure, sheriff-sale, tax-sale and government-sold properties by state, county or ZIP. See the sale date, opening bid and what to check before you bid.",
-  alternates: {
-    canonical: "/listings",
-  },
-  openGraph: {
-    title: "Foreclosure Auctions & Distressed Homes | PerfectProperty",
-    description: "Search foreclosure and government-sold properties in one list, map and calendar. Each listing links to the original sale notice.",
-    url: "/listings",
-    siteName: "PerfectProperty",
-    type: "website",
-    images: [
-      {
-        url: "/og-image.png",
-        width: 1200,
-        height: 630,
-        alt: "Foreclosure Auctions & Distressed Homes | PerfectProperty",
-      },
-    ],
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "Foreclosure Auctions & Distressed Homes | PerfectProperty",
-    description: "Search foreclosure and government-sold properties in one list, map and calendar. Each listing links to the original sale notice.",
-    images: ["/og-image.png"],
-  },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getRequestLocale();
+  const m = getMessages(locale);
+  const title = locale === "en" ? "Foreclosure Auctions & Distressed Homes | PerfectProperty" : m.meta.listingsTitle;
+  const description = m.meta.listingsDescription;
+  return {
+    title,
+    description,
+    alternates: {
+      canonical: "/listings",
+    },
+    openGraph: {
+      title,
+      description,
+      url: "/listings",
+      siteName: "PerfectProperty",
+      type: "website",
+      images: [{ url: "/og-image.png", width: 1200, height: 630, alt: title }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: ["/og-image.png"],
+    },
+  };
+}
 
 export const dynamic = "force-dynamic";
 

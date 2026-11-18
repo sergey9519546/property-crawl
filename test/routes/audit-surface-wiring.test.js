@@ -134,7 +134,7 @@ test('3d parcel visualizer and intelligence surface preserve zero-fabrication co
   assert.match(parcelSrc, /inspectParcelBoundaryInputs/);
   assert.match(parcelSrc, /3D Isometric/);
   assert.match(parcelSrc, /2D Top-Down/);
-  assert.match(parcelSrc, /aria-label="Parcel rotation azimuth"/);
+  assert.match(parcelSrc, /(?:aria-label="Parcel rotation azimuth"|aria-label=\{t\.parcelAzimuthAria\})/);
   assert.match(parcelSrc, /metadata\?\.topography/);
   assert.match(parcelSrc, /NOT_A_SURVEY/);
 

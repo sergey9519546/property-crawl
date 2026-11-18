@@ -5,8 +5,9 @@ import { GsapReveal } from "./gsap-reveal";
 import { SOURCES as SOURCE_TAXONOMY } from "@/components/terminal/property-data";
 import { sourceDisplayText } from "@/lib/source-display";
 import { fetchHealthSnapshot } from "@/lib/health-client";
+import { useLocale } from "@/components/i18n/locale-provider";
+import { formatLocaleNumber } from "@/lib/i18n/translator";
 
-// Fallback labels shown before /api/health resolves or when the API is unavailable.
 const DEFAULT_SOURCES: string[] = [
   "HUD Home",
   "Sheriff Sale",
@@ -20,10 +21,6 @@ const DEFAULT_SOURCES: string[] = [
 type Count = { value: string; label: string };
 type ActiveSourceItem = { key: string; label: string; count: number | null };
 
-function format(n: unknown): string {
-  return typeof n === "number" && Number.isFinite(n) ? n.toLocaleString() : "—";
-}
-
 function sourceCount(entry: unknown): number {
   if (typeof entry === "number" && Number.isFinite(entry)) return entry;
   if (entry && typeof entry === "object") {
@@ -36,6 +33,8 @@ function sourceCount(entry: unknown): number {
 
 /** Live numbers and active sources from the API. Shows "—" rather than a made-up figure when one can't load. */
 function useLiveCounts(): { counts: Count[]; activeSources: ActiveSourceItem[] } {
+  const { locale, messages } = useLocale();
+  const s = messages.home.socialProof;
   const [listings, setListings] = React.useState("…");
   const [sources, setSources] = React.useState("…");
   const [activeSources, setActiveSources] = React.useState<ActiveSourceItem[]>(
@@ -44,14 +43,14 @@ function useLiveCounts(): { counts: Count[]; activeSources: ActiveSourceItem[] }
 
   React.useEffect(() => {
     let cancelled = false;
-    // The search total, not /api/health's count, which also counts court and parcel evidence rows.
-    fetch("/api/listings?limit=1", { cache: "no-store" })
+    const fmt = (n: unknown) => (typeof n === "number" && Number.isFinite(n) ? formatLocaleNumber(locale, n) : "—");
+    fetch("/api/listings?limit=1&summary=1", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : Promise.reject()))
-      .then((d: { total?: number | null }) => !cancelled && setListings(format(d.total)))
+      .then((d: { total?: number | null }) => !cancelled && setListings(fmt(d.total)))
       .catch(() => !cancelled && setListings("—"));
     fetch("/api/coverage", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : Promise.reject()))
-      .then((d: { catalog?: { total?: number } }) => !cancelled && setSources(format(d.catalog?.total)))
+      .then((d: { catalog?: { total?: number } }) => !cancelled && setSources(fmt(d.catalog?.total)))
       .catch(() => !cancelled && setSources("—"));
     fetchHealthSnapshot()
       .then((d: { inventoryFreshness?: { bySource?: Record<string, unknown> } }) => {
@@ -68,24 +67,24 @@ function useLiveCounts(): { counts: Count[]; activeSources: ActiveSourceItem[] }
           .sort((a, b) => b.count - a.count);
         if (resolved.length > 0) setActiveSources(resolved);
       })
-      .catch(() => {
-        // Preserve fallback source labels when /api/health is unavailable.
-      });
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [locale]);
 
   return {
     counts: [
-      { value: listings, label: "listings on the site now" },
-      { value: sources, label: "public sources on our list" },
+      { value: listings, label: s.listingsLabel },
+      { value: sources, label: s.sourcesLabel },
     ],
     activeSources,
   };
 }
 
 export function SocialProof() {
+  const { locale, messages } = useLocale();
+  const s = messages.home.socialProof;
   const { counts, activeSources } = useLiveCounts();
   return (
     <section id="proof" className="px-5 pt-12 pb-16 lg:px-8">
@@ -95,7 +94,7 @@ export function SocialProof() {
             {counts.map((c) => (
               <div key={c.label} className="flex flex-col-reverse">
                 <dt className="mt-1 text-meta text-ink-3">
-                  <span className="mr-1.5 inline-flex rounded-full bg-go-wash px-2 py-0.5 text-label font-bold uppercase tracking-wider text-go">Live count</span>
+                  <span className="mr-1.5 inline-flex rounded-full bg-go-wash px-2 py-0.5 text-label font-bold uppercase tracking-wider text-go">{s.liveBadge}</span>
                   {c.label}
                 </dt>
                 <dd className="text-title font-semibold tracking-[-0.02em] text-ink tabular-nums">{c.value}</dd>
@@ -103,19 +102,21 @@ export function SocialProof() {
             ))}
           </dl>
           <div>
-            <h2 className="text-lead font-semibold text-ink">Where the listings come from</h2>
+            <h2 className="text-lead font-semibold text-ink">{s.whereTitle}</h2>
             <ul className="mt-3 flex flex-wrap gap-2">
               {activeSources.map((src) => (
                 <li key={src.key} className="rounded-full border border-line bg-paper px-3 py-1.5 text-meta font-medium text-ink">
                   {src.label}
                   {src.count !== null ? (
-                    <span className="ml-1.5 text-ink-3 tabular-nums">({src.count.toLocaleString()})</span>
+                    <span className="ml-1.5 text-ink-3 tabular-nums">({formatLocaleNumber(locale, src.count)})</span>
                   ) : null}
                 </li>
               ))}
             </ul>
             <p className="mt-3 text-meta leading-5 text-ink-3">
-              Public sale notices and government listings. Coverage varies by county. Names are for reference, not endorsements.
+              {locale === "en"
+                ? "Public sale notices and government listings. Coverage varies by county. Names are for reference, not endorsements."
+                : s.whereNote}
             </p>
           </div>
         </div>

@@ -1,42 +1,42 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { getRequestLocale } from "@/lib/i18n/server";
+import { getMessages } from "@/lib/i18n/messages";
 import { ShieldAlert, Scale, AlertTriangle, FileText, ArrowLeft } from "lucide-react";
 import { SiteHeader } from "@/components/site/site-header";
 import { SiteFooter } from "@/components/site/site-footer";
 
-export const metadata: Metadata = {
-  title: "Terms of Service | PerfectProperty",
-  description:
-    "Statutory terms, non-brokerage disclosures, TCPA non-negotiables, and acceptable use guidelines for the PerfectProperty research platform.",
-  alternates: {
-    canonical: "/terms",
-  },
-  openGraph: {
-    title: "Terms of Service | PerfectProperty",
-    description:
-      "Statutory terms, non-brokerage disclosures, TCPA non-negotiables, and acceptable use guidelines for the PerfectProperty research platform.",
-    url: "/terms",
-    siteName: "PerfectProperty",
-    type: "website",
-    images: [
-      {
-        url: "/og-image.png",
-        width: 1200,
-        height: 630,
-        alt: "Terms of Service | PerfectProperty",
-      },
-    ],
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "Terms of Service | PerfectProperty",
-    description:
-      "Statutory terms, non-brokerage disclosures, TCPA non-negotiables, and acceptable use guidelines for the PerfectProperty research platform.",
-    images: ["/og-image.png"],
-  },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getRequestLocale();
+  const m = getMessages(locale);
+  const title = locale === "en" ? "Terms of Service | PerfectProperty" : m.meta.termsTitle;
+  const description = m.meta.termsDescription;
+  return {
+    title,
+    description,
+    alternates: {
+      canonical: "/terms",
+    },
+    openGraph: {
+      title,
+      description,
+      url: "/terms",
+      siteName: "PerfectProperty",
+      type: "website",
+      images: [{ url: "/og-image.png", width: 1200, height: 630, alt: title }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: ["/og-image.png"],
+    },
+  };
+}
 
-export default function TermsPage() {
+export default async function TermsPage() {
+  const locale = await getRequestLocale();
+  const m = getMessages(locale);
   return (
     <div className="min-h-screen bg-paper text-ink">
       <SiteHeader />
@@ -46,21 +46,23 @@ export default function TermsPage() {
           href="/"
           className="inline-flex items-center gap-2 text-sm font-semibold text-ink-3 hover:text-ink transition-colors"
         >
-          <ArrowLeft className="h-4 w-4" /> Back to home
+          <ArrowLeft className="h-4 w-4" /> {m.common.backToHome}
         </Link>
       </div>
 
       <div className="border-b border-line pb-8">
-        <p className="text-label font-bold uppercase tracking-[0.14em] text-ink-3">Legal & Compliance</p>
+        <p className="text-label font-bold uppercase tracking-[0.14em] text-ink-3">{m.terms.eyebrow}</p>
         <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-ink sm:text-4xl">
-          Terms of Service
+          {m.terms.title}
         </h1>
         <p className="mt-3 text-sm text-ink-3">
           Last revised: October 22, 2026 · Effective immediately for all beta participants
         </p>
       </div>
 
-      <div className="mt-8 space-y-10 text-sm leading-7 text-ink-2">
+      {locale === "en" ? (
+<>
+<div className="mt-8 space-y-10 text-sm leading-7 text-ink-2">
         {/* Section 1 */}
         <section className="space-y-3">
           <h2 className="text-lg font-bold text-ink flex items-center gap-2">
@@ -167,17 +169,54 @@ export default function TermsPage() {
           </p>
         </section>
       </div>
+</>
+) : (
+<>
+      <div className="mt-8 space-y-10 text-sm leading-7 text-ink-2">
+        <section className="space-y-3">
+          <h2 className="text-lg font-bold text-ink flex items-center gap-2"><Scale className="h-5 w-5 text-ink-2" />{m.terms.s1Title}</h2>
+          <p>{m.terms.s1P1}</p>
+          <p>{m.terms.s1P2}</p>
+        </section>
+        <section className="rounded-card border border-line-strong bg-paper p-6 space-y-3 text-ink">
+          <h2 className="text-lg font-bold flex items-center gap-2 text-ink"><ShieldAlert className="h-5 w-5 text-ink-3" />{m.terms.s2Title}</h2>
+          <p className="text-ink-2 leading-relaxed">{m.terms.s2P1}</p>
+          <ul className="list-disc pl-5 space-y-1 text-xs text-ink-2">
+            {m.terms.s2Items.map((it) => (<li key={it.label}><strong>{it.label}</strong> {it.body}</li>))}
+          </ul>
+        </section>
+        <section className="space-y-3">
+          <h2 className="text-lg font-bold text-ink">{m.terms.s3Title}</h2>
+          <p>{m.terms.s3P1}</p>
+          <p>{m.terms.s3P2}</p>
+        </section>
+        <section className="space-y-3">
+          <h2 className="text-lg font-bold text-ink">{m.terms.s4Title}</h2>
+          <p>{m.terms.s4P1}</p>
+          <p>{m.terms.s4P2}</p>
+        </section>
+        <section className="space-y-3">
+          <h2 className="text-lg font-bold text-ink">{m.terms.s5Title}</h2>
+          <p>{m.terms.s5P1}</p>
+        </section>
+        <section className="space-y-3 border-t border-line pt-6">
+          <h2 className="text-lg font-bold text-ink">{m.terms.s6Title}</h2>
+          <p>{m.terms.s6P1}</p>
+        </section>
+      </div>
+      </>
+)}
 
       <div className="mt-12 rounded-card border border-line bg-paper p-6 flex items-center justify-between">
         <div>
-          <h3 className="font-semibold text-ink">Questions regarding these terms?</h3>
-          <p className="text-xs text-ink-3 mt-1">Our compliance team reviews inquiries regarding public data and terms.</p>
+          <h3 className="font-semibold text-ink">{m.terms.ctaTitle}</h3>
+          <p className="text-xs text-ink-3 mt-1">{m.terms.ctaSub}</p>
         </div>
         <Link
           href="/contact"
           className="rounded-control bg-ink px-4 py-2.5 text-xs font-semibold text-white hover:bg-ink-2 transition"
         >
-          Contact Legal
+          {m.terms.ctaBtn}
         </Link>
       </div>
     </main>
