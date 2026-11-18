@@ -5,9 +5,23 @@ import { AlertTriangle, MapPin } from "lucide-react";
 import type { DiscoveryFilters } from "@/lib/discovery-query";
 import { discoverySearchParams } from "@/lib/discovery-query";
 import { useLocale } from "@/components/i18n/locale-provider";
+import { OPENFREEMAP_POSITRON_STYLE, RASTER_STREET_STYLE } from "@/lib/map-style";
+import { SOURCES } from "@/components/terminal/property-data";
 import "maplibre-gl/dist/maplibre-gl.css";
 
-type Feature = { geometry?: { type?: string; coordinates?: number[] }; properties?: { id?: string; count?: number; source?: string; status?: string } };
+type Feature = {
+  geometry?: { type?: string; coordinates?: number[] };
+  properties?: {
+    id?: string;
+    count?: number;
+    source?: string;
+    status?: string;
+    address?: string | null;
+    city?: string | null;
+    state?: string | null;
+    openingBid?: number | null;
+  };
+};
 type MapResponse = { type?: string; features?: Feature[]; revision?: string; truncated?: boolean };
 
 export function DiscoveryMap({
@@ -69,26 +83,66 @@ export function DiscoveryMap({
         if (!point || point.length < 2) continue;
         const props = feature.properties || {};
         const button = document.createElement("button");
-        button.type = "button"; button.className = "live-market-marker";
+        button.type = "button";
+        button.className = "live-market-marker";
         const clustered = (props.count || 0) > 1;
-        button.setAttribute("aria-label", clustered ? `${props.count} records in this area` : "Open property record");
-        button.textContent = clustered ? String(props.count) : "•";
+        const sourceColor = props.source && props.source !== "multiple"
+          ? (SOURCES[props.source]?.color ?? "#181529")
+          : "#181529";
+        button.style.setProperty("--marker-color", sourceColor);
+        button.setAttribute("aria-label", clustered ? `${props.count} records in this area — click to zoom` : (props.address ? `Inspect ${props.address}` : "Open property record"));
+        const halo = document.createElement("span");
+        halo.className = "live-market-marker__halo";
+        halo.setAttribute("aria-hidden", "true");
+        const pin = document.createElement("span");
+        pin.className = "live-market-marker__pin";
+        pin.setAttribute("aria-hidden", "true");
+        pin.textContent = clustered ? String(props.count) : "•";
+        button.append(halo, pin);
         button.onclick = (event) => {
           event.stopPropagation();
           if (!props.id) return;
           if (clustered) {
-            onOpenRef.current(props.id);
-            return;
+            const nextZoom = Math.min((map.getZoom?.() ?? 5) + 2.5, 16);
+            if (typeof map.easeTo === "function" && nextZoom > (map.getZoom?.() ?? 0) + 0.25) {
+              map.easeTo({ center: [point[0], point[1]], zoom: nextZoom, duration: 400 });
+              return;
+            }
           }
           popupRef.current?.remove();
           const root = document.createElement("div");
-          root.className = "grid gap-2 p-1";
+          root.className = "grid gap-2 p-1 text-left";
           const listingId = props.id;
+          if (props.address) {
+            const heading = document.createElement("a");
+            heading.href = `/listings/${encodeURIComponent(listingId)}`;
+            heading.className = "text-xs font-bold text-ink hover:underline";
+            heading.textContent = props.address;
+            heading.onclick = (click) => {
+              click.preventDefault();
+              click.stopPropagation();
+              onOpenRef.current(listingId);
+            };
+            root.append(heading);
+            const metaParts = [
+              [props.city, props.state].filter(Boolean).join(", "),
+              typeof props.openingBid === "number" && Number.isFinite(props.openingBid) && props.openingBid > 0
+                ? `$${Math.round(props.openingBid).toLocaleString("en-US")}`
+                : null,
+              clustered ? `${props.count} records in cluster` : null,
+            ].filter(Boolean);
+            if (metaParts.length > 0) {
+              const meta = document.createElement("p");
+              meta.className = "text-label text-ink-3";
+              meta.textContent = metaParts.join(" · ");
+              root.append(meta);
+            }
+          }
           const selected = compareIdsRef.current.includes(listingId);
           const blocked = compareFullRef.current && !selected;
           const compareBtn = document.createElement("button");
           compareBtn.type = "button";
-          compareBtn.className = "inline-flex min-h-11 items-center justify-center rounded-lg border border-line-strong bg-card px-3 text-xs font-semibold text-ink";
+          compareBtn.className = "inline-flex min-h-10 items-center justify-center rounded-lg border border-line-strong bg-card px-3 text-xs font-semibold text-ink";
           compareBtn.setAttribute("aria-pressed", selected ? "true" : "false");
           compareBtn.disabled = blocked;
           compareBtn.textContent = selected ? m.listingsUi.inCompareBtn : blocked ? m.listingsUi.compareFullBtn : m.listingsUi.compareBtn;
@@ -100,16 +154,17 @@ export function DiscoveryMap({
             compareBtn.setAttribute("aria-pressed", next ? "true" : "false");
             compareBtn.textContent = next ? m.listingsUi.inCompareBtn : m.listingsUi.compareBtn;
           };
-          const openBtn = document.createElement("button");
-          openBtn.type = "button";
-          openBtn.className = "inline-flex min-h-11 items-center justify-center rounded-lg bg-ink px-3 text-xs font-semibold text-white";
+          const openBtn = document.createElement("a");
+          openBtn.href = `/listings/${encodeURIComponent(listingId)}`;
+          openBtn.className = "inline-flex min-h-10 items-center justify-center rounded-lg bg-ink px-3 text-xs font-semibold text-white";
           openBtn.textContent = m.listingsUi.openRecordBtn;
           openBtn.onclick = (click) => {
+            click.preventDefault();
             click.stopPropagation();
             onOpenRef.current(listingId);
           };
           root.append(compareBtn, openBtn);
-          popupRef.current = new maplibre.Popup({ closeButton: true, offset: 12, maxWidth: "220px" })
+          popupRef.current = new maplibre.Popup({ closeButton: true, offset: 12, maxWidth: "250px" })
             .setLngLat([point[0], point[1]])
             .setDOMContent(root)
             .addTo(map);
@@ -128,16 +183,27 @@ export function DiscoveryMap({
 
   React.useEffect(() => {
     let disposed = false;
-    void import("maplibre-gl").then(({ Map, NavigationControl }) => {
+    let fallbackTimer: number | null = null;
+    void import("maplibre-gl").then(({ Map, NavigationControl, AttributionControl }) => {
       if (disposed || !ref.current) return;
-      const map = new Map({ container: ref.current, style: "https://tiles.openfreemap.org/styles/positron", center: [-98.5795, 39.8283], zoom: 3.25, attributionControl: false });
-      map.addControl(new NavigationControl(), "top-right"); mapRef.current = map;
+      const map = new Map({ container: ref.current, style: OPENFREEMAP_POSITRON_STYLE, center: [-98.5795, 39.8283], zoom: 3.25, attributionControl: false });
+      map.addControl(new NavigationControl(), "top-right");
+      map.addControl(new AttributionControl({ compact: true, customAttribution: "OpenFreeMap · OpenStreetMap · CARTO" }), "bottom-left");
+      mapRef.current = map;
+      let fallbackApplied = false;
+      const applyFallback = () => {
+        if (disposed || fallbackApplied) return;
+        fallbackApplied = true;
+        try { map.setStyle(RASTER_STREET_STYLE); } catch {}
+      };
+      map.on("error", () => { if (!map.isStyleLoaded()) applyFallback(); });
+      fallbackTimer = window.setTimeout(() => { if (!map.isStyleLoaded() && !disposed) applyFallback(); }, 3_500);
       const requestPins = () => { if (!disposed) void loadRef.current?.(); };
       map.once("load", requestPins);
       map.on("moveend", requestPins);
       requestAnimationFrame(requestPins);
     }).catch(() => setError("Map engine could not load. Use the ranked grid to continue research."));
-    return () => { disposed = true; requestRef.current?.controller.abort(); popupRef.current?.remove(); markerRef.current.forEach((marker) => marker.remove()); mapRef.current?.remove(); mapRef.current = null; };
+    return () => { disposed = true; if (fallbackTimer !== null) window.clearTimeout(fallbackTimer); requestRef.current?.controller.abort(); popupRef.current?.remove(); markerRef.current.forEach((marker) => marker.remove()); mapRef.current?.remove(); mapRef.current = null; };
   }, []);
 
   React.useEffect(() => { if (mapRef.current) void load(); }, [load]);

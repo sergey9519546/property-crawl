@@ -85,9 +85,9 @@ const PA_COUNTY_MAP = Object.freeze({
 });
 
 const ALL_COUNTY_MAP = Object.freeze({
-  ...NATIONWIDE_COUNTY_MAP,
-  ...NJ_COUNTY_MAP,
   ...PA_COUNTY_MAP,
+  ...NJ_COUNTY_MAP,
+  ...NATIONWIDE_COUNTY_MAP,
 });
 
 function getCivilViewUrl(countyId = 1) {

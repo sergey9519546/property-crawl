@@ -334,12 +334,20 @@ export function InteractiveTerminal() {
 
   useEffect(() => {
     const handleHeroSearch = (event: Event) => {
-      const detail = (event as CustomEvent<{ query?: string; scope?: string }>).detail;
+      const detail = (event as CustomEvent<{ query?: string; scope?: string; state?: string }>).detail;
       if (typeof detail?.query !== "string") return;
       const query = detail.query.trim();
+      const stateCode = typeof detail.state === "string" && /^[A-Z]{2}$/i.test(detail.state.trim())
+        ? detail.state.trim().toUpperCase()
+        : undefined;
 
       if (detail?.scope === "state" && query.length === 2) {
         dispatchFilters({ type: "patch", patch: { selectedState: query.toUpperCase(), searchQuery: "", activeView: "grid" } });
+      } else if ((detail?.scope === "county" || detail?.scope === "city") && stateCode) {
+        const cleaned = detail.scope === "county"
+          ? query.replace(/\s+(?:County|Parish|Borough)$/i, "").trim()
+          : query;
+        dispatchFilters({ type: "patch", patch: { selectedState: stateCode, searchQuery: cleaned, activeView: "grid" } });
       } else {
         dispatchFilters({ type: "setSearch", query, view: "grid" });
       }
@@ -1167,7 +1175,9 @@ export function InteractiveTerminal() {
                     <div>
                       {/* Photo + Tags */}
                       <div className="relative h-48 w-full bg-paper overflow-hidden">
-                        <ListingThumbnail listingId={listing.id} address={listing.address} photo={cardPhoto} observed={isObserved} photoProvider={secondaryMedia?.accepted ? secondaryMedia.provider : undefined} photoSourceUrl={secondaryMedia?.accepted ? secondaryMedia.sourceRecordUrl : undefined} />
+                        <Link href={`/listings/${encodeURIComponent(listing.id)}?returnTo=${encodeURIComponent("/#live-feed")}`} className="block h-full w-full">
+                          <ListingThumbnail listingId={listing.id} address={listing.address} propType={listing.propType} photo={cardPhoto} observed={isObserved} photoProvider={secondaryMedia?.accepted ? secondaryMedia.provider : undefined} photoSourceUrl={secondaryMedia?.accepted ? secondaryMedia.sourceRecordUrl : undefined} />
+                        </Link>
                         <div className="absolute top-3 left-3 flex items-center gap-1.5">
                           <span
                             className="text-label font-extrabold uppercase px-2 py-0.5 rounded-md text-white shadow-sm"
@@ -1196,7 +1206,11 @@ export function InteractiveTerminal() {
                       <div className="p-5 space-y-3">
                         <div className="flex items-start justify-between gap-2">
                           <div>
-                            <h3 className="font-bold text-base text-ink line-clamp-1">{listing.address}</h3>
+                            <h3 className="font-bold text-base text-ink line-clamp-1">
+                              <Link href={`/listings/${encodeURIComponent(listing.id)}?returnTo=${encodeURIComponent("/#live-feed")}`} className="hover:underline underline-offset-2">
+                                {listing.address}
+                              </Link>
+                            </h3>
                             <p className="text-xs text-ink-3">{displayText(listing.city)}, {listing.state} · {displayText(listing.county, "County not published")}</p>
                             {sourceRecordCountAtAddress && (
                               <p className="mt-1 text-xs font-semibold text-ink">
@@ -1260,7 +1274,7 @@ export function InteractiveTerminal() {
                         <ArrowRight className="w-3.5 h-3.5" />
                       </button>
                       <Link
-                        href={`/listings/${encodeURIComponent(listing.id)}`}
+                        href={`/listings/${encodeURIComponent(listing.id)}?returnTo=${encodeURIComponent("/#live-feed")}`}
                         data-testid="listing-detail-link"
                         aria-label={`Open listing page for ${listing.address}`}
                         className="w-full inline-flex h-10 items-center justify-center rounded-control border border-line-strong bg-card text-ink text-xs font-bold hover:bg-paper transition gap-1 shadow-sm"

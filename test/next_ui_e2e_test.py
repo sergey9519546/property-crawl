@@ -1004,12 +1004,10 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         )
         hero_search = self.page.locator("#hero form").first
         hero_content_stack = self.page.get_by_test_id("hero-content-stack")
-        hero_art = self.page.get_by_test_id("hero-property-blueprint").locator("img")
         hero_box = hero.bounding_box()
         hero_heading_box = hero_heading.bounding_box()
         hero_search_box = hero_search.bounding_box()
         hero_content_stack_box = hero_content_stack.bounding_box()
-        hero_art_box = hero_art.bounding_box()
 
         self.assertIsNotNone(header_box)
         self.assertIsNotNone(brand_box)
@@ -1019,7 +1017,6 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         self.assertIsNotNone(hero_heading_box)
         self.assertIsNotNone(hero_search_box)
         self.assertIsNotNone(hero_content_stack_box)
-        self.assertIsNotNone(hero_art_box)
         self.assertGreater(header_box["width"], 2100)
         self.assertLess(brand_box["x"], 100)
         self.assertGreater(signup_box["x"] + signup_box["width"], 2220)
@@ -1049,28 +1046,13 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
             hero_box["y"] + hero_box["height"] / 2,
             delta=4,
         )
-        self.assertGreaterEqual(hero_art_box["width"], 1160)
-        self.assertLessEqual(hero_art_box["width"], 1200)
-        self.assertLessEqual(
-            hero_art_box["x"] + hero_art_box["width"],
-            hero_box["x"] + hero_box["width"] - 8,
-            "the villa's transparent right edge should remain visible inside the hero",
-        )
-        self.assertLessEqual(
-            hero_art_box["y"] + hero_art_box["height"],
-            hero_box["y"] + hero_box["height"] - 8,
-            "the villa's transparent bottom edge should remain visible inside the hero",
-        )
-        self.assertNotEqual(
-            hero_art.evaluate("element => getComputedStyle(element).maskImage"),
-            "none",
-        )
+        self.assertEqual(self.page.get_by_test_id("hero-property-blueprint").count(), 0)
+        self.assertEqual(hero.locator("img[src*='hero-modern-villa']").count(), 0)
 
     def test_hero_hook_and_search_are_fully_visible_within_one_second(self):
         self.page.wait_for_timeout(800)
         heading = self.page.get_by_role("heading", level=1)
         search = self.page.get_by_role("combobox", name="Market or address")
-        blueprint = self.page.get_by_test_id("hero-property-blueprint")
         self.assertGreaterEqual(
             float(heading.evaluate("element => getComputedStyle(element).opacity")),
             0.99,
@@ -1079,39 +1061,13 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
             float(search.evaluate("element => getComputedStyle(element.closest('form')).opacity")),
             0.99,
         )
-        self.assertTrue(blueprint.is_visible())
-        self.assertEqual(
-            blueprint.evaluate("element => getComputedStyle(element).mixBlendMode"),
-            "multiply",
-        )
-        self.assertEqual(
-            blueprint.evaluate("element => getComputedStyle(element).pointerEvents"),
-            "none",
-        )
-        blueprint_image = blueprint.locator("img")
-        blueprint_metrics = blueprint_image.evaluate(
-            "element => ({ naturalWidth: element.naturalWidth, clientWidth: element.clientWidth })"
-        )
-        self.assertGreaterEqual(
-            blueprint_metrics["naturalWidth"],
-            blueprint_metrics["clientWidth"] - 2,
-        )
-        self.assertEqual(blueprint_image.get_attribute("width"), "1536")
-        self.assertEqual(blueprint_image.get_attribute("height"), "1024")
-        self.assertIn("hero-modern-villa.png", blueprint_image.get_attribute("src"))
-        self.assertGreaterEqual(
-            float(blueprint.evaluate("element => getComputedStyle(element).opacity")),
-            0.75,
-        )
+        self.assertEqual(self.page.get_by_test_id("hero-property-blueprint").count(), 0)
+        self.assertEqual(self.page.locator("#hero img[src*='hero-modern-villa']").count(), 0)
 
         self.page.set_viewport_size({"width": 390, "height": 844})
         self.assertLessEqual(
             self.page.evaluate("document.documentElement.scrollWidth"),
             390,
-        )
-        self.assertGreater(
-            float(blueprint.evaluate("element => getComputedStyle(element).opacity")),
-            0.1,
         )
 
     def test_hero_shader_field_tracks_the_pointer(self):

@@ -482,7 +482,7 @@ async function handleRequest(req, res) {
 }
 
 const server = http.createServer((req, res) => {
-  handleRequest(req, res).catch((error) => {
+  return handleRequest(req, res).catch((error) => {
     console.error('[API] Request failed:', error.code || error.name);
     if (!res.headersSent) {
       res.statusCode = 503;

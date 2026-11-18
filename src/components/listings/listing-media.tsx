@@ -10,10 +10,13 @@ import { PropertyEvidenceVisual } from "@/components/listings/property-evidence-
 import { AlternativeStreetView } from "@/components/listings/alternative-street-view";
 import { InteractiveStreetView } from "@/components/listings/interactive-street-view";
 import { useLocale } from "@/components/i18n/locale-provider";
+import { AERIAL_IMAGERY_STYLE, OPENFREEMAP_POSITRON_STYLE, RASTER_STREET_STYLE } from "@/lib/map-style";
+import "maplibre-gl/dist/maplibre-gl.css";
 
 type ListingMediaProps = {
   listingId?: string | null;
   address: string;
+  propType?: string | null;
   photo?: string | null;
   gallery?: string[];
   lat?: number | null;
@@ -43,18 +46,7 @@ type ParcelBoundaryPayload = {
   properties?: Record<string, unknown> | null;
 };
 
-const AERIAL_STYLE: StyleSpecification = {
-  version: 8,
-  sources: {
-    aerial: {
-      type: "raster",
-      tiles: ["https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
-      tileSize: 256,
-      attribution: "Esri, USGS, USDA NAIP",
-    },
-  },
-  layers: [{ id: "aerial-tiles", type: "raster", source: "aerial", minzoom: 0, maxzoom: 19 }],
-};
+const AERIAL_STYLE: StyleSpecification = AERIAL_IMAGERY_STYLE;
 
 function computeGeometryBounds(
   geometry: { type?: unknown; coordinates?: unknown } | null | undefined,
@@ -106,7 +98,7 @@ function publisherPhotoUrl(photo: string | null | undefined) {
   return safeImageUrl(photo) || null;
 }
 
-export function ListingMedia({ listingId, address, photo, gallery = [], lat, lng, locationDisclosure, photoOrigin = "publisher", photoProvider, photoSourceUrl, sourceLabel }: ListingMediaProps) {
+export function ListingMedia({ listingId, address, propType, photo, gallery = [], lat, lng, locationDisclosure, photoOrigin = "publisher", photoProvider, photoSourceUrl, sourceLabel }: ListingMediaProps) {
   const { locale, messages: m } = useLocale();
   const canMap = hasCoordinates(lat, lng);
   const publisherPhoto = publisherPhotoUrl(photo);
@@ -121,6 +113,7 @@ export function ListingMedia({ listingId, address, photo, gallery = [], lat, lng
   const [mode, setMode] = React.useState<MediaMode>("photo");
   const [mapLayer, setMapLayer] = React.useState<MapLayer>("vector");
   const [streetView, setStreetView] = React.useState<StreetViewState>({ status: "idle" });
+  const [aerialState, setAerialState] = React.useState<"idle" | "loading" | "ready" | "error">("idle");
   const [mapReady, setMapReady] = React.useState(false);
   const [mapUnavailable, setMapUnavailable] = React.useState(false);
   const mapContainerRef = React.useRef<HTMLDivElement>(null);
@@ -144,6 +137,7 @@ export function ListingMedia({ listingId, address, photo, gallery = [], lat, lng
   React.useEffect(() => {
     streetViewRequestGeneration.current++;
     setStreetView({ status: "idle" });
+    setAerialState("idle");
 
     // Always begin in the photo slot. A map is useful context, but it must not
     // masquerade as a property image when the publisher supplied none.
@@ -171,7 +165,7 @@ export function ListingMedia({ listingId, address, photo, gallery = [], lat, lng
         const center: [number, number] = [Number(lng), Number(lat)];
         const map = new maplibre.Map({
           container: mapContainerRef.current,
-          style: isAerial ? AERIAL_STYLE : "https://tiles.openfreemap.org/styles/positron",
+          style: isAerial ? AERIAL_STYLE : OPENFREEMAP_POSITRON_STYLE,
           center,
           zoom: isAerial ? 17 : 15,
           minZoom: 2,
@@ -185,7 +179,7 @@ export function ListingMedia({ listingId, address, photo, gallery = [], lat, lng
             compact: true,
             customAttribution: isAerial
               ? "Esri, USGS, USDA NAIP"
-              : "OpenFreeMap · OpenStreetMap contributors",
+              : "OpenFreeMap · OpenStreetMap · CARTO",
           }),
           "bottom-left",
         );
@@ -193,9 +187,21 @@ export function ListingMedia({ listingId, address, photo, gallery = [], lat, lng
           .setLngLat(center)
           .setPopup(new maplibre.Popup({ offset: 28 }).setText(address))
           .addTo(map);
-        map.once("load", () => {
-          if (disposed) return;
-          setMapReady(true);
+        let fallbackApplied = false;
+        let parcelFetched = false;
+        const switchToRasterFallback = () => {
+          if (disposed || isAerial || fallbackApplied) return false;
+          fallbackApplied = true;
+          try {
+            map.setStyle(RASTER_STREET_STYLE);
+            return true;
+          } catch {
+            return false;
+          }
+        };
+        const fetchParcelBoundary = () => {
+          if (disposed || parcelFetched) return;
+          parcelFetched = true;
           if (!normalizedListingId) return;
 
           void (async () => {
@@ -259,13 +265,30 @@ export function ListingMedia({ listingId, address, photo, gallery = [], lat, lng
               // Some states do not publish GIS parcel boundaries; fail silently.
             }
           })();
-        });
+        };
+        const markReady = () => {
+          if (disposed) return;
+          setMapReady(true);
+          setMapUnavailable(false);
+          fetchParcelBoundary();
+        };
+        map.once("styledata", () => { if (map.isStyleLoaded()) markReady(); });
+        map.once("render", () => { if (map.isStyleLoaded()) markReady(); });
+        map.once("load", markReady);
         map.on("error", () => {
-          if (!map.loaded() && !disposed) setMapUnavailable(true);
+          if (disposed || map.loaded()) return;
+          if (!switchToRasterFallback()) setMapUnavailable(true);
         });
         timeoutId = window.setTimeout(() => {
-          if (!map.loaded() && !disposed) setMapUnavailable(true);
-        }, 7_000);
+          if (disposed || map.loaded() || map.isStyleLoaded()) return;
+          if (!switchToRasterFallback()) {
+            setMapUnavailable(true);
+          } else {
+            window.setTimeout(() => {
+              if (!map.loaded() && !map.isStyleLoaded() && !disposed) setMapUnavailable(true);
+            }, 5_000);
+          }
+        }, 3_500);
       })
       .catch(() => {
         if (!disposed) setMapUnavailable(true);
@@ -400,14 +423,38 @@ export function ListingMedia({ listingId, address, photo, gallery = [], lat, lng
         >
           {(!canShowPhoto || publisherGalleryUnavailable) ? (
             <div className="relative h-full w-full">
-              <PropertyEvidenceVisual
-                listingId={normalizedListingId}
-                address={address}
-                statusLabel={canShowPhoto ? "publisher media unavailable" : "source media open"}
-              />
+              {aerialState === "ready" && normalizedListingId ? (
+                <>
+                  <img
+                    src={`/api/property-image?listingId=${encodeURIComponent(normalizedListingId)}&mode=aerial`}
+                    alt={`Aerial parcel imagery for ${address}`}
+                    className="h-full w-full object-cover"
+                    onError={() => setAerialState("error")}
+                  />
+                  <span className="absolute left-4 top-4 rounded-control bg-ink/85 px-3 py-1.5 text-label font-semibold text-white backdrop-blur">
+                    Esri / USGS NAIP aerial parcel view · Overhead satellite context
+                  </span>
+                </>
+              ) : (
+                <PropertyEvidenceVisual
+                  listingId={normalizedListingId}
+                  address={address}
+                  propType={propType}
+                  statusLabel={canShowPhoto ? "publisher media unavailable" : "source media open"}
+                />
+              )}
               <div className="absolute bottom-5 right-5 flex max-w-[min(88%,28rem)] flex-col items-end gap-2">
                 {(normalizedListingId || canMap) ? (
                   <div className="flex flex-wrap items-center justify-end gap-2">
+                    {normalizedListingId && aerialState !== "ready" ? (
+                      <button
+                        type="button"
+                        onClick={() => setAerialState("ready")}
+                        className="inline-flex min-h-11 items-center gap-2 rounded-control border border-white/70 bg-card/95 px-4 py-2.5 text-sm font-bold text-ink shadow-xl backdrop-blur hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-ink"
+                      >
+                        <ImageIcon className="h-3.5 w-3.5" aria-hidden /> Aerial satellite view
+                      </button>
+                    ) : null}
                     {normalizedListingId ? (
                       <button
                         type="button"
@@ -429,10 +476,11 @@ export function ListingMedia({ listingId, address, photo, gallery = [], lat, lng
                     ) : null}
                   </div>
                 ) : null}
+                {aerialState === "error" ? <p role="status" className="rounded-control bg-ink/90 px-3 py-2 text-right text-xs leading-snug text-white shadow-lg backdrop-blur">Aerial satellite imagery could not be loaded for this location.</p> : null}
                 {streetView.status === "unavailable" ? <p role="status" className="rounded-control bg-ink/90 px-3 py-2 text-right text-xs leading-snug text-white shadow-lg backdrop-blur">{streetView.reason}</p> : null}
               </div>
             </div>
-          ) : <img src={photos[photoIndex] || publisherPhoto || undefined} alt={`${photoLabel} ${photoIndex + 1} of ${address}`} className="h-full w-full object-contain" onError={handlePhotoError} />}
+          ) : <img src={photos[photoIndex] || publisherPhoto || undefined} alt={`${photoLabel} ${photoIndex + 1} of ${address}`} referrerPolicy="no-referrer" className="h-full w-full object-contain" onError={handlePhotoError} />}
           {canShowPhoto && !publisherGalleryUnavailable ? <div className="absolute bottom-4 left-4 right-4 flex flex-col gap-2">
             {photos.length > 1 ? (
               <div className="flex items-center gap-1.5 overflow-x-auto rounded-control bg-ink/75 p-1.5 backdrop-blur" aria-label="Property gallery thumbnails">
@@ -445,7 +493,7 @@ export function ListingMedia({ listingId, address, photo, gallery = [], lat, lng
                     onClick={() => setPhotoIndex(idx)}
                     className={`relative h-9 w-12 shrink-0 overflow-hidden rounded border transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white ${photoIndex === idx ? "border-white ring-1 ring-white" : "border-white/30 opacity-75 hover:opacity-100"}`}
                   >
-                    <img src={thumbUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
+                    <img src={thumbUrl} alt="" referrerPolicy="no-referrer" className="h-full w-full object-cover" loading="lazy" />
                   </button>
                 ))}
               </div>
@@ -484,7 +532,7 @@ export function ListingMedia({ listingId, address, photo, gallery = [], lat, lng
                 {streetView.metadata.coverage === "nearby_street" ? "Nearby street coverage; this is not verified property frontage. " : "Street-level context only. "}Verify the facade and parcel against the publisher record before relying on this imagery.
               </p>
             </div>
-          </> : streetView.status === "unavailable" && normalizedListingId ? <><div className="min-h-0 flex-1"><AlternativeStreetView key={normalizedListingId} listingId={normalizedListingId} address={address} onSelectMap={canMap ? () => selectMode("map") : undefined} /></div><div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-line bg-card px-4 py-2.5"><span className="text-xs text-ink-3">Google Street View preview unavailable</span><div className="flex flex-wrap items-center gap-2"><a href={streetViewLaunchUrl(address)} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-9 items-center gap-1.5 rounded-control bg-ink px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-ink-2">{m.detailUi.mediaOpenGoogleMaps} <ExternalLink className="h-3.5 w-3.5" aria-hidden /></a><button type="button" onClick={loadStreetView} className="inline-flex min-h-9 items-center gap-1.5 rounded-control border border-line-strong bg-card px-3 py-1.5 text-xs font-semibold text-ink transition-colors hover:bg-paper">{m.detailUi.mediaRetryGoogleStreetView}</button>{canMap && <button type="button" onClick={() => selectMode("map")} className="inline-flex min-h-9 items-center gap-1.5 rounded-control border border-line-strong bg-card px-3 py-1.5 text-xs font-semibold text-ink-2 transition-colors hover:bg-paper"><MapIcon className="h-3.5 w-3.5" aria-hidden />{m.detailUi.mediaPropertyMap}</button>}</div></div></> : <div className="grid min-h-0 flex-1 place-items-center px-5 py-4 text-center"><div><Camera className="mx-auto h-7 w-7 text-ink-3" aria-hidden /><p className="mt-2 text-sm font-bold text-ink">Street View</p>{streetView.status === "unavailable" ? <p role="status" className="mt-2 max-w-md text-xs leading-relaxed text-ink-3">{streetView.reason}</p> : <p className="mt-2 max-w-md text-xs leading-relaxed text-ink-3">Check for available outdoor street imagery near this property.</p>}<div className="mt-3 flex flex-wrap justify-center gap-2">{normalizedListingId ? <button type="button" disabled={streetView.status === "loading"} onClick={loadStreetView} className="inline-flex min-h-10 items-center gap-2 rounded-control bg-ink px-3 py-2 text-xs font-bold text-white disabled:opacity-60"><Camera className="h-3.5 w-3.5" aria-hidden />{streetView.status === "loading" ? "Checking…" : streetView.status === "unavailable" ? "Check again" : "Check panorama"}</button> : null}{streetView.status === "unavailable" ? <a href={streetViewLaunchUrl(address)} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-10 items-center gap-2 rounded-control border border-line-strong bg-card px-3 py-2 text-xs font-bold text-ink">{m.detailUi.mediaOpenGoogleMaps} <ExternalLink className="h-3.5 w-3.5" aria-hidden /></a> : null}{streetView.status === "unavailable" && canMap ? <button type="button" onClick={() => selectMode("map")} className="inline-flex min-h-10 items-center gap-2 rounded-control border border-line-strong bg-card px-3 py-2 text-xs font-bold text-ink"><MapIcon className="h-3.5 w-3.5" aria-hidden />{m.detailUi.mediaPropertyMap}</button> : null}</div></div></div>}
+          </> : streetView.status === "unavailable" && normalizedListingId ? <><div className="min-h-0 flex-1"><AlternativeStreetView key={normalizedListingId} listingId={normalizedListingId} address={address} onSelectMap={canMap ? () => selectMode("map") : undefined} /></div><div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-line bg-card px-4 py-2.5"><span className="text-xs text-ink-3">Google Street View preview unavailable</span><div className="flex flex-wrap items-center gap-2"><a href={streetViewLaunchUrl(address, null, { lat, lng })} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-9 items-center gap-1.5 rounded-control bg-ink px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-ink-2">{m.detailUi.mediaOpenGoogleMaps} <ExternalLink className="h-3.5 w-3.5" aria-hidden /></a><button type="button" onClick={loadStreetView} className="inline-flex min-h-9 items-center gap-1.5 rounded-control border border-line-strong bg-card px-3 py-1.5 text-xs font-semibold text-ink transition-colors hover:bg-paper">{m.detailUi.mediaRetryGoogleStreetView}</button>{canMap && <button type="button" onClick={() => selectMode("map")} className="inline-flex min-h-9 items-center gap-1.5 rounded-control border border-line-strong bg-card px-3 py-1.5 text-xs font-semibold text-ink-2 transition-colors hover:bg-paper"><MapIcon className="h-3.5 w-3.5" aria-hidden />{m.detailUi.mediaPropertyMap}</button>}</div></div></> : <div className="grid min-h-0 flex-1 place-items-center px-5 py-4 text-center"><div><Camera className="mx-auto h-7 w-7 text-ink-3" aria-hidden /><p className="mt-2 text-sm font-bold text-ink">Street View</p>{streetView.status === "unavailable" ? <p role="status" className="mt-2 max-w-md text-xs leading-relaxed text-ink-3">{streetView.reason}</p> : <p className="mt-2 max-w-md text-xs leading-relaxed text-ink-3">Check for available outdoor street imagery near this property.</p>}<div className="mt-3 flex flex-wrap justify-center gap-2">{normalizedListingId ? <button type="button" disabled={streetView.status === "loading"} onClick={loadStreetView} className="inline-flex min-h-10 items-center gap-2 rounded-control bg-ink px-3 py-2 text-xs font-bold text-white disabled:opacity-60"><Camera className="h-3.5 w-3.5" aria-hidden />{streetView.status === "loading" ? "Checking…" : streetView.status === "unavailable" ? "Check again" : "Check panorama"}</button> : null}{streetView.status === "unavailable" ? <a href={streetViewLaunchUrl(address, null, { lat, lng })} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-10 items-center gap-2 rounded-control border border-line-strong bg-card px-3 py-2 text-xs font-bold text-ink">{m.detailUi.mediaOpenGoogleMaps} <ExternalLink className="h-3.5 w-3.5" aria-hidden /></a> : null}{streetView.status === "unavailable" && canMap ? <button type="button" onClick={() => selectMode("map")} className="inline-flex min-h-10 items-center gap-2 rounded-control border border-line-strong bg-card px-3 py-2 text-xs font-bold text-ink"><MapIcon className="h-3.5 w-3.5" aria-hidden />{m.detailUi.mediaPropertyMap}</button> : null}</div></div></div>}
         </div>
       ) : mode === "map" && canMap ? (
         <div

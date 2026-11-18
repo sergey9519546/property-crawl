@@ -107,6 +107,9 @@ function parseAcceleratedDisposition(html) {
     const areaMatch = chunk.match(/Rentable Area:\s*(?:<strong>)?\s*([\d,]+)/i);
     const gross = /Gross Square Footage/i.test(chunk);
     const area = !gross && areaMatch ? parseInt(areaMatch[1].replace(/,/g, ''), 10) : null;
+    const cardHrefs = [...chunk.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>/gi)].map((match) => match[1].trim());
+    const directRealEstateUrl = cardHrefs.find((href) => /^https:\/\/(?:www\.)?realestatesales\.gov\/asset-details\/?\?property_id=\d+/i.test(href)) || null;
+    const disposalUrl = cardHrefs.find((href) => /^https:\/\/disposal\.gsa\.gov\/s\/property\//i.test(href)) || null;
     const listingId = `GSA-${state}-${slug}-${addressMatch[4]}`.slice(0, 64);
     const recordId = `${state}-${slug}-${addressMatch[4]}`.slice(0, 64);
     open.push({
@@ -123,7 +126,7 @@ function parseAcceleratedDisposition(html) {
       estLow: null,
       estHigh: null,
       saleDate: null,
-      sourceUrl: DISPOSITION_URL,
+      sourceUrl: directRealEstateUrl || DISPOSITION_URL,
       raw: `${title}. ${address}. Identified for accelerated disposition on the GSA public list. ${listed}`.trim(),
       provenance: {
         origin: 'live',
@@ -135,7 +138,8 @@ function parseAcceleratedDisposition(html) {
           program: 'accelerated_disposition',
           dateListed: listed.replace(/^DATE LISTED:\s*/, '') || null,
           propertyType: typeMatch ? cardText(typeMatch[1]) : null,
-          auctionLinkFollowed: false
+          auctionLinkFollowed: Boolean(directRealEstateUrl || disposalUrl),
+          ...(disposalUrl ? { disposalUrl } : {}),
         }
       }
     });

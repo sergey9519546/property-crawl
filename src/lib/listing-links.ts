@@ -61,29 +61,31 @@ function isUsStateOrTerritoryCode(value: string) {
   return US_STATE_OR_TERRITORY_CODES.has(value.trim().toUpperCase());
 }
 
+const EMAIL_NOTICE_HOSTS = [
+  "floridapublicnotices.com",
+  "publicnoticeillinois.com",
+  "texaspublicnotices.com",
+  "publicnoticesohio.com",
+  "publicnoticepa.com",
+  "georgiapublicnotice.com",
+  "capublicnotice.com",
+  "nypublicnotices.com",
+  "njpublicnotices.com",
+  "michiganpublicnotices.com",
+  "ncpublicnotices.com",
+  "publicnoticeads.com",
+  "publicnoticecolorado.com",
+  "indianapublicnotices.com",
+  "publicnotice.org",
+];
+
 const SOURCE_ALLOWED_HOSTS: Record<string, string[]> = {
   bid4assets: ["bid4assets.com"],
   "ca-controller-tax-sale": ["sco.ca.gov"],
   civilview: ["salesweb.civilview.com"],
   courtlistener: ["www.courtlistener.com"],
-  "email-notices": [
-    "floridapublicnotices.com",
-    "publicnoticeillinois.com",
-    "texaspublicnotices.com",
-    "publicnoticesohio.com",
-    "publicnoticepa.com",
-    "georgiapublicnotice.com",
-    "publicnotice.org",
-  ],
-  "public-notices-email": [
-    "floridapublicnotices.com",
-    "publicnoticeillinois.com",
-    "texaspublicnotices.com",
-    "publicnoticesohio.com",
-    "publicnoticepa.com",
-    "georgiapublicnotice.com",
-    "publicnotice.org",
-  ],
+  "email-notices": EMAIL_NOTICE_HOSTS,
+  "public-notices-email": EMAIL_NOTICE_HOSTS,
   fannie: ["homepath.fanniemae.com"],
   "fhfa-hpi": ["www.fhfa.gov"],
   "fl-dor-cadastral": ["services9.arcgis.com"],
@@ -204,7 +206,7 @@ function hasSourceRecordShape(source: string, url: URL): boolean {
       );
     }
     case "hud":
-      return path === "/property/propertydetails" && url.searchParams.has("caseNumber");
+      return (path === "/propertydetails" || path === "/property/propertydetails") && url.searchParams.has("caseNumber");
     case "hud-usps-vacancy": {
       const featureMatch = path.match(/^(?:\/[^/]+){0,8}\/featureserver\/0\/(\d+)$/);
       if (featureMatch && !url.search) return true;
@@ -369,4 +371,210 @@ export function getExactSourceListingUrl(
   }
 
   return hasRecordIdentity(candidate) ? candidate.toString() : null;
+}
+
+export type SourceLinkPresentation = {
+  exactUrl: string | null;
+  primaryUrl: string | null;
+  primaryLabel: string;
+  sessionGateUrl: string | null;
+  sessionGateLabel: string | null;
+  rawEvidenceUrl: string | null;
+  rawEvidenceLabel: string | null;
+  kind: "direct_property" | "session_required" | "batch_directory" | "raw_api_json" | "unavailable";
+  hint: string | null;
+  referenceId: string | null;
+};
+
+type RichListingLinkFields = ListingLinkFields & {
+  address?: string | null;
+  county?: string | null;
+  state?: string | null;
+  provenance?: {
+    recordId?: string | number | null;
+    countySearchUrl?: string | null;
+    propertyId?: string | number | null;
+    sheriffNumber?: string | null;
+    courtCaseNumber?: string | null;
+    detailUrlRequiresCountySession?: boolean | null;
+    sourceFacts?: {
+      disposalUrl?: string | null;
+      parcelListUrl?: string | null;
+    } | null;
+  } | null;
+};
+
+function safeHttps(urlString: unknown, allowedHosts?: string[]): string | null {
+  if (typeof urlString !== "string" || !urlString.trim()) return null;
+  try {
+    const parsed = new URL(urlString.trim());
+    if (parsed.protocol !== "https:" || parsed.username || parsed.password || parsed.port) return null;
+    if (allowedHosts && !allowedHosts.some((host) => hostnameMatches(parsed.hostname, host))) return null;
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
+export function getSourceLinkPresentation(
+  listing: RichListingLinkFields,
+  sourceWebsiteUrl?: string | null,
+  sourceLabel?: string | null,
+): SourceLinkPresentation {
+  const exactUrl = getExactSourceListingUrl(listing, sourceWebsiteUrl);
+  const sourceKey = listing.source?.trim().toLowerCase() || "";
+  const prov = listing.provenance || {};
+  const labelName = sourceLabel?.trim() || (sourceKey ? sourceKey.toUpperCase() : "Source");
+
+  if (!exactUrl) {
+    return {
+      exactUrl: null,
+      primaryUrl: null,
+      primaryLabel: "Exact source listing unavailable",
+      sessionGateUrl: null,
+      sessionGateLabel: null,
+      rawEvidenceUrl: null,
+      rawEvidenceLabel: null,
+      kind: "unavailable",
+      hint: null,
+      referenceId: null,
+    };
+  }
+
+  if (sourceKey === "civilview") {
+    const idCounty = typeof listing.id === "string" ? listing.id.match(/^CIV-[A-Z]{2}-(\d+)-(\d+)/i) : null;
+    const urlProp = new URL(exactUrl).searchParams.get("PropertyId");
+    const countyId = idCounty?.[1] || null;
+    const propertyId = String(prov.propertyId ?? idCounty?.[2] ?? urlProp ?? "");
+    const sessionGateUrl = safeHttps(prov.countySearchUrl, ["salesweb.civilview.com"])
+      || (countyId ? `https://salesweb.civilview.com/Sales/SalesSearch?countyId=${encodeURIComponent(countyId)}` : "https://salesweb.civilview.com/");
+    const sheriffRef = prov.sheriffNumber ? `Sheriff #${prov.sheriffNumber}` : null;
+    const caseRef = prov.courtCaseNumber ? `Case ${prov.courtCaseNumber}` : null;
+    const propRef = propertyId ? `PropertyId ${propertyId}` : null;
+    const refText = [sheriffRef, caseRef, propRef].filter(Boolean).join(" · ") || null;
+    return {
+      exactUrl,
+      primaryUrl: exactUrl,
+      primaryLabel: "Step 2: Open Property Detail",
+      sessionGateUrl,
+      sessionGateLabel: `Step 1: Open ${listing.county ? `${listing.county} ` : ""}County Docket`,
+      rawEvidenceUrl: null,
+      rawEvidenceLabel: null,
+      kind: "session_required",
+      hint: `CivilView redirects direct links to its home index until your browser visits the county docket first. Open Step 1, then open Step 2 or search ${refText || "this address"}.`,
+      referenceId: refText,
+    };
+  }
+
+  if (sourceKey === "hud" && exactUrl.includes("egis.hud.gov")) {
+    const caseMatch = exactUrl.match(/CASE_NUM(?:%20|\s)*=(?:%20|\s)*(?:'|%27)([0-9-]+)(?:'|%27)/i);
+    const caseNumber = String(prov.recordId || caseMatch?.[1] || (typeof listing.id === "string" ? listing.id.replace(/^HUD-/i, "") : "")).trim();
+    const consumerUrl = caseNumber
+      ? `https://www.hudhomestore.gov/propertydetails?caseNumber=${encodeURIComponent(caseNumber)}`
+      : "https://www.hudhomestore.gov/";
+    return {
+      exactUrl,
+      primaryUrl: consumerUrl,
+      primaryLabel: caseNumber ? `Open HUD HomeStore (Case #${caseNumber})` : "Open HUD HomeStore",
+      sessionGateUrl: null,
+      sessionGateLabel: null,
+      rawEvidenceUrl: exactUrl,
+      rawEvidenceLabel: "Inspect Official HUD eGIS JSON",
+      kind: "raw_api_json",
+      hint: "HUD HomeStore renders the public buyer page if still active; historical HUD eGIS acquisitions remain inspectable in the raw government record JSON.",
+      referenceId: caseNumber ? `Case #${caseNumber}` : null,
+    };
+  }
+
+  if (sourceKey === "gsa" && exactUrl.includes("/assets-identified-for-accelerated-disposition")) {
+    const disposalUrl = safeHttps(prov.sourceFacts?.disposalUrl, ["disposal.gsa.gov", "realestatesales.gov"]);
+    if (disposalUrl) {
+      return {
+        exactUrl,
+        primaryUrl: disposalUrl,
+        primaryLabel: "Open Official GSA Disposal Property Page",
+        sessionGateUrl: null,
+        sessionGateLabel: null,
+        rawEvidenceUrl: exactUrl,
+        rawEvidenceLabel: "Open GSA Disposition Directory",
+        kind: "direct_property",
+        hint: "Links directly to the individual GSA disposal asset page.",
+        referenceId: null,
+      };
+    }
+    return {
+      exactUrl,
+      primaryUrl: exactUrl,
+      primaryLabel: "Open GSA Disposition List (Search Address)",
+      sessionGateUrl: null,
+      sessionGateLabel: null,
+      rawEvidenceUrl: null,
+      rawEvidenceLabel: null,
+      kind: "batch_directory",
+      hint: "GSA publishes early accelerated-disposition notices on a combined directory page without individual asset URLs yet. Search the property title or address on that page.",
+      referenceId: listing.address || null,
+    };
+  }
+
+  if (sourceKey === "ca-controller-tax-sale") {
+    const countyListUrl = safeHttps(prov.sourceFacts?.parcelListUrl);
+    return {
+      exactUrl,
+      primaryUrl: countyListUrl || exactUrl,
+      primaryLabel: countyListUrl ? `Open ${listing.county || "County"} Tax Sale Schedule` : "Open CA Controller Tax Sales Schedule",
+      sessionGateUrl: null,
+      sessionGateLabel: null,
+      rawEvidenceUrl: countyListUrl ? exactUrl : null,
+      rawEvidenceLabel: countyListUrl ? "Open CA Controller Directory" : null,
+      kind: "batch_directory",
+      hint: "California tax-defaulted sales are published on county/state tax sale schedules. Search by APN or situs address inside the schedule.",
+      referenceId: null,
+    };
+  }
+
+  if (sourceKey === "fl-dor-cadastral" || sourceKey === "hud-usps-vacancy" || sourceKey === "fhfa-hpi") {
+    return {
+      exactUrl,
+      primaryUrl: exactUrl,
+      primaryLabel: `Inspect Official ${labelName} Record Data`,
+      sessionGateUrl: null,
+      sessionGateLabel: null,
+      rawEvidenceUrl: null,
+      rawEvidenceLabel: null,
+      kind: "raw_api_json",
+      hint: "Official agency open-data record endpoint (JSON / CSV).",
+      referenceId: null,
+    };
+  }
+
+  if (sourceKey === "sheriff") {
+    const urlObj = new URL(exactUrl);
+    const aid = urlObj.searchParams.get("aid") || (prov.recordId ? String(prov.recordId) : null);
+    const calendarUrl = `${urlObj.origin}/index.cfm?zaction=USER&zmethod=CALENDAR`;
+    return {
+      exactUrl,
+      primaryUrl: exactUrl,
+      primaryLabel: aid ? `Open ${listing.county || labelName} Preview (Aid #${aid})` : `Open Exact ${labelName} Preview`,
+      sessionGateUrl: calendarUrl,
+      sessionGateLabel: `Open ${listing.county || "County"} Auction Calendar`,
+      rawEvidenceUrl: null,
+      rawEvidenceLabel: null,
+      kind: "direct_property",
+      hint: "Opens the county RealAuction public sale preview. If the preview is past or requires navigation, use the county auction calendar alongside the Aid/Case number.",
+      referenceId: aid ? `Aid #${aid}` : null,
+    };
+  }
+
+  return {
+    exactUrl,
+    primaryUrl: exactUrl,
+    primaryLabel: `Open Exact ${labelName} Listing`,
+    sessionGateUrl: null,
+    sessionGateLabel: null,
+    rawEvidenceUrl: null,
+    rawEvidenceLabel: null,
+    kind: "direct_property",
+    hint: null,
+    referenceId: null,
+  };
 }

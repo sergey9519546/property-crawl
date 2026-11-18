@@ -21,6 +21,8 @@ import dynamic from "next/dynamic";
 import { SectionHeading } from "./section-heading";
 import { Fact, YoursTag, type FactFormat } from "@/components/evidence/fact";
 import { factText } from "@/lib/evidence";
+import { getSourceLinkPresentation } from "@/lib/listing-links";
+import { SOURCES } from "@/components/terminal/property-data";
 import { useLocale } from "@/components/i18n/locale-provider";
 
 /**
@@ -172,6 +174,8 @@ type PublishedListing = {
   dealScore?: number | string | null;
   occupancy?: string | null;
   parcelKey?: string | null;
+  sourceUrl?: string | null;
+  provenance?: Record<string, unknown> | null;
 };
 
 type PublishedState = {
@@ -296,7 +300,11 @@ export function Storyteller() {
                   Property decision workflow
                 </p>
                 <p className="mt-1 text-body font-semibold text-ink">
-                  {headline}
+                  {published.listing?.id ? (
+                    <a href={`/listings/${encodeURIComponent(published.listing.id)}`} className="hover:underline underline-offset-4">
+                      {headline}
+                    </a>
+                  ) : headline}
                   {place ? <span className="ml-2 font-medium text-ink-3">{place}</span> : null}
                 </p>
               </div>
@@ -464,7 +472,15 @@ function VerificationPanel() {
         <p className="relative text-label font-extrabold uppercase tracking-[0.16em] text-white/75">
           Next sale
         </p>
-        <h4 className="relative mt-3 text-title sm:text-display font-bold tracking-[-0.03em]">{listing?.address || (status === "loading" ? "Loading a sample listing" : "No listing to show yet")}</h4>
+        <h4 className="relative mt-3 text-title sm:text-display font-bold tracking-[-0.03em]">
+          {listing?.id ? (
+            <a href={`/listings/${encodeURIComponent(listing.id)}`} className="hover:underline underline-offset-4">
+              {listing.address || (status === "loading" ? "Loading a sample listing" : "No listing to show yet")}
+            </a>
+          ) : (
+            listing?.address || (status === "loading" ? "Loading a sample listing" : "No listing to show yet")
+          )}
+        </h4>
         <p className="relative mt-1 text-meta font-medium text-white/75">{[listing?.county, listing?.state].filter(Boolean).join(", ") || listing?.source || "Details from the listing"}</p>
 
         <dl className="relative mt-8 grid grid-cols-2 gap-px overflow-hidden rounded-control bg-white/10">
@@ -481,6 +497,22 @@ function VerificationPanel() {
           <p className="mt-2 text-label leading-[1.55] text-white/75">
             {listing?.id ? "These details come straight from the listing. Check the original notice before you bid." : "We could not load a listing just now."}
           </p>
+          {listing?.id ? (() => {
+            const sourceMeta = listing.source ? SOURCES[listing.source] : undefined;
+            const link = getSourceLinkPresentation(listing, sourceMeta?.websiteUrl, sourceMeta?.label);
+            return (
+              <div className="mt-3 flex flex-wrap gap-2">
+                <a href={`/listings/${encodeURIComponent(listing.id)}`} className="inline-flex items-center gap-1 rounded-control bg-card px-3 py-1.5 text-label font-bold text-ink hover:bg-card/90">
+                  Open property page <ArrowRight className="h-3 w-3" aria-hidden />
+                </a>
+                {link.primaryUrl ? (
+                  <a href={link.primaryUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-control border border-white/25 px-3 py-1.5 text-label font-semibold text-white hover:bg-white/10">
+                    {link.primaryLabel}
+                  </a>
+                ) : null}
+              </div>
+            );
+          })() : null}
         </div>
       </article>
 
@@ -665,10 +697,6 @@ function UnderwritePanel() {
               if (ceiling !== null && ceiling > 0) {
                 params.set("maxBid", String(Math.round(ceiling)));
               }
-              if (assumed > 0) params.set("assumedValue", String(Math.round(assumed)));
-              if (repairs > 0) params.set("rehab", String(Math.round(repairs)));
-              if (carry > 0) params.set("carry", String(Math.round(carry)));
-              if (profit > 0) params.set("profit", String(Math.round(profit)));
               const qs = params.toString();
               return qs ? `/listings?${qs}` : "/listings";
             })()}
@@ -726,7 +754,15 @@ function ActionPanel() {
         <div className="flex items-start justify-between gap-4 border-b border-line bg-ink px-6 py-5 text-white">
           <div>
             <p className="text-label font-extrabold uppercase tracking-[0.14em] text-white/75">Listing</p>
-            <h4 className="mt-1 text-title font-bold">{listing?.address || "No listing to show yet"}</h4>
+            <h4 className="mt-1 text-title font-bold">
+              {listing?.id ? (
+                <a href={`/listings/${encodeURIComponent(listing.id)}`} className="hover:underline underline-offset-4">
+                  {listing.address || "No listing to show yet"}
+                </a>
+              ) : (
+                listing?.address || "No listing to show yet"
+              )}
+            </h4>
             <p className="mt-0.5 text-label font-medium text-white/60">Your shortlist card</p>
           </div>
           <span className="rounded-control bg-white/10 px-3 py-2 text-label font-extrabold text-white">
@@ -804,7 +840,7 @@ function ActionPanel() {
           ))}
         </div>
         <a href={listing?.id ? `/listings/${encodeURIComponent(listing.id)}` : "/listings"} className="mt-5 inline-flex h-11 w-full items-center justify-center gap-2 rounded-control bg-ink px-4 text-label font-bold text-white">
-          Browse listings <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+          {listing?.id ? "Open full listing" : "Browse listings"} <ArrowRight className="h-3.5 w-3.5" aria-hidden />
         </a>
       </article>
     </div>

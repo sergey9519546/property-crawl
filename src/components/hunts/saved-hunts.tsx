@@ -1072,8 +1072,12 @@ export function SavedHunts() {
                           >
                             <p className="text-xs font-semibold">
                               {event.type.replaceAll("_", " ")} ·{" "}
-                              {sourceDisplayText(
-                                event.address || event.listingId,
+                              {event.listingId ? (
+                                <Link href={`/listings/${encodeURIComponent(event.listingId)}?returnTo=${encodeURIComponent("/hunts")}`} className="underline underline-offset-2 hover:text-ink-2">
+                                  {sourceDisplayText(event.address || event.listingId)}
+                                </Link>
+                              ) : (
+                                sourceDisplayText(event.address || event.listingId)
                               )}
                             </p>
                             <p className="mt-2 text-xs leading-6 text-ink-3">

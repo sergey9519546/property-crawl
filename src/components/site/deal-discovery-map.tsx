@@ -1,6 +1,9 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
+import "maplibre-gl/dist/maplibre-gl.css";
+import { OPENFREEMAP_POSITRON_STYLE } from "@/lib/map-style";
 import {
   ArrowRight,
   Crosshair,
@@ -443,7 +446,7 @@ export function DealDiscoveryMap() {
         const compactMap = window.innerWidth < 768;
         const map = new maplibre.Map({
           container: mapContainerRef.current,
-          style: "https://tiles.openfreemap.org/styles/positron",
+          style: OPENFREEMAP_POSITRON_STYLE,
           center: initialCenter,
           zoom: localWindow ? (compactMap ? 10.2 : 10.8) : 4,
           pitch: localWindow && !compactMap ? 18 : 0,
@@ -510,10 +513,19 @@ export function DealDiscoveryMap() {
           return { element, marker };
         });
 
+        let styleFailed = false;
+        const markReadyIfStyleLoaded = () => {
+          if (disposed || styleFailed) return;
+          if (map.isStyleLoaded()) {
+            setMapReady(true);
+            setMapUnavailable(false);
+          }
+        };
         const handleMapError = () => {
           if (disposed) return;
           const styleCold = !map.isStyleLoaded();
           if (!styleCold) return;
+          styleFailed = true;
           if (loadTimeout !== null) {
             window.clearTimeout(loadTimeout);
             loadTimeout = null;
@@ -521,6 +533,8 @@ export function DealDiscoveryMap() {
           setMapUnavailable(true);
         };
         map.on("error", handleMapError);
+        map.once("styledata", markReadyIfStyleLoaded);
+        map.once("render", markReadyIfStyleLoaded);
 
         map.once("load", () => {
           if (disposed) return;
@@ -810,7 +824,13 @@ export function DealDiscoveryMap() {
               {sourceDisplayText(shown.source)}
             </p>
             <h3 className="mt-1 truncate text-xl font-bold tracking-[-0.02em] text-[#111827]">
-              {shown.address}
+              {shown.id ? (
+                <Link href={`/listings/${encodeURIComponent(shown.id)}`} className="hover:underline underline-offset-4">
+                  {shown.address}
+                </Link>
+              ) : (
+                shown.address
+              )}
             </h3>
             <p className="mt-1 text-xs font-medium text-[#5B6472]">
               {shown.area}

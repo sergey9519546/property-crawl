@@ -701,6 +701,50 @@ async function resolveCensusCoordinates({ fetchImpl, observedAddress, timeoutMs 
   }
 }
 
+async function resolveArcgisCoordinates({ fetchImpl, observedAddress, timeoutMs = 5_000 }) {
+  if (!observedAddress?.query || typeof fetchImpl !== 'function') return null;
+  const url = new URL('https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates');
+  url.search = new URLSearchParams({
+    SingleLine: observedAddress.query,
+    countryCode: 'USA',
+    maxLocations: '1',
+    outFields: 'Match_addr,Addr_type,StAddr,Postal,RegionAbbr',
+    f: 'pjson',
+  }).toString();
+  try {
+    const response = await fetchWithTimeout(
+      fetchImpl,
+      url,
+      { method: 'GET', redirect: 'error', headers: { Accept: 'application/json' } },
+      timeoutMs
+    );
+    if (!response || !response.ok) return null;
+    const payload = JSON.parse(await readBoundedText(response, MAX_METADATA_BYTES));
+    const candidate = Array.isArray(payload?.candidates) ? payload.candidates[0] : null;
+    if (!candidate || Number(candidate.score) < 88) return null;
+    const addrType = String(candidate?.attributes?.Addr_type || '');
+    if (!['PointAddress', 'StreetAddress', 'Subaddress', 'Parcel'].includes(addrType)) return null;
+    const lat = validCoordinate(candidate?.location?.y, -90, 90);
+    const lng = validCoordinate(candidate?.location?.x, -180, 180);
+    if (lat === null || lng === null || (lat === 0 && lng === 0)) return null;
+    const returnedState = String(candidate?.attributes?.RegionAbbr || '').trim().toUpperCase();
+    if (observedAddress.state && returnedState && returnedState !== observedAddress.state) return null;
+    return {
+      lat,
+      lng,
+      basis: 'source_observed_address_arcgis_geocode',
+      resolution: {
+        origin: 'arcgis_world_geocoder_ephemeral',
+        locationType: addrType,
+        partialMatch: false,
+        persisted: false,
+      },
+    };
+  } catch (_) {
+    return null;
+  }
+}
+
 function classifyMetadataStatus(status, circuit) {
   if (status === 'ZERO_RESULTS' || status === 'NOT_FOUND') {
     circuit.success();
@@ -1109,13 +1153,83 @@ function createPropertyImageService(options = {}) {
         throw new PropertyImageError(400, 'invalid_listing_id', 'listingId is invalid.');
       }
       const mode = safeText(url.searchParams.get('mode') || 'metadata', 16)?.toLowerCase();
-      if (!['metadata', 'walkthrough', 'image', 'alternatives'].includes(mode)) {
-        throw new PropertyImageError(400, 'invalid_mode', 'mode must be metadata, walkthrough, image, or alternatives.');
+      if (!['metadata', 'walkthrough', 'image', 'alternatives', 'aerial'].includes(mode)) {
+        throw new PropertyImageError(400, 'invalid_mode', 'mode must be metadata, walkthrough, image, alternatives, or aerial.');
       }
 
       limiter.consume(FixedWindowRateLimiter.clientIp(req, trustedProxyCount));
       const listing = await database.getListingById(listingId);
       if (!listing) throw new PropertyImageError(404, 'listing_not_found', 'Listing not found.');
+
+      if (mode === 'aerial') {
+        const directLat = validCoordinate(listing?.lat, -90, 90);
+        const directLng = validCoordinate(listing?.lng, -180, 180);
+        let aerialCoords = sourceCoordinates(listing)
+          || (directLat !== null && directLng !== null && !(directLat === 0 && directLng === 0)
+            ? { lat: directLat, lng: directLng, basis: 'listing_coordinates' }
+            : null);
+        if (!aerialCoords) {
+          const observedAddress = sourceObservedAddress(listing) || (safeText(listing?.address, 256)
+            ? {
+                query: [listing.address, listing.city, listing.state, listing.zip].filter(Boolean).join(', '),
+                street: String(listing.address || '').split(',')[0].trim(),
+                city: String(listing.city || '').trim(),
+                state: String(listing.state || '').trim().toUpperCase(),
+                zip5: String(listing.zip || '').trim().slice(0, 5),
+              }
+            : null);
+          if (observedAddress) {
+            const timeoutMs = clampInteger(env.GOOGLE_STREETVIEW_TIMEOUT_MS, 500, 10_000, 5_000);
+            aerialCoords = await resolveCensusCoordinates({ fetchImpl, observedAddress, timeoutMs })
+              || await resolveArcgisCoordinates({ fetchImpl, observedAddress, timeoutMs });
+          }
+        }
+        if (!aerialCoords) {
+          throw new PropertyImageError(422, 'exact_location_unavailable', 'Aerial parcel imagery requires verified coordinates or a complete street address.');
+        }
+        return await gate.run(async () => {
+          const deltaLng = 0.0008;
+          const deltaLat = 0.0006;
+          const exportUrl = new URL('https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export');
+          exportUrl.search = new URLSearchParams({
+            bbox: `${(aerialCoords.lng - deltaLng).toFixed(6)},${(aerialCoords.lat - deltaLat).toFixed(6)},${(aerialCoords.lng + deltaLng).toFixed(6)},${(aerialCoords.lat + deltaLat).toFixed(6)}`,
+            bboxSR: '4326',
+            imageSR: '3857',
+            size: '640,480',
+            format: 'jpg',
+            f: 'image',
+          }).toString();
+          const timeoutMs = clampInteger(env.GOOGLE_STREETVIEW_TIMEOUT_MS, 500, 10_000, 6_500);
+          const aerialRes = await fetchWithTimeout(
+            fetchImpl,
+            exportUrl,
+            { method: 'GET', redirect: 'error', headers: { Accept: 'image/jpeg,image/png' } },
+            timeoutMs
+          );
+          if (!aerialRes || !aerialRes.ok) {
+            throw new PropertyImageError(503, 'aerial_unavailable', 'Aerial satellite imagery is temporarily unavailable.');
+          }
+          const buffer = await readBoundedBytes(aerialRes, MAX_IMAGE_BYTES, timeoutMs);
+          if (buffer.length < 100 || (!imageMagicMatches('image/jpeg', buffer) && !imageMagicMatches('image/png', buffer))) {
+            throw new PropertyImageError(502, 'upstream_non_image', 'Aerial imagery service did not return a valid image.');
+          }
+          const contentType = imageMagicMatches('image/png', buffer) ? 'image/png' : 'image/jpeg';
+          const ext = contentType === 'image/png' ? 'png' : 'jpg';
+          return {
+            status: 200,
+            headers: {
+              ...baseHeaders(),
+              'Cache-Control': 'public, max-age=86400',
+              'Content-Type': contentType,
+              'Content-Length': String(buffer.length),
+              'Content-Disposition': `inline; filename="aerial-${listingId}.${ext}"`,
+              'X-Property-Image-Provider': 'Esri World Imagery',
+              'X-Property-Image-Attribution': 'Esri, Maxar, Earthstar Geographics, USDA NAIP',
+            },
+            body: buffer,
+          };
+        });
+      }
       const geocodingOutageCodes = new Set([
         'geocoding_denied',
         'geocoding_rate_limited',

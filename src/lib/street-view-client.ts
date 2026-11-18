@@ -154,11 +154,28 @@ export function loadGoogleMapsStreetView(): Promise<GoogleMapsRuntime> {
   return googleMapsPromise;
 }
 
-export function streetViewLaunchUrl(address: string, metadata?: StreetViewMetadata | null) {
+export function streetViewLaunchUrl(
+  address: string,
+  metadata?: StreetViewMetadata | null,
+  coords?: { lat?: number | null; lng?: number | null } | null,
+) {
   if (metadata?.mapsLaunchUrl) return metadata.mapsLaunchUrl;
   if (metadata?.panoramaLocation) {
     const viewpoint = `${metadata.panoramaLocation.lat},${metadata.panoramaLocation.lng}`;
     return `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${encodeURIComponent(viewpoint)}`;
+  }
+  const lat = coords?.lat;
+  const lng = coords?.lng;
+  if (
+    typeof lat === "number" &&
+    typeof lng === "number" &&
+    Number.isFinite(lat) &&
+    Number.isFinite(lng) &&
+    Math.abs(lat) <= 90 &&
+    Math.abs(lng) <= 180 &&
+    !(lat === 0 && lng === 0)
+  ) {
+    return `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${encodeURIComponent(`${lat},${lng}`)}`;
   }
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
 }

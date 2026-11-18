@@ -20,8 +20,8 @@ const shared = new WeakMap<typeof fetch, { result: Promise<InventoryResult<any>>
 // refresh must not silently replace an already useful feed with demo records.
 async function loadPages<T extends RecordIdentity>(fetchImpl: typeof fetch, signal?: AbortSignal): Promise<InventoryResult<T>> {
   const records = new Map<string, T>();
-  const pageSize = 1000;
-  const maxPages = 10;
+  const pageSize = 250;
+  const maxPages = 40;
   let total = 0;
   let offset = 0;
   for (let page = 0; page < maxPages; page++) {

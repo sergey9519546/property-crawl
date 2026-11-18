@@ -5,7 +5,7 @@ import { notFound } from "next/navigation";
 import { cache } from "react";
 import { ArrowLeft, CalendarDays, ExternalLink, Gavel, MapPin, TrendingUp, AlertTriangle, Info, Clock, FileText, Download, FileCheck2 } from "lucide-react";
 import { Listing, SOURCES } from "@/data/listings";
-import { getExactSourceListingUrl } from "@/lib/listing-links";
+import { getExactSourceListingUrl, getSourceLinkPresentation } from "@/lib/listing-links";
 import { safeImageUrl } from "@/lib/listing-display";
 import { combineStatusTones, listingOfferAvailability, listingStatusClass, listingStatusTone } from "@/lib/listing-status";
 import { serializeJsonLd } from "@/lib/json-ld";
@@ -327,8 +327,17 @@ export default async function ListingPage({ params, searchParams }: Props) {
   }
 
   const source = SOURCES[listing.source];
-  const gisLink = getCountyCadastralGisLink(listing.state, listing.county);
-  const exactSourceUrl = getExactSourceListingUrl(listing, source?.websiteUrl);
+  const listingProv = listing.provenance && typeof listing.provenance === "object" ? listing.provenance as Record<string, unknown> : {};
+  const mapLocationGis = inspectMapLocation(listing);
+  const gisLink = getCountyCadastralGisLink(listing.state, listing.county, {
+    address: listing.address,
+    apn: (listing as { assessorParcel?: { canonicalApn?: string | null } }).assessorParcel?.canonicalApn
+      ?? (typeof listingProv.parcelNumber === "string" ? listingProv.parcelNumber : null),
+    lat: mapLocationGis.accepted ? finiteNumber(listing.lat) : null,
+    lng: mapLocationGis.accepted ? finiteNumber(listing.lng) : null,
+  });
+  const sourceLink = getSourceLinkPresentation(listing, source?.websiteUrl, source?.label);
+  const exactSourceUrl = sourceLink.exactUrl ?? getExactSourceListingUrl(listing, source?.websiteUrl);
   const openingBid = positiveNumber(listing.openingBid);
   const estLow = positiveNumber(listing.estLow);
   const estHigh = positiveNumber(listing.estHigh);
@@ -500,6 +509,7 @@ export default async function ListingPage({ params, searchParams }: Props) {
             <ListingMedia
               listingId={listing.id}
               address={listing.address}
+              propType={listing.propType}
               photo={detailPhoto}
               gallery={detailGallery}
               photoOrigin={publisherPhoto ? "publisher" : secondaryMedia.accepted ? "secondary" : undefined}
@@ -561,10 +571,28 @@ export default async function ListingPage({ params, searchParams }: Props) {
               <div className="flex items-center justify-between gap-4 py-3.5 text-sm"><dt className="text-ink-3">{dUi.depositTermsLabel}</dt><dd className="max-w-[55%] text-right font-semibold"><Fact origin={listingFactOrigin(listing, "deposit")} value={listing.deposit} /></dd></div>
             </dl>
             <p className="mt-4 text-xs leading-relaxed text-ink-3">{dUi.confirmTermsNote}</p>
-            {exactSourceUrl ? (
-              <a href={exactSourceUrl} target="_blank" rel="noreferrer" data-testid="exact-source-listing-link" className="mt-4 flex min-h-11 items-center justify-center gap-2 rounded-control bg-ink px-5 py-3 text-center text-sm font-semibold text-white hover:bg-ink-2">
-                {dUi.openExactSource} <ExternalLink className="h-4 w-4" />
-              </a>
+            {sourceLink.primaryUrl ? (
+              <div className="mt-4 space-y-2">
+                {sourceLink.sessionGateUrl && sourceLink.sessionGateLabel ? (
+                  <a href={sourceLink.sessionGateUrl} target="_blank" rel="noreferrer" className="flex min-h-10 items-center justify-center gap-2 rounded-control border border-line-strong bg-paper px-4 py-2 text-center text-xs font-bold text-ink hover:bg-line">
+                    {sourceLink.sessionGateLabel} <ExternalLink className="h-3.5 w-3.5" />
+                  </a>
+                ) : null}
+                <a href={sourceLink.primaryUrl} target="_blank" rel="noreferrer" data-testid="exact-source-listing-link" className="flex min-h-11 items-center justify-center gap-2 rounded-control bg-ink px-5 py-3 text-center text-sm font-semibold text-white hover:bg-ink-2">
+                  {sourceLink.kind === "direct_property" ? dUi.openExactSource : sourceLink.primaryLabel} <ExternalLink className="h-4 w-4" />
+                </a>
+                {sourceLink.rawEvidenceUrl && sourceLink.rawEvidenceLabel ? (
+                  <a href={sourceLink.rawEvidenceUrl} target="_blank" rel="noreferrer" className="flex min-h-9 items-center justify-center gap-1.5 rounded-control border border-line px-3 py-2 text-center text-xs font-semibold text-ink-2 hover:bg-paper">
+                    {sourceLink.rawEvidenceLabel} <ExternalLink className="h-3.5 w-3.5" />
+                  </a>
+                ) : null}
+                {(sourceLink.hint || sourceLink.referenceId) ? (
+                  <p className="rounded-control bg-paper px-3 py-2.5 text-xs leading-relaxed text-ink-3">
+                    {sourceLink.referenceId ? <strong className="mb-0.5 block text-ink">{sourceLink.referenceId}</strong> : null}
+                    {sourceLink.hint}
+                  </p>
+                ) : null}
+              </div>
             ) : (
               <p data-testid="exact-source-listing-unavailable" className="mt-4 border-t border-line pt-4 text-xs leading-relaxed text-ink-3"><strong className="text-ink">{dUi.exactUpstreamMissingTitle} </strong>{dUi.exactUpstreamMissingBody}</p>
             )}
@@ -648,7 +676,7 @@ export default async function ListingPage({ params, searchParams }: Props) {
             {catchSummary.flags.length ? <ul className="mt-2 list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-ink-2 marker:text-catch">{catchSummary.flags.map((flag, i) => <li key={i}>{flag}</li>)}</ul> : null}
           </section>
           {/* A state-table redemption baseline or a pattern-matched lien signal is modeled, not published, so it must not close the gap (same rule as signals.js). */}
-          <GapLedger className="" listing={{ id: listing.id, occupancy: listing.occupancy, seniorLienRisk: (provenance.derivedFields as { seniorLienRisk?: unknown } | undefined)?.seniorLienRisk ? null : listing.seniorLienRisk, deposit: listing.deposit, redemptionDays: derivedRedemption ? null : listing.redemptionDays, redemptionWarning: derivedRedemption ? null : listing.redemptionWarning, openingBid: listing.openingBid, saleDate: listing.saleDate, sourceUrl: exactSourceUrl }} />
+          <GapLedger className="" listing={{ id: listing.id, state: listing.state, county: listing.county, gisUrl: gisLink?.url ?? null, occupancy: listing.occupancy, seniorLienRisk: (provenance.derivedFields as { seniorLienRisk?: unknown } | undefined)?.seniorLienRisk ? null : listing.seniorLienRisk, deposit: listing.deposit, redemptionDays: derivedRedemption ? null : listing.redemptionDays, redemptionWarning: derivedRedemption ? null : listing.redemptionWarning, openingBid: listing.openingBid, saleDate: listing.saleDate, sourceUrl: exactSourceUrl }} />
           </div>
           <nav aria-label={dUi.sectionNavAria} className="sticky top-0 z-10 -mx-1 mt-6 flex max-w-full gap-6 overflow-x-auto border-b border-line bg-paper/95 px-1 pt-2 text-sm font-semibold text-ink-3 backdrop-blur-sm">
             <a href="#property-facts" className="whitespace-nowrap border-b-2 border-ink px-1 pb-3 text-ink">{dUi.tabOverview}</a>
@@ -774,7 +802,7 @@ export default async function ListingPage({ params, searchParams }: Props) {
                 </div>
                 {listing.crossSourceMatches.map((match) => (
                   <div key={match.listingId} className="rounded-control border border-line bg-card p-3">
-                    <dt className="text-xs font-semibold text-ink-3">{sourceDisplayText(match.source)}{listing.bakeOff?.preferredSource === match.source ? <span className="ml-2 rounded-control bg-line px-1.5 py-0.5 text-label font-bold text-ink-2">Preferred</span> : null}</dt>
+                    <dt className="text-xs font-semibold text-ink-3"><Link href={`/listings/${encodeURIComponent(match.listingId)}?returnTo=${encodeURIComponent(returnTo)}`} className="underline underline-offset-2 hover:text-ink">{sourceDisplayText(match.source)} ({match.listingId})</Link>{listing.bakeOff?.preferredSource === match.source ? <span className="ml-2 rounded-control bg-line px-1.5 py-0.5 text-label font-bold text-ink-2">Preferred</span> : null}</dt>
                     <dd className="mt-1 text-lg font-bold text-ink">{formatMoney(match.openingBid)}</dd>
                     {match.observedAt ? <dd className="mt-0.5 text-xs text-ink-3">Observed {formatObservedAt(match.observedAt)}</dd> : null}
                   </div>
@@ -842,17 +870,29 @@ export default async function ListingPage({ params, searchParams }: Props) {
                       {gisLink.portalName}
                     </h3>
                     <p className="text-xs text-ink-3 max-w-xl leading-relaxed">
-                      Cross-reference this property&apos;s parcel boundaries, lot dimensions, and official assessed value directly with county tax records.
+                      {gisLink.instructions}
                     </p>
                   </div>
-                  <a
-                    href={gisLink.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center justify-center gap-1.5 shrink-0 rounded-control border border-line-strong bg-paper px-3.5 py-2 text-xs font-semibold text-ink-2 hover:bg-line transition"
-                  >
-                    Open County GIS <ExternalLink className="h-3.5 w-3.5" />
-                  </a>
+                  <div className="flex flex-wrap items-center gap-2 shrink-0">
+                    {gisLink.coordinateMapUrl && gisLink.coordinateMapUrl !== gisLink.url ? (
+                      <a
+                        href={gisLink.coordinateMapUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center justify-center gap-1.5 rounded-control border border-line-strong bg-card px-3.5 py-2 text-xs font-semibold text-ink hover:bg-paper transition"
+                      >
+                        Pin Parcel Coordinates <ExternalLink className="h-3.5 w-3.5" />
+                      </a>
+                    ) : null}
+                    <a
+                      href={gisLink.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center justify-center gap-1.5 rounded-control border border-line-strong bg-paper px-3.5 py-2 text-xs font-semibold text-ink-2 hover:bg-line transition"
+                    >
+                      {gisLink.isDirectParcelLink ? "Open Direct Parcel GIS" : "Open County GIS"} <ExternalLink className="h-3.5 w-3.5" />
+                    </a>
+                  </div>
                 </div>
               </div>
             )}

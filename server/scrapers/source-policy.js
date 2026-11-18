@@ -213,7 +213,7 @@ function hasSourceRecordShape(source, url) {
           && (!url.searchParams.has('returnGeometry') || ['true', 'false'].includes(url.searchParams.get('returnGeometry')))
           && (!url.searchParams.has('outSR') || url.searchParams.get('outSR') === '4326');
       }
-      return path === '/property/propertydetails' && url.searchParams.has('caseNumber');
+      return (path === '/propertydetails' || path === '/property/propertydetails') && url.searchParams.has('caseNumber');
     case 'hud-usps-vacancy': {
       // HUD GIS Open Data ArcGIS FeatureServer record URLs, never the
       // service root or an unbounded whole-inventory query. Two accepted

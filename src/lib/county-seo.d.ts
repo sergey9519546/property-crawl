@@ -64,8 +64,19 @@ export interface CountyCadastralGisLink {
   portalName: string;
   authorityType: 'county_assessor_gis' | 'statewide_cadastral';
   url: string;
+  portalUrl: string;
+  coordinateMapUrl: string | null;
+  isDirectParcelLink: boolean;
   instructions: string;
   verified: true;
+}
+
+export interface PropertyGisTarget {
+  address?: string | null;
+  apn?: string | null;
+  parcelNumber?: string | null;
+  lat?: number | null;
+  lng?: number | null;
 }
 
 export interface CountyMetadataResult {
@@ -91,7 +102,8 @@ export function getStatutoryRedemption(stateCode: string | null | undefined): St
 export function getStatutoryFeeSchedule(stateCode: string | null | undefined, baselinePrice?: number | null): StatutoryFeeSchedule;
 export function getCountyCadastralGisLink(
   state: string | null | undefined,
-  county: string | null | undefined
+  county: string | null | undefined,
+  property?: PropertyGisTarget | null
 ): CountyCadastralGisLink;
 export function generateHighCtrCountyTitle(county: string | null | undefined, state: string | null | undefined): string;
 export function generateCountyMetadata(params: {

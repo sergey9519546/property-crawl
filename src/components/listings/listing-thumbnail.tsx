@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Camera, ExternalLink, ImageOff, Loader2 } from "lucide-react";
+import { Camera, ExternalLink, Loader2 } from "lucide-react";
 import { safeImageUrl } from "@/lib/listing-display";
+import { getPropertyPlaceholder } from "@/lib/property-placeholders";
 import {
   fetchAlternativeStreetView,
   parseAlternativeCandidate,
@@ -31,15 +32,16 @@ function buildAlternativeMetadata(chosen: AlternativeCandidate, t: Messages["med
   };
 }
 
-type Props = { listingId: string; address: string; photo?: string | null; photoCount?: number; observed: boolean; photoProvider?: string | null; photoSourceUrl?: string | null; layout?: "fill" | "card" };
+type Props = { listingId: string; address: string; propType?: string | null; photo?: string | null; photoCount?: number; observed: boolean; photoProvider?: string | null; photoSourceUrl?: string | null; layout?: "fill" | "card" };
 
-export function ListingThumbnail({ listingId, address, photo, photoCount, observed, photoProvider, photoSourceUrl, layout = "fill" }: Props) {
+export function ListingThumbnail({ listingId, address, propType, photo, photoCount, observed, photoProvider, photoSourceUrl, layout = "fill" }: Props) {
+  const placeholder = getPropertyPlaceholder(propType);
   const { messages, format } = useLocale();
   const t = messages.mediaUi;
   const publisherPhoto = safeImageUrl(photo);
   const [photoFailed, setPhotoFailed] = useState(false);
   const [altImageFailed, setAltImageFailed] = useState(false);
-  const [status, setStatus] = useState<"idle" | "loading" | "image" | "loaded" | "unavailable">("idle");
+  const [status, setStatus] = useState<"idle" | "loading" | "image" | "loaded" | "aerial" | "aerial_loaded" | "unavailable">("idle");
   const [altLoading, setAltLoading] = useState(false);
   const [metadata, setMetadata] = useState<StreetViewMetadata | null>(null);
   const [alternative, setAlternative] = useState<AlternativeCandidate | null>(null);
@@ -133,8 +135,8 @@ export function ListingThumbnail({ listingId, address, photo, photoCount, observ
         : t.openDetailsMedia;
     return (
       <div className="flex h-full w-full flex-col">
-        <div className={frame}><img src={publisherPhoto} alt={format(t.publisherPhotoAlt, { provider: photoProvider || t.publisherFallback, address })} loading="lazy" decoding="async" className="absolute inset-0 h-full w-full object-cover" onError={() => setPhotoFailed(true)} /></div>
-        {layout === "card" || (photoProvider && photoSourceUrl) ? <div className={caption}>{photoProvider && photoSourceUrl ? <a href={photoSourceUrl} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2">{format(t.addressMatchedPhoto, { provider: photoProvider })}</a> : <span>{t.publisherPhotoLabel}</span>}<span className="text-ink-3">{countLabel}</span></div> : null}
+        <div className={frame}><img src={publisherPhoto} alt={format(t.publisherPhotoAlt, { provider: photoProvider || t.publisherFallback, address })} referrerPolicy="no-referrer" loading="lazy" decoding="async" className="absolute inset-0 h-full w-full object-cover" onError={() => setPhotoFailed(true)} /></div>
+        {layout === "card" || (photoProvider && photoSourceUrl) ? <div className={caption}>{photoProvider && photoSourceUrl ? <a href={photoSourceUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="underline underline-offset-2">{format(t.addressMatchedPhoto, { provider: photoProvider })}</a> : <span>{t.publisherPhotoLabel}</span>}<span className="text-ink-3">{countLabel}</span></div> : null}
       </div>
     );
   }
@@ -225,12 +227,44 @@ export function ListingThumbnail({ listingId, address, photo, photoCount, observ
     </div>
   );
 
+  if (status === "aerial" || status === "aerial_loaded") {
+    return (
+      <div className="flex h-full flex-col bg-paper" data-testid="listing-thumbnail-aerial">
+        <div className={frame}>
+          <img
+            src={`/api/property-image?listingId=${encodeURIComponent(listingId)}&mode=aerial`}
+            alt={`Aerial satellite view for ${address}`}
+            className={`absolute inset-0 h-full w-full object-cover ${status === "aerial_loaded" ? "" : "opacity-0"}`}
+            onLoad={() => setStatus("aerial_loaded")}
+            onError={() => {
+              setReason("Aerial satellite imagery is unavailable for this location.");
+              setStatus("unavailable");
+            }}
+          />
+          {status === "aerial" ? <p role="status" className="absolute inset-0 grid place-items-center text-xs text-ink-3">Loading aerial parcel view…</p> : null}
+        </div>
+        <div className={caption}>
+          <span>Esri World Imagery · USGS / USDA NAIP</span>
+          <span className="text-ink-3">Overhead satellite context · Not a publisher photo</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex h-full w-full flex-col" data-testid="listing-thumbnail-unavailable">
+    <div className="flex h-full w-full flex-col" data-testid="listing-thumbnail-unavailable" data-placeholder-category={placeholder.category}>
       <div className={`${frame} bg-paper`}>
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5 px-6 py-8 text-center">
-          <ImageOff size={25} strokeWidth={1.4} className="text-ink-3" aria-hidden />
-          <p className="text-sm font-medium text-ink-3">{t.photoUnavailable}</p>
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 bg-cover bg-center opacity-90"
+          style={{ backgroundImage: `url("${placeholder.imageSrc}")` }}
+        />
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-gradient-to-b from-paper/20 via-paper/55 to-paper/85" />
+        <div className="relative z-10 flex h-full flex-col items-center justify-center gap-2 px-5 py-6 text-center">
+          <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-label font-semibold shadow-sm backdrop-blur-sm ${placeholder.accentClass}`}>
+            {placeholder.typeLabel} · Placeholder
+          </span>
+          <p className="rounded bg-paper/80 px-2 py-0.5 text-xs font-semibold text-ink-2 backdrop-blur-sm">{t.photoUnavailable}</p>
           {observed ? (() => {
             // One label for both the visible text and the accessible name.
             // They used to be written separately and drifted: the aria-label
@@ -242,13 +276,16 @@ export function ListingThumbnail({ listingId, address, photo, photoCount, observ
               : t.checkStreetView;
             return (
               <div className="flex flex-wrap items-center justify-center gap-2">
-                <button type="button" disabled={status === "loading" || altLoading} aria-label={format(t.actionForAddress, { action: label, address })} onClick={loadStreetView} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-line-strong bg-card px-3 py-2 text-xs font-semibold text-ink-2 transition hover:border-ink-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-3 disabled:opacity-60">
+                <button type="button" disabled={status === "loading" || altLoading} aria-label={format(t.actionForAddress, { action: label, address })} onClick={(e) => { e.preventDefault(); e.stopPropagation(); void loadStreetView(); }} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-line-strong bg-card px-3 py-2 text-xs font-semibold text-ink-2 transition hover:border-ink-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-3 disabled:opacity-60">
                   {status === "loading" ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <Camera size={14} aria-hidden />}
                   {label}
                 </button>
-                <button type="button" disabled={status === "loading" || altLoading} aria-label={format(t.checkOpenImageryFor, { address })} onClick={loadAlternatives} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-line-strong bg-card px-3 py-2 text-xs font-semibold text-ink-2 transition hover:border-ink-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-3 disabled:opacity-60">
+                <button type="button" disabled={status === "loading" || altLoading} aria-label={format(t.checkOpenImageryFor, { address })} onClick={(e) => { e.preventDefault(); e.stopPropagation(); void loadAlternatives(); }} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-line-strong bg-card px-3 py-2 text-xs font-semibold text-ink-2 transition hover:border-ink-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-3 disabled:opacity-60">
                   {altLoading ? <Loader2 size={14} className="animate-spin" aria-hidden /> : null}
                   {altLoading ? t.checkingOpenImagery : t.openProvidersBtn}
+                </button>
+                <button type="button" disabled={status === "loading" || altLoading} aria-label={`Load aerial view for ${address}`} onClick={(e) => { e.preventDefault(); e.stopPropagation(); setStatus("aerial"); }} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-line-strong bg-card px-3 py-2 text-xs font-semibold text-ink-2 transition hover:border-ink-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-3 disabled:opacity-60">
+                  Aerial view
                 </button>
               </div>
             );

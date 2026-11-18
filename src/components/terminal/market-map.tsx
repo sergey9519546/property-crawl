@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import * as React from "react";
+import "maplibre-gl/dist/maplibre-gl.css";
+import { OPENFREEMAP_POSITRON_STYLE, RASTER_STREET_STYLE } from "@/lib/map-style";
 import { ArrowRight, LocateFixed, MapPin, Minus, Plus, X } from "lucide-react";
 import type { LngLatBoundsLike, Map as MapLibreMap, Marker as MapLibreMarker } from "maplibre-gl";
 import type { Feature as GeoJsonFeature } from "geojson";
@@ -218,7 +220,7 @@ export function MarketMap({ listings, onUnderwrite, returnTo = "/listings?view=m
         if (disposed || !mapContainerRef.current) return;
         const map = new maplibre.Map({
           container: mapContainerRef.current,
-          style: "https://tiles.openfreemap.org/styles/positron",
+          style: OPENFREEMAP_POSITRON_STYLE,
           center: [-98.5795, 39.8283],
           zoom: 3.25,
           minZoom: 2,
@@ -228,23 +230,45 @@ export function MarketMap({ listings, onUnderwrite, returnTo = "/listings?view=m
         maplibreRef.current = maplibre;
         mapRef.current = map;
         setMapCreated(true);
-        map.addControl(new maplibre.AttributionControl({ compact: true, customAttribution: "OpenFreeMap · OpenStreetMap contributors" }), "bottom-left");
+        map.addControl(new maplibre.AttributionControl({ compact: true, customAttribution: "OpenFreeMap · OpenStreetMap · CARTO" }), "bottom-left");
 
+        let fallbackApplied = false;
+        const switchToRasterFallback = () => {
+          if (disposed || fallbackApplied) return false;
+          fallbackApplied = true;
+          try {
+            map.setStyle(RASTER_STREET_STYLE);
+            return true;
+          } catch {
+            return false;
+          }
+        };
         const updateView = () => syncView(map);
-        map.on("moveend", updateView);
-        map.on("zoomend", updateView);
-        map.once("load", () => {
+        const markReady = () => {
           if (disposed) return;
           setMapReady(true);
           setMapUnavailable(false);
           syncView(map);
-        });
+        };
+        map.on("moveend", updateView);
+        map.on("zoomend", updateView);
+        map.once("styledata", () => { if (map.isStyleLoaded()) markReady(); });
+        map.once("render", () => { if (map.isStyleLoaded()) markReady(); });
+        map.once("load", markReady);
         map.on("error", () => {
-          if (!map.loaded() && !disposed) setMapUnavailable(true);
+          if (disposed || map.loaded()) return;
+          if (!switchToRasterFallback()) setMapUnavailable(true);
         });
         loadTimeout = window.setTimeout(() => {
-          if (!map.loaded() && !disposed) setMapUnavailable(true);
-        }, 6_000);
+          if (disposed || map.loaded() || map.isStyleLoaded()) return;
+          if (!switchToRasterFallback()) {
+            setMapUnavailable(true);
+          } else {
+            window.setTimeout(() => {
+              if (!map.loaded() && !map.isStyleLoaded() && !disposed) setMapUnavailable(true);
+            }, 5_000);
+          }
+        }, 3_500);
       })
       .catch(() => {
         if (!disposed) setMapUnavailable(true);
@@ -485,7 +509,11 @@ function MapPreview({
         <p className="text-label font-extrabold uppercase tracking-[0.12em] text-ink-3">
           {sourceDisplayText(SOURCES[listing.source]?.label ?? listing.source)} · {score !== null ? interpolate(t.mmModeledScore, { score }) : t.mmUnscored}
         </p>
-        <h4 className="mt-1 text-lg font-bold tracking-[-0.02em] text-ink">{listing.address}</h4>
+        <h4 className="mt-1 text-lg font-bold tracking-[-0.02em] text-ink">
+          <Link href={`/listings/${encodeURIComponent(listing.id)}`} className="hover:underline underline-offset-4">
+            {listing.address}
+          </Link>
+        </h4>
         <p className="mt-1 flex items-center gap-1 text-xs text-ink-3">
           <MapPin className="h-3.5 w-3.5" aria-hidden /> {displayText(listing.city, listing.state)}, {listing.state}{listing.county ? ` · ${interpolate(t.mmCountySuffix, { county: listing.county })}` : ""}
         </p>

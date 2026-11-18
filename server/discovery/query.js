@@ -49,6 +49,9 @@ const PROP_TYPE_ALIAS_SQL = Object.freeze({
 const hasPhotoEvidence = (row) => Boolean(row?.photo) || (Array.isArray(row?.images) && row.images.length > 0);
 const stripCountySuffix = (v) =>
   text(v)
+    .replace(/['’]/g, "")
+    .replace(/\.+/g, " ")
+    .replace(/\s+/g, " ")
     .replace(/\s+(?:county|parish|borough)$/, "")
     .trim();
 function cursorEncode(v) {
@@ -66,6 +69,7 @@ function cursorDecode(v) {
   }
 }
 function revisionOf(rows) {
+  if (!Array.isArray(rows)) return null;
   return hash(
     rows
       .map((x) => [x.id, x.sourceObservedAt || x.fetchedAt || null])
@@ -611,7 +615,7 @@ function pgWhere(f, start = 1, options = {}) {
     const isCountyCol = col === "county";
     const isTypeCol = col === "prop_type";
     const colExpr = isCountyCol
-      ? "btrim(regexp_replace(btrim(lower(coalesce(county,''))), '\\s+(county|parish|borough)$', ''))"
+      ? "btrim(regexp_replace(regexp_replace(regexp_replace(lower(coalesce(county,'')), '[''’]', '', 'g'), '\\.+', ' ', 'g'), '\\s+(county|parish|borough)\\s*$', ''))"
       : `lower(${sqlCol})`;
     const normFilterPart = (part) => {
       if (isCountyCol) return stripCountySuffix(part);
@@ -1179,7 +1183,7 @@ async function pgMap(database, f) {
     grid = Math.max(0.0001, 360 / Math.pow(2, zoom + 4)),
     limit = Math.min(f.limit, 2000),
     params = [...where.params, grid, limit + 1];
-  const sql = `SELECT ST_X(ST_Centroid(ST_Collect(geog::geometry)))::float8 AS lng,ST_Y(ST_Centroid(ST_Collect(geog::geometry)))::float8 AS lat,count(*)::int AS count,min(id) AS id,CASE WHEN count(DISTINCT source_key)=1 THEN min(source_key) ELSE 'multiple' END AS source,CASE WHEN count(DISTINCT lifecycle_status)=1 THEN min(lifecycle_status) ELSE 'mixed' END AS status FROM listings${where.sql}${where.sql ? " AND" : " WHERE"} geog IS NOT NULL GROUP BY ST_SnapToGrid(geog::geometry,$${where.params.length + 1}) ORDER BY count(*) DESC,min(id) LIMIT $${where.params.length + 2}`;
+  const sql = `SELECT ST_X(ST_Centroid(ST_Collect(geog::geometry)))::float8 AS lng,ST_Y(ST_Centroid(ST_Collect(geog::geometry)))::float8 AS lat,count(*)::int AS count,min(id) AS id,CASE WHEN count(*)=1 THEN min(address) ELSE NULL END AS address,CASE WHEN count(*)=1 THEN min(city) ELSE NULL END AS city,CASE WHEN count(*)=1 THEN min(state) ELSE NULL END AS state,CASE WHEN count(*)=1 THEN min(opening_bid)::float8 ELSE NULL END AS "openingBid",CASE WHEN count(DISTINCT source_key)=1 THEN min(source_key) ELSE 'multiple' END AS source,CASE WHEN count(DISTINCT lifecycle_status)=1 THEN min(lifecycle_status) ELSE 'mixed' END AS status FROM listings${where.sql}${where.sql ? " AND" : " WHERE"} geog IS NOT NULL GROUP BY ST_SnapToGrid(geog::geometry,$${where.params.length + 1}) ORDER BY count(*) DESC,min(id) LIMIT $${where.params.length + 2}`;
   const rows = (await getReadPool(database).query(sql, params)).rows,
     more = rows.length > limit;
   if (more) rows.pop();
@@ -1193,6 +1197,12 @@ async function pgMap(database, f) {
         count: r.count,
         source: r.source,
         status: r.status,
+        ...(r.count === 1 ? {
+          address: r.address ?? null,
+          city: r.city ?? null,
+          state: r.state ?? null,
+          openingBid: Number.isFinite(Number(r.openingBid)) ? Number(r.openingBid) : null,
+        } : {}),
       },
     })),
     revision: await pgRevision(database),
@@ -1291,6 +1301,10 @@ async function map(database, f) {
         count: 1,
         source: r.source,
         status: derived(r).lifecycle,
+        address: r.address ?? null,
+        city: r.city ?? null,
+        state: r.state ?? null,
+        openingBid: r.openingBid ?? null,
       },
     })),
     revision,

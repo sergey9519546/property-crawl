@@ -427,26 +427,28 @@ function generateHighCtrCountyTitle(county, state) {
 /**
  * Official Public Cadastral GIS & Property Appraiser Registry across Top States.
  */
+const NJGIN_PROPERTY_EXPLORER_URL = 'https://newjersey.maps.arcgis.com/apps/webappviewer/index.html?id=3a4290e1b3d64094a8b8a127965ab43a';
+
 const COUNTY_CADASTRAL_GIS_REGISTRY = Object.freeze({
   // Florida (FL)
   'FL-MIAMI-DADE': {
     portalName: 'Miami-Dade County Property Appraiser GIS',
-    url: 'https://gisweb.miamidade.gov/propertysearch/',
+    url: 'https://apps.miamidadepa.gov/propertysearch/',
     instructions: 'Search by address or Folio (APN) to view cadastral parcel boundaries, assessed value, and zoning.',
   },
   'FL-BROWARD': {
     portalName: 'Broward County Property Appraiser GIS',
-    url: 'https://web.bcpa.net/bcpaclient/#/',
+    url: 'https://web.bcpa.net/bcpaclient/#/Record-Search',
     instructions: 'Look up parcel ID or property address for assessment history, plat boundary, and exemptions.',
   },
   'FL-PALM BEACH': {
     portalName: 'Palm Beach County Property Appraiser (PAPA) GIS',
-    url: 'https://www.pbcgov.org/papa/',
+    url: 'https://pbcpao.gov/',
     instructions: 'Search PAPA records for official cadastral maps, building footprints, and certified tax roll values.',
   },
   'FL-ORANGE': {
     portalName: 'Orange County Property Appraiser (OCPA) GIS',
-    url: 'https://www.ocpafl.org/searches/parcelsearch.aspx',
+    url: 'https://ocpaweb.ocpafl.org/parcelsearch',
     instructions: 'Enter parcel ID or situs address to inspect cadastral boundaries and sales history.',
   },
   'FL-HILLSBOROUGH': {
@@ -456,44 +458,44 @@ const COUNTY_CADASTRAL_GIS_REGISTRY = Object.freeze({
   },
   'FL-DUVAL': {
     portalName: 'Duval County Property Appraiser (Jacksonville) GIS',
-    url: 'https://services.coj.net/paopsearch/',
+    url: 'https://maps.coj.net/DuvalProperty/',
     instructions: 'Search Jacksonville/Duval real estate records for parcel geometry and valuation data.',
   },
   'FL-PINELLAS': {
     portalName: 'Pinellas County Property Appraiser (PCPAO) GIS',
-    url: 'https://www.pcpao.gov/',
+    url: 'https://www.pcpao.gov/quick-search',
     instructions: 'Look up Pinellas property parcels for tax roll values, plat maps, and deed history.',
   },
   'FL-LEE': {
     portalName: 'Lee County Property Appraiser GIS',
-    url: 'https://www.leepa.org/',
+    url: 'https://www.leepa.org/Search/PropertySearch.aspx',
     instructions: 'Search Fort Myers/Lee County parcels for certified values, GIS layers, and aerial imagery.',
   },
   'FL-POLK': {
     portalName: 'Polk County Property Appraiser GIS',
-    url: 'https://www.polkpa.org/',
+    url: 'https://map.polkflpa.gov/',
     instructions: 'Inspect Polk County cadastral maps, parcel numbers, and assessment records.',
   },
 
   // New Jersey (NJ)
   'NJ-ESSEX': {
-    portalName: 'Essex County Tax Board / County GIS',
-    url: 'https://njgin.nj.gov/',
-    instructions: 'Search Newark and Essex County tax parcels using the PAMS PIN or street address.',
+    portalName: 'Essex County Tax Board / NJGIN Property Explorer GIS',
+    url: NJGIN_PROPERTY_EXPLORER_URL,
+    instructions: 'Search Newark and Essex County tax parcels on the NJGIN Property Explorer using street address or block/lot.',
   },
   'NJ-BERGEN': {
-    portalName: 'Bergen County Board of Taxation GIS',
-    url: 'https://www.co.bergen.nj.us/',
-    instructions: 'Review Bergen County property assessment records and MOD-IV tax parcel boundaries.',
+    portalName: 'Bergen County Board of Taxation / NJGIN GIS',
+    url: NJGIN_PROPERTY_EXPLORER_URL,
+    instructions: 'Review Bergen County property assessment records and MOD-IV tax parcel boundaries in NJGIN Property Explorer.',
   },
   'NJ-HUDSON': {
     portalName: 'Hudson County Tax Board GIS',
-    url: 'https://www.hudsoncountynj.org/',
+    url: 'https://hudson-county-gis-hudsoncogis.hub.arcgis.com/',
     instructions: 'Search Jersey City and Hudson County parcel records for assessment and block/lot maps.',
   },
   'NJ-MIDDLESEX': {
     portalName: 'Middlesex County Board of Taxation GIS',
-    url: 'https://www.middlesexcountynj.gov/',
+    url: 'https://middlesex-county-gis-middlesexnj.hub.arcgis.com/',
     instructions: 'View Middlesex County tax maps, assessments, and parcel identification numbers.',
   },
   'NJ-MONMOUTH': {
@@ -503,44 +505,44 @@ const COUNTY_CADASTRAL_GIS_REGISTRY = Object.freeze({
   },
   'NJ-OCEAN': {
     portalName: 'Ocean County Board of Taxation GIS',
-    url: 'https://www.co.ocean.nj.us/',
-    instructions: 'Inspect Ocean County parcel records, block and lot data, and tax maps.',
+    url: 'https://tax.co.ocean.nj.us/frmTaxBoardTaxListSearch',
+    instructions: 'Inspect Ocean County parcel records, block and lot data, and tax lists.',
   },
   'NJ-CAMDEN': {
     portalName: 'Camden County Board of Taxation GIS',
-    url: 'https://www.camdencounty.com/',
+    url: 'https://camden-county-gis-camdencounty.hub.arcgis.com/',
     instructions: 'Review Camden County property assessments, tax board records, and parcel maps.',
   },
 
   // Ohio (OH)
   'OH-CUYAHOGA': {
     portalName: 'Cuyahoga County Fiscal Officer (Cleveland) GIS',
-    url: 'https://myplace.cuyahogacounty.us/',
+    url: 'https://myplace.cuyahogacounty.gov/',
     instructions: 'Search Cleveland and Cuyahoga County parcel numbers, aerial photography, and tax duplicates.',
   },
   'OH-FRANKLIN': {
     portalName: 'Franklin County Auditor (Columbus) GIS',
-    url: 'https://property.franklincountyauditor.com/',
+    url: 'https://property.franklincountyauditor.com/_web/search/commonsearch.aspx?mode=address',
     instructions: 'Look up Columbus/Franklin parcel records, tax values, conveyance history, and GIS maps.',
   },
   'OH-HAMILTON': {
     portalName: 'Hamilton County Auditor / CAGIS (Cincinnati)',
-    url: 'https://wedge.hcmaps.org/',
-    instructions: 'Search Cincinnati/Hamilton County CAGIS parcel boundaries, property reports, and ownership.',
+    url: 'https://wedge.hcauditor.org/',
+    instructions: 'Search Cincinnati/Hamilton County parcel boundaries, property reports, and ownership.',
   },
   'OH-MONTGOMERY': {
     portalName: 'Montgomery County Auditor (Dayton) GIS',
-    url: 'https://www.mcohio.org/',
+    url: 'https://www.mcrealestate.org/forms/htmlframe.aspx?mode=content/home.htm',
     instructions: 'Search Dayton and Montgomery County parcel data, values, and GIS mapping layers.',
   },
   'OH-SUMMIT': {
     portalName: 'Summit County Fiscal Office (Akron) GIS',
-    url: 'https://fiscaloffice.summitoh.net/',
+    url: 'https://propertyaccess.summitoh.net/',
     instructions: 'Look up Akron and Summit County property cards, tax assessments, and parcel GIS.',
   },
   'OH-LUCAS': {
     portalName: 'Lucas County Auditor (Toledo) AREIS GIS',
-    url: 'https://co.lucas.oh.us/',
+    url: 'https://icare.co.lucas.oh.us/LucasCare/search/commonsearch.aspx?mode=address',
     instructions: 'Search Toledo and Lucas County AREIS real estate records and parcel boundaries.',
   },
 
@@ -557,17 +559,17 @@ const COUNTY_CADASTRAL_GIS_REGISTRY = Object.freeze({
   },
   'PA-MONTGOMERY': {
     portalName: 'Montgomery County Property Records GIS',
-    url: 'https://propertyrecords.montcopa.org/',
+    url: 'https://propertyrecords.montcopa.org/pt/forms/htmlframe.aspx?mode=content/home.htm',
     instructions: 'Search Montgomery County parcel maps, tax assessments, and recording indices.',
   },
   'PA-BUCKS': {
     portalName: 'Bucks County Board of Assessment GIS',
-    url: 'https://www.buckscounty.gov/',
+    url: 'https://maps.buckscounty.gov/',
     instructions: 'Review Bucks County real estate assessment rolls and cadastral boundary maps.',
   },
   'PA-DELAWARE': {
     portalName: 'Delaware County Board of Assessment GIS',
-    url: 'https://www.delcopa.gov/',
+    url: 'https://delcopublicaccess.co.delaware.pa.us/',
     instructions: 'Look up Delaware County parcel numbers, tax records, and municipal boundaries.',
   },
 
@@ -584,34 +586,34 @@ const COUNTY_CADASTRAL_GIS_REGISTRY = Object.freeze({
   },
   'CA-ORANGE': {
     portalName: 'Orange County Clerk-Recorder / Assessor GIS',
-    url: 'https://www.ocgov.com/',
+    url: 'https://webapps.ocgis.com/oclandinsights/home/',
     instructions: 'Inspect Orange County property tax rolls, parcel maps, and recorded deed information.',
   },
   'CA-RIVERSIDE': {
     portalName: 'Riverside County Assessor / Map My County GIS',
-    url: 'https://rivco.org/',
-    instructions: 'Use Map My County to view Riverside cadastral parcel boundaries, zoning, and flood zones.',
+    url: 'https://rivcoview.rivcoacr.org/',
+    instructions: 'Use RivCoView / Map My County to view Riverside cadastral parcel boundaries, zoning, and flood zones.',
   },
   'CA-SAN BERNARDINO': {
     portalName: 'San Bernardino County Assessor (PIMS)',
-    url: 'https://www.sbcounty.gov/arc/',
+    url: 'https://arcpropertyinfo.sbcounty.gov/',
     instructions: 'Search San Bernardino PIMS parcel information system for assessment rolls and plat maps.',
   },
   'CA-SANTA CLARA': {
     portalName: 'Santa Clara County Assessor Property Search',
-    url: 'https://www.sccassessor.org/',
+    url: 'https://santaclaracounty.maps.arcgis.com/apps/webappviewer/index.html',
     instructions: 'Look up Silicon Valley/Santa Clara parcel boundaries, assessed values, and exemptions.',
   },
   'CA-ALAMEDA': {
     portalName: 'Alameda County Assessor Property Lookup',
-    url: 'https://www.acgov.org/assessor/',
+    url: 'https://www.acassessor.org/homeowners/assessed-value-look-up/',
     instructions: 'Search Oakland/Alameda County property records, parcel numbers, and tax rates.',
   },
 
   // North Carolina (NC)
   'NC-WAKE': {
     portalName: 'Wake County Tax Administration (iMAPS / Raleigh)',
-    url: 'https://imaps.wake.gov/',
+    url: 'https://maps.raleighnc.gov/imaps/',
     instructions: 'Interactive iMAPS cadastral parcel boundary, real estate tax cards, and deed book/page references.',
   },
   'NC-MECKLENBURG': {
@@ -621,66 +623,66 @@ const COUNTY_CADASTRAL_GIS_REGISTRY = Object.freeze({
   },
   'NC-GUILFORD': {
     portalName: 'Guilford County Tax Department GIS (Greensboro)',
-    url: 'https://gis.guilfordcountync.gov/',
+    url: 'https://gisdv.guilfordcountync.gov/Guilford/',
     instructions: 'Search Greensboro/Guilford parcel records, building details, and cadastral maps.',
   },
   'NC-FORSYTH': {
     portalName: 'Forsyth County GeoData Explorer (Winston-Salem)',
-    url: 'https://mapfor.forsyth.cc/',
+    url: 'https://www.forsyth.cc/tax/propertylookup.aspx',
     instructions: 'Search Winston-Salem/Forsyth county parcel data, sales history, and tax assessment maps.',
   },
 
   // Texas (TX)
   'TX-HARRIS': {
     portalName: 'Harris County Appraisal District (HCAD) GIS',
-    url: 'https://hcad.org/',
+    url: 'https://public.hcad.org/',
     instructions: 'Search Houston/Harris County 13-digit account numbers for building footprints, land values, and deed history.',
   },
   'TX-DALLAS': {
     portalName: 'Dallas Central Appraisal District (DCAD) GIS',
-    url: 'https://www.dallascad.org/',
-    instructions: 'Look up Dallas County property cards, parcel boundaries, and certified market values.',
+    url: 'https://www.dallascad.org/SearchAddr.aspx',
+    instructions: 'Look up Dallas County property cards, parcel boundaries, and certified market values by street address.',
   },
   'TX-TARRANT': {
     portalName: 'Tarrant Appraisal District (TAD) GIS',
-    url: 'https://www.tad.org/',
+    url: 'https://www.tad.org/property-search',
     instructions: 'Search Fort Worth/Tarrant County property records, cadastral maps, and tax valuations.',
   },
   'TX-BEXAR': {
     portalName: 'Bexar Appraisal District (BCAD) GIS',
-    url: 'https://www.bcad.org/',
+    url: 'https://hgo.harrisgovern.com/bexar/property/search',
     instructions: 'Search San Antonio/Bexar County property records, cadastral boundaries, and tax roll data.',
   },
   'TX-TRAVIS': {
     portalName: 'Travis Central Appraisal District (TCAD) GIS',
-    url: 'https://www.traviscad.org/',
+    url: 'https://travis.prodigycad.com/property-search',
     instructions: 'Search Austin/Travis County property appraisals, parcel maps, and deed references.',
   },
 
   // Colorado (CO)
   'CO-DENVER': {
     portalName: 'Denver County Assessor Property Search',
-    url: 'https://www.denvergov.org/',
+    url: 'https://www.denvergov.org/Property',
     instructions: 'Search Denver real property records, assessment schedules, and official cadastral maps.',
   },
   'CO-EL PASO': {
     portalName: 'El Paso County Assessor GIS (Colorado Springs)',
-    url: 'https://assessor.elpasoco.com/',
+    url: 'https://property.spatialest.com/co/elpaso/',
     instructions: 'Look up Colorado Springs/El Paso County parcel numbers, tax details, and GIS mapping.',
   },
   'CO-ARAPAHOE': {
     portalName: 'Arapahoe County Assessor GIS',
-    url: 'https://www.arapahoegov.com/',
+    url: 'https://gis.arapahoegov.com/',
     instructions: 'Search Arapahoe County property records, valuation notices, and cadastral layers.',
   },
   'CO-JEFFERSON': {
     portalName: 'Jefferson County Assessor (jCode / GIS)',
-    url: 'https://www.jeffco.us/',
+    url: 'https://propertysearch.jeffco.us/',
     instructions: 'Review Jefferson County property profiles, tax appraisals, and GIS parcel boundaries.',
   },
   'CO-ADAMS': {
     portalName: 'Adams County Assessor GIS',
-    url: 'https://www.adcogov.org/',
+    url: 'https://adamscountyco.gov/service/search-real-property/',
     instructions: 'Search Adams County real property data, assessment valuations, and parcel geometry.',
   },
 });
@@ -692,13 +694,13 @@ const STATEWIDE_CADASTRAL_FALLBACKS = Object.freeze({
     instructions: 'Access Florida statewide cadastral parcel layers and Name-Address-Legal (NAL) tax data.',
   },
   NJ: {
-    portalName: 'New Jersey Geographic Information Network (NJGIN) Cadastral',
-    url: 'https://njgin.nj.gov/',
+    portalName: 'New Jersey Geographic Information Network (NJGIN) Cadastral Explorer',
+    url: NJGIN_PROPERTY_EXPLORER_URL,
     instructions: 'Explore NJ statewide digital tax maps, MOD-IV property parcels, and cadastral layers.',
   },
   OH: {
     portalName: 'Ohio Geographically Referenced Information Program (OGRIP)',
-    url: 'https://ogrip.oit.ohio.gov/',
+    url: 'https://das.ohio.gov/technology-and-strategy/OGRIP',
     instructions: 'Access Ohio statewide location-based data, county parcel boundaries, and orthophotography.',
   },
   PA: {
@@ -717,33 +719,59 @@ const STATEWIDE_CADASTRAL_FALLBACKS = Object.freeze({
     instructions: 'Access North Carolina statewide aggregated parcel boundaries and county assessor data.',
   },
   TX: {
-    portalName: 'Texas Natural Resources Information System (TNRIS) Cadastral',
-    url: 'https://tnris.org/',
+    portalName: 'Texas Geographic Information Office (TxGIO / TNRIS) Cadastral',
+    url: 'https://geographic.texas.gov/',
     instructions: 'Access Texas statewide StratMap parcel datasets and county appraisal GIS layers.',
   },
   CO: {
     portalName: "Colorado Governor's Office of Information Technology (OIT) Statewide Parcels",
-    url: 'https://gis.colorado.gov/',
+    url: 'https://geodata.colorado.gov/datasets/COOIT::colorado-public-parcels/explore',
     instructions: 'Access Colorado statewide composite parcel layers, spatial data, and public parcel bounds.',
   },
 });
 
+function buildCoordinateMapUrl(property) {
+  const lat = property && Number(property.lat);
+  const lng = property && Number(property.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180 || (lat === 0 && lng === 0)) {
+    return null;
+  }
+  return `https://www.openstreetmap.org/?mlat=${lat.toFixed(6)}&mlon=${lng.toFixed(6)}#map=18/${lat.toFixed(6)}/${lng.toFixed(6)}`;
+}
+
+function buildDirectParcelUrl(st, lookupKey, portalUrl, property) {
+  if (!property) return { url: portalUrl, isDirectParcelLink: false };
+  const rawAddress = typeof property.address === 'string' ? property.address.trim() : '';
+  const rawApn = String(property.apn || property.parcelNumber || '').replace(/[^0-9A-Za-z]/g, '');
+  const lat = Number(property.lat);
+  const lng = Number(property.lng);
+  const hasCoords = Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 && !(lat === 0 && lng === 0);
+
+  if (lookupKey === 'PA-PHILADELPHIA' && rawAddress) {
+    return {
+      url: `https://atlas.phila.gov/${encodeURIComponent(rawAddress)}`,
+      isDirectParcelLink: true,
+    };
+  }
+  if (lookupKey === 'CA-LOS ANGELES' && /^\d{10}$/.test(rawApn)) {
+    return {
+      url: `https://portal.assessor.lacounty.gov/parceldetail/${rawApn}`,
+      isDirectParcelLink: true,
+    };
+  }
+  if (st === 'NJ' && hasCoords && portalUrl === NJGIN_PROPERTY_EXPLORER_URL) {
+    return {
+      url: `${NJGIN_PROPERTY_EXPLORER_URL}&center=${lng.toFixed(6)},${lat.toFixed(6)},4326&level=18`,
+      isDirectParcelLink: true,
+    };
+  }
+  return { url: portalUrl, isDirectParcelLink: false };
+}
+
 /**
  * Resolves verified official public county assessor / GIS parcel map link.
- *
- * @param {string} state - 2-letter state code
- * @param {string} county - County name or slug
- * @returns {{
- *   state: string,
- *   county: string,
- *   portalName: string,
- *   authorityType: "county_assessor_gis" | "statewide_cadastral",
- *   url: string,
- *   instructions: string,
- *   verified: true
- * }}
  */
-function getCountyCadastralGisLink(state, county) {
+function getCountyCadastralGisLink(state, county, property = null) {
   const st = String(state || '').trim().toUpperCase();
   const normCounty = normalizeCountySlug(county);
   const formalCounty = formatCountyDisplayName(normCounty) || 'County';
@@ -755,43 +783,54 @@ function getCountyCadastralGisLink(state, county) {
     `${st}-${cleanCountyKey.replace(/-/g, ' ')}`,
   ];
   const lookupKey = candidateKeys.find((k) => COUNTY_CADASTRAL_GIS_REGISTRY[k]) || `${st}-${cleanCountyKey}`;
+  const coordinateMapUrl = buildCoordinateMapUrl(property);
 
-  // Direct county-level GIS portal match
   if (COUNTY_CADASTRAL_GIS_REGISTRY[lookupKey]) {
     const entry = COUNTY_CADASTRAL_GIS_REGISTRY[lookupKey];
+    const direct = buildDirectParcelUrl(st, lookupKey, entry.url, property);
     return {
       state: st,
       county: formalCounty,
       portalName: entry.portalName,
       authorityType: 'county_assessor_gis',
-      url: entry.url,
+      url: direct.url,
+      portalUrl: entry.url,
+      coordinateMapUrl,
+      isDirectParcelLink: direct.isDirectParcelLink,
       instructions: entry.instructions,
       verified: true,
     };
   }
 
-  // Statewide cadastral fallback
   if (STATEWIDE_CADASTRAL_FALLBACKS[st]) {
     const fallback = STATEWIDE_CADASTRAL_FALLBACKS[st];
+    const direct = buildDirectParcelUrl(st, lookupKey, fallback.url, property);
     return {
       state: st,
       county: formalCounty,
       portalName: fallback.portalName,
       authorityType: 'statewide_cadastral',
-      url: fallback.url,
+      url: direct.url,
+      portalUrl: fallback.url,
+      coordinateMapUrl,
+      isDirectParcelLink: direct.isDirectParcelLink,
       instructions: fallback.instructions,
       verified: true,
     };
   }
 
-  // Graceful fallback for unmapped counties / states
   return {
     state: st || 'US',
     county: formalCounty,
     portalName: `${formalCounty} Public Land & Assessment Records`,
     authorityType: 'statewide_cadastral',
-    url: 'https://data.gov/',
-    instructions: 'Verify parcel boundaries and GIS cadastral maps directly through local county assessor records.',
+    url: coordinateMapUrl || 'https://data.gov/',
+    portalUrl: 'https://data.gov/',
+    coordinateMapUrl,
+    isDirectParcelLink: Boolean(coordinateMapUrl),
+    instructions: coordinateMapUrl
+      ? 'Open the exact coordinate parcel locator or check the local county assessor portal for deed and tax roll verification.'
+      : 'Verify parcel boundaries and GIS cadastral maps directly through local county assessor records.',
     verified: true,
   };
 }

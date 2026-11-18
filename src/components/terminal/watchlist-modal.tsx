@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect } from "react";
+import Link from "next/link";
 import { PropertyListing, SOURCES } from "./property-data";
 import { displayDate, displayMoney, knownNumber, positiveNumber, safeImageUrl } from "@/lib/listing-display";
 import { sourceDisplayText } from "@/lib/source-display";
@@ -320,7 +321,7 @@ export function WatchlistModal({ isOpen, onClose, savedListings, onRemove, onSel
             {portfolioStatus && (
               <div className="px-6 py-2.5 bg-paper border-b border-line-strong text-xs text-ink-2 flex items-center justify-between gap-2">
                 <span>{portfolioStatus}</span>
-                <a href="/sign-in" className="font-bold underline shrink-0">{t.unlockWorkspace}</a>
+                <a href="/account" className="font-bold underline shrink-0">{t.unlockWorkspace}</a>
               </div>
             )}
             {portfolioRollup && (
@@ -391,6 +392,13 @@ export function WatchlistModal({ isOpen, onClose, savedListings, onRemove, onSel
                 </button>
 
                 <div className="flex items-center gap-3">
+                  <Link
+                    href={`/listings/${encodeURIComponent(l.id)}`}
+                    onClick={onClose}
+                    className="rounded-control border border-line-strong px-2.5 py-1.5 text-xs font-semibold text-ink hover:bg-paper transition shrink-0"
+                  >
+                    View
+                  </Link>
                   <ListingCompareToggle listingId={l.id} className="h-10 shrink-0" />
                   <span
                     className="text-xs font-extrabold px-2.5 py-1 rounded-control"

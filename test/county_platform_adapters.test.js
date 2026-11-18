@@ -93,7 +93,7 @@ test('CivilView parses HTML table rows into structured listings', () => {
     </table>
   `;
 
-  const listings = parseCivilViewHtml(html, 1);
+  const listings = parseCivilViewHtml(html, 7);
   assert.equal(listings.length, 2);
 
   const first = listings[0];

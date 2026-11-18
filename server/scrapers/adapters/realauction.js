@@ -289,7 +289,7 @@ function parseRealAuctionCard(cardHtml = '', county = 'cuyahoga', state = 'OH', 
     return null;
   }
 
-  const zipMatch = cleanAddress ? cleanAddress.match(/\b\d{5}\b/) : null;
+  const zipMatch = cleanAddress ? cleanAddress.match(/\b(\d{5})(?:-\d{4})?\s*$/) : null;
   const countyCapitalized = county.charAt(0).toUpperCase() + county.slice(1).toLowerCase();
   const cleanState = state.toUpperCase();
 
@@ -304,7 +304,7 @@ function parseRealAuctionCard(cardHtml = '', county = 'cuyahoga', state = 'OH', 
     homestead,
     parcelId,
     address: cleanAddress,
-    zip: zipMatch ? zipMatch[0] : null,
+    zip: zipMatch ? zipMatch[1] : null,
     openingBid,
     judgment,
     assessed,

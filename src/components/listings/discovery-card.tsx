@@ -87,9 +87,11 @@ export const DiscoveryCard = React.memo(function DiscoveryCard({ listing, href, 
 
   return <article className="flex min-w-0 flex-col overflow-hidden rounded-card border border-line bg-card shadow-card transition-shadow hover:shadow-raised" aria-label={listing.address}>
     <div className="relative shrink-0">
-      <ListingThumbnail listingId={listing.id} address={listing.address} photo={listing.photo} photoCount={Array.isArray(listing.images) && listing.images.length > 0 ? listing.images.length : (listing.photo ? 1 : 0)} observed={observed} layout="card" />
-      {program ? <span className="absolute left-3 top-3 max-w-[calc(100%-5rem)] rounded-control bg-card/95 px-2.5 py-1.5 text-xs font-semibold text-ink-2 shadow-sm">{sourceDisplayText(program)}</span> : null}
-      <button type="button" onClick={() => onSave(listing.id)} disabled={saving} aria-label={format(saved ? m.listingsUi.removeFromWatchlistAddress : m.listingsUi.addToWatchlistAddress, { address: listing.address })} aria-pressed={saved} className="absolute right-3 top-3 grid h-11 w-11 place-items-center rounded-full border border-line bg-card text-ink-2 shadow-sm transition hover:bg-paper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-3 disabled:opacity-60">
+      <Link href={href} prefetch={false} className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-3" aria-label={`Inspect ${listing.address}`}>
+        <ListingThumbnail listingId={listing.id} address={listing.address} propType={listing.propType} photo={listing.photo} photoCount={Array.isArray(listing.images) && listing.images.length > 0 ? listing.images.length : (listing.photo ? 1 : 0)} observed={observed} layout="card" />
+      </Link>
+      {program ? <span className="absolute left-3 top-3 z-20 max-w-[calc(100%-5rem)] rounded-control bg-card/95 px-2.5 py-1.5 text-xs font-semibold text-ink-2 shadow-sm">{sourceDisplayText(program)}</span> : null}
+      <button type="button" onClick={() => onSave(listing.id)} disabled={saving} aria-label={format(saved ? m.listingsUi.removeFromWatchlistAddress : m.listingsUi.addToWatchlistAddress, { address: listing.address })} aria-pressed={saved} className="absolute right-3 top-3 z-20 grid h-11 w-11 place-items-center rounded-full border border-line bg-card text-ink-2 shadow-sm transition hover:bg-paper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-3 disabled:opacity-60">
         {saving ? <Loader2 size={17} className="animate-spin" /> : <Bookmark size={17} className={saved ? "fill-ink text-ink" : ""} />}
       </button>
     </div>

@@ -4,6 +4,7 @@ import { useLocale } from "@/components/i18n/locale-provider";
 import { formatUsd, formatLocaleDate, formatLocaleNumber } from "@/lib/i18n/translator";
 import { localizeRedemption } from "@/lib/i18n/domain";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import {
   X,
@@ -35,7 +36,8 @@ import { BiddingSimulator } from "./bidding-simulator";
 import { DocketAgent } from "./docket-agent";
 import { PropertyIntelligence } from "@/components/listings/property-intelligence";
 import { OpportunitySignalsCard } from "@/components/listings/opportunity-signals-card";
-import { getExactSourceListingUrl } from "@/lib/listing-links";
+import { getExactSourceListingUrl, getSourceLinkPresentation } from "@/lib/listing-links";
+import { getPropertyPlaceholder } from "@/lib/property-placeholders";
 import { displayDate, displayMoney, displayText, knownNumber, positiveNumber, safeImageUrl } from "@/lib/listing-display";
 import { sourceDisplayText } from "@/lib/source-display";
 import { computeCashToClose, computeCreMetrics, generateLetterOfIntent, generateInvestmentCommitteeMemo, redemptionLabel } from "@/lib/underwriting";
@@ -181,7 +183,8 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
     note: t.sourceUnclassified,
     websiteUrl: "#"
   };
-  const exactSourceUrl = getExactSourceListingUrl(listing, source.websiteUrl);
+  const sourceLink = getSourceLinkPresentation(listing, source.websiteUrl, source.label);
+  const exactSourceUrl = sourceLink.exactUrl ?? getExactSourceListingUrl(listing, source.websiteUrl);
   const openingBid = positiveNumber(listing.openingBid);
   const estLow = positiveNumber(listing.estLow);
   const estHigh = positiveNumber(listing.estHigh);
@@ -441,11 +444,21 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
 
         {/* Property Hero Media */}
         {activeTab === "underwrite" && (
-          <div className="relative h-56 sm:h-64 w-full bg-paper overflow-hidden">
+          <div className="relative h-56 sm:h-64 w-full bg-paper bg-cover bg-center overflow-hidden" style={{ backgroundImage: `url("${getPropertyPlaceholder(listing.propType).imageSrc}")` }}>
             {photoUrl ? (
-              <img src={photoUrl} alt="" className="w-full h-full object-cover" />
+              <img src={photoUrl} alt={listing.address || ""} referrerPolicy="no-referrer" className="w-full h-full object-cover" />
             ) : (
-              <div className="flex h-full items-center justify-center text-sm font-semibold text-ink-3">{t.noSourcePhoto}</div>
+              <>
+                <img
+                  src={`/api/property-image?listingId=${encodeURIComponent(listing.id)}&mode=aerial`}
+                  alt={`Aerial satellite view of ${listing.address || "parcel"}`}
+                  onError={(e) => { e.currentTarget.style.display = "none"; }}
+                  className="w-full h-full object-cover"
+                />
+                <span className="absolute bottom-2 left-2 rounded bg-ink/75 px-2 py-0.5 text-label font-medium text-paper backdrop-blur-sm">
+                  Esri / USGS NAIP aerial view · {getPropertyPlaceholder(listing.propType).typeLabel}
+                </span>
+              </>
             )}
             {dealScore !== null && (
               <div className="absolute top-4 left-4 bg-card/90 backdrop-blur-md px-3 py-1.5 rounded-control border border-card/80 shadow-md">
@@ -460,7 +473,16 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
         {/* Content Body */}
         <div className="p-6 space-y-6 flex-1">
           <div>
-            <h2 id="property-drawer-title" className="text-2xl font-bold text-ink">{listing.address}</h2>
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <h2 id="property-drawer-title" className="text-2xl font-bold text-ink">
+                <Link href={`/listings/${encodeURIComponent(listing.id)}`} className="hover:underline underline-offset-4">
+                  {listing.address}
+                </Link>
+              </h2>
+              <Link href={`/listings/${encodeURIComponent(listing.id)}`} className="inline-flex h-9 items-center gap-1.5 rounded-control border border-line-strong bg-paper px-3 text-xs font-bold text-ink hover:bg-card shrink-0">
+                Open property page <ArrowUpRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
             <p className="text-sm text-ink-3 flex items-center gap-1.5 mt-1">
               <MapPin className="w-4 h-4 text-ink-3" />
               {displayText(listing.city)}, {listing.state} {displayText(listing.zip, "")} · {displayText(listing.county, t.countyNotPublished)}
@@ -885,18 +907,46 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
           )}
 
           {/* Source Link */}
-          {exactSourceUrl ? (
-            <div className="pt-2">
+          {sourceLink.primaryUrl ? (
+            <div className="pt-2 space-y-2">
+              {sourceLink.sessionGateUrl && sourceLink.sessionGateLabel ? (
+                <a
+                  href={sourceLink.sessionGateUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="w-full inline-flex min-h-10 items-center justify-center rounded-control border border-line-strong bg-paper px-4 py-2 text-center text-xs font-bold text-ink hover:bg-line transition gap-2"
+                >
+                  <span>{sourceLink.sessionGateLabel}</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              ) : null}
               <a
-                href={exactSourceUrl}
+                href={sourceLink.primaryUrl}
                 target="_blank"
                 rel="noreferrer"
                 data-testid="exact-source-listing-link"
                 className="w-full inline-flex h-11 items-center justify-center rounded-control bg-card border border-line text-sm font-bold text-ink hover:bg-paper transition gap-2 shadow-sm"
               >
-                <span>{format(t.openExactListing, { source: source.label })}</span>
+                <span>{sourceLink.primaryLabel || format(t.openExactListing, { source: source.label })}</span>
                 <ExternalLink className="w-4 h-4" />
               </a>
+              {sourceLink.rawEvidenceUrl && sourceLink.rawEvidenceLabel ? (
+                <a
+                  href={sourceLink.rawEvidenceUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="w-full inline-flex min-h-9 items-center justify-center rounded-control border border-line px-3 py-2 text-center text-xs font-semibold text-ink-2 hover:bg-paper transition gap-1.5"
+                >
+                  <span>{sourceLink.rawEvidenceLabel}</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              ) : null}
+              {(sourceLink.hint || sourceLink.referenceId) ? (
+                <p className="rounded-control bg-paper px-3 py-2 text-xs leading-relaxed text-ink-3">
+                  {sourceLink.referenceId ? <strong className="mb-0.5 block text-ink">{sourceLink.referenceId}</strong> : null}
+                  {sourceLink.hint}
+                </p>
+              ) : null}
             </div>
           ) : (
             <p

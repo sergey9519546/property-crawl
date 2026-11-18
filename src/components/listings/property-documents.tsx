@@ -17,7 +17,9 @@ const DEFAULT_ACCESS_LABELS: Record<DocumentEvidence['items'][number]['accessSta
 function safeLink(value: string | null | undefined) {
   try {
     const parsed = new URL(value || '');
-    return ['https:', 'http:'].includes(parsed.protocol) && !parsed.username && !parsed.password ? parsed.href : null;
+    return parsed.protocol === 'https:' && !parsed.username && !parsed.password && !parsed.port && parsed.pathname !== '/'
+      ? parsed.href
+      : null;
   } catch { return null; }
 }
 

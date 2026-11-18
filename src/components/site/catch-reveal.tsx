@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { AlertTriangle, ArrowRight, Check, ExternalLink, Eye, House, RefreshCw } from "lucide-react";
+import { AlertTriangle, ArrowRight, Check, ExternalLink, Eye, RefreshCw } from "lucide-react";
 import { listingCatch } from "@/lib/listing-catch";
 import { safeImageUrl } from "@/lib/listing-display";
 import { getExactSourceListingUrl } from "@/lib/listing-links";
@@ -12,6 +12,7 @@ import { Fact } from "@/components/evidence/fact";
 import { sourceDisplayText } from "@/lib/source-display";
 import { SectionHeading } from "./section-heading";
 import { useLocale } from "@/components/i18n/locale-provider";
+import { getPropertyPlaceholder } from "@/lib/property-placeholders";
 import type { Messages } from "@/lib/i18n/messages";
 
 type Listing = Parameters<typeof listingCatch>[0] & {
@@ -22,6 +23,7 @@ type Listing = Parameters<typeof listingCatch>[0] & {
   source?: string | null;
   sourceUrl?: string | null;
   photo?: string | null;
+  propType?: string | null;
 };
 
 const SOURCE_NAMES: Record<string, string> = {
@@ -65,6 +67,7 @@ export function CatchReveal() {
   const [status, setStatus] = React.useState<"loading" | "ready" | "error">("loading");
   const [index, setIndex] = React.useState(0);
   const [revealed, setRevealed] = React.useState(false);
+  const [showAerial, setShowAerial] = React.useState(false);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -104,14 +107,26 @@ export function CatchReveal() {
           {/* Left: what the sale posts */}
           <article className="overflow-hidden rounded-card border border-line bg-card shadow-raised">
             <div className="relative h-48 w-full overflow-hidden bg-paper">
-              <House aria-hidden className="absolute left-1/2 top-1/2 h-10 w-10 -translate-x-1/2 -translate-y-1/2 text-ink-3/40" />
+              <div aria-hidden="true" className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url("${getPropertyPlaceholder(listing?.propType).imageSrc}")` }} />
               {photo ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={photo} alt="" loading="lazy" referrerPolicy="no-referrer" className="relative h-full w-full object-cover" onError={(e) => { e.currentTarget.style.display = "none"; }} />
+              ) : showAerial && listing?.id ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={`/api/property-image?listingId=${encodeURIComponent(listing.id)}&mode=aerial`} alt={`Aerial parcel view for ${listing.address || ""}`} loading="lazy" className="relative h-full w-full object-cover" onError={(e) => { e.currentTarget.style.display = "none"; }} />
               ) : null}
               <span className="absolute left-4 top-4 rounded-full bg-card/90 px-3 py-1 text-label font-semibold text-ink shadow-sm backdrop-blur">
-                {cr.whatPostsBadge}
+                {photo ? cr.whatPostsBadge : showAerial ? `${cr.whatPostsBadge} · Aerial parcel view` : `${getPropertyPlaceholder(listing?.propType).typeLabel} · Placeholder`}
               </span>
+              {!photo && !showAerial && listing?.id ? (
+                <button
+                  type="button"
+                  onClick={() => setShowAerial(true)}
+                  className="absolute bottom-3 right-3 rounded-control border border-line-strong bg-card/95 px-3 py-1.5 text-xs font-semibold text-ink shadow-sm backdrop-blur hover:bg-card"
+                >
+                  Aerial view
+                </button>
+              ) : null}
             </div>
             <div className="p-6 sm:p-7">
               {status === "loading" ? (
@@ -125,7 +140,11 @@ export function CatchReveal() {
                   <p className="text-label font-semibold uppercase tracking-wider text-ink-3">
                     {SOURCE_NAMES[String(listing.source)] ?? sourceDisplayText(String(listing.source ?? "Public sale"))}
                   </p>
-                  <h3 className="mt-2 text-title font-semibold leading-snug text-ink">{listing.address}</h3>
+                  <h3 className="mt-2 text-title font-semibold leading-snug text-ink">
+                    <Link href={`/listings/${encodeURIComponent(listing.id)}`} className="hover:underline underline-offset-4">
+                      {listing.address}
+                    </Link>
+                  </h3>
                   {place ? <p className="mt-1 text-meta text-ink-3">{place}</p> : null}
                   <div className="mt-6 flex items-end justify-between gap-4 border-t border-paper pt-5">
                     <div>

@@ -31,6 +31,9 @@ export function factText(value: unknown, format: FactFormat = "text"): string | 
 
 export type GapListing = {
   id: string;
+  state?: string | null;
+  county?: string | null;
+  gisUrl?: string | null;
   occupancy?: string | null;
   seniorLienRisk?: string | null;
   deposit?: string | null;
@@ -52,23 +55,31 @@ export type Gap = {
 // Fixed priority: what can cost a buyer most comes first. The order is a
 // house rule, not a cost estimate.
 export function findGaps(listing: GapListing): Gap[] {
+  const cleanState = typeof listing.state === "string" && /^[A-Za-z]{2}$/.test(listing.state.trim())
+    ? listing.state.trim().toUpperCase()
+    : null;
+  const countySlug = typeof listing.county === "string" && listing.county.trim()
+    ? listing.county.trim().toLowerCase().replace(/\s+(?:county|parish|borough)$/i, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")
+    : null;
+  const stateHref = cleanState ? `/states/${encodeURIComponent(cleanState)}` : "/resources#knowledge-base";
+  const countyOrGisHref = listing.gisUrl || (cleanState && countySlug ? `/states/${encodeURIComponent(cleanState)}/${encodeURIComponent(countySlug)}` : stateHref);
   const notice = listing.sourceUrl
     ? { label: "Read the original notice", href: listing.sourceUrl, external: true }
-    : { label: "Search the county's sale records", href: "/resources#knowledge-base" };
+    : { label: "Search county records", href: countyOrGisHref, ...(listing.gisUrl ? { external: true } : {}) };
   const gaps: Gap[] = [];
   if (factText(listing.occupancy) === null) {
     gaps.push({ key: "occupancy", fact: "Whether anyone lives there", reason: "Not in the notice", why: "You may not get inside before the sale, and moving people out can cost time and money.", action: { label: "Drive by and look, then check the notice", href: notice.href, external: notice.external } });
   }
   // A risk pattern never establishes the scope or result of a title search.
   {
-    gaps.push({ key: "liens", fact: "Debts that stay with the property", reason: "Not checked yet", why: "Some liens survive the sale, and the new owner pays them.", action: { label: "Order a title search before you bid", href: "/resources#knowledge-base" } });
+    gaps.push({ key: "liens", fact: "Debts that stay with the property", reason: "Not checked yet", why: "Some liens survive the sale, and the new owner pays them.", action: { label: "Order a title search or inspect county GIS", href: countyOrGisHref, ...(listing.gisUrl ? { external: true } : {}) } });
   }
   if (factText(listing.deposit) === null) {
     gaps.push({ key: "deposit", fact: "The deposit on sale day", reason: "Not in the notice", why: "Many sales want certified funds on the day. Without them you can't bid.", action: notice });
   }
   const redemption = typeof listing.redemptionDays === "number" ? listing.redemptionDays : null;
   if (redemption === null && factText(listing.redemptionWarning) === null) {
-    gaps.push({ key: "redemption", fact: "How long the owner can buy it back", reason: "Not in the notice", why: "In some states the former owner can reclaim the property after you win.", action: { label: "Check your state's rule", href: "/resources#knowledge-base" } });
+    gaps.push({ key: "redemption", fact: "How long the owner can buy it back", reason: "Not in the notice", why: "In some states the former owner can reclaim the property after you win.", action: { label: cleanState ? `Check ${cleanState} redemption rules` : "Check your state's rule", href: stateHref } });
   }
   if (factText(listing.openingBid, "money") === null) {
     gaps.push({ key: "openingBid", fact: "The opening bid", reason: "Not in the notice", why: "You won't know the starting price until the sale, so plan your top bid from your own numbers.", action: notice });

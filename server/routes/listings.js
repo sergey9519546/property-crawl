@@ -551,7 +551,7 @@ async function handleListings(req, res, dbOverride = null, options = {}) {
     const cacheRev = cacheStore
       ? (db.isPg && typeof discovery.pgRevisionCoalesced === 'function'
           ? await discovery.pgRevisionCoalesced(db).catch(() => null)
-          : (typeof discovery.revisionOf === 'function' ? discovery.revisionOf(db) : null))
+          : (Array.isArray(db) && typeof discovery.revisionOf === 'function' ? discovery.revisionOf(db) : null))
       : null;
     const cacheKey = cacheStore && cacheRev !== null && cacheRev !== undefined ? `${cacheRev}|${url.search}` : null;
     if (cacheKey) {

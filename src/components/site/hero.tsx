@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { motion, useMotionValue, useSpring, useTransform } from "framer-motion";
 import { ArrowRight, ArrowUp, Building2, Database, Flag, Globe2, House, Map as MapIcon, MapPin, Undo2 } from "lucide-react";
@@ -132,14 +131,20 @@ export function Hero() {
     setStatus(`${suggestion.label} selected.`);
   };
 
-  // A picked state/county market opens Discover with real filters, not a text query.
+  // A picked state/county/city market opens Discover with real filters.
   const listingsHref = (() => {
     const label = url.trim();
     if (!label) return "/listings";
     if (selectedMarket?.label === label) {
-      const st = selectedMarket.id.split(":").pop() || "";
+      const parts = selectedMarket.id.split(":");
+      const st = parts.length >= 2 ? parts[parts.length - 1] : "";
       if (selectedMarket.kind === "state") return `/listings?state=${encodeURIComponent(selectedMarket.query)}`;
       if (selectedMarket.kind === "county") return `/listings?state=${encodeURIComponent(st)}&county=${encodeURIComponent(selectedMarket.query)}`;
+      if (selectedMarket.kind === "city") {
+        const params = new URLSearchParams({ q: selectedMarket.query });
+        if (/^[A-Z]{2}$/i.test(st)) params.set("state", st.toUpperCase());
+        return `/listings?${params.toString()}`;
+      }
       if (selectedMarket.kind === "country") return "/listings";
       return `/listings?q=${encodeURIComponent(selectedMarket.query)}`;
     }
@@ -149,7 +154,9 @@ export function Hero() {
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const label = url.trim();
-    const query = selectedMarket?.label === label ? selectedMarket.query : label;
+    const matchedSuggestion = selectedMarket?.label === label ? selectedMarket : null;
+    const query = matchedSuggestion ? matchedSuggestion.query : label;
+    const state = matchedSuggestion ? matchedSuggestion.id.split(":").pop() : undefined;
 
     if (!label) {
       setStatus("Enter a city, county, state, ZIP, or address first.");
@@ -158,7 +165,11 @@ export function Hero() {
 
     window.dispatchEvent(
       new CustomEvent("perfectproperty:search", {
-        detail: { query, scope: selectedMarket?.kind || "search" },
+        detail: {
+          query,
+          scope: matchedSuggestion?.kind || "search",
+          ...(state && /^[A-Z]{2}$/i.test(state) ? { state: state.toUpperCase() } : {}),
+        },
       }),
     );
     window.location.hash = "live-feed";
@@ -200,26 +211,8 @@ export function Hero() {
           </ErrorBoundary>
         </motion.div>
 
-        {/* A local light field keeps the architecture legible without separating it from the shader. */}
         {/* Cadastral plat survey grid overlay */}
         <div aria-hidden className="pointer-events-none absolute inset-0 z-[2] bg-[radial-gradient(#181529_0.75px,transparent_0.75px)] [background-size:20px_20px] opacity-15" />
-        <div aria-hidden className="hero-property-backlight absolute inset-0 z-[2]" />
-
-        {/* Property layer: the supplied transparent villa is colorized by the live shader. */}
-        <div
-          data-testid="hero-property-blueprint"
-          className="hero-property-art absolute inset-0 z-[3]"
-        >
-          <Image
-            src="/hero-modern-villa.png"
-            alt=""
-            width={1536}
-            height={1024}
-            preload
-            sizes="(max-width: 767px) 132vw, (max-width: 1279px) 90vw, (max-width: 1532px) 920px, (max-width: 1966px) 60vw, 1180px"
-            className="absolute bottom-0 right-0 h-auto max-w-none"
-          />
-        </div>
       </div>
 
       {/* Content */}

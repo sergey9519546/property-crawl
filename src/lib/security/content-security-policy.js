@@ -39,7 +39,7 @@ function buildContentSecurityPolicy({
     `script-src ${scriptSrc.join(' ')}`,
     `style-src ${styleSrc}`,
     "style-src-attr 'unsafe-inline'",
-    "img-src 'self' data: https:",
+    "img-src 'self' data: blob: https:",
     "font-src 'self' https://fonts.gstatic.com https: data:",
     "connect-src 'self' https:",
     "worker-src 'self' blob:",

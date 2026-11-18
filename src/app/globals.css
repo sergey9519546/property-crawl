@@ -249,65 +249,12 @@
   opacity: 1;
 }
 
-/* Hero blueprint composition tokens and shader-to-property blend. */
-@keyframes hero-blueprint-resolve {
-  from { opacity: 0; transform: translate3d(0, 12px, 0) scale(0.992); }
-  to { opacity: var(--hero-art-opacity); transform: translate3d(0, 0, 0) scale(1); }
-}
-.hero-property-art {
-  --hero-art-opacity: 0.76;
-  pointer-events: none;
-  mix-blend-mode: multiply;
-  filter: grayscale(1) contrast(1.1) brightness(1.04);
-  opacity: var(--hero-art-opacity);
-  animation: hero-blueprint-resolve 800ms cubic-bezier(0.16, 1, 0.3, 1) both;
-  transform-origin: right bottom;
-}
-.hero-property-backlight {
-  pointer-events: none;
-  opacity: 0.28;
-  background: radial-gradient(
-    ellipse 58% 76% at 79% 68%,
-    rgba(255, 255, 255, 0.22) 0%,
-    rgba(190, 224, 255, 0.08) 48%,
-    rgba(10, 35, 90, 0) 78%
-  );
-}
-.hero-property-art img {
-  right: 8px;
-  bottom: 10px;
-  width: 132vw;
-  -webkit-mask-image: linear-gradient(90deg, transparent 0%, rgba(0, 0, 0, 0.24) 10%, rgba(0, 0, 0, 0.82) 24%, #000 36%, #000 100%);
-  mask-image: linear-gradient(90deg, transparent 0%, rgba(0, 0, 0, 0.24) 10%, rgba(0, 0, 0, 0.82) 24%, #000 36%, #000 100%);
-}
-@media (min-width: 768px) {
-  .hero-property-art {
-    --hero-art-opacity: 0.78;
-  }
-  .hero-property-art img {
-    right: 12px;
-    bottom: 12px;
-    width: 90vw;
-  }
-}
 @media (min-width: 1280px) {
   .hero-content {
     position: absolute;
     inset: 0;
     justify-content: center;
   }
-
-  .hero-property-art {
-    --hero-art-opacity: 0.8;
-  }
-  .hero-property-art img {
-    right: clamp(12px, 1.3vw, 30px);
-    bottom: clamp(10px, 1vw, 22px);
-    width: clamp(920px, 60vw, 1180px);
-    -webkit-mask-image: linear-gradient(90deg, transparent 0%, rgba(0, 0, 0, 0.18) 8%, rgba(0, 0, 0, 0.78) 21%, #000 32%, #000 100%);
-    mask-image: linear-gradient(90deg, transparent 0%, rgba(0, 0, 0, 0.18) 8%, rgba(0, 0, 0, 0.78) 21%, #000 32%, #000 100%);
-  }
-
 }
 
 /* Arcade float: subtle 3px range (translateY 6px→9px→6px) */
