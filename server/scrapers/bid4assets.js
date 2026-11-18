@@ -287,7 +287,7 @@ class Bid4AssetsScraper extends BaseScraper {
 
       const standardized = allListings
         .filter((item) => this.passesFilter(item))
-        .map((item) => this.standardizeListing(item));
+        .flatMap((item) => { try { return [this.standardizeListing(item)]; } catch (err) { if (err && err.code === 'LISTING_SCHEMA_INVALID') { console.warn(`[${this.name}] Dropped schema-invalid listing (${item?.id || 'unknown'}): ${err.message}`); return []; } throw err; } });
 
       const totalDiscovered = countySlugs.length;
       const nextOffset = totalDiscovered > 0 ? (this.rotationOffset + targetSlugs.length) % totalDiscovered : 0;

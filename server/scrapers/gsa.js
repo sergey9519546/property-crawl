@@ -300,7 +300,7 @@ class GsaSurplusScraper extends BaseScraper {
       this.lastRunReport = { outcome: failures.length ? 'partial_failure' : listings.length ? 'success' : 'empty', scope: { endpoint: '/our-listing', filters: { assetClass: 'real_estate' } }, recordsDiscovered: ids.length, recordsEmitted: listings.length, recordsRejected: ids.length - listings.length - failures.length, failures, complete: failures.length === 0, fullSweepComplete: failures.length === 0, truncated: false, fixtureFallbackUsed: false };
       if (indexEvidence) this.lastRunReport.extraction = this.extractionEvidence(indexEvidence);
       console.log(`[${this.name}] Scraped ${listings.length} GSA properties`);
-      return listings.map(item => this.standardizeListing(item));
+      return listings.flatMap(item => { try { return [this.standardizeListing(item)]; } catch (err) { if (err && err.code === 'LISTING_SCHEMA_INVALID') { console.warn(`[${this.name}] Dropped schema-invalid listing: ${err.message}`); return []; } throw err; } });
     });
   }
 

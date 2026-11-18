@@ -387,7 +387,7 @@ class CourtListenerScraper extends BaseScraper {
 
         for (const result of results) {
           if (collected.length >= this.maxRecords) break;
-          const listing = this.mapDocket(result, { queryUrl: page.queryUrl, observedAt });
+          let listing = null; try { listing = this.mapDocket(result, { queryUrl: page.queryUrl, observedAt }); } catch (err) { if (err && err.code === 'LISTING_SCHEMA_INVALID') { rejectedResults += 1; continue; } throw err; }
           if (listing) collected.push(listing);
           else rejectedResults += 1;
         }

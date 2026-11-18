@@ -349,7 +349,7 @@ class HudUspsVacancyScraper extends BaseScraper {
 
         for (const feature of features) {
           if (collected.length >= this.maxRecords) break;
-          const listing = this.mapVacancyRecord(feature, { queryUrl: page.queryUrl, observedAt });
+          let listing = null; try { listing = this.mapVacancyRecord(feature, { queryUrl: page.queryUrl, observedAt }); } catch (err) { if (err && err.code === 'LISTING_SCHEMA_INVALID') { rejectedFeatures += 1; continue; } throw err; }
           if (listing) collected.push(listing);
           else rejectedFeatures += 1;
         }

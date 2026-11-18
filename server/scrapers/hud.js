@@ -188,7 +188,7 @@ class HudHomeScraper extends BaseScraper {
       report.listingsParsed = allListings.length;
       const standardized = allListings
         .filter(l => this.passesFilter(l))
-        .map(l => this.standardizeListing(l));
+        .flatMap(l => { try { return [this.standardizeListing(l)]; } catch (err) { if (err && err.code === 'LISTING_SCHEMA_INVALID') { console.warn(`[${this.name}] Dropped schema-invalid listing (${l?.id || 'unknown'}): ${err.message}`); return []; } throw err; } });
       report.listingsEmitted = standardized.length;
       const remainingStates = this.states.filter((state) => !checkpoint.completedStates.has(state));
       report.completedStates = [...checkpoint.completedStates];

@@ -490,7 +490,7 @@ class ServiceLinkScraper extends BaseScraper {
           const observedAt = new Date(this.now()).toISOString();
 
           for (const record of payload.data) {
-            const listing = this.toListing(record, observedAt);
+            let listing = null; try { listing = this.toListing(record, observedAt); } catch (err) { if (err && err.code === 'LISTING_SCHEMA_INVALID') { report.recordsSkipped += 1; continue; } throw err; }
             if (!listing || seenListingIds.has(listing.id)) {
               report.recordsSkipped += 1;
               continue;

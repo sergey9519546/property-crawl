@@ -416,7 +416,7 @@ test('collectionScope covers scheduled federal/auction sources while preserving 
   assert.equal(collectionScope({ sourceKey: 'civilview', targetState: 'NJ', countyId: null, maxCounties: 4 }), null);
 });
 
-test('parseHarrisClerkNotice attaches documentReferences for captured ViewECdocs links', () => {
+test('parseHarrisClerkNotice attaches documentReferences for captured ViewECdocs links and FdicScraper isolates schema-invalid items', async () => {
   const row = `
     <tr>
       <td><a href="ViewECdocs.aspx?ID=bWXqGXasMeuE7YZXR3B2NUNXeLVZTKlhHSbKofnpRC4r5lhzEImkzlXLdS33pau5">FRCL-2026-9999</a></td>
@@ -434,6 +434,16 @@ test('parseHarrisClerkNotice attaches documentReferences for captured ViewECdocs
   assert.equal(parsed.documentReferences[0].kind, 'filings');
   assert.equal(parsed.documentReferences[0].url, parsed.sourceUrl);
   assert.equal(parsed.documentReferences[0].accessState, 'public');
+  const { FdicScraper } = require('../server/scrapers/fdic');
+  const fdic = new FdicScraper();
+  fdic.executeWithRetry = (fn) => fn();
+  fdic.fetchApi = async () => [{ bad: true }, { ok: true }];
+  fdic.toListing = (rec) => (rec.bad
+    ? { id: 'FDIC-!!BAD!!', source: 'fdic', state: 'TX', address: '123 Main St, Austin, TX', sourceUrl: 'https://sales.fdic.gov/item/bad' }
+    : { id: 'FDIC-1', source: 'fdic', state: 'TX', address: '100 Main St, Austin, TX 78701', city: 'Austin', zip: '78701', openingBid: 95000, sourceUrl: 'https://sales.fdic.gov/item/1', provenance: { origin: 'live', observed: true, publisher: 'FDIC', recordId: '1', observedAt: '2026-10-01T00:00:00Z' } });
+  const fdicOut = await fdic.scrapeFeed();
+  assert.equal(fdicOut.length, 1);
+  assert.equal(fdicOut[0].id, 'FDIC-1');
 });
 
 

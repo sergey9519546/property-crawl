@@ -33,7 +33,7 @@ class UsMarshalsScraper extends BaseScraper {
       const allListings = await this.fetchSeizedListings(report);
       const standardized = allListings
         .filter(l => this.passesFilter(l))
-        .map(l => this.standardizeListing(l));
+        .flatMap(l => { try { return [this.standardizeListing(l)]; } catch (err) { if (err && err.code === 'LISTING_SCHEMA_INVALID') { console.warn(`[${this.name}] Dropped schema-invalid listing (${l?.id || 'unknown'}): ${err.message}`); return []; } throw err; } });
       finalizeRunReport(report, { emitted: standardized.length });
       report.scrapling = this.useScrapling
         ? { enabled: true, profile: 'table-extract', engine: this._lastExtraction?.engine || null, error: this._lastExtraction?.error || null }

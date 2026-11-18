@@ -243,7 +243,7 @@ class FhfaHpiScraper extends BaseScraper {
       sourceObservedAt: observedAt
     };
 
-    const listing = this.standardizeListing(preNormalized);
+    let listing = null; try { listing = this.standardizeListing(preNormalized); } catch (err) { if (err && err.code === 'LISTING_SCHEMA_INVALID') return null; throw err; }
     this.rawPublisherRecords.set(listing, rawPayload);
     return listing;
   }

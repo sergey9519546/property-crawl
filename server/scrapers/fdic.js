@@ -71,7 +71,7 @@ class FdicScraper extends BaseScraper {
       );
       return allListings
         .filter((item) => this.passesFilter(item))
-        .map((item) => this.standardizeListing(item));
+        .flatMap((item) => { try { return [this.standardizeListing(item)]; } catch (err) { if (err && err.code === 'LISTING_SCHEMA_INVALID') { console.warn(`[${this.name}] Dropped schema-invalid listing (${item?.id || 'unknown'}): ${err.message}`); return []; } throw err; } });
     });
   }
 
@@ -171,3 +171,4 @@ class FdicScraper extends BaseScraper {
 }
 
 module.exports = new FdicScraper();
+module.exports.FdicScraper = FdicScraper;
