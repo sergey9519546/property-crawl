@@ -18,6 +18,11 @@ const MAX_CANDIDATES = 1000;
 const SECRET_QUERY = /^(?:access[_-]?token|api[_-]?key|auth|authorization|cookie|key|password|passwd|private[_-]?key|refresh[_-]?token|secret|session|signature|sig|token)$/i;
 const DOCUMENT_PATH = /\.pdf$/i;
 const BINARY_PATH = /\.(?:7z|avi|bin|bmp|css|csv|docx?|exe|gif|gz|ico|jpe?g|js|json|mp3|mp4|png|pptx?|rar|svg|tar|tiff?|webm|webp|xlsx?|xml|zip)$/i;
+const FRONTIER_PAGINATION_QUERY = /[?&](?:page|p|offset|start)=\d+/i;
+const FRONTIER_PAGINATION_PATH = /\/page\/\d+/i;
+const FRONTIER_PAGINATION_TEXT = /\b(?:next|more\s+results|page\s+\d+)\b/i;
+const FRONTIER_DISCOVERY_TOKENS = /\b(?:auction|sale|sheriff|foreclosure|tax|deed|surplus|reo|forfeiture|seized|docket|listing|propert(?:y|ies)|parcel|bid|calendar|schedule)\b/i;
+const FRONTIER_BOILERPLATE_TOKENS = /\b(?:about|contact|privacy|terms|faq|help|login|signin|register|accessibility|careers|press|news|sitemap|disclaimer|cookie)\b/i;
 
 class OnboardingSpiderError extends Error {
   constructor(message, code, options = {}) {
@@ -94,12 +99,57 @@ function isValidContentHash(value) {
   return typeof value === 'string' && /^[0-9a-f]{64}$/i.test(value);
 }
 
+/**
+ * Scores a frontier URL + anchor text for best-first onboarding crawl priority.
+ */
+function scoreFrontierLink({ url, text = '', depth = 0 } = {}) {
+  let pathname = '';
+  let search = '';
+  const rawUrl = String(url || '').trim();
+  if (rawUrl) {
+    try {
+      const parsed = new URL(rawUrl, 'https://frontier.invalid');
+      pathname = parsed.pathname || '';
+      search = parsed.search || '';
+    } catch {
+      const queryIndex = rawUrl.indexOf('?');
+      if (queryIndex >= 0) {
+        pathname = rawUrl.slice(0, queryIndex);
+        search = rawUrl.slice(queryIndex);
+      } else {
+        pathname = rawUrl;
+      }
+    }
+  }
+  const pathAndSearch = `${pathname}${search}`;
+  const anchorText = String(text || '');
+  const searchAndText = `${pathAndSearch} ${anchorText}`;
+  let score = 0;
+  if (
+    FRONTIER_PAGINATION_QUERY.test(pathAndSearch)
+    || FRONTIER_PAGINATION_PATH.test(pathname)
+    || FRONTIER_PAGINATION_TEXT.test(searchAndText)
+  ) {
+    score += 30;
+  }
+  if (FRONTIER_DISCOVERY_TOKENS.test(searchAndText)) {
+    score += 25;
+  }
+  if (FRONTIER_BOILERPLATE_TOKENS.test(`${pathname} ${anchorText}`)) {
+    score -= 40;
+  }
+  const numericDepth = Number(depth || 0);
+  score -= (Number.isFinite(numericDepth) ? numericDepth : 0) * 2;
+  return score;
+}
+
 module.exports = {
   OnboardingSpiderError,
   resolveCrawlTimeoutMs,
   inspectCrawlUrl,
   scopeFor,
   isValidContentHash,
+  scoreFrontierLink,
   VERSION,
   USER_AGENT,
   DEFAULT_MAX_PAGES,

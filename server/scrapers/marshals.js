@@ -22,10 +22,10 @@ class UsMarshalsScraper extends BaseScraper {
   async scrapeFeed() {
     return this.executeWithRetry(async () => {
       const report = createRunReport('marshals', {
-        endpoints: ['usms-real-property', 'reallook-fallback', 'gaston-sheehan-fallback'],
+        endpoints: ['usms-real-property', 'reallook-fallback'],
       });
-      report.statesRequested = ['usms', 'reallook', 'gaston'];
-      report.endpointsTried = 3;
+      report.statesRequested = ['usms'];
+      report.endpointsTried = 1;
       this.lastRunReport = report;
 
       this._htmlSamples = [];
@@ -57,6 +57,16 @@ class UsMarshalsScraper extends BaseScraper {
     });
   }
 
+  _markPartnerAttempted(report) {
+    if (!report) return;
+    if (Array.isArray(report.statesRequested) && !report.statesRequested.includes('reallook')) {
+      report.statesRequested.push('reallook');
+    }
+    report.endpointsTried = Array.isArray(report.statesRequested)
+      ? report.statesRequested.length
+      : (report.endpointsTried || 1) + 1;
+  }
+
   async fetchSeizedListings(report) {
     const url = `${this.baseUrl}/what-we-do/asset-forfeiture/real-property`;
     try {
@@ -67,13 +77,15 @@ class UsMarshalsScraper extends BaseScraper {
         }
       });
       if (Array.isArray(this._htmlSamples)) this._htmlSamples.push(html);
-      let listings = this.parseMarshalsHtml(html);
+      let rawListings = this.parseMarshalsHtml(html);
+      let listings = rawListings.filter((l) => this.passesFilter(l));
       if (!listings.length && this.useScrapling && typeof this.extract === 'function') {
         try {
           const extracted = await this.extract('table-extract', { html, url });
           this._lastExtraction = extracted;
           if (Array.isArray(extracted?.rows) && extracted.rows.length) {
-            listings = this.parseExtractedTableRows(extracted.rows, url);
+            rawListings = this.parseExtractedTableRows(extracted.rows, url);
+            listings = rawListings.filter((l) => this.passesFilter(l));
           }
         } catch (err) {
           this._lastExtraction = { error: String(err?.message || err), code: err?.code || null };
@@ -83,10 +95,21 @@ class UsMarshalsScraper extends BaseScraper {
         recordUnitSuccess(report, 'usms', listings.length);
         return listings;
       }
-      recordUnitFailure(report, 'usms', new Error('empty or unparseable USMS page'), 'empty_primary');
+      if (report) {
+        recordUnitFailure(
+          report,
+          'usms',
+          new Error(rawListings.length > 0 ? 'USMS rows failed passesFilter' : 'empty or unparseable USMS page'),
+          'empty_primary',
+        );
+        this._markPartnerAttempted(report);
+      }
       return this.fetchPartnerAuctions(report);
     } catch (err) {
-      recordUnitFailure(report, 'usms', err, 'upstream');
+      if (report) {
+        recordUnitFailure(report, 'usms', err, 'upstream');
+        this._markPartnerAttempted(report);
+      }
       return this.fetchPartnerAuctions(report);
     }
   }
@@ -147,7 +170,8 @@ class UsMarshalsScraper extends BaseScraper {
   }
 
   async fetchPartnerAuctions(report = null) {
-    // Partner feed query (Gaston & Sheehan / RealLook USMS real estate)
+    // Partner feed query (RealLook USMS real estate)
+    this._markPartnerAttempted(report);
     const partnerUrl = 'https://www.reallook.com/usms-inventory';
     try {
       const html = await this.requestText(partnerUrl, {

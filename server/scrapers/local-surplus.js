@@ -10,11 +10,8 @@
  */
 
 const BaseScraper = require('./base');
-const {
-  createRunReport,
-  finalizeRunReport,
-} = require('./run-report');
-const { validateEnrollmentUrl } = require('./government-land');
+const { extractWithScrapling, isScraplingEnabled } = require('./scrapling-bridge');
+const { runEnrolledTemplateScrape } = require('./government-land');
 
 class LocalSurplusScraper extends BaseScraper {
   constructor(options = {}) {
@@ -24,69 +21,23 @@ class LocalSurplusScraper extends BaseScraper {
       ?? process.env.LOCAL_SURPLUS_DISCOVERY_URL
       ?? '';
     this.lastRunReport = null;
+    this.useScrapling = options.useScrapling ?? isScraplingEnabled('local-surplus');
+    this.extract = options.extractImpl || extractWithScrapling;
   }
 
   async scrapeFeed() {
-    return this.executeWithRetry(async () => {
-      const report = createRunReport('local-surplus', {
-        end: 'local_surplus',
-        enrollmentUrl: this.enrollmentUrl || null,
-        catalogTemplates: ['county-surplus-property'],
-      });
-      report.statesRequested = ['enrollment'];
-      report.endpointsTried = 1;
-      this.lastRunReport = report;
-
-      const validation = validateEnrollmentUrl(this.enrollmentUrl);
-      if (!validation.ok) {
-        report.statesFailed.push('enrollment');
-        report.failures.push({
-          unit: 'enrollment',
-          kind: 'not_enrolled',
-          message: validation.reason === 'not-configured'
-            ? 'No LOCAL_SURPLUS_DISCOVERY_URL enrolled; catalog template only. Each county/municipality must be enrolled separately.'
-            : `Enrollment URL rejected: ${validation.reason}`,
-        });
-        finalizeRunReport(report, { emitted: 0 });
-        report.outcome = 'skipped_not_enrolled';
-        report.complete = false;
-        report.fullSweepComplete = false;
-        report.observationError = 'local_surplus end is enrollment-only until LOCAL_SURPLUS_DISCOVERY_URL is configured';
-        return [];
-      }
-
-      try {
-        const html = await this.requestText(validation.url);
-        const embedded = this.extractEmbeddedState(html);
-        if (embedded && Array.isArray(embedded.jsonLd) && embedded.jsonLd.length > 0) {
-          const candidates = this.parseJsonLdProperties(embedded.jsonLd, {
-            sourceKey: 'local-surplus',
-            sourceUrl: validation.url,
-            publisher: 'County / Municipal Surplus',
-          });
-          const valid = candidates.filter(c => this.passesFilter(c)).map(c => this.standardizeListing(c));
-          if (valid.length > 0) {
-            report.statesSucceeded.push('enrollment');
-            finalizeRunReport(report, { emitted: valid.length });
-            report.outcome = 'success';
-            report.complete = true;
-            return valid;
-          }
-        }
-      } catch (err) {
-        if (err && err.code === 'LISTING_SCHEMA_INVALID') throw err;
-      }
-
-      report.statesFailed.push('enrollment');
-      report.failures.push({
-        unit: 'enrollment',
-        kind: 'parser_not_implemented',
-        message: `Enrollment URL accepted (${validation.url}) but no surplus HTML parser is bound; use source intake for official bid packets until an adapter is written.`,
-      });
-      finalizeRunReport(report, { emitted: 0 });
-      report.outcome = 'failed';
-      throw new Error('LOCAL_SURPLUS_PARSER_NOT_IMPLEMENTED: enrollment URL set but no surplus parser is bound');
-    });
+    return this.executeWithRetry(() => runEnrolledTemplateScrape(this, {
+      sourceKey: 'local-surplus',
+      end: 'local_surplus',
+      catalogTemplates: ['county-surplus-property'],
+      publisher: 'County / Municipal Surplus',
+      envVarName: 'LOCAL_SURPLUS_DISCOVERY_URL',
+      notConfiguredMessage: 'No LOCAL_SURPLUS_DISCOVERY_URL enrolled; catalog template only. Each county/municipality must be enrolled separately.',
+      observationErrorNotEnrolled: 'local_surplus end is enrollment-only until LOCAL_SURPLUS_DISCOVERY_URL is configured',
+      parserNotImplementedMessage: (url) => `Enrollment URL accepted (${url}) but no surplus HTML parser is bound; use source intake for official bid packets until an adapter is written.`,
+      observationErrorParserMissing: 'local-surplus parser not implemented for enrolled publisher',
+      errorCodeMessage: 'LOCAL_SURPLUS_PARSER_NOT_IMPLEMENTED: enrollment URL set but no surplus parser is bound',
+    }));
   }
 }
 

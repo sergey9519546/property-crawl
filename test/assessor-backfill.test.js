@@ -498,3 +498,380 @@ test('backfillAssessorRolls includes NJ geocoding+cadastral phase without adding
   assert.equal(njRow.assessed, 412000);
   assert.equal(njRow.propType, 'Single Family');
 });
+
+test('isCompatibleNjSitusAddress matches normalized street variants and rejects house or core-street mismatches', () => {
+  const { isCompatibleNjSitusAddress } = require('../server/enrichment/nj-cadastral');
+
+  assert.equal(isCompatibleNjSitusAddress('1427 46TH STREET, NORTH BERGEN, NJ 07047', '1427 46TH ST'), true);
+  assert.equal(isCompatibleNjSitusAddress('19 WEST PARK AVENUE, PARK RIDGE, NJ 07656', '19 W PARK AVE'), true);
+  assert.equal(isCompatibleNjSitusAddress('1427 46TH STREET (BLOCK 153 LOT 38), NORTH BERGEN, NJ 07047', '1427 46TH ST'), true);
+  assert.equal(isCompatibleNjSitusAddress('1427 46TH STREET FKA 1425 46TH ST, NORTH BERGEN, NJ 07047', '1427 46TH ST'), true);
+  assert.equal(isCompatibleNjSitusAddress('1427 46TH STREET, NORTH BERGEN, NJ 07047', ''), true);
+  assert.equal(isCompatibleNjSitusAddress('1427 46TH STREET, NORTH BERGEN, NJ 07047', 'VACANT LAND'), true);
+  assert.equal(isCompatibleNjSitusAddress('BLOCK 153 LOT 38, NORTH BERGEN, NJ 07047', '712 80TH ST'), true);
+
+  assert.equal(isCompatibleNjSitusAddress('1427 46TH STREET, NORTH BERGEN, NJ 07047', '712 80TH ST'), false);
+  assert.equal(isCompatibleNjSitusAddress('1427 46TH STREET, NORTH BERGEN, NJ 07047', '1427 80TH ST'), false);
+  assert.equal(isCompatibleNjSitusAddress('1427 NORTH PARK AVE, NORTH BERGEN, NJ 07047', '1427 NORTH 80TH ST'), false);
+  assert.equal(isCompatibleNjSitusAddress('1427 46TH ST APT 2', '1427 80TH ST APT 2'), false);
+});
+
+test('isExactNjGeocodeMatch rejects same-house-number different-street candidates and accepts valid equivalents', () => {
+  const { isExactNjGeocodeMatch } = require('../server/enrichment/nj-cadastral');
+
+  const listing = {
+    address: '1427 46TH STREET, NORTH BERGEN, NJ 07047',
+    city: 'NORTH BERGEN',
+    state: 'NJ',
+    zip: '07047',
+  };
+
+  assert.equal(
+    isExactNjGeocodeMatch(listing, {
+      address: '1427 80th St, North Bergen, NJ, 07047',
+      location: { x: -74.01, y: 40.80 },
+      score: 100,
+      attributes: {
+        Score: 100,
+        Addr_type: 'PointAddress',
+        AddNum: '1427',
+        StAddr: '1427 80th St',
+        City: 'North Bergen',
+        RegionAbbr: 'NJ',
+        Postal: '07047',
+      },
+    }),
+    false,
+  );
+
+  assert.equal(
+    isExactNjGeocodeMatch(listing, {
+      address: '1427 46th St, North Bergen, NJ, 07047',
+      location: { x: -74.02, y: 40.78 },
+      score: 99,
+      attributes: {
+        Score: 99,
+        Addr_type: 'PointAddress',
+        AddNum: '1427',
+        StAddr: '1427 46th St',
+        City: 'North Bergen',
+        RegionAbbr: 'NJ',
+        Postal: '07047',
+      },
+    }),
+    true,
+  );
+});
+
+test('selectBestNjCadastralFeature rejects NJGIN 0908_153_38 mismatched situs despite Block/Lot match', () => {
+  const { selectBestNjCadastralFeature } = require('../server/enrichment/nj-cadastral');
+
+  const listing = {
+    address: '1427 46TH STREET, NORTH BERGEN, NJ 07047',
+    city: 'NORTH BERGEN',
+    state: 'NJ',
+    zip: '07047',
+    apn: 'LOT 38, BLOCK 153',
+    provenance: {
+      sourceFacts: { lotBlock: { block: '153', lot: '38' } },
+    },
+  };
+
+  const mismatchedFeature = {
+    attributes: {
+      PAMS_PIN: '0908_153_38',
+      PCLBLOCK: '153',
+      PCLLOT: '38',
+      COUNTY: 'HUDSON',
+      MUN_NAME: 'NORTH BERGEN TWP',
+      ST_ADDRESS: '712 80TH ST',
+      NET_VALUE: 705700,
+    },
+  };
+
+  assert.equal(
+    selectBestNjCadastralFeature([mismatchedFeature], listing, { Addr_Block: '153', Addr_Lot: '38' }),
+    null,
+  );
+
+  const matchingFeature = {
+    attributes: {
+      PAMS_PIN: '0908_153_38_REAL',
+      PCLBLOCK: '153',
+      PCLLOT: '38',
+      COUNTY: 'HUDSON',
+      MUN_NAME: 'NORTH BERGEN TWP',
+      ST_ADDRESS: '1427 46TH ST',
+      NET_VALUE: 425000,
+    },
+  };
+  assert.equal(
+    selectBestNjCadastralFeature([mismatchedFeature, matchingFeature], listing),
+    matchingFeature,
+  );
+});
+
+test('queryNjCadastralByAddress & enrichNjListing recover parcel centroid and refuse uncorroborated rejected coordinates', async () => {
+  const { inspectMapLocation } = require('../src/lib/listing-map-policy');
+  const {
+    queryNjCadastralByAddress,
+    enrichNjListing,
+    NJ_GEOCODE_URL,
+    NJ_CADASTRAL_URL,
+  } = require('../server/enrichment/nj-cadastral');
+
+  const baseListing = () => ({
+    id: 'CIV-NJ-HUDSON-1427',
+    source: 'civilview',
+    sourceUrl: 'https://salesweb.civilview.com/Sales/SaleDetails?PropertyId=142746',
+    state: 'NJ',
+    county: 'Hudson County',
+    address: '1427 46TH STREET, NORTH BERGEN, NJ 07047',
+    city: 'NORTH BERGEN',
+    zip: '07047',
+    propType: 'Unknown',
+    apn: 'LOT 38, BLOCK 153',
+    lat: null,
+    lng: null,
+    assessed: null,
+    sourceObservedAt: '2026-10-01T12:00:00.000Z',
+    provenance: {
+      origin: 'live',
+      observed: true,
+      recordKind: 'source_record',
+      publisher: 'CivilView',
+      recordId: '142746',
+      observedAt: '2026-10-01T12:00:00.000Z',
+      sourceFacts: { lotBlock: { block: '153', lot: '38' } },
+    },
+  });
+
+  // Direct queryNjCadastralByAddress computes ring centroid and filters MUN_NAME + situs
+  let capturedWhere = null;
+  const direct = await queryNjCadastralByAddress(baseListing(), {
+    fetchFn: async (url) => {
+      const parsed = new URL(String(url));
+      capturedWhere = parsed.searchParams.get('where');
+      assert.equal(parsed.searchParams.get('returnGeometry'), 'true');
+      assert.equal(parsed.searchParams.get('outSR'), '4326');
+      return {
+        ok: true,
+        json: async () => ({
+          features: [
+            {
+              attributes: {
+                PAMS_PIN: '0908_153_38',
+                COUNTY: 'HUDSON',
+                MUN_NAME: 'NORTH BERGEN TWP',
+                ST_ADDRESS: '712 80TH ST',
+                NET_VALUE: 705700,
+              },
+              geometry: { rings: [[[-74.01, 40.80], [-74.00, 40.80], [-74.00, 40.81], [-74.01, 40.81], [-74.01, 40.80]]] },
+            },
+            {
+              attributes: {
+                PAMS_PIN: '0908_64_12',
+                PCLBLOCK: '64',
+                PCLLOT: '12',
+                COUNTY: 'HUDSON',
+                MUN_NAME: 'NORTH BERGEN TWP',
+                ST_ADDRESS: '1427 46TH ST',
+                PROP_CLASS: '2',
+                NET_VALUE: 485000,
+                LAND_VAL: 185000,
+                IMPRVT_VAL: 300000,
+                YR_CONSTR: 1935,
+                DWELL: 2,
+                BLDG_DESC: '2SF',
+              },
+              geometry: { rings: [[[-74.030, 40.780], [-74.020, 40.780], [-74.020, 40.790], [-74.030, 40.790], [-74.030, 40.780]]] },
+            },
+          ],
+        }),
+      };
+    },
+  });
+  assert.equal(capturedWhere, "UPPER(COUNTY) = 'HUDSON' AND UPPER(ST_ADDRESS) LIKE '1427%46TH%'");
+  assert.ok(direct);
+  assert.equal(direct.feature.attributes.PAMS_PIN, '0908_64_12');
+  assert.equal(direct.lat, 40.785);
+  assert.equal(direct.lng, -74.025);
+
+  // Fallback in enrichNjListing when NJ_Geocode misses: attaches ParcelCentroid & passes inspectMapLocation
+  const recoveredListing = baseListing();
+  const recovered = await enrichNjListing(recoveredListing, {
+    now: Date.parse('2026-11-01T00:00:00.000Z'),
+    fetchFn: async (url) => {
+      if (String(url).startsWith(NJ_GEOCODE_URL)) {
+        return { ok: true, json: async () => ({ candidates: [] }) };
+      }
+      assert.ok(String(url).startsWith(NJ_CADASTRAL_URL));
+      return {
+        ok: true,
+        json: async () => ({
+          features: [{
+            attributes: {
+              PAMS_PIN: '0908_64_12',
+              PCLBLOCK: '64',
+              PCLLOT: '12',
+              COUNTY: 'HUDSON',
+              MUN_NAME: 'NORTH BERGEN TWP',
+              ST_ADDRESS: '1427 46TH ST',
+              PROP_CLASS: '2',
+              NET_VALUE: 485000,
+              LAND_VAL: 185000,
+              IMPRVT_VAL: 300000,
+              YR_CONSTR: 1935,
+              DWELL: 2,
+              BLDG_DESC: '2SF',
+            },
+            geometry: { rings: [[[-74.030, 40.780], [-74.020, 40.780], [-74.020, 40.790], [-74.030, 40.790], [-74.030, 40.780]]] },
+          }],
+        }),
+      };
+    },
+  });
+  assert.equal(recovered.found, true);
+  assert.equal(recovered.geocoded, true);
+  assert.equal(recovered.cadastral, true);
+  assert.equal(recoveredListing.lat, 40.785);
+  assert.equal(recoveredListing.lng, -74.025);
+  assert.equal(recoveredListing.assessed, 485000);
+  assert.equal(recoveredListing.propType, 'Duplex');
+  assert.equal(recoveredListing.provenance.coordinates.provider, 'NJGIN Cadastral Parcel Centroid');
+  assert.equal(inspectMapLocation(recoveredListing).accepted, true);
+
+  // Negative control: geocode matches 1427 46th St, point-in-polygon returns 712 80th St (rejected), address fallback misses -> no coords persisted
+  const rejectedListing = baseListing();
+  const rejectedRes = await enrichNjListing(rejectedListing, {
+    now: Date.parse('2026-11-01T00:00:00.000Z'),
+    fetchFn: async (url) => {
+      if (String(url).startsWith(NJ_GEOCODE_URL)) {
+        return {
+          ok: true,
+          json: async () => ({
+            candidates: [{
+              address: '1427 46th St, North Bergen, NJ, 07047',
+              location: { x: -74.01, y: 40.80 },
+              score: 100,
+              attributes: {
+                Score: 100,
+                Addr_type: 'PointAddress',
+                AddNum: '1427',
+                StAddr: '1427 46th St',
+                City: 'North Bergen',
+                RegionAbbr: 'NJ',
+                Postal: '07047',
+              },
+            }],
+          }),
+        };
+      }
+      const parsed = new URL(String(url));
+      if (parsed.searchParams.get('geometryType') === 'esriGeometryPoint') {
+        return {
+          ok: true,
+          json: async () => ({
+            features: [{
+              attributes: {
+                PAMS_PIN: '0908_153_38',
+                PCLBLOCK: '153',
+                PCLLOT: '38',
+                COUNTY: 'HUDSON',
+                ST_ADDRESS: '712 80TH ST',
+                NET_VALUE: 705700,
+              },
+            }],
+          }),
+        };
+      }
+      return { ok: true, json: async () => ({ features: [] }) };
+    },
+  });
+  assert.equal(rejectedRes.found, false);
+  assert.equal(rejectedListing.lat, null);
+  assert.equal(rejectedListing.lng, null);
+  assert.equal(rejectedListing.assessorParcel, undefined);
+});
+
+test('GET /api/listings/:id/assessor rejects cached or queried parcels with mismatched situsAddress', async () => {
+  const handleListings = require('../server/routes/listings');
+
+  function makeMockRes() {
+    const out = { statusCode: 200, body: null };
+    return {
+      status(code) { out.statusCode = code; return this; },
+      json(payload) { out.body = payload; return out; },
+      out,
+    };
+  }
+
+  // 1. Cached parcel with mismatched situsAddress (712 80TH ST for 1427 46TH STREET)
+  const cachedListing = {
+    id: 'CIV-NJ-10-MISMATCH-CACHED',
+    state: 'NJ',
+    county: 'Hudson County',
+    address: '1427 46TH STREET, NORTH BERGEN, NJ 07047',
+    openingBid: 100000,
+    parcelKey: '34017-090815338',
+    assessorParcel: {
+      source: 'NJGIN_MODIV_CADASTRAL',
+      countyFips: '34017',
+      canonicalApn: '090815338',
+      situsAddress: '712 80TH ST',
+      assessedValue: { total: 705700, land: 300000, improvements: 405700 },
+    },
+  };
+  const cachedRes = makeMockRes();
+  await handleListings(
+    { method: 'GET', url: `/api/listings/${cachedListing.id}/assessor`, headers: {} },
+    cachedRes,
+    { async getListingById(id) { return id === cachedListing.id ? cachedListing : null; } },
+  );
+  assert.equal(cachedRes.out.statusCode, 200);
+  assert.equal(cachedRes.out.body.enrolled, true);
+  assert.equal(cachedRes.out.body.found, false);
+  assert.equal(cachedRes.out.body.rawFigure, null);
+  assert.equal(cachedRes.out.body.parcelKey, null);
+  assert.equal(cachedRes.out.body.reason, 'Parcel situs address does not corroborate listing street address.');
+  assert.equal(cachedRes.out.body.withheldReason, 'Parcel situs address does not corroborate listing street address.');
+  assert.ok(cachedRes.out.body.countyName);
+  assert.ok(cachedRes.out.body.endpoint);
+
+  // 2. Live queryArcgisParcel returning mismatched situsAddress is also rejected and never persisted
+  const queriedListing = {
+    id: 'CIV-NJ-10-MISMATCH-LIVE',
+    state: 'NJ',
+    county: 'Hudson County',
+    address: '1427 46TH STREET, NORTH BERGEN, NJ 07047',
+    openingBid: 100000,
+    lat: 40.80,
+    lng: -74.01,
+  };
+  let persistedCount = 0;
+  const liveRes = makeMockRes();
+  await handleListings(
+    { method: 'GET', url: `/api/listings/${queriedListing.id}/assessor`, headers: {} },
+    liveRes,
+    {
+      async getListingById(id) { return id === queriedListing.id ? queriedListing : null; },
+      async createListing() { persistedCount += 1; },
+    },
+    {
+      queryArcgisParcel: async () => ({
+        rawApn: '0908_153_38',
+        canonicalApn: '090815338',
+        countyFips: '34017',
+        situsAddress: '712 80TH ST',
+        assessedValue: { total: 705700, land: 300000, improvements: 405700 },
+      }),
+    },
+  );
+  assert.equal(liveRes.out.statusCode, 200);
+  assert.equal(liveRes.out.body.enrolled, true);
+  assert.equal(liveRes.out.body.found, false);
+  assert.equal(liveRes.out.body.rawFigure, null);
+  assert.equal(liveRes.out.body.reason, 'Parcel situs address does not corroborate listing street address.');
+  assert.equal(persistedCount, 0);
+  assert.equal(queriedListing.assessorParcel, undefined);
+});

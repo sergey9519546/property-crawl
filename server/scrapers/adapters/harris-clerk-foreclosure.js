@@ -1,5 +1,6 @@
 'use strict';
 const { capturedRecordUrl } = require('./record-link');
+const { buildDocumentReferences } = require('../document-reference');
 
 /**
  * server/scrapers/adapters/harris-clerk-foreclosure.js
@@ -151,11 +152,14 @@ function parseHarrisClerkNotice(noticeHtmlOrText = '', options = {}) {
     if (!sourceUrl) return null;
     const field = name => raw.match(new RegExp(`id="[^"\\s]*${name}"[^>]*>([\\s\\S]*?)<\\/span>`, 'i'))?.[1];
     const date = name => { const value = parseDateToUtcTimestamp(cleanCellText(field(name))); return value === null ? null : new Date(value).toISOString().slice(0, 10); };
+    const documentReferences = buildDocumentReferences([
+      { kind: 'filings', url: sourceUrl, label: `Harris County Clerk Foreclosure Notice ${document[2]}` },
+    ], { observedAt: options.observedAt || null });
     return { source:'recorder', platform:'harris-clerk-foreclosure', county:'Harris', state:'TX',
       fileNumber:document[2], instrumentNumber:document[2], postingDate:date('lblFileDate'), saleDate:date('lblSaleDate'),
       earliestEligibleSaleDate:null, debtor:null, grantor:null, trustee:null, grantee:null, situsAddress:null,
       legalDescription:null, apn:null, docType:HARRIS_DOC_TYPES.NOTICE_OF_FORECLOSURE_SALE,
-      distressStage:'SCHEDULED_AUCTION', sourceUrl, openingBid:null, estLow:null, estHigh:null, assessed:null,
+      distressStage:'SCHEDULED_AUCTION', sourceUrl, documentReferences, openingBid:null, estLow:null, estHigh:null, assessed:null,
       evidenceOnly:true, pages:Number(cleanCellText(field('lblPages'))) || null };
   }
 

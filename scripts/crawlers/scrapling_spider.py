@@ -14,6 +14,7 @@ Guarantees:
 
 import asyncio
 import hashlib
+import ipaddress
 import json
 import re
 import sys
@@ -42,6 +43,80 @@ BOT_CHALLENGE_PATTERNS = [
     r"incapsula",
     r"perimeterx",
 ]
+
+
+CGNAT_NETWORK = ipaddress.ip_network("100.64.0.0/10")
+_IPV4_COMPAT_NETWORK = ipaddress.ip_network("::/96")
+_NAT64_NETWORK = ipaddress.ip_network("64:ff9b::/96")
+
+
+def _is_disallowed_ip(ip_obj) -> bool:
+    mapped = getattr(ip_obj, "ipv4_mapped", None)
+    if mapped is not None:
+        return _is_disallowed_ip(mapped)
+    if isinstance(ip_obj, ipaddress.IPv6Address):
+        sixtofour = getattr(ip_obj, "sixtofour", None)
+        if sixtofour is not None and _is_disallowed_ip(sixtofour):
+            return True
+        teredo = getattr(ip_obj, "teredo", None)
+        if teredo is not None and any(_is_disallowed_ip(part) for part in teredo):
+            return True
+        if ip_obj in _IPV4_COMPAT_NETWORK or ip_obj in _NAT64_NETWORK:
+            if ip_obj.is_loopback or ip_obj.is_unspecified:
+                return True
+            embedded_v4 = ipaddress.IPv4Address(int(ip_obj) & 0xFFFFFFFF)
+            if _is_disallowed_ip(embedded_v4):
+                return True
+    if (
+        ip_obj.is_private
+        or ip_obj.is_loopback
+        or ip_obj.is_link_local
+        or ip_obj.is_reserved
+        or ip_obj.is_multicast
+        or ip_obj.is_unspecified
+        or not ip_obj.is_global
+    ):
+        return True
+    if isinstance(ip_obj, ipaddress.IPv4Address) and ip_obj in CGNAT_NETWORK:
+        return True
+    return False
+
+
+def is_private_or_unsafe_url(raw_url: str) -> bool:
+    """Rejects non-HTTPS, credential-bearing, loopback, local/internal, or private/CGNAT URLs."""
+    if not raw_url or not isinstance(raw_url, str):
+        return True
+    candidate = raw_url.strip()
+    if not candidate:
+        return True
+    try:
+        parsed = urlparse(candidate)
+    except Exception:
+        return True
+    if (parsed.scheme or "").lower() != "https":
+        return True
+    if parsed.username is not None or parsed.password is not None or "@" in (parsed.netloc or ""):
+        return True
+    try:
+        _ = parsed.port
+    except ValueError:
+        return True
+
+    hostname = (parsed.hostname or "").strip().lower().rstrip(".")
+    if not hostname or "%" in hostname:
+        return True
+    if hostname in {"localhost", "0", "0.0.0.0", "::", "::1"}:
+        return True
+    if hostname.endswith((".local", ".internal", ".localhost", ".arpa")):
+        return True
+    if re.fullmatch(r"\d+|0x[0-9a-f]+", hostname):
+        return True
+
+    try:
+        ip_obj = ipaddress.ip_address(hostname)
+    except ValueError:
+        return False
+    return _is_disallowed_ip(ip_obj)
 
 
 def detect_bot_challenge(status: int, text: str) -> str | None:
@@ -119,10 +194,23 @@ async def run_spider_batch(batch_request: dict):
 
     exit_code = 0
     try:
-        # Check robots.txt if obeyRobots is enabled
+        # Enforce SSRF / HTTPS / credential guard before robots.txt or network fetch
         disallowed_urls = set()
+        for url in urls:
+            if is_private_or_unsafe_url(url):
+                disallowed_urls.add(url)
+                print(json.dumps({
+                    "event": "ACCESS_POLICY_VIOLATION",
+                    "sourceKey": source_key,
+                    "url": url,
+                    "reason": "unsafe_or_private_url_disallowed"
+                }), flush=True)
+
+        # Check robots.txt if obeyRobots is enabled
         if obey_robots:
             for url in urls:
+                if url in disallowed_urls:
+                    continue
                 # Custom policy: if robots disallow mock exists or explicitly blocked
                 robots_url = f"{urlparse(url).scheme}://{urlparse(url).netloc}/robots.txt"
                 if mock_responses and robots_url in mock_responses:

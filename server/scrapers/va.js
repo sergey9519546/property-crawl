@@ -28,6 +28,7 @@ class VaReoScraper extends BaseScraper {
     this.timeoutMs = 4000;
     this.useScrapling = options.useScrapling ?? isScraplingEnabled('va');
     this.extract = options.extractImpl || extractWithScrapling;
+    this.captureSpaXhr = options.captureSpaXhrImpl || captureSpaXhr;
     this.lastRunReport = null;
   }
 
@@ -132,11 +133,19 @@ class VaReoScraper extends BaseScraper {
     }
     if (!listings.length && looksLikeClientRenderedShell(html)) {
       if (spaXhrEnabled('va', process.env)) {
-        const xhr = await captureSpaXhr(searchUrl, { sourceKey: 'va' });
+        const xhr = await (this.captureSpaXhr || captureSpaXhr)(searchUrl, { sourceKey: 'va' });
         if (xhr.ok && Array.isArray(xhr.items) && xhr.items.length) {
           const mapped = mapCapturedItems(this, xhr.items, state)
             .map((item) => ({ ...item, provenance: { ...(item.provenance || {}), spaXhr: true, capturedUrls: xhr.capturedUrls || [] } }));
-          const usable = mapped.filter((item) => validateListingShape(item).valid);
+          const usable = [];
+          for (const item of mapped) {
+            try {
+              const std = this.standardizeListing(item);
+              if (this.passesFilter(std) && validateListingShape(std).valid) {
+                usable.push(std);
+              }
+            } catch (_) {}
+          }
           if (usable.length) return { listings: usable, html, spaXhr: true };
         }
       }
@@ -238,6 +247,7 @@ class VaReoScraper extends BaseScraper {
 
     return {
       id: `VA-${propId}`,
+      source: this.sourceKey,
       state: p.state || state,
       county: p.county ?? null,
       city: p.city ?? null,
@@ -264,7 +274,7 @@ class VaReoScraper extends BaseScraper {
       photoUrl: p.photoUrl ?? p.imageUrl ?? null,
       sourceUrl: p.url ? (p.url.startsWith('http') ? p.url : `${this.baseUrl}${p.url}`) : `${this.baseUrl}/property/${propId}`,
       raw: JSON.stringify(p),
-      provenance: { origin: 'live', observed: true, publisher: 'VRM Properties', recordId: String(propId) },
+      provenance: { origin: 'live', observed: true, publisher: 'VRM Properties', recordId: String(propId), observedAt: new Date().toISOString() },
     };
   }
 

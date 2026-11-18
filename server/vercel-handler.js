@@ -27,6 +27,11 @@ function configureServerlessEnv(env = process.env) {
     PROPERTY_RESEARCH_PATH: path.join(cacheRoot, 'research-workspaces.json'),
     PROPERTY_ACCOUNTS_PATH: path.join(cacheRoot, 'accounts.json'),
     PROPERTY_EMAIL_NOTICE_PATH: path.join(cacheRoot, 'email-notices.json'),
+    DISCOVERY_STORAGE_PATH: os.tmpdir(),
+    DISCOVERY_MIN_FREE_BYTES: String(64 * 1024 * 1024),
+    PROPERTY_IMAGE_CENSUS_GEOCODER_FALLBACK: '1',
+    PROPERTY_IMAGE_GOOGLE_PANORAMAX_FALLBACK: '1',
+    PROPERTY_IMAGE_GOOGLE_MAPILLARY_FALLBACK: '1',
   };
   for (const [key, value] of Object.entries(defaults)) {
     if (!env[key]) env[key] = value;

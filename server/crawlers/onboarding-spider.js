@@ -3,6 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { ScraperCircuitBreaker } = require('../scrapers/circuit-breaker');
+const { extractEmbeddedState, normalizePostalAddress } = require('../scrapers/embedded-extractor');
 const { crawlJitter } = require('../scrapers/http');
 const scrapling = require('../scrapers/scrapling-bridge');
 const {
@@ -11,6 +12,7 @@ const {
   inspectCrawlUrl,
   scopeFor,
   isValidContentHash,
+  scoreFrontierLink,
   VERSION,
   USER_AGENT,
   DEFAULT_MAX_PAGES,
@@ -29,6 +31,72 @@ const {
   loadRobots,
   candidateFromLink
 } = require('./onboarding-spider-http');
+
+/**
+ * Adds a validated candidate to state while enforcing deduplication and MAX_CANDIDATES.
+ */
+function addCandidate(state, candidateKeys, candidate) {
+  if (!candidate) return;
+  const key = `${candidate.type}:${candidate.url}`;
+  if (candidateKeys.has(key)) return;
+  if (state.candidates.length >= MAX_CANDIDATES) {
+    state.truncated = true;
+    return;
+  }
+  candidateKeys.add(key);
+  state.candidates.push(candidate);
+}
+
+/**
+ * Stably re-orders state.pending descending by frontier score while keeping { url, depth } items intact.
+ */
+function sortPendingFrontier(pending, linkScores) {
+  if (!Array.isArray(pending) || pending.length <= 1) return;
+  const ranked = pending.map((item, index) => ({
+    item,
+    index,
+    score: linkScores.get(item.url) ?? scoreFrontierLink({ url: item.url, depth: item.depth })
+  }));
+  ranked.sort((a, b) => (b.score - a.score) || (a.index - b.index));
+  for (let i = 0; i < ranked.length; i += 1) {
+    pending[i] = ranked[i].item;
+  }
+}
+
+function resolveEmbeddedCandidateText(item) {
+  if (typeof item.name === 'string' && item.name.trim()) return item.name;
+  if (typeof item.address === 'string' && item.address.trim()) return item.address;
+  return normalizePostalAddress(item.address || item.postalAddress) || 'Embedded Listing';
+}
+
+/**
+ * Extracts structured listing candidates from embedded JSON-LD or hydration scripts.
+ */
+function collectEmbeddedCandidates({ html, source, page, origin, extractEmbedded, candidateKeys, state }) {
+  if (typeof html !== 'string' || !/<script/i.test(html)) return;
+  try {
+    const embedded = extractEmbedded(html);
+    const items = [
+      ...(Array.isArray(embedded?.jsonLd) ? embedded.jsonLd : []),
+      ...(Array.isArray(embedded?.inlineProperties) ? embedded.inlineProperties : [])
+    ];
+    for (const item of items) {
+      if (!item || typeof item !== 'object') continue;
+      const rawUrl = item.url || item.sourceUrl || item.canonicalUrl;
+      if (!rawUrl) continue;
+      const checked = inspectCrawlUrl(source, rawUrl, { baseUrl: page.url, origin });
+      if (!checked.isValid) continue;
+      const candidate = candidateFromLink(source, page, {
+        href: checked.url,
+        text: resolveEmbeddedCandidateText(item),
+        document: false
+      });
+      addCandidate(state, candidateKeys, candidate);
+    }
+  } catch {
+    // Embedded state extraction is best-effort; page-links remains primary.
+  }
+}
 
 async function crawlOnboardingSource(input = {}, dependencies = {}) {
   const source = String(input.source || '').trim().toLowerCase();
@@ -75,6 +143,7 @@ async function crawlOnboardingSource(input = {}, dependencies = {}) {
   const visitedUrls = new Set(state.visited.map((entry) => entry.url));
   const pendingUrls = new Set(state.pending.map((entry) => entry.url));
   const candidateKeys = new Set(state.candidates.map((entry) => `${entry.type}:${entry.url}`));
+  const linkScores = new Map();
   let processed = 0;
   state.nextAction = null;
 
@@ -106,7 +175,9 @@ async function crawlOnboardingSource(input = {}, dependencies = {}) {
         circuitBreaker: breaker,
         timeoutMs,
         random: dependencies.random,
-        sleep: dependencies.sleep
+        sleep: dependencies.sleep,
+        autoThrottle: dependencies.autoThrottle,
+        minIntervalMs: dependencies.minIntervalMs
       });
       const parsed = await extract('page-links', { html, url: current.url, signal: dependencies.signal });
       const contentSha256 = isValidContentHash(parsed.contentSha256) ? parsed.contentSha256 : null;
@@ -122,31 +193,50 @@ async function crawlOnboardingSource(input = {}, dependencies = {}) {
       state.visited.push(page);
       visitedUrls.add(current.url);
       processed += 1;
+      const discoveredFrontier = [];
+      const discoveredFrontierMap = new Map();
       for (const rawLink of Array.isArray(parsed.links) ? parsed.links : []) {
         const checked = inspectCrawlUrl(source, rawLink?.href, { baseUrl: current.url, origin });
         if (!checked.isValid) continue;
         const candidate = candidateFromLink(source, page, { href: checked.url, text: rawLink.text, document: rawLink.document });
-        if (candidate) {
-          const key = `${candidate.type}:${candidate.url}`;
-          if (!candidateKeys.has(key)) {
-            if (state.candidates.length >= MAX_CANDIDATES) state.truncated = true;
-            else {
-              candidateKeys.add(key);
-              state.candidates.push(candidate);
-            }
-          }
-        }
+        addCandidate(state, candidateKeys, candidate);
         const pathname = new URL(checked.url).pathname;
         if (!candidate && current.depth < maxDepth && !DOCUMENT_PATH.test(pathname) && !BINARY_PATH.test(pathname) && !visitedUrls.has(checked.url) && !pendingUrls.has(checked.url)) {
-          if (state.pending.length >= MAX_FRONTIER) state.truncated = true;
-          else {
-            state.pending.push({ url: checked.url, depth: current.depth + 1 });
-            pendingUrls.add(checked.url);
+          const nextDepth = current.depth + 1;
+          const score = scoreFrontierLink({ url: checked.url, text: rawLink.text, depth: nextDepth });
+          const existing = discoveredFrontierMap.get(checked.url);
+          if (existing) {
+            if (score > existing.score) existing.score = score;
+          } else {
+            const entry = { url: checked.url, depth: nextDepth, score, index: discoveredFrontier.length };
+            discoveredFrontierMap.set(checked.url, entry);
+            discoveredFrontier.push(entry);
           }
         }
       }
+      discoveredFrontier.sort((a, b) => (b.score - a.score) || (a.index - b.index));
+      for (const entry of discoveredFrontier) {
+        if (state.pending.length >= MAX_FRONTIER) {
+          state.truncated = true;
+        } else {
+          linkScores.set(entry.url, entry.score);
+          state.pending.push({ url: entry.url, depth: entry.depth });
+          pendingUrls.add(entry.url);
+        }
+      }
+      collectEmbeddedCandidates({
+        html,
+        source,
+        page,
+        origin,
+        extractEmbedded: dependencies.extractEmbeddedState || extractEmbeddedState,
+        candidateKeys,
+        state
+      });
       state.pending.shift();
       pendingUrls.delete(current.url);
+      linkScores.delete(current.url);
+      sortPendingFrontier(state.pending, linkScores);
       state.halted = null;
       atomicWriteJson(statePath, state, fsImpl);
     } catch (error) {
@@ -176,6 +266,7 @@ module.exports = {
   inspectCrawlUrl,
   scopeFor,
   isValidContentHash,
+  scoreFrontierLink,
   resolveCrawlTimeoutMs,
   OnboardingSpiderError,
   VERSION,

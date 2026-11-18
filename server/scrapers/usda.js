@@ -210,6 +210,7 @@ class UsdaResalesScraper extends BaseScraper {
 
     const pageUrl = `${this.baseUrl}/resales/public/searchSFH`;
     const html = await this.fetchText(pageUrl, 30000, 'POST', body);
+    this._lastExtraction = null;
     if (this.useScrapling && typeof this.extract === 'function') {
       try {
         this._lastExtraction = await this.extract('usda-table', { html, url: pageUrl });
@@ -217,7 +218,30 @@ class UsdaResalesScraper extends BaseScraper {
         this._lastExtraction = { error: String(error?.message || error), code: error?.code || null };
       }
     }
-    return this.parseSummaryTable(html);
+    try {
+      return this.parseSummaryTable(html);
+    } catch (err) {
+      if (
+        err instanceof UsdaScrapeError
+        && err.code === 'USDA_RESULT_SCHEMA_UNRECOGNIZED'
+        && this.useScrapling
+        && this._lastExtraction
+        && Array.isArray(this._lastExtraction.rows)
+        && this._lastExtraction.rows.length > 0
+      ) {
+        const items = Array.isArray(this._lastExtraction.items) ? this._lastExtraction.items : [];
+        return this._lastExtraction.rows.map((row, idx) => {
+          const cells = Array.isArray(row) ? row.map((c) => String(c ?? '')) : [];
+          const item = items[idx];
+          if (cells.length >= 1 && !/href\s*=/i.test(cells[0]) && item && typeof item.detailUrl === 'string' && item.detailUrl) {
+            const safeHref = item.detailUrl.replace(/"/g, '&quot;');
+            cells[0] = `<a href="${safeHref}">${this.text(cells[0]) || 'detail'}</a>`;
+          }
+          return cells;
+        });
+      }
+      throw err;
+    }
   }
 
   parseSummaryTable(html) {

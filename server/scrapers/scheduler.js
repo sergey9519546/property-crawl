@@ -570,7 +570,7 @@ class IngestionScheduler {
               const checkpointPath = servicelink.explicitCheckpointPath(process.env.SERVICELINK_CHECKPOINT_PATH || defaultCheckpointPath);
               scraper.checkpointPath = checkpointPath;
               if (checkpointPath) {
-                const saved = (checkpointPath && servicelink.readCheckpointFile(checkpointPath)) || this.sourceCheckpoints.get(scraper.sourceKey);
+                const saved = this.sourceCheckpoints.get(scraper.sourceKey) || (checkpointPath && servicelink.readCheckpointFile(checkpointPath));
                 if (saved) scraper.setCheckpoint(saved);
               }
             }

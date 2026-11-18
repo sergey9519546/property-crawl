@@ -22,6 +22,35 @@ if (Array.isArray(SOURCE_CATALOG)) {
   }
 }
 const { interpretAssessorParcel } = require('../enrichment/assessor-reading');
+const { isCompatibleNjSitusAddress } = require('../enrichment/nj-cadastral');
+
+function isParcelSitusMismatched(listing, parcel) {
+  const listingAddr = String(listing?.address || '').trim();
+  const situsAddr = String(parcel?.situsAddress || '').trim();
+  if (!listingAddr || !situsAddr) return false;
+  return !isCompatibleNjSitusAddress(listingAddr, situsAddr);
+}
+
+function buildMismatchedAssessorResponse(listing, countyKey, endpoint) {
+  const mismatchReason = 'Parcel situs address does not corroborate listing street address.';
+  const interpreted = interpretAssessorParcel({
+    countyKey,
+    parcel: null,
+    openingBid: listing.openingBid,
+  });
+  return {
+    listingId: listing.id,
+    parcelKey: null,
+    lookedUpAt: new Date().toISOString(),
+    ...interpreted,
+    enrolled: Boolean(interpreted.enrolled || endpoint),
+    found: false,
+    countyName: interpreted.countyName || endpoint?.name || null,
+    endpoint: interpreted.endpoint || endpoint?.endpoint || null,
+    withheldReason: mismatchReason,
+    reason: mismatchReason,
+  };
+}
 const { isWorkspaceAuthorized } = require('../security/workspace-identity');
 const { getHudSafmrBenchmark } = require('../enrichment/hud-safmr');
 
@@ -298,7 +327,7 @@ function publishedApn(listing) {
   return extractRawApn(listing) || null;
 }
 
-async function handleAssessorLookup(encodedId, req, res, db = defaultDb) {
+async function handleAssessorLookup(encodedId, req, res, db = defaultDb, options = {}) {
   let id;
   try { id = decodeURIComponent(encodedId); }
   catch (_) { return res.status(400).json({ error: 'Invalid listing identifier encoding' }); }
@@ -323,6 +352,9 @@ async function handleAssessorLookup(encodedId, req, res, db = defaultDb) {
 
   const cachedParcel = listing.assessorParcel || listing.provenance?.derivedFields?.assessorRoll?.parcel;
   if (cachedParcel) {
+    if (isParcelSitusMismatched(listing, cachedParcel)) {
+      return res.json(buildMismatchedAssessorResponse(listing, countyKey, endpoint));
+    }
     const resolvedParcelKey = listing.parcelKey || (cachedParcel?.canonicalApn ? buildParcelKey({ apn: cachedParcel.canonicalApn, countyFips: cachedParcel.countyFips }) : null);
     return res.json({
       listingId: listing.id,
@@ -337,16 +369,21 @@ async function handleAssessorLookup(encodedId, req, res, db = defaultDb) {
   const lng = Number(listing.lng);
   let parcel = null;
   try {
-    parcel = await queryArcgisParcel({
+    const queryParcelFn = typeof options?.queryArcgisParcel === 'function' ? options.queryArcgisParcel : queryArcgisParcel;
+    parcel = await queryParcelFn({
       lat: Number.isFinite(lat) ? lat : undefined,
       lng: Number.isFinite(lng) ? lng : undefined,
       apn: publishedApn(listing) || undefined,
       state: listing.state,
       county: listing.county,
-      fetchFn: (url, init = {}) => fetch(url, { ...init, signal: AbortSignal.timeout(8000) }),
+      fetchFn: typeof options?.fetchFn === 'function' ? options.fetchFn : (url, init = {}) => fetch(url, { ...init, signal: AbortSignal.timeout(8000) }),
     });
   } catch (_) {
     parcel = null;
+  }
+
+  if (parcel && isParcelSitusMismatched(listing, parcel)) {
+    return res.json(buildMismatchedAssessorResponse(listing, countyKey, endpoint));
   }
 
   const authorizedToPersist = isWorkspaceAuthorized(req);
@@ -394,7 +431,7 @@ async function handleListings(req, res, dbOverride = null, options = {}) {
 
   if (method === 'GET') {
     const assessorMatch = url.pathname.match(/^\/api\/listings\/([^/]+)\/assessor$/);
-    if (assessorMatch) return handleAssessorLookup(assessorMatch[1], req, res, db);
+    if (assessorMatch) return handleAssessorLookup(assessorMatch[1], req, res, db, options);
     if (url.pathname === '/api/listings/map') {
       try {
         // The map view is fed by the same filter state as the grid, so it can

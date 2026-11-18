@@ -106,7 +106,11 @@ function computeDomStructureHash(html) {
  */
 function isFieldPresent(listing, field) {
   if (!listing || typeof listing !== 'object') return false;
-  const val = listing[field];
+  const val = field === 'latitude'
+    ? (listing.latitude ?? listing.lat)
+    : field === 'longitude'
+      ? (listing.longitude ?? listing.lng)
+      : listing[field];
   if (val === null || val === undefined) return false;
 
   if (field === 'openingBid') {

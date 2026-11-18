@@ -201,6 +201,27 @@ test('Field Yield Calculation: calculateFieldYield', async (t) => {
     assert.equal(nullResult.totalCount, 0);
     assert.equal(nullResult.openingBid, 0);
   });
+
+  await t.test('recognizes canonical lat/lng coordinate properties as latitude/longitude yield 1.0', () => {
+    const canonicalListings = [
+      {
+        openingBid: 95000,
+        saleDate: '2026-12-10',
+        apn: 'APN-2001',
+        address: '500 Broadway',
+        city: 'New York',
+        state: 'NY',
+        zip: '10012',
+        lat: 40.7,
+        lng: -74.0
+      }
+    ];
+    const result = calculateFieldYield(canonicalListings);
+    assert.equal(result.latitude, 1.0);
+    assert.equal(result.longitude, 1.0);
+    assert.equal(result.fieldYield.latitude, 1.0);
+    assert.equal(result.fieldYield.longitude, 1.0);
+  });
 });
 
 test('Drift Alarm Evaluation: evaluateDrift', async (t) => {
@@ -389,4 +410,37 @@ test('ScraperTelemetry ignores sparse (<25%) fields in auto-captured baselines w
   telemetry.recordRun('CivilViewSparse', run3, 100, null, { scopeKey: 'civilview:counties:NJ:Bergen' });
   assert.equal(telemetry.getHealthReport().details.CivilViewSparse.driftDetected, true);
   assert.equal(telemetry.history.CivilViewSparse.driftReport.yieldCollapse, true);
+});
+
+test('Integration: BaseScraper.requestText records _driftSamples on HTML fetch without crashing on invalid URL', async () => {
+  const html = '<html><body><table><tr><td>123 Main St</td></tr></table></body></html>';
+  const scraper = new BaseScraper({
+    sourceKey: 'test_req_drift',
+    name: 'Test Req Drift',
+    fetchImpl: async () => ({
+      status: 200,
+      headers: new Headers({ 'content-type': 'text/html' }),
+      text: async () => html
+    })
+  });
+
+  await scraper.requestText('https://example.gov/auctions/page1?q=1', { autoThrottle: false });
+  assert.equal(scraper._driftSamples.size, 1);
+  assert.equal(
+    scraper._driftSamples.get('https://example.gov/auctions/page1'),
+    scraper.computeDomStructureHash(html)
+  );
+
+  // Non-HTML payload must not overwrite or pollute _driftSamples
+  const jsonScraper = new BaseScraper({
+    sourceKey: 'test_req_json',
+    name: 'Test Req Json',
+    fetchImpl: async () => ({
+      status: 200,
+      headers: new Headers({ 'content-type': 'application/json' }),
+      text: async () => '{"items":[]}'
+    })
+  });
+  await jsonScraper.requestText('https://example.gov/api/list', { autoThrottle: false });
+  assert.equal(jsonScraper._driftSamples.size, 0);
 });

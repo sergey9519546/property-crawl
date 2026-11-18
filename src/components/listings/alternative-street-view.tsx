@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from 'react';
-import { ExternalLink, RotateCcw } from 'lucide-react';
+import { ExternalLink, Map as MapIcon, RotateCcw } from 'lucide-react';
 import {
   fetchAlternativeStreetView,
   type AlternativeCandidate,
@@ -17,7 +17,7 @@ type State =
   | { status: 'unavailable'; reason: string }
   | { status: 'available'; data: AlternativeImageryPayload; selectedProvider: 'panoramax' | 'mapillary' };
 
-export function AlternativeStreetView({ listingId, address }: { listingId: string; address: string }) {
+export function AlternativeStreetView({ listingId, address, onSelectMap }: { listingId: string; address: string; onSelectMap?: () => void }) {
   const nonce = useNonce();
   const { locale, messages, format } = useLocale();
   const t = messages.mediaUi;
@@ -111,13 +111,24 @@ export function AlternativeStreetView({ listingId, address }: { listingId: strin
                 : t.noEligibleAlternative}
           </p>
           {state.status === 'unavailable' ? (
-            <button
-              type="button"
-              onClick={() => setAttempt((value) => value + 1)}
-              className="mt-3 inline-flex min-h-9 items-center gap-2 rounded-control border border-line-strong bg-card px-3 py-1.5 text-xs font-semibold text-ink-2 transition-colors hover:bg-paper hover:text-ink"
-            >
-              <RotateCcw size={14} />{t.retryOtherImagery}
-            </button>
+            <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+              <button
+                type="button"
+                onClick={() => setAttempt((value) => value + 1)}
+                className="inline-flex min-h-9 items-center gap-2 rounded-control border border-line-strong bg-card px-3 py-1.5 text-xs font-semibold text-ink-2 transition-colors hover:bg-paper hover:text-ink"
+              >
+                <RotateCcw size={14} />{t.retryOtherImagery}
+              </button>
+              {onSelectMap ? (
+                <button
+                  type="button"
+                  onClick={onSelectMap}
+                  className="inline-flex min-h-9 items-center gap-2 rounded-control border border-line-strong bg-card px-3 py-1.5 text-xs font-semibold text-ink transition-colors hover:bg-paper"
+                >
+                  <MapIcon size={14} aria-hidden />Interactive Aerial &amp; Parcel Map
+                </button>
+              ) : null}
+            </div>
           ) : null}
         </div>
       </div>

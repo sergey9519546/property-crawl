@@ -11,7 +11,7 @@ import { StatutoryDeadlinesTimeline } from "@/components/terminal/statutory-dead
 import { TitleRiskForensics } from "@/components/terminal/title-risk-forensics";
 import { useLocale } from "@/components/i18n/locale-provider";
 
-interface BiddingSimulatorProps { listing: Listing; }
+interface BiddingSimulatorProps { listing: Listing; publishedUpsetEstimate?: number | null; }
 
 type ScenarioField = "registrationFunds" | "creditedDeposit" | "buyersPremium" | "sheriffPoundage" | "transferTax" | "delinquentTaxes" | "settlementCosts";
 
@@ -41,7 +41,7 @@ function enteredAmount(value: string): number | null {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
-export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
+export function BiddingSimulator({ listing, publishedUpsetEstimate }: BiddingSimulatorProps) {
   const { messages: m } = useLocale();
   const [rehabBudget, setRehabBudget] = useState(25_000);
   const [targetMargin, setTargetMargin] = useState(30);
@@ -123,6 +123,10 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
   }, [listing.id, publishedRedemption]);
 
   const publishedOpeningBid = positiveNumber(listing.openingBid);
+  const provenance = listing.provenance && typeof listing.provenance === "object" ? listing.provenance : {};
+  const publishedUpset = positiveNumber(publishedUpsetEstimate ?? (provenance.approximateUpsetPrice as { amount?: unknown } | null | undefined)?.amount);
+  // publishedUpsetEstimate is supplied by the detail SSR page to keep the grid payload stripped.
+  const publishedJudgment = positiveNumber(listing.judgment);
   const customOpeningBidNum = (() => { const val = enteredAmount(customOpeningBid); return val !== null && val > 0 ? val : null; })();
   const openingBid = publishedOpeningBid ?? customOpeningBidNum;
   const isCustomOpeningBid = publishedOpeningBid === null && customOpeningBidNum !== null;
@@ -472,6 +476,28 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
                     />
                   </div>
                 </div>
+                {publishedOpeningBid === null && (publishedUpset !== null || publishedJudgment !== null) && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    {publishedUpset !== null && (
+                      <button
+                        type="button"
+                        onClick={() => updateCustomOpeningBid(String(Math.round(publishedUpset)))}
+                        className="rounded-lg border border-line-strong bg-card px-3 py-1.5 text-xs font-semibold text-ink-2 shadow-sm transition hover:bg-paper"
+                      >
+                        Use published upset ({displayMoney(publishedUpset)})
+                      </button>
+                    )}
+                    {publishedJudgment !== null && (
+                      <button
+                        type="button"
+                        onClick={() => updateCustomOpeningBid(String(Math.round(publishedJudgment)))}
+                        className="rounded-lg border border-line-strong bg-card px-3 py-1.5 text-xs font-semibold text-ink-2 shadow-sm transition hover:bg-paper"
+                      >
+                        Use execution judgment ({displayMoney(publishedJudgment)})
+                      </button>
+                    )}
+                  </div>
+                )}
                 <p className="mt-1.5 text-xs text-ink-3">
                   Entering an assumed opening bid enables cash-to-close and statutory fee modeling for this session as an investor assumption.
                 </p>

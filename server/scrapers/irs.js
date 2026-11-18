@@ -79,10 +79,15 @@ class IrsSeizedScraper extends BaseScraper {
     this.lastRunReport = null;
     this.useScrapling = options.useScrapling ?? isScraplingEnabled('irs');
     this.extract = options.extractImpl || extractWithScrapling;
+    this.useSpiderBatch = typeof options.useSpiderBatch === 'boolean'
+      ? options.useSpiderBatch
+      : Boolean(options.useSpiderBatch || String(process.env.SCRAPLING_SPIDER_SOURCES || '').toLowerCase().split(',').map((s) => s.trim()).includes('irs'));
+    this._spiderDetailCache = new Map();
   }
 
   async scrapeFeed() {
     return this.executeWithRetry(async () => {
+      if (this._spiderDetailCache) this._spiderDetailCache.clear();
 
       const listHtml = await this.fetchText(`${this.baseUrl}/auction/items`);
 
@@ -128,6 +133,27 @@ class IrsSeizedScraper extends BaseScraper {
         cards.push({ slug, title });
       }
       console.log(`[${this.name}] Found ${cards.length} in-scope real-estate auction cards on list page (${excluded.length} excluded, ${scopeUnverified.length} asset-class unverified)`);
+
+      if (this.useSpiderBatch && cards.length > 0 && typeof this.runSpiderBatch === 'function') {
+        try {
+          const urls = cards.map((c) => `${this.baseUrl}/ad/${c.slug}`);
+          const batchResult = await this.runSpiderBatch({
+            urls,
+            profile: 'irs-detail',
+            scope: 'federal',
+          });
+          if (batchResult && Array.isArray(batchResult.items)) {
+            for (const item of batchResult.items) {
+              const itemUrl = item?.url || item?.data?.url;
+              if (item && itemUrl && item.data && item.data.property) {
+                this._spiderDetailCache.set(itemUrl, item.data.property);
+              }
+            }
+          }
+        } catch (err) {
+          console.warn(`[${this.name}] Spider batch prefetch fallback: ${err.message}`);
+        }
+      }
 
       const detailResults = await mapWithConcurrency(
         cards,
@@ -201,8 +227,11 @@ class IrsSeizedScraper extends BaseScraper {
     // record before the regex scan runs. We still run the regex scan below
     // so the per-field fallback path is unchanged when Scrapling returns
     // null for a given field (a partial extract is OK).
-    let scraplingRecord = null;
-    if (this.useScrapling) {
+    let scraplingRecord = (this._spiderDetailCache && this._spiderDetailCache.get(detailUrl)) || null;
+    if (scraplingRecord && !(scraplingRecord.address || scraplingRecord.state || scraplingRecord.minimumBid != null || scraplingRecord.saleDate || scraplingRecord.beds != null || scraplingRecord.baths != null)) {
+      scraplingRecord = null;
+    }
+    if (!scraplingRecord && this.useScrapling) {
       try {
         const evidence = await this.extract('irs-detail', { html, url: detailUrl });
         const p = evidence && evidence.property ? evidence.property : null;

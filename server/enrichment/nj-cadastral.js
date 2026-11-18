@@ -60,6 +60,36 @@ const TOKEN_ABBREV = Object.freeze({
 
 const MUNICIPAL_SUFFIX_RE = /\b(BORO|BOROUGH|TWP|TOWNSHIP|TOWN|CITY|VILLAGE|VLG)\b/g;
 
+const STREET_SUFFIX_TOKENS = new Set([
+  'STREET', 'ST', 'STR',
+  'AVENUE', 'AVE', 'AV',
+  'ROAD', 'RD',
+  'DRIVE', 'DR',
+  'BOULEVARD', 'BLVD',
+  'LANE', 'LN',
+  'COURT', 'CT',
+  'PLACE', 'PL',
+  'TERRACE', 'TER', 'TERR',
+  'PARKWAY', 'PKWY', 'PKY',
+  'HIGHWAY', 'HWY',
+  'WAY',
+  'CIRCLE', 'CIR',
+  'TRAIL', 'TRL',
+  'PLAZA', 'PLZ',
+  'SQUARE', 'SQ',
+  'ALLEY', 'ALY',
+  'WALK', 'WLK',
+  'CROSSING', 'XING',
+  'TURNPIKE', 'TPKE', 'TPK',
+  'EXPRESSWAY', 'EXPY',
+  'ROUTE', 'RT', 'RTE',
+]);
+
+const DIRECTIONAL_TOKENS = new Set([
+  'NORTH', 'SOUTH', 'EAST', 'WEST',
+  'NORTHEAST', 'NORTHWEST', 'SOUTHEAST', 'SOUTHWEST',
+]);
+
 function normalizeCountyFipsNj(countyName, listingCountyFips) {
   if (listingCountyFips && /^34\d{3}$/.test(String(listingCountyFips).trim())) {
     return String(listingCountyFips).trim();
@@ -159,8 +189,98 @@ function stripCityStateZipTail(queryAddress, city, zip) {
   if (city) {
     const escapedCity = String(city).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     head = head.replace(new RegExp(`(?:,\\s*|\\s+)${escapedCity}\\s*$`, 'i'), '').trim();
+  } else if (head.includes(',')) {
+    const parts = head.split(',');
+    const last = parts[parts.length - 1].trim();
+    if (last && !/^(?:APT|APARTMENT|UNIT|STE|SUITE|FL|FLOOR|BLDG|BUILDING|RM|ROOM|#)\b/i.test(last)) {
+      head = parts.slice(0, -1).join(',').trim();
+    }
   }
   return head.replace(/,+$/, '').trim();
+}
+
+function cleanStreetLineForComparison(rawAddress) {
+  let raw = String(rawAddress || '').replace(/\s*,+\s*,+/g, ', ').replace(/\s+/g, ' ').trim();
+  if (!raw) return '';
+
+  const nkaMatch = raw.match(/\b(?:N\/?K\/?A|NOW\s+KNOWN\s+AS)\s*[:\-]?\s*(.+)$/i);
+  if (nkaMatch && nkaMatch[1]) {
+    raw = nkaMatch[1].trim();
+  } else {
+    raw = raw
+      .replace(/\s*\([^)]*(?:F\/?K\/?A|FORMERLY\s+KNOWN\s+AS|A\/?K\/?A)[^)]*\)/gi, '')
+      .replace(/\s*\b(?:F\/?K\/?A|FORMERLY\s+KNOWN\s+AS|A\/?K\/?A)\b[^,]*/gi, '')
+      .trim();
+  }
+
+  raw = raw
+    .replace(/\s*\([^)]*(?:BLOCK|BLK|LOT)[^)]*\)/gi, '')
+    .replace(/\s*,+\s*,+/g, ', ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  raw = raw.replace(/,?\s*\b(?:NJ|NEW\s+JERSEY)\b(?:\s+\d{5}(?:-\d{4})?)?\s*$/i, '').trim();
+  raw = raw.replace(/,?\s*\b[A-Z]{2}\s+\d{5}(?:-\d{4})?\s*$/i, '').trim();
+
+  if (raw.includes(',')) {
+    const segments = raw
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => s && !/^(?:BLOCK|BLK|LOT|UNIT|APT|APARTMENT)\b/i.test(s));
+    raw = segments[0] || '';
+  }
+
+  raw = raw
+    .replace(/\s+(?:APT|APARTMENT|UNIT|STE|SUITE|FL|FLOOR|BLDG|BUILDING|RM|ROOM)\b.*$/i, '')
+    .replace(/\s+#\s*[A-Z0-9-]+\s*$/i, '')
+    .replace(/,+$/, '')
+    .trim();
+  return raw;
+}
+
+function extractLeadingHouseNumber(rawAddress) {
+  const cleaned = cleanStreetLineForComparison(rawAddress);
+  if (!cleaned) return '';
+  const tokens = normalizeTokens(cleaned);
+  if (!tokens.length) return '';
+  const match = tokens[0].match(/^\d+[A-Z]?$/);
+  return match ? match[0] : '';
+}
+
+function extractCoreStreetTokens(tokens, { stripLeadingHouse = true } = {}) {
+  if (!Array.isArray(tokens) || tokens.length === 0) return [];
+  const startIndex = stripLeadingHouse && /^\d+[A-Z]?$/.test(tokens[0]) ? 1 : 0;
+  const nonSuffix = tokens
+    .slice(startIndex)
+    .filter((token) => !STREET_SUFFIX_TOKENS.has(token));
+  if (nonSuffix.length > 1) {
+    const withoutDirectionals = nonSuffix.filter((token) => !DIRECTIONAL_TOKENS.has(token));
+    if (withoutDirectionals.length > 0) return withoutDirectionals;
+  }
+  return nonSuffix;
+}
+
+function isCompatibleNjSitusAddress(listingAddress, situsAddress) {
+  const cleanedSitus = cleanStreetLineForComparison(situsAddress);
+  if (!cleanedSitus) return true;
+  const situsTokens = normalizeTokens(cleanedSitus);
+  if (!situsTokens.length || !/^\d+[A-Z]?$/.test(situsTokens[0])) return true;
+
+  const cleanedListing = cleanStreetLineForComparison(listingAddress);
+  if (!cleanedListing) return true;
+  const listingTokens = normalizeTokens(cleanedListing);
+  if (!listingTokens.length || !/^\d+[A-Z]?$/.test(listingTokens[0])) return true;
+
+  if (listingTokens[0] !== situsTokens[0]) return false;
+
+  const listingCore = extractCoreStreetTokens(listingTokens);
+  const situsCore = extractCoreStreetTokens(situsTokens);
+  if (listingCore.length > 0 && situsCore.length > 0) {
+    const situsSet = new Set(situsCore);
+    if (!listingCore.some((token) => situsSet.has(token))) return false;
+  }
+
+  return true;
 }
 
 function isExactNjGeocodeMatch(listing = {}, candidate = {}) {
@@ -197,12 +317,23 @@ function isExactNjGeocodeMatch(listing = {}, candidate = {}) {
     : '';
   const listingHouseMatch = streetTokens[0].match(/^\d+[A-Z]?$/);
   const listingHouse = listingHouseMatch ? listingHouseMatch[0] : '';
+  const candHouseMatch = candStreetTokens[0].match(/^\d+[A-Z]?$/);
+  const candHouse = candHouseMatch ? candHouseMatch[0] : '';
   if (noticeHouse && listingHouse && noticeHouse !== listingHouse) return false;
+  if (listingHouse && (noticeHouse || candHouse) !== listingHouse) return false;
 
-  const candSet = new Set(candStreetTokens);
+  const streetCore = extractCoreStreetTokens(streetTokens);
+  const candCore = extractCoreStreetTokens(candStreetTokens);
+  if (streetCore.length > 0 && candCore.length > 0) {
+    const candCoreSet = new Set(candCore);
+    if (!streetCore.some((token) => candCoreSet.has(token))) return false;
+  } else if (streetCore.length > 0 || candCore.length > 0) {
+    return false;
+  }
+
   const overlap = candStreetTokens.filter((token) => streetTokens.includes(token)).length;
   const required = Math.max(2, Math.ceil(candStreetTokens.length * 0.8));
-  if (overlap < required && !candSet.has(streetTokens[0])) return false;
+  if (overlap < required) return false;
 
   return true;
 }
@@ -210,9 +341,20 @@ function isExactNjGeocodeMatch(listing = {}, candidate = {}) {
 function selectBestNjCadastralFeature(features, listing = {}, geocodeAttrs = {}) {
   if (!Array.isArray(features) || features.length === 0) return null;
 
+  const listingAddress = listing?.address || listing?.street || '';
+  const listingHouse = extractLeadingHouseNumber(listingAddress);
+  const compatibleFeatures = listingHouse
+    ? features.filter((f) => isCompatibleNjSitusAddress(
+      listingAddress,
+      f?.attributes?.ST_ADDRESS || f?.attributes?.PROP_LOC || '',
+    ))
+    : features;
+
+  if (compatibleFeatures.length === 0) return null;
+
   const noticeLotBlock = parseNjNoticeLotBlock(listing);
   if (noticeLotBlock) {
-    const exactNotice = features.find((f) => {
+    const exactNotice = compatibleFeatures.find((f) => {
       const attrs = f?.attributes || {};
       return normalizeLotOrBlockValue(attrs.PCLBLOCK) === noticeLotBlock.block
         && normalizeLotOrBlockValue(attrs.PCLLOT) === noticeLotBlock.lot;
@@ -223,7 +365,7 @@ function selectBestNjCadastralFeature(features, listing = {}, geocodeAttrs = {})
   const geoBlock = normalizeLotOrBlockValue(geocodeAttrs?.Addr_Block);
   const geoLot = normalizeLotOrBlockValue(geocodeAttrs?.Addr_Lot);
   if (geoBlock && geoLot) {
-    const exactGeo = features.find((f) => {
+    const exactGeo = compatibleFeatures.find((f) => {
       const attrs = f?.attributes || {};
       return normalizeLotOrBlockValue(attrs.PCLBLOCK) === geoBlock
         && normalizeLotOrBlockValue(attrs.PCLLOT) === geoLot;
@@ -231,17 +373,16 @@ function selectBestNjCadastralFeature(features, listing = {}, geocodeAttrs = {})
     if (exactGeo) return exactGeo;
   }
 
-  const listingHouse = (String(listing.address || '').trim().match(/^(\d+[A-Za-z]?)\b/) || [])[1]?.toUpperCase() || '';
   if (listingHouse) {
-    const addressMatched = features.filter((f) => {
+    const addressMatched = compatibleFeatures.filter((f) => {
       const situs = String(f?.attributes?.ST_ADDRESS || f?.attributes?.PROP_LOC || '').trim();
-      const candHouse = (situs.match(/^(\d+[A-Za-z]?)\b/) || [])[1]?.toUpperCase() || '';
+      const candHouse = extractLeadingHouseNumber(situs);
       return candHouse && candHouse === listingHouse;
     });
     if (addressMatched.length === 1) return addressMatched[0];
   }
 
-  if (features.length === 1) return features[0];
+  if (compatibleFeatures.length === 1) return compatibleFeatures[0];
   return null;
 }
 
@@ -293,7 +434,116 @@ async function queryNjCadastralAtPoint(lat, lng, { fetchFn = globalThis.fetch } 
   return Array.isArray(payload?.features) ? payload.features : [];
 }
 
-function applyNjCadastralData(listing, { candidate = null, feature = null, observedAt }) {
+function computeRingCentroid(ring) {
+  if (!Array.isArray(ring) || ring.length === 0) return null;
+  const pts = ring
+    .map((pt) => (Array.isArray(pt) && pt.length >= 2 ? [Number(pt[0]), Number(pt[1])] : null))
+    .filter((pt) => pt && Number.isFinite(pt[0]) && Number.isFinite(pt[1]) && Math.abs(pt[1]) <= 90 && Math.abs(pt[0]) <= 180);
+  if (pts.length === 0) return null;
+
+  let area2 = 0;
+  let cx = 0;
+  let cy = 0;
+  for (let i = 0; i < pts.length; i += 1) {
+    const [x0, y0] = pts[i];
+    const [x1, y1] = pts[(i + 1) % pts.length];
+    const cross = x0 * y1 - x1 * y0;
+    area2 += cross;
+    cx += (x0 + x1) * cross;
+    cy += (y0 + y1) * cross;
+  }
+
+  let lat;
+  let lng;
+  if (Math.abs(area2) > 1e-12) {
+    lng = cx / (3 * area2);
+    lat = cy / (3 * area2);
+  } else {
+    const unique = pts.length > 1 && pts[0][0] === pts[pts.length - 1][0] && pts[0][1] === pts[pts.length - 1][1]
+      ? pts.slice(0, -1)
+      : pts;
+    const sum = unique.reduce((acc, [x, y]) => [acc[0] + x, acc[1] + y], [0, 0]);
+    lng = sum[0] / unique.length;
+    lat = sum[1] / unique.length;
+  }
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || (lat === 0 && lng === 0)) return null;
+  return {
+    lat: Number(lat.toFixed(6)),
+    lng: Number(lng.toFixed(6)),
+  };
+}
+
+async function queryNjCadastralByAddress(listing = {}, { fetchFn = globalThis.fetch } = {}) {
+  if (!listing || typeof listing !== 'object' || typeof fetchFn !== 'function') return null;
+  const queryLine = extractNjGeocodeQuery(listing);
+  if (!queryLine) return null;
+
+  const listingZip = String(listing.zip || '').trim().slice(0, 5);
+  const streetOnly = cleanStreetLineForComparison(stripCityStateZipTail(queryLine, listing.city, listingZip));
+  const streetTokens = normalizeTokens(streetOnly);
+  if (!streetTokens.length) return null;
+
+  const houseMatch = streetTokens[0].match(/^\d+[A-Z]?$/);
+  const houseNum = houseMatch ? houseMatch[0] : '';
+  if (!houseNum) return null;
+
+  const coreTokens = extractCoreStreetTokens(streetTokens);
+  const coreStreet = coreTokens.find((token) => /^[A-Z0-9]+$/.test(token)) || '';
+  if (!coreStreet) return null;
+
+  const cleanCounty = String(listing.county || '')
+    .toUpperCase()
+    .replace(/\bCOUNTY\b/g, '')
+    .replace(/[^A-Z\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const cleanCity = normalizeMunicipality(listing.city);
+  if (!cleanCounty && !cleanCity) return null;
+
+  const where = cleanCounty
+    ? `UPPER(COUNTY) = '${cleanCounty}' AND UPPER(ST_ADDRESS) LIKE '${houseNum}%${coreStreet}%'`
+    : `UPPER(MUN_NAME) LIKE '${cleanCity}%' AND UPPER(ST_ADDRESS) LIKE '${houseNum}%${coreStreet}%'`;
+
+  const params = new URLSearchParams({
+    f: 'json',
+    where,
+    outFields: '*',
+    returnGeometry: 'true',
+    outSR: '4326',
+  });
+  const url = `${NJ_CADASTRAL_URL}?${params.toString()}`;
+  const response = await fetchFn(url, { signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined });
+  if (!response?.ok) return null;
+  const payload = await response.json();
+  const features = Array.isArray(payload?.features) ? payload.features : [];
+  if (!features.length) return null;
+
+  const listingAddress = listing.address || queryLine;
+  const compatible = features.filter((f) => {
+    const attrs = f?.attributes || {};
+    const situs = attrs.ST_ADDRESS || attrs.PROP_LOC || '';
+    if (!isCompatibleNjSitusAddress(listingAddress, situs)) return false;
+    if (cleanCity && attrs.MUN_NAME) {
+      const candMun = normalizeMunicipality(attrs.MUN_NAME);
+      if (candMun && candMun !== cleanCity) return false;
+    }
+    return true;
+  });
+  if (!compatible.length) return null;
+
+  const feature = selectBestNjCadastralFeature(compatible, listing);
+  if (!feature) return null;
+
+  const centroid = computeRingCentroid(feature?.geometry?.rings?.[0]);
+  return {
+    feature,
+    lat: centroid ? centroid.lat : null,
+    lng: centroid ? centroid.lng : null,
+  };
+}
+
+function applyNjCadastralData(listing, { candidate = null, feature = null, observedAt, provider = null, matchedAddress = null }) {
   listing.provenance = listing.provenance || {};
   listing.provenance.derivedFields = listing.provenance.derivedFields || {};
 
@@ -304,7 +554,7 @@ function applyNjCadastralData(listing, { candidate = null, feature = null, obser
     listing.lng = lng;
     listing.provenance.coordinates = {
       origin: 'geocoder',
-      provider: 'NJGIN NJ_Geocode Composite Locator',
+      provider: provider || candidate.provider || 'NJGIN NJ_Geocode Composite Locator',
       verification: 'exact_address_match',
       precision: 'parcel',
       sourceRecordUrl: listing.sourceUrl,
@@ -314,7 +564,7 @@ function applyNjCadastralData(listing, { candidate = null, feature = null, obser
       geocodeScore: Number(candidate.score ?? candidate.attributes?.Score ?? 0),
       addrType: String(candidate.attributes?.Addr_type || 'PointAddress'),
       geocodedLabel: candidate.address || null,
-      matchedAddress: {
+      matchedAddress: matchedAddress || candidate.matchedAddress || {
         address: listing.address || '',
         city: listing.city || '',
         state: listing.state || 'NJ',
@@ -392,6 +642,7 @@ async function enrichNjListing(listing, options = {}) {
   }
 
   let candidate = null;
+  let geocodeErrored = false;
   let lat = Number(listing.lat);
   let lng = Number(listing.lng);
   const hasCoords = listing.lat !== null && listing.lat !== undefined && listing.lng !== null && listing.lng !== undefined
@@ -401,23 +652,77 @@ async function enrichNjListing(listing, options = {}) {
     try {
       candidate = await queryNjGeocode(listing, { fetchFn });
     } catch {
-      return { found: false, reason: 'geocode_error' };
+      geocodeErrored = true;
+      candidate = null;
     }
-    if (!candidate) return { found: false, reason: 'geocode_miss' };
-    lat = Number(Number(candidate.location.y).toFixed(6));
-    lng = Number(Number(candidate.location.x).toFixed(6));
+    if (candidate) {
+      lat = Number(Number(candidate.location.y).toFixed(6));
+      lng = Number(Number(candidate.location.x).toFixed(6));
+    }
   }
 
   let feature = null;
-  try {
-    const features = await queryNjCadastralAtPoint(lat, lng, { fetchFn });
-    feature = selectBestNjCadastralFeature(features, listing, candidate?.attributes || {});
-  } catch {
-    feature = null;
+  let pointFeatures = [];
+  if (hasCoords || candidate) {
+    try {
+      pointFeatures = await queryNjCadastralAtPoint(lat, lng, { fetchFn });
+      feature = selectBestNjCadastralFeature(pointFeatures, listing, candidate?.attributes || {});
+    } catch {
+      pointFeatures = [];
+      feature = null;
+    }
   }
 
-  applyNjCadastralData(listing, { candidate, feature, observedAt });
-  const coordsAttached = Boolean(candidate && listing.lat !== null && listing.lng !== null);
+  let candidateProvider = null;
+  let candidateMatchedAddress = null;
+  if (!feature) {
+    let byAddress = null;
+    try {
+      byAddress = await queryNjCadastralByAddress(listing, { fetchFn });
+    } catch {
+      byAddress = null;
+    }
+    if (byAddress?.feature) {
+      feature = byAddress.feature;
+      if (!hasCoords) {
+        if (Number.isFinite(byAddress.lat) && Number.isFinite(byAddress.lng)) {
+          candidate = {
+            location: { x: byAddress.lng, y: byAddress.lat },
+            score: 100,
+            address: feature.attributes?.ST_ADDRESS || feature.attributes?.PROP_LOC || '',
+            attributes: { Addr_type: 'ParcelCentroid', Score: 100 },
+          };
+          candidateProvider = 'NJGIN Cadastral Parcel Centroid';
+          candidateMatchedAddress = {
+            address: listing.address || '',
+            city: listing.city || '',
+            state: listing.state || 'NJ',
+            zip: listing.zip || '',
+          };
+        } else if (pointFeatures.length > 0) {
+          candidate = null;
+        }
+      }
+    } else if (!hasCoords && pointFeatures.length > 0) {
+      candidate = null;
+    }
+  }
+
+  if (!feature && !candidate) {
+    return {
+      found: false,
+      reason: geocodeErrored ? 'geocode_error' : (pointFeatures.length > 0 ? 'cadastral_mismatch' : 'geocode_miss'),
+    };
+  }
+
+  applyNjCadastralData(listing, {
+    candidate,
+    feature,
+    observedAt,
+    provider: candidateProvider,
+    matchedAddress: candidateMatchedAddress,
+  });
+  const coordsAttached = Boolean(candidate && listing.lat !== null && listing.lat !== undefined && listing.lng !== null && listing.lng !== undefined);
   return {
     found: Boolean(feature || coordsAttached),
     geocoded: coordsAttached,
@@ -431,11 +736,13 @@ module.exports = {
   NJ_COUNTY_FIPS,
   extractNjGeocodeQuery,
   parseNjNoticeLotBlock,
+  isCompatibleNjSitusAddress,
   isExactNjGeocodeMatch,
   selectBestNjCadastralFeature,
   mapNjPropClassToPropType,
   queryNjGeocode,
   queryNjCadastralAtPoint,
+  queryNjCadastralByAddress,
   applyNjCadastralData,
   enrichNjListing,
 };

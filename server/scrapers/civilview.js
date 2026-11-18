@@ -143,26 +143,37 @@ function parseExecutionAmount(description) {
   const match = String(description || '').match(
     /approximate\s+amount\s+due\s+on\s+this\s+execution\s+is\s+(\$[\d,\s]+(?:\.\d{1,2})?)/i,
   );
-  return match ? parseMoney(match[1]) : 0;
+  if (match) {
+    const amount = parseMoney(match[1]);
+    if (amount > 0) return amount;
+  }
+  const secondaryMatch = String(description || '').match(
+    /\b(?:approximate\s+judgment\s+amount|judgment\s+amount|amount\s+of\s+judgment|current\s+amount\s+due|approximate\s+amount\s+due)\b[^$\n]{0,80}?(\$[\d,\s]+(?:\.\d{1,2})?)/i,
+  );
+  return secondaryMatch ? parseMoney(secondaryMatch[1]) : 0;
 }
 
 function parseDescriptionUpsetMatch(description) {
   const text = String(description || '');
   const patterns = [
     {
-      regex: /\bplaintiff\s+upset\s+price\s*[:\-]?\s*(\$[\d,\s]+(?:\.\d{1,2})?)/i,
+      regex: /(?<!good\s+faith\s+)\bestimated\s+upset\s+(?:bid\s+)?(?:amount|price)\s*[:\-]?\s*(\$[\d,\s]+(?:\.\d{1,2})?)/i,
+      source: 'CivilView Description — Estimated Upset Bid Amount',
+    },
+    {
+      regex: /\bplaintiff(?:'s)?\s+upset\s+(?:price|bid|amount)\s*(?:(?:presently\s+)?(?:approximates|is)\s*)?[:\-]?\s*(\$[\d,\s]+(?:\.\d{1,2})?)/i,
       source: 'CivilView Description — Plaintiff Upset Price',
     },
     {
-      regex: /\bgood\s+faith\s+estimated\s+upset\s+price\s*[:\-]?\s*(\$[\d,\s]+(?:\.\d{1,2})?)/i,
+      regex: /\b(?:plaintiff(?:'s)?\s+)?good\s+faith\s+estimate(?:d)?(?:\s+upset(?:\s+price|\s+bid|\s+amount)?)?\s*(?:is\s*)?[:\-]?\s*(\$[\d,\s]+(?:\.\d{1,2})?)/i,
       source: 'CivilView Description — Good Faith Estimated Upset Price',
     },
     {
-      regex: /\bapproximate\s+upset\s+price\s+(?:is\s+)?[:\-]?\s*(\$[\d,\s]+(?:\.\d{1,2})?)/i,
+      regex: /\bapprox(?:imate|\.)?\s+upset(?:\s+(?:price|bid|amount))?\s*(?:is\s*)?[:\-]?\s*(\$[\d,\s]+(?:\.\d{1,2})?)/i,
       source: 'CivilView Description — Approximate Upset Price',
     },
     {
-      regex: /\bupset\s+price\s*[:\-]\s*(\$[\d,\s]+(?:\.\d{1,2})?)/i,
+      regex: /\bupset\s+(?:price|bid|amount)\s*[:\-]\s*(\$[\d,\s]+(?:\.\d{1,2})?)/i,
       source: 'CivilView Description — Upset Price',
     },
   ];
@@ -1157,5 +1168,7 @@ module.exports.orderCounties = orderCounties;
 module.exports.rotateCounties = rotateCounties;
 module.exports.deriveStatusFromHistory = deriveStatusFromHistory;
 module.exports.parseLotBlockFromNotice = parseLotBlockFromNotice;
+module.exports.parseExecutionAmount = parseExecutionAmount;
+module.exports.parseDescriptionUpsetMatch = parseDescriptionUpsetMatch;
 module.exports.ALL_COUNTY_MAP = ALL_COUNTY_MAP;
 module.exports.NATIONWIDE_COUNTY_MAP = NATIONWIDE_COUNTY_MAP;

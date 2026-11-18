@@ -21,6 +21,15 @@ const SOURCE_EXPECTED_FIELDS = Object.freeze({
   irs: ['id', 'address', 'city', 'zip', 'openingBid', 'saleDate', 'sourceUrl'],
   hud: ['id', 'address', 'city', 'zip', 'lat', 'lng', 'sourceUrl'],
   trustee: ['id', 'address', 'county', 'sourceUrl'],
+  treasury: ['id', 'address', 'city', 'zip', 'openingBid', 'saleDate', 'sourceUrl'],
+  usda: ['id', 'address', 'city', 'county', 'zip', 'openingBid', 'sourceUrl'],
+  civilview: ['id', 'address', 'county', 'city', 'zip', 'saleDate', 'plaintiff', 'sourceUrl'],
+  sheriff: ['id', 'address', 'county', 'saleDate', 'openingBid', 'sourceUrl'],
+  servicelink: ['id', 'address', 'city', 'county', 'zip', 'saleDate', 'openingBid', 'sourceUrl'],
+  fannie: ['id', 'address', 'city', 'zip', 'openingBid', 'sourceUrl'],
+  freddie: ['id', 'address', 'city', 'zip', 'openingBid', 'sourceUrl'],
+  va: ['id', 'address', 'city', 'zip', 'openingBid', 'sourceUrl'],
+  marshals: ['id', 'address', 'zip', 'openingBid', 'sourceUrl'],
 });
 
 const DEFAULT_MIN_YIELD_THRESHOLD = 0.4; // Alarm triggers if yield drops below 40%

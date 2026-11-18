@@ -34,6 +34,8 @@ const SCRAPLING_PROFILES = {
   fannie: ['table-extract'],
   freddie: ['table-extract'],
   va: ['table-extract'],
+  'government-land': ['table-extract'],
+  'local-surplus': ['table-extract'],
 };
 
 // End coverage required for a "government/bank auction" product.

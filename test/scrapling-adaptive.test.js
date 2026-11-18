@@ -178,3 +178,38 @@ test('BaseScraper.requestText fails closed on bot challenge and never escalates 
     }
   );
 });
+
+test('relocatePresentationSelector relocates allowed presentation fields while failing closed on identity/bid fields', () => {
+  const html = `
+    <div class="commercial-wrapper" data-id="CASE-9988">
+      <span class="x-spec">4 bedrooms</span>
+      <span class="x-bath">2.5 baths</span>
+      <span class="x-area">2,150 sq ft</span>
+      <span class="x-type">Single Family</span>
+      <span class="x-bid">Opening Bid: $125,000.00</span>
+      <span class="x-case">Case #2026-CV-441</span>
+    </div>
+  `;
+
+  const beds = relocatePresentationSelector(html, 'beds');
+  assert.equal(beds?.value, 4);
+  assert.equal(beds?.confidence, 0.85);
+
+  const baths = relocatePresentationSelector(html, 'baths');
+  assert.equal(baths?.value, 2.5);
+  assert.equal(baths?.confidence, 0.85);
+
+  const sqft = relocatePresentationSelector(html, 'sqft');
+  assert.equal(sqft?.value, 2150);
+  assert.equal(sqft?.confidence, 0.85);
+
+  const propertyType = relocatePresentationSelector(html, 'propertyType');
+  assert.equal(propertyType?.value, 'Single Family');
+  assert.equal(propertyType?.confidence, 0.82);
+
+  const propType = relocatePresentationSelector('<div class="card">Condominium</div>', 'propType');
+  assert.equal(propType?.value, 'Condominium');
+
+  assert.equal(relocatePresentationSelector(html, 'openingBid'), null);
+  assert.equal(relocatePresentationSelector(html, 'caseNumber'), null);
+});

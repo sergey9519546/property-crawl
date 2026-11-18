@@ -238,6 +238,44 @@ test.describe('P0.5: Parser Dev-Mode Disk Cache (server/scrapers/base.js)', () =
     assert.equal(second, '<div class="notice">Sheriff Sale Active</div>');
     assert.equal(fetchCalls, 1);
   });
+
+  test('dev cache keys POST requests by method and body without colliding with GET', async () => {
+    const targetUrl = 'https://www.resales.usda.gov/resales/public/searchSFH';
+    const getPath = getDevCachePath(targetUrl, tmpCacheDir);
+    const explicitGetPath = getDevCachePath(targetUrl, tmpCacheDir, { method: 'GET', body: '' });
+    const postCaPath = getDevCachePath(targetUrl, tmpCacheDir, { method: 'POST', body: 'stateCode=06' });
+    const postTxPath = getDevCachePath(targetUrl, tmpCacheDir, { method: 'POST', body: 'stateCode=48' });
+
+    assert.equal(getPath, explicitGetPath, 'Explicit empty GET must match 2-arg getDevCachePath');
+    assert.notEqual(postCaPath, getPath, 'POST must not collide with GET cache key');
+    assert.notEqual(postCaPath, postTxPath, 'POST requests with different bodies must use distinct cache files');
+
+    let fetchCalls = 0;
+    const mockFetch = async (_url, opts = {}) => {
+      fetchCalls += 1;
+      const label = `${opts.method || 'GET'}:${opts.body || ''}`;
+      return {
+        status: 200,
+        headers: new Headers({ 'content-type': 'text/html' }),
+        text: async () => `<html><body>${label}</body></html>`
+      };
+    };
+
+    const env = { SCRAPER_DEV_CACHE: '1', NODE_ENV: 'development' };
+    const getRes = await fetchTextWithPolicy(targetUrl, { fetchImpl: mockFetch, devCacheDir: tmpCacheDir, env });
+    const caRes = await fetchTextWithPolicy(targetUrl, { method: 'POST', body: 'stateCode=06', fetchImpl: mockFetch, devCacheDir: tmpCacheDir, env });
+    const txRes = await fetchTextWithPolicy(targetUrl, { method: 'POST', body: 'stateCode=48', fetchImpl: mockFetch, devCacheDir: tmpCacheDir, env });
+
+    assert.equal(getRes, '<html><body>GET:</body></html>');
+    assert.equal(caRes, '<html><body>POST:stateCode=06</body></html>');
+    assert.equal(txRes, '<html><body>POST:stateCode=48</body></html>');
+    assert.equal(fetchCalls, 3);
+
+    assert.equal(await fetchTextWithPolicy(targetUrl, { fetchImpl: mockFetch, devCacheDir: tmpCacheDir, env }), getRes);
+    assert.equal(await fetchTextWithPolicy(targetUrl, { method: 'POST', body: 'stateCode=06', fetchImpl: mockFetch, devCacheDir: tmpCacheDir, env }), caRes);
+    assert.equal(await fetchTextWithPolicy(targetUrl, { method: 'POST', body: 'stateCode=48', fetchImpl: mockFetch, devCacheDir: tmpCacheDir, env }), txRes);
+    assert.equal(fetchCalls, 3);
+  });
 });
 
 test.describe('P1.9: Sanitized Markdown Evidence Snapshots (server/scrapers/discovery-snapshots.js)', () => {

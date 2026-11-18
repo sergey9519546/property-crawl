@@ -217,6 +217,7 @@ function isoOrNull(value) {
 /** Align PG text/numeric columns with the in-memory camelCase contract. */
 function mapPgListingRow(row) {
   if (!row || typeof row !== 'object') return row;
+  const assessorRoll = row.provenance?.derivedFields?.assessorRoll;
   return {
     ...row,
     bidSpread: row.bidSpread == null || row.bidSpread === ''
@@ -225,7 +226,15 @@ function mapPgListingRow(row) {
     sourceObservedAt: isoOrNull(row.sourceObservedAt),
     fetchedAt: isoOrNull(row.fetchedAt),
     // Computed fields are not columns; keep contract keys present (nullable).
-    parcelKey: Object.prototype.hasOwnProperty.call(row, 'parcelKey') ? row.parcelKey : null,
+    parcelKey: (Object.prototype.hasOwnProperty.call(row, 'parcelKey') && row.parcelKey != null && row.parcelKey !== '')
+      ? row.parcelKey
+      : (row.provenance?.parcelKey || null),
+    assessorParcel: (Object.prototype.hasOwnProperty.call(row, 'assessorParcel') && row.assessorParcel != null)
+      ? row.assessorParcel
+      : (assessorRoll?.parcel || null),
+    assessmentYear: (Object.prototype.hasOwnProperty.call(row, 'assessmentYear') && row.assessmentYear != null && row.assessmentYear !== '')
+      ? row.assessmentYear
+      : (assessorRoll?.assessmentYear ?? assessorRoll?.taxYear ?? null),
     triage: Object.prototype.hasOwnProperty.call(row, 'triage') ? row.triage : null,
     sourceFacts: Object.prototype.hasOwnProperty.call(row, 'sourceFacts') ? row.sourceFacts : null,
   };

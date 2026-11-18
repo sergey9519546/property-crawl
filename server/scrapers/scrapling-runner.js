@@ -102,6 +102,59 @@ function relocatePresentationSelector(html, field, options = {}) {
   const text = String(html || '');
   if (!text) return null;
 
+  const visibleText = text
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ');
+
+  if (field === 'beds') {
+    const match = visibleText.match(/\b(\d{1,2})\s*(?:bed(?:room)?s?|bd|br)\b/i);
+    if (match) {
+      return {
+        strategy: 'contextual-regex',
+        field,
+        value: Number(match[1]),
+        confidence: 0.85,
+      };
+    }
+  }
+
+  if (field === 'baths') {
+    const match = visibleText.match(/\b(\d{1,2}(?:\.\d)?)\s*(?:bath(?:room)?s?|ba)\b/i);
+    if (match) {
+      return {
+        strategy: 'contextual-regex',
+        field,
+        value: Number(match[1]),
+        confidence: 0.85,
+      };
+    }
+  }
+
+  if (field === 'sqft') {
+    const match = visibleText.match(/\b([\d,]{3,7})\s*(?:sq\.?\s*ft\.?|square\s*feet|sqft)\b/i);
+    if (match) {
+      return {
+        strategy: 'contextual-regex',
+        field,
+        value: Number(match[1].replace(/,/g, '')),
+        confidence: 0.85,
+      };
+    }
+  }
+
+  if (field === 'propertyType' || field === 'propType') {
+    const match = visibleText.match(/\b(single[\s-]family|condo(?:minium)?|town\s*house|multi[\s-]family|duplex|triplex|commercial|vacant\s*land|land)\b/i);
+    if (match) {
+      return {
+        strategy: 'contextual-regex',
+        field,
+        value: match[1].replace(/\s+/g, ' ').trim(),
+        confidence: 0.82,
+      };
+    }
+  }
+
   if (field === 'openingBid' || field === 'currentBid') {
     // Zero-Fabrication: Strictly require bid context. Never attribute deposits or judgments as opening bids.
     const bidRegex = /(?:opening\s*bid|starting\s*bid|minimum\s*bid|upset\s*bid|current\s*bid)[^$]{0,40}\$\s*([\d,]+(?:\.\d{2})?)/i;

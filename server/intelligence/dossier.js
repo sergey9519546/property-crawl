@@ -20,6 +20,7 @@ const {
 } = require('../enrichment/fema-flood');
 const { evaluateEnvironmentalLiability, loadCache: loadEpaCache } = require('../enrichment/epa-hazard');
 const { classifySlope, loadCache: loadTerrainCache } = require('../enrichment/usgs-terrain');
+const { isCompatibleNjSitusAddress } = require('../enrichment/nj-cadastral');
 
 function coordHash(coords, suffix = '') {
   const base = `${coords.lat},${coords.lng}${suffix ? `,${suffix}` : ''}`;
@@ -433,9 +434,46 @@ function buildPropertyDossier(listing, { observations = { records: {}, signals: 
         };
       })
     : opportunityEvaluation.signals;
+  const roll = listing.provenance?.derivedFields?.assessorRoll || null;
+  const persistedParcel = listing.assessorParcel || roll?.parcel || null;
+  const persistedSitus = persistedParcel?.situsAddress || persistedParcel?.properties?.situsAddress || null;
+  const persistedConflict = Boolean(
+    persistedParcel && listing.address && persistedSitus
+    && !isCompatibleNjSitusAddress(String(listing.address), String(persistedSitus)),
+  );
+  const rawBenchmarkParcel = publicRecords?.parcel != null
+    ? publicRecords.parcel
+    : (persistedParcel && !persistedConflict ? persistedParcel : null);
+  let benchmarkParcel = rawBenchmarkParcel;
+  if (benchmarkParcel && typeof benchmarkParcel === 'object') {
+    const needsImprovementNorm = benchmarkParcel.assessedValue
+      && typeof benchmarkParcel.assessedValue === 'object'
+      && benchmarkParcel.assessedValue.improvement == null
+      && benchmarkParcel.assessedValue.improvements != null;
+    const inheritedCountyKey = publicRecords?.parcel == null && !benchmarkParcel.countyKey && roll?.countyKey
+      ? roll.countyKey
+      : null;
+    if (needsImprovementNorm || inheritedCountyKey) {
+      benchmarkParcel = {
+        ...benchmarkParcel,
+        ...(inheritedCountyKey ? { countyKey: inheritedCountyKey } : {}),
+        ...(needsImprovementNorm ? {
+          assessedValue: {
+            ...benchmarkParcel.assessedValue,
+            improvement: benchmarkParcel.assessedValue.improvements ?? null,
+          },
+        } : {}),
+      };
+    }
+  }
+  const rawListingAssessmentYear = listing.assessmentYear !== undefined && listing.assessmentYear !== null && listing.assessmentYear !== ''
+    ? listing.assessmentYear
+    : null;
+  const benchmarkAssessmentYear = rawListingAssessmentYear
+    ?? (publicRecords?.parcel == null && !persistedConflict ? (roll?.assessmentYear ?? roll?.taxYear ?? null) : null);
   return {
     evidenceReceipt: verifiedSnapshotReceipt(listing),
-    publicBenchmarks: computePublicBenchmarkConsensus({ ...listing, parcel: publicRecords?.parcel || null }, { hpiSeries: loadObservedHpiSeries() }),
+    publicBenchmarks: computePublicBenchmarkConsensus({ ...listing, parcel: benchmarkParcel, assessmentYear: benchmarkAssessmentYear }, { hpiSeries: loadObservedHpiSeries() }),
     version: 1, generatedAt: new Date(now).toISOString(), listingId: listing.id, address: listing.address,
     source, facts, signals: calibratedSignals, contradictions, gaps, documentEvidence,
     hudSafmr: listing.hudSafmr || (listing.zip ? getHudSafmrBenchmark({ zip: listing.zip, bedrooms: listing.beds ?? 2 }) : null),

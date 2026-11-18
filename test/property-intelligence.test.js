@@ -7,6 +7,8 @@ const { createPropertyIntelligenceHandler } = require('../server/routes/property
 const { validateListingForIngestion } = require('../server/scrapers/validation');
 const { compareSnapshots, snapshot } = require('../server/sources/observations');
 const { buildPublicRecordEvidence } = require('../server/public-records');
+const { mapPgListingRow } = require('../server/db/client');
+const handleListings = require('../server/routes/listings');
 
 const NOW = Date.now();
 const observedAt = new Date(NOW - 3600000).toISOString();
@@ -594,4 +596,156 @@ test('property-intelligence route passes countyParcel and observations into exec
   assert.equal(res.body.enrichmentExecution.success, true);
   assert.equal(res.body.enrichmentExecution.dossier.cadastral.lotAcres, 0.42);
   assert.equal(res.body.enrichmentExecution.dossier.cadastral.hasGeometry, true);
+});
+
+test('GET /api/property-intelligence hydrates persisted assessorRoll into publicBenchmarks matching /assessor without network lookup', async (t) => {
+  t.mock.method(globalThis, 'fetch', () => { throw new Error('Unexpected outbound request'); });
+
+  const pgRow = {
+    id: 'SHERIFF-OH-CUY-1001',
+    source: 'sheriff',
+    state: 'OH',
+    county: 'Cuyahoga',
+    city: 'Cleveland',
+    zip: '44113',
+    address: '1420 W 28th St, Cleveland, OH 44113',
+    openingBid: 100000,
+    saleDate: '2027-10-01',
+    status: 'scheduled',
+    deposit: null,
+    propType: 'Single Family',
+    sqft: 1400,
+    assessed: 70000,
+    raw: 'Synthetic test-only notice for Cuyahoga County sheriff sale.',
+    sourceUrl: 'https://cuyahoga.sheriffsale.example/sales/1001',
+    sourceObservedAt: observedAt,
+    fetchedAt: observedAt,
+    bidSpread: null,
+    provenance: {
+      origin: 'live',
+      observed: true,
+      recordKind: 'source_record',
+      publisher: 'Cuyahoga Sheriff',
+      recordId: '1001',
+      observedAt,
+      parcelKey: '39035-10101001',
+      derivedFields: {
+        parcelKey: true,
+        assessorRoll: {
+          countyKey: 'OH-CUYAHOGA',
+          apn: '10101001',
+          observedAt,
+          basis: 'ARCGIS_REST_PARCEL',
+          taxYear: 2024,
+          parcel: {
+            source: 'Cuyahoga County Fiscal Office',
+            countyFips: '39035',
+            countyName: 'Cuyahoga',
+            rawApn: '101-01-001',
+            canonicalApn: '10101001',
+            situsAddress: '1420 W 28TH ST',
+            landUse: 'RESIDENTIAL',
+            assessedValue: {
+              total: 70000,
+              land: null,
+              improvements: 50000,
+            },
+          },
+        },
+      },
+    },
+  };
+
+  const hydratedListing = mapPgListingRow(pgRow);
+  assert.equal(hydratedListing.parcelKey, '39035-10101001');
+  assert.equal(hydratedListing.assessorParcel?.canonicalApn, '10101001');
+  assert.equal(hydratedListing.assessmentYear, 2024);
+
+  const nullProvRow = mapPgListingRow({ ...pgRow, provenance: null });
+  assert.equal(nullProvRow.parcelKey, null);
+  assert.equal(nullProvRow.assessorParcel, null);
+  assert.equal(nullProvRow.assessmentYear, null);
+
+  const handler = handlerFor(
+    async () => hydratedListing,
+    async () => { throw new Error('GET must not invoke live publicRecords lookup'); },
+  );
+  const intelRes = await invoke(handler, 'GET', hydratedListing.id);
+  assert.equal(intelRes.statusCode, 200);
+  assert.equal(globalThis.fetch.mock.callCount(), 0);
+  assert.ok(intelRes.body.publicBenchmarks?.assessorRoll, 'expected non-null publicBenchmarks.assessorRoll from persisted roll');
+  assert.ok(intelRes.body.publicBenchmarks.sourcesAvailable.includes('assessor_roll'));
+  assert.equal(intelRes.body.publicBenchmarks.assessorRoll.assessedValue, 70000);
+  assert.equal(intelRes.body.publicBenchmarks.assessorRoll.improvementValue, 50000);
+  assert.equal(intelRes.body.publicBenchmarks.assessorRoll.apn, '10101001');
+
+  const assessorRes = response();
+  await handleListings(
+    { method: 'GET', url: `/api/listings/${encodeURIComponent(hydratedListing.id)}/assessor`, headers: {} },
+    assessorRes,
+    { getListingById: async () => hydratedListing },
+  );
+  assert.equal(assessorRes.statusCode, 200);
+  assert.equal(assessorRes.body.found, true);
+  assert.equal(intelRes.body.publicBenchmarks.assessorRoll.assessedValue, assessorRes.body.rawFigure);
+  assert.equal(intelRes.body.publicBenchmarks.assessorRoll.marketComparison, assessorRes.body.marketComparison);
+  assert.equal(intelRes.body.publicBenchmarks.assessorRoll.citation, assessorRes.body.citation);
+  assert.equal(intelRes.body.publicBenchmarks.assessorRoll.apn, assessorRes.body.apn);
+
+  const conflictingDossier = buildPropertyDossier(publisherFixture({
+    address: '1420 W 28th St, Cleveland, OH 44113',
+    state: 'OH',
+    county: 'Cuyahoga',
+    provenance: {
+      derivedFields: {
+        assessorRoll: {
+          countyKey: 'OH-CUYAHOGA',
+          assessmentYear: 2024,
+          parcel: {
+            canonicalApn: '99999999',
+            situsAddress: '842 OAK STREET',
+            assessedValue: { total: 250000, land: 50000, improvements: 200000 },
+          },
+        },
+      },
+    },
+  }), { now: NOW });
+  const noDerivedRow = mapPgListingRow({ ...pgRow, provenance: { origin: 'live' } });
+  assert.equal(noDerivedRow.parcelKey, null);
+  assert.equal(noDerivedRow.assessorParcel, null);
+  assert.equal(noDerivedRow.assessmentYear, null);
+
+  const explicitRow = mapPgListingRow({
+    ...pgRow,
+    parcelKey: '39035-99999999',
+    assessorParcel: { canonicalApn: '99999999' },
+    assessmentYear: 2026,
+  });
+  assert.equal(explicitRow.parcelKey, '39035-99999999');
+  assert.equal(explicitRow.assessorParcel.canonicalApn, '99999999');
+  assert.equal(explicitRow.assessmentYear, 2026);
+
+  const unhydratedDossier = buildPropertyDossier(publisherFixture({
+    address: '1420 W 28th St, Cleveland, OH 44113',
+    state: 'OH',
+    county: 'Cuyahoga',
+    provenance: {
+      derivedFields: {
+        assessorRoll: {
+          countyKey: 'OH-CUYAHOGA',
+          assessmentYear: 2025,
+          parcel: {
+            canonicalApn: '10101001',
+            assessedValue: { total: 70000, land: 20000, improvements: 50000 },
+          },
+        },
+      },
+    },
+  }), { now: NOW });
+  assert.ok(unhydratedDossier.publicBenchmarks.assessorRoll);
+  assert.equal(unhydratedDossier.publicBenchmarks.assessorRoll.assessedValue, 70000);
+  assert.equal(unhydratedDossier.publicBenchmarks.assessorRoll.landValue, 20000);
+  assert.equal(unhydratedDossier.publicBenchmarks.assessorRoll.improvementValue, 50000);
+
+  assert.equal(conflictingDossier.publicBenchmarks.assessorRoll, null, 'stale conflicting persisted roll must not be promoted');
 });

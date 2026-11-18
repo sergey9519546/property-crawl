@@ -1,6 +1,11 @@
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
-const { CivilViewScraper, rotateCounties } = require('../server/scrapers/civilview');
+const {
+  CivilViewScraper,
+  rotateCounties,
+  parseExecutionAmount,
+  parseDescriptionUpsetMatch,
+} = require('../server/scrapers/civilview');
 const { validateListingForIngestion } = require('../server/scrapers/validation');
 
 const COUNTY = { id: '7', name: 'Bergen County', state: 'NJ', fullName: 'Bergen County, NJ' };
@@ -584,4 +589,125 @@ test('CivilView records completedCounties for lossless per-county absence reconc
   assert.deepEqual(subject.lastRunReport.completedCounties, [
     { state: 'NJ', county: 'Bergen County', countyId: '7', seenIds: ['CIV-NJ-7-111'] },
   ]);
+});
+
+
+test('parseDescriptionUpsetMatch matches all five NJ CivilView upset phrasings in priority order', () => {
+  assert.deepEqual(
+    parseDescriptionUpsetMatch('Estimated Upset Bid Amount: $350,000.00'),
+    { raw: '$350,000.00', source: 'CivilView Description — Estimated Upset Bid Amount' },
+  );
+  assert.deepEqual(
+    parseDescriptionUpsetMatch('Estimated Upset Price - $351,250'),
+    { raw: '$351,250', source: 'CivilView Description — Estimated Upset Bid Amount' },
+  );
+  assert.deepEqual(
+    parseDescriptionUpsetMatch("Plaintiff's upset price presently approximates $412,500.75"),
+    { raw: '$412,500.75', source: 'CivilView Description — Plaintiff Upset Price' },
+  );
+  assert.deepEqual(
+    parseDescriptionUpsetMatch('Plaintiff upset bid is $410,000.00'),
+    { raw: '$410,000.00', source: 'CivilView Description — Plaintiff Upset Price' },
+  );
+  assert.deepEqual(
+    parseDescriptionUpsetMatch("Plaintiff's good faith estimated upset price: $485,125.50"),
+    { raw: '$485,125.50', source: 'CivilView Description — Good Faith Estimated Upset Price' },
+  );
+  assert.deepEqual(
+    parseDescriptionUpsetMatch("Good faith estimate is $480,000.00"),
+    { raw: '$480,000.00', source: 'CivilView Description — Good Faith Estimated Upset Price' },
+  );
+  assert.deepEqual(
+    parseDescriptionUpsetMatch('Approx. upset: $320,000.00'),
+    { raw: '$320,000.00', source: 'CivilView Description — Approximate Upset Price' },
+  );
+  assert.deepEqual(
+    parseDescriptionUpsetMatch('Approx upset amount is $322,400.25'),
+    { raw: '$322,400.25', source: 'CivilView Description — Approximate Upset Price' },
+  );
+  assert.deepEqual(
+    parseDescriptionUpsetMatch('Upset Bid: $275,900.00'),
+    { raw: '$275,900.00', source: 'CivilView Description — Upset Price' },
+  );
+  assert.deepEqual(
+    parseDescriptionUpsetMatch('Upset Amount - $275,000'),
+    { raw: '$275,000', source: 'CivilView Description — Upset Price' },
+  );
+  assert.deepEqual(
+    parseDescriptionUpsetMatch('Upset Price: $275,000.00. Estimated Upset Bid Amount: $290,000.00.'),
+    { raw: '$290,000.00', source: 'CivilView Description — Estimated Upset Bid Amount' },
+    'higher-priority Estimated Upset Bid Amount must take precedence over generic Upset Price',
+  );
+  assert.equal(parseDescriptionUpsetMatch('The upset price may change. No dollar figure published.'), null);
+});
+
+test('parseExecutionAmount extracts NJ judgment and amount-due variants without false positives', () => {
+  assert.equal(
+    parseExecutionAmount('The approximate amount due on this execution is $556,894.75 plus interest.'),
+    556894.75,
+  );
+  assert.equal(parseExecutionAmount('Approximate Judgment Amount: $312,450.25'), 312450.25);
+  assert.equal(parseExecutionAmount('Judgment Amount is $240,000.00 plus costs.'), 240000);
+  assert.equal(parseExecutionAmount('Amount of judgment — $195,500.50'), 195500.5);
+  assert.equal(parseExecutionAmount('Current Amount Due as of sale date: $410,125.00'), 410125);
+  assert.equal(parseExecutionAmount('Approximate amount due: $289,900.00'), 289900);
+  assert.equal(parseExecutionAmount('2026 TAXES OPEN: $8,705.58; WATER OPEN: $140.24'), 0);
+  assert.equal(parseExecutionAmount(''), 0);
+});
+
+test('CivilView detail parser preserves all 5 NJ description upset and judgment variants without fabricating openingBid or valuations', () => {
+  const subject = scraper();
+  const [summary] = subject.parseSalesTable(SEARCH_HTML, COUNTY, COUNTY_URL);
+  const cases = [
+    {
+      desc: 'Estimated Upset Bid Amount: $350,000.00. Approximate Judgment Amount: $312,450.25.',
+      expectedUpset: 350000,
+      expectedSource: 'CivilView Description — Estimated Upset Bid Amount',
+      expectedJudgment: 312450.25,
+    },
+    {
+      desc: "Plaintiff's upset price presently approximates $412,500.75. Judgment Amount: $389,000.00.",
+      expectedUpset: 412500.75,
+      expectedSource: 'CivilView Description — Plaintiff Upset Price',
+      expectedJudgment: 389000,
+    },
+    {
+      desc: "Good Faith Estimated Upset Price: $485,125.50. Amount of judgment: $450,200.00.",
+      expectedUpset: 485125.5,
+      expectedSource: 'CivilView Description — Good Faith Estimated Upset Price',
+      expectedJudgment: 450200,
+    },
+    {
+      desc: 'Approx. upset: $320,000.00. Current amount due: $298,750.00.',
+      expectedUpset: 320000,
+      expectedSource: 'CivilView Description — Approximate Upset Price',
+      expectedJudgment: 298750,
+    },
+    {
+      desc: 'Upset Bid: $275,900.00. Approximate amount due: $261,400.80.',
+      expectedUpset: 275900,
+      expectedSource: 'CivilView Description — Upset Price',
+      expectedJudgment: 261400.8,
+    },
+  ];
+
+  for (const { desc, expectedUpset, expectedSource, expectedJudgment } of cases) {
+    const html = DETAIL_HTML
+      .replace(detailItem('Approx. Upset*', '$564,684.81'), '')
+      .replace('The approximate amount due on this execution is $556,894.75 plus interest.', desc);
+    const listing = subject.parseDetailPage(html, summary);
+
+    assert.ok(listing);
+    assert.equal(listing.openingBid, null, `${expectedSource} must never populate openingBid`);
+    assert.equal(listing.estLow, null);
+    assert.equal(listing.estHigh, null);
+    assert.equal(listing.dealScore ?? null, null);
+    assert.equal(listing.judgment, expectedJudgment);
+    assert.equal(listing.sourceFacts.upsetPrice, expectedUpset);
+    assert.equal(listing.sourceFacts.approximateUpsetPrice.amount, expectedUpset);
+    assert.equal(listing.sourceFacts.approximateUpsetPrice.source, expectedSource);
+    assert.equal(listing.provenance.approximateUpsetPrice.amount, expectedUpset);
+    assert.equal(listing.provenance.approximateUpsetPrice.source, expectedSource);
+    assert.equal(listing.provenance.openingBidSource, null);
+  }
 });

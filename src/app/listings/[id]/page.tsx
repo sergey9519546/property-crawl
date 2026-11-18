@@ -347,6 +347,9 @@ export default async function ListingPage({ params, searchParams }: Props) {
     || Boolean(listing.redemptionWarning)
     || (redemptionDays !== null && redemptionDays > 0));
   const sourceFacts = provenance.sourceFacts && typeof provenance.sourceFacts === "object" ? provenance.sourceFacts as Record<string, unknown> : {};
+  const publishedUpsetAmount = positiveNumber((provenance.approximateUpsetPrice as { amount?: unknown } | null | undefined)?.amount ?? sourceFacts.upsetPrice);
+  const publishedUpsetSource = optionalPublishedText((provenance.approximateUpsetPrice as { source?: unknown } | null | undefined)?.source);
+  const publishedJudgmentAmount = positiveNumber(listing.judgment);
   const isDemo = !isObservedSourceRecord(listing);
   const publisherPhoto = verifiedPublisherPhoto(listing);
   // Secondary media is allowed only when the publisher did not supply a
@@ -531,6 +534,27 @@ export default async function ListingPage({ params, searchParams }: Props) {
             </div>
             <p className={openingBid !== null ? "mt-4 text-3xl font-bold tracking-tight sm:text-4xl" : "mt-4 text-2xl font-bold tracking-tight text-ink sm:text-3xl"}>{openingBid !== null ? formatMoney(openingBid) : dUi.openingAmountMissing}</p>
             <p className="mt-1 text-sm text-ink-3">{openingBid !== null ? dUi.openingAmountPublished : dUi.confirmReservePrompt}</p>
+            {openingBid === null && (publishedUpsetAmount !== null || publishedJudgmentAmount !== null) && (
+              <div data-testid="published-upset-judgment-callout" className="rounded-control border border-line bg-paper p-3.5 mt-3 text-xs space-y-2">
+                {publishedUpsetAmount !== null && (
+                  <div>
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="font-semibold text-ink-2">Approx. upset estimate:</span>
+                      <span className="text-sm font-bold text-ink">{formatMoney(publishedUpsetAmount)}</span>
+                    </div>
+                    <p className="mt-0.5 text-ink-3 leading-relaxed">
+                      Qualified sheriff/plaintiff estimate, not a guaranteed opening bid{publishedUpsetSource ? ` (${sourceDisplayText(publishedUpsetSource)})` : ""}.
+                    </p>
+                  </div>
+                )}
+                {publishedJudgmentAmount !== null && (
+                  <div className={publishedUpsetAmount !== null ? "border-t border-line pt-2 flex items-baseline justify-between gap-2" : "flex items-baseline justify-between gap-2"}>
+                    <span className="font-semibold text-ink-2">Execution judgment:</span>
+                    <span className="text-sm font-bold text-ink">{formatMoney(publishedJudgmentAmount)}</span>
+                  </div>
+                )}
+              </div>
+            )}
             <dl className="mt-4 divide-y divide-line border-y border-line py-1">
               <div className="flex items-start justify-between gap-4 py-3.5 text-sm"><dt className="flex shrink-0 items-center gap-2 text-ink-3"><CalendarDays className="h-4 w-4" aria-hidden /> {dUi.reportedSaleLabel}</dt><dd className="text-right font-semibold"><Fact origin={listingFactOrigin(listing, "saleDate")} value={listing.saleDate} format="date" />{[saleTime, saleTimezone].filter(Boolean).length ? ` · ${[saleTime, saleTimezone].filter(Boolean).join(" ")}` : null}</dd></div>
               {saleLocation ? <div className="py-3.5 text-sm"><dt className="flex items-center gap-2 text-ink-3"><MapPin className="h-4 w-4" /> {dUi.saleLocationLabel}</dt><dd className="mt-1.5 font-semibold leading-relaxed">{saleLocation}</dd></div> : null}
@@ -799,7 +823,7 @@ export default async function ListingPage({ params, searchParams }: Props) {
           </div>
           </details>
           <div className="mt-8 space-y-8">
-            <BiddingSimulator listing={listing} />
+            <BiddingSimulator listing={listing} publishedUpsetEstimate={publishedUpsetAmount} />
             <DueDiligenceChecklist listing={listing} className="scroll-mt-6" />
             <ListingCompare listingId={listing.id} label={listing.address} />
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:items-start">

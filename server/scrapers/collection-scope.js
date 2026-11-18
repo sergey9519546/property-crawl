@@ -7,11 +7,21 @@ const FIXED_SCOPES = Object.freeze({
   irs: { endpoint: '/auction/items', filters: { assetClass: 'real_estate' } },
   gsa: { endpoint: '/real-estate/real-property-disposition/assets-identified-for-accelerated-disposition', filters: { assetClass: 'real_estate', program: 'accelerated_disposition' } },
   usda: { endpoint: '/resales/public/searchSFH', filters: { propertyType: 'Single Family' }, jurisdictionSelection: 'publisher_inventory_options' },
+  fannie: { endpoint: '/search-service/v1/properties', filters: { assetClass: 'real_estate' } },
+  freddie: { endpoint: '/homesteps/api/propertysearch', filters: { assetClass: 'real_estate' } },
+  va: { endpoint: '/api/properties', filters: { assetClass: 'real_estate' } },
+  marshals: { endpoint: '/what-we-do/asset-forfeiture/real-property', filters: { assetClass: 'real_property' } },
+  landbank: { endpoint: '/data', filters: { assetClass: 'real_estate' } },
+  bid4assets: { endpoint: '/sheriffsales', filters: { assetClass: 'real_estate' } },
+  sheriff: { endpoint: '/index.cfm', filters: { assetClass: 'real_estate' } },
 });
 
 function collectionScope(scraper) {
   if (!scraper || typeof scraper !== 'object') return null;
-  if (typeof scraper.getCollectionScope === 'function') return acquisitionScope(scraper.getCollectionScope()) || null;
+  if (typeof scraper.getCollectionScope === 'function') {
+    const declared = acquisitionScope(scraper.getCollectionScope());
+    if (declared) return declared;
+  }
   const key = scraper.sourceKey;
   if (FIXED_SCOPES[key]) return acquisitionScope(FIXED_SCOPES[key]) || null;
   if (key === 'civilview') {

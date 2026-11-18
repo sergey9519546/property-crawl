@@ -26,8 +26,14 @@ function isDevCacheActive(env = process.env) {
   return env.SCRAPER_DEV_CACHE === '1';
 }
 
-function getDevCachePath(url, cacheDir = DEV_CACHE_DIR) {
-  const hash = crypto.createHash('sha256').update(String(url)).digest('hex');
+function getDevCachePath(url, cacheDir = DEV_CACHE_DIR, options = {}) {
+  const opts = options && typeof options === 'object' ? options : {};
+  const method = String(opts.method || 'GET').toUpperCase();
+  const hasBody = opts.body != null && opts.body !== '';
+  const key = method === 'GET' && !hasBody
+    ? String(url)
+    : `${method}:${String(url)}:${typeof opts.body === 'string' ? opts.body : JSON.stringify(opts.body ?? '')}`;
+  const hash = crypto.createHash('sha256').update(key).digest('hex');
   return path.join(cacheDir, `${hash}.txt`);
 }
 
@@ -37,7 +43,7 @@ async function fetchTextWithPolicy(url, options = {}) {
   const active = isDevCacheActive(env);
 
   if (active) {
-    const cacheFile = getDevCachePath(url, cacheDir);
+    const cacheFile = getDevCachePath(url, cacheDir, options);
     try {
       if (fs.existsSync(cacheFile)) {
         const stat = fs.statSync(cacheFile);
@@ -60,7 +66,7 @@ async function fetchTextWithPolicy(url, options = {}) {
       if (!fs.existsSync(cacheDir)) {
         fs.mkdirSync(cacheDir, { recursive: true });
       }
-      const cacheFile = getDevCachePath(url, cacheDir);
+      const cacheFile = getDevCachePath(url, cacheDir, options);
       fs.writeFileSync(cacheFile, body, 'utf8');
     } catch (_) {
       // Non-fatal cache write failure
@@ -92,6 +98,19 @@ class BaseScraper {
     // scheduler receives. Weak so a long run cannot leak parsed rows.
     this._publisherRecords = new WeakMap();
     this._driftSamples = new Map();
+    this._lastWaterfallTier = null;
+    this._lastWaterfallItems = null;
+  }
+
+  _recordDriftSample(url, html) {
+    if (typeof html !== 'string' || !html.includes('<') || !this._driftSamples) return;
+    try {
+      const parsed = new URL(url);
+      const pageKey = `${parsed.origin}${parsed.pathname}`;
+      if (this._driftSamples.size < 8 || this._driftSamples.has(pageKey)) {
+        this._driftSamples.set(pageKey, computeDomStructureHash(html));
+      }
+    } catch (_) {}
   }
 
   // The publisher's own record for this listing, before normalization. Scrapers
@@ -187,18 +206,22 @@ class BaseScraper {
 
   async requestText(url, options = {}) {
     const env = options.env || process.env;
+    this._lastWaterfallTier = null;
+    this._lastWaterfallItems = null;
     const canEscalate = Boolean(
       options.useWaterfall
       || impersonationEnabled(this.sourceKey, env)
       || spaXhrEnabled(this.sourceKey, env)
     );
     try {
-      return await fetchTextWithPolicy(url, {
+      const html = await fetchTextWithPolicy(url, {
         ...options,
         timeoutMs: options.timeoutMs ?? this.timeoutMs,
         circuitBreaker: options.circuitBreaker || this.circuitBreaker,
         fetchImpl: options.fetchImpl || this.fetchImpl
       });
+      this._recordDriftSample(url, html);
+      return html;
     } catch (primaryErr) {
       if (!canEscalate) throw primaryErr;
       if (
@@ -217,9 +240,21 @@ class BaseScraper {
         env,
         enableSpaXhr: Boolean(options.enableSpaXhr),
       });
-      if (wf && wf.ok && typeof wf.html === 'string' && wf.html.trim()) {
-        this._lastWaterfallTier = wf.tier;
-        return wf.html;
+      if (wf && wf.ok) {
+        if (Array.isArray(wf.items) && wf.items.length > 0) {
+          this._lastWaterfallItems = wf.items;
+          this._lastWaterfallTier = wf.tier;
+          if (typeof wf.html === 'string' && wf.html.trim()) {
+            this._recordDriftSample(url, wf.html);
+            return wf.html;
+          }
+          return JSON.stringify(wf.items);
+        }
+        if (typeof wf.html === 'string' && wf.html.trim()) {
+          this._lastWaterfallTier = wf.tier;
+          this._recordDriftSample(url, wf.html);
+          return wf.html;
+        }
       }
       throw primaryErr;
     }

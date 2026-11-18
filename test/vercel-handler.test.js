@@ -37,6 +37,11 @@ test('configureServerlessEnv applies /tmp cache defaults and disables background
   const configured = configureServerlessEnv(env);
   assert.equal(configured, true);
   assert.equal(env.SCRAPER_BACKGROUND_ENABLED, '0');
+  assert.equal(env.DISCOVERY_STORAGE_PATH, os.tmpdir());
+  assert.equal(env.DISCOVERY_MIN_FREE_BYTES, String(64 * 1024 * 1024));
+  assert.equal(env.PROPERTY_IMAGE_CENSUS_GEOCODER_FALLBACK, '1');
+  assert.equal(env.PROPERTY_IMAGE_GOOGLE_PANORAMAX_FALLBACK, '1');
+  assert.equal(env.PROPERTY_IMAGE_GOOGLE_MAPILLARY_FALLBACK, '1');
   assert.equal(
     env.PROPERTY_LIVE_CACHE_PATH,
     path.join(os.tmpdir(), 'property-crawl-cache', 'live-listings.json'),
@@ -45,6 +50,28 @@ test('configureServerlessEnv applies /tmp cache defaults and disables background
     env.PROPERTY_ACCOUNTS_PATH,
     path.join(os.tmpdir(), 'property-crawl-cache', 'accounts.json'),
   );
+});
+
+test('configureServerlessEnv preserves explicit operator overrides on Vercel and ignores non-serverless environments', () => {
+  assert.equal(configureServerlessEnv({}), false);
+
+  const customDir = path.join(os.tmpdir(), 'custom-discovery');
+  const env = {
+    VERCEL: '1',
+    SCRAPER_BACKGROUND_ENABLED: '1',
+    DISCOVERY_STORAGE_PATH: customDir,
+    DISCOVERY_MIN_FREE_BYTES: '1024',
+    PROPERTY_IMAGE_CENSUS_GEOCODER_FALLBACK: '0',
+    PROPERTY_IMAGE_GOOGLE_PANORAMAX_FALLBACK: '0',
+    PROPERTY_IMAGE_GOOGLE_MAPILLARY_FALLBACK: '0',
+  };
+  assert.equal(configureServerlessEnv(env), true);
+  assert.equal(env.SCRAPER_BACKGROUND_ENABLED, '1');
+  assert.equal(env.DISCOVERY_STORAGE_PATH, customDir);
+  assert.equal(env.DISCOVERY_MIN_FREE_BYTES, '1024');
+  assert.equal(env.PROPERTY_IMAGE_CENSUS_GEOCODER_FALLBACK, '0');
+  assert.equal(env.PROPERTY_IMAGE_GOOGLE_PANORAMAX_FALLBACK, '0');
+  assert.equal(env.PROPERTY_IMAGE_GOOGLE_MAPILLARY_FALLBACK, '0');
 });
 
 test('createServerlessDispatcher caches verified DB check and retries after transient failures', async () => {

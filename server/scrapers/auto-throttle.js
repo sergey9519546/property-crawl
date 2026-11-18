@@ -109,8 +109,11 @@ async function autoThrottle(url, options = {}) {
   if (retryUntil > now) waitMs = Math.max(waitMs, retryUntil - now);
   const due = last + effectiveMinIntervalMs;
   if (due > now) waitMs = Math.max(waitMs, due - now);
-  if (waitMs > 0) await sleep(Math.min(waitMs, 30000));
-  hostLastRequest.set(host, Date.now());
+  const clampedWait = Math.min(waitMs, 30000);
+  // Reserve slot before awaiting sleep so concurrent same-host callers queue sequentially
+  hostLastRequest.set(host, now + clampedWait);
+  if (clampedWait > 0) await sleep(clampedWait);
+  hostLastRequest.set(host, Math.max(hostLastRequest.get(host) || 0, Date.now()));
   return {
     host,
     waitedMs: waitMs,

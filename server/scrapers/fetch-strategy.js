@@ -13,6 +13,7 @@
 const path = require('node:path');
 const fs = require('node:fs');
 const { spawn } = require('node:child_process');
+const { findBotChallengeSignature } = require('./circuit-breaker');
 
 const TIER_ORDER = ['native', 'scrapling-http', 'fail-closed'];
 
@@ -64,13 +65,14 @@ async function scraplingHttpGet(url, { timeoutMs = 8000 } = {}) {
   if (!python) {
     return { ok: false, tier: 'scrapling-http', error: 'SCRAPLING_RUNTIME_MISSING' };
   }
+  const timeoutSec = Math.max(1, Math.ceil(((Number.isFinite(Number(timeoutMs)) && Number(timeoutMs) > 0) ? Number(timeoutMs) : 8000) / 1000));
   const script = `
 import json,sys
 from urllib.parse import urlparse
 url=sys.argv[1]
 try:
     from scrapling.fetchers import Fetcher
-    page=Fetcher.get(url, timeout=8)
+    page=Fetcher.get(url, timeout=${timeoutSec})
     body=getattr(page,'body',None) or getattr(page,'html',None) or ''
     if hasattr(body,'decode'):
         body=body.decode('utf-8','replace')
@@ -78,16 +80,20 @@ try:
 except Exception as exc:
     print(json.dumps({'ok':False,'error':str(exc)[:300]}))
 `;
+  const childEnv = {
+    PATH: process.env.PATH || '',
+    SystemRoot: process.env.SystemRoot || process.env.SYSTEMROOT || '',
+    PYTHONIOENCODING: 'utf-8',
+  };
+  for (const key of ['TEMP', 'TMP', 'USERPROFILE', 'HOME', 'LOCALAPPDATA', 'APPDATA', 'PYTHONPATH']) {
+    if (process.env[key]) childEnv[key] = process.env[key];
+  }
   return new Promise((resolve) => {
     const child = spawn(python, ['-c', script, url], {
       shell: false,
       windowsHide: true,
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: {
-        PATH: process.env.PATH || '',
-        SystemRoot: process.env.SystemRoot || process.env.SYSTEMROOT || '',
-        PYTHONIOENCODING: 'utf-8',
-      },
+      env: childEnv,
     });
     let out = '', err = '';
     const timer = setTimeout(() => {
@@ -104,6 +110,10 @@ except Exception as exc:
       clearTimeout(timer);
       try {
         const parsed = JSON.parse(out.trim().split('\n').pop() || '{}');
+        if (parsed.html && findBotChallengeSignature(parsed.html)) {
+          resolve({ ok: false, tier: 'scrapling-http', error: 'UPSTREAM_BOT_CHALLENGE' });
+          return;
+        }
         resolve({ ...parsed, tier: 'scrapling-http' });
       } catch {
         resolve({ ok: false, tier: 'scrapling-http', error: (err || 'protocol').slice(0, 300) });

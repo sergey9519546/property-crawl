@@ -119,3 +119,135 @@ test('parser rejection makes a sweep incomplete and personal property is explici
   assert.equal(scraper.lastRunReport.fullSweepComplete, false);
   assert.equal(scraper.lastRunReport.outcome, 'partial_failure');
 });
+
+test('useSpiderBatch follows SCRAPLING_SPIDER_SOURCES env and explicit option precedence', () => {
+  const prev = process.env.SCRAPLING_SPIDER_SOURCES;
+  try {
+    delete process.env.SCRAPLING_SPIDER_SOURCES;
+    assert.equal(new IrsSeizedScraper().useSpiderBatch, false);
+    assert.equal(new IrsSeizedScraper({ useSpiderBatch: true }).useSpiderBatch, true);
+
+    process.env.SCRAPLING_SPIDER_SOURCES = 'treasury, irs';
+    assert.equal(new IrsSeizedScraper().useSpiderBatch, true);
+    assert.equal(new IrsSeizedScraper({ useSpiderBatch: false }).useSpiderBatch, false);
+  } finally {
+    if (prev === undefined) delete process.env.SCRAPLING_SPIDER_SOURCES;
+    else process.env.SCRAPLING_SPIDER_SOURCES = prev;
+  }
+});
+
+test('scrapeFeed prefetches in-scope detail records via runSpiderBatch and reuses _spiderDetailCache', async () => {
+  const scraper = new IrsSeizedScraper({ useSpiderBatch: true, useScrapling: true });
+  scraper.executeWithRetry = operation => operation();
+  scraper.crawlJitter = async () => {};
+  scraper._spiderDetailCache.set('https://www.irsauctions.gov/ad/stale-slug', { address: 'Stale' });
+
+  const batchCalls = [];
+  let extractCalls = 0;
+  scraper.extract = async () => { extractCalls += 1; return { property: {} }; };
+  scraper.runSpiderBatch = async (opts) => {
+    batchCalls.push(opts);
+    return {
+      items: [
+        {
+          url: 'https://www.irsauctions.gov/ad/100-main-pa',
+          data: {
+            property: {
+              address: '100 Main St',
+              city: 'Drexel Hill',
+              state: 'PA',
+              zip: '19026',
+              minimumBid: 185000,
+              saleDate: '2026-12-10',
+              beds: 4,
+              baths: 2,
+              sqft: 1800,
+              yearBuilt: 1955,
+            },
+          },
+        },
+      ],
+    };
+  };
+
+  scraper.fetchText = async (url) => {
+    if (url.endsWith('/auction/items')) {
+      return liveCard('100-main-pa', 'Single family house on Main St', '8')
+        + liveCard('seized-boat-1', 'Seized speedboat', '516');
+    }
+    return `<html><body>
+      <address>100 Main St<br>Drexel Hill, 19026 PA</address>
+      <div content="100.00" class="field__item">100.00</div>
+      <time datetime="2026-01-01T10:00:00Z">Jan 1</time>
+      <div class="field__item">Asset Description</div><div class="field__item">Single family house</div>
+    </body></html>`;
+  };
+
+  const results = await scraper.scrapeFeed();
+  assert.equal(scraper._spiderDetailCache.has('https://www.irsauctions.gov/ad/stale-slug'), false, 'stale cache entries must be cleared');
+  assert.equal(batchCalls.length, 1);
+  assert.deepEqual(batchCalls[0], {
+    urls: ['https://www.irsauctions.gov/ad/100-main-pa'],
+    profile: 'irs-detail',
+    scope: 'federal',
+  });
+  assert.equal(extractCalls, 0, 'cached spider result must avoid redundant extract() calls');
+  assert.equal(results.length, 1);
+  assert.equal(results[0].id, 'IRS-PA-100-MAIN-PA');
+  assert.equal(results[0].openingBid, 185000);
+  assert.equal(results[0].saleDate, '2026-12-10');
+  assert.equal(results[0].beds, 4);
+  assert.equal(results[0].baths, 2);
+  assert.equal(results[0].sqft, 1800);
+  assert.equal(results[0].year, 1955);
+  assert.equal(scraper.lastRunReport.outcome, 'success');
+});
+
+test('scrapeFeed falls back gracefully when runSpiderBatch fails or returns empty property fields', async () => {
+  const scraper = new IrsSeizedScraper({ useSpiderBatch: true, useScrapling: false });
+  scraper.executeWithRetry = operation => operation();
+  scraper.crawlJitter = async () => {};
+  scraper.runSpiderBatch = async () => { throw new Error('spider transport error'); };
+  scraper.fetchText = async (url) => {
+    if (url.endsWith('/auction/items')) {
+      return liveCard('200-oak-oh', 'Residential house on Oak Ave', '8');
+    }
+    return `<html><body>
+      <address>200 Oak Ave<br>Columbus, 43215 OH</address>
+      <div content="95000.00" class="field__item">95,000.00</div>
+      <time datetime="2026-12-15T15:00:00Z">Dec 15</time>
+      Asset Description</div><div class="field__item">Single family house, 3 bedrooms, 1 bathrooms, 1200 sq ft, built in 1962.</div>
+    </body></html>`;
+  };
+
+  const results = await scraper.scrapeFeed();
+  assert.equal(results.length, 1);
+  assert.equal(results[0].id, 'IRS-OH-200-OAK-OH');
+  assert.equal(results[0].openingBid, 95000);
+  assert.equal(results[0].saleDate, '2026-12-15');
+  assert.equal(results[0].beds, 3);
+  assert.equal(scraper.lastRunReport.outcome, 'success');
+
+  let extractCalled = false;
+  const fallbackScraper = new IrsSeizedScraper({
+    useSpiderBatch: true,
+    useScrapling: true,
+    extractImpl: async () => {
+      extractCalled = true;
+      return { property: { minimumBid: 123000 } };
+    },
+  });
+  fallbackScraper.executeWithRetry = operation => operation();
+  fallbackScraper.crawlJitter = async () => {};
+  fallbackScraper.runSpiderBatch = async () => ({
+    items: [{ url: 'https://www.irsauctions.gov/ad/300-pine-tx', data: { property: { address: null, state: null } } }],
+  });
+  fallbackScraper.fetchText = async (url) => {
+    if (url.endsWith('/auction/items')) return liveCard('300-pine-tx', 'Residential house on Pine St', '8');
+    return `<html><body><address>300 Pine St<br>Austin, 78701 TX</address></body></html>`;
+  };
+  const fbResults = await fallbackScraper.scrapeFeed();
+  assert.equal(extractCalled, true);
+  assert.equal(fbResults.length, 1);
+  assert.equal(fbResults[0].openingBid, 123000);
+});

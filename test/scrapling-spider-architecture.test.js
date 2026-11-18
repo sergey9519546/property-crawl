@@ -249,3 +249,77 @@ test('7. Provenance Contract in Stateless Parser Bridge', async (t) => {
   assert.match(result.contentSha256, /^[a-f0-9]{64}$/);
   assert.equal(result.items.length, 2);
 });
+
+test('8. SSRF Guard in scrapling_spider.py blocks private/loopback/CGNAT/unsafe URLs before fetching', async (t) => {
+  if (!requirePython(t)) return;
+
+  const { spawnSync } = require('node:child_process');
+  const spiderDir = path.resolve(__dirname, '..', 'scripts', 'crawlers');
+  const pyCheck = spawnSync(
+    python,
+    [
+      '-c',
+      [
+        'import json, sys',
+        `sys.path.insert(0, ${JSON.stringify(spiderDir)})`,
+        'from scrapling_spider import is_private_or_unsafe_url',
+        'cases = json.loads(sys.argv[1])',
+        'print(json.dumps({u: is_private_or_unsafe_url(u) for u in cases}))',
+      ].join('; '),
+      JSON.stringify([
+        'https://realestatesales.gov/our-listing?page=1',
+        'https://www.irsauctions.gov/ad/sample-property',
+        'http://realestatesales.gov/our-listing',
+        'https://user:pass@realestatesales.gov/our-listing',
+        'https://localhost/our-listing',
+        'https://sub.localhost/our-listing',
+        'https://printer.local/our-listing',
+        'https://metadata.google.internal/computeMetadata/v1/',
+        'https://127.0.0.1/our-listing',
+        'https://10.0.0.1/our-listing',
+        'https://172.16.0.1/our-listing',
+        'https://192.168.1.1/our-listing',
+        'https://169.254.169.254/latest/meta-data',
+        'https://100.64.0.1/our-listing',
+        'https://[::1]/our-listing',
+        'https://[::ffff:127.0.0.1]/our-listing',
+        'https://[::ffff:100.64.0.1]/our-listing',
+      ]),
+    ],
+    { encoding: 'utf8' }
+  );
+  assert.equal(pyCheck.status, 0, pyCheck.stderr || 'Python SSRF helper check failed');
+  const verdicts = JSON.parse(pyCheck.stdout);
+  assert.equal(verdicts['https://realestatesales.gov/our-listing?page=1'], false);
+  assert.equal(verdicts['https://www.irsauctions.gov/ad/sample-property'], false);
+  for (const [url, blocked] of Object.entries(verdicts)) {
+    if (url.startsWith('https://realestatesales.gov') || url.startsWith('https://www.irsauctions.gov')) continue;
+    assert.equal(blocked, true, `${url} must be flagged by is_private_or_unsafe_url`);
+  }
+
+  for (const unsafeUrl of [
+    'http://realestatesales.gov/our-listing',
+    'https://user:pass@realestatesales.gov/our-listing',
+    'https://127.0.0.1/our-listing',
+    'https://169.254.169.254/latest/meta-data',
+    'https://100.64.0.5/our-listing',
+    'https://[::ffff:127.0.0.1]/our-listing',
+    'https://metadata.google.internal/computeMetadata/v1/',
+  ]) {
+    await assert.rejects(
+      () => runSpiderBatch({
+        sourceKey: 'gsa',
+        urls: [unsafeUrl],
+        profile: 'gsa-index',
+        obeyRobots: false,
+        mockResponses: { [unsafeUrl]: { status: 200, body: GSA_INDEX_HTML } },
+      }),
+      (err) => {
+        assert.equal(err.code, 'ACCESS_POLICY_VIOLATION');
+        assert.equal(err.details.reason, 'unsafe_or_private_url_disallowed');
+        assert.equal(err.details.url, unsafeUrl);
+        return true;
+      }
+    );
+  }
+});

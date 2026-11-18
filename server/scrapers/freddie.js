@@ -25,6 +25,7 @@ class FreddieMacScraper extends BaseScraper {
     this.timeoutMs = 4000;
     this.useScrapling = options.useScrapling ?? isScraplingEnabled('freddie');
     this.extract = options.extractImpl || extractWithScrapling;
+    this.captureSpaXhr = options.captureSpaXhrImpl || captureSpaXhr;
     this.lastRunReport = null;
   }
 
@@ -54,10 +55,24 @@ class FreddieMacScraper extends BaseScraper {
         }
       });
 
-      const standardized = allListings
-        .filter(l => this.passesFilter(l))
-        .map(l => this.standardizeListing(l));
-      finalizeRunReport(report, { emitted: standardized.length });
+      const standardized = [];
+      let schemaRejected = 0;
+      for (const l of allListings) {
+        if (!this.passesFilter(l)) continue;
+        try {
+          standardized.push(this.standardizeListing(l));
+        } catch (err) {
+          if (err && err.code === 'LISTING_SCHEMA_INVALID') {
+            schemaRejected += 1;
+            console.warn(`[${this.name}] Dropped schema-invalid Freddie Mac listing (${l?.id || 'unknown'}): ${err.message}`);
+            continue;
+          }
+          throw err;
+        }
+      }
+
+
+      finalizeRunReport(report, { emitted: standardized.length, rejected: schemaRejected });
       if (report.outcome === 'failed') {
         throw new Error(`FREDDIE_UPSTREAM_UNAVAILABLE: all ${topStates.length} HomeSteps state endpoints failed`);
       }
@@ -117,11 +132,19 @@ class FreddieMacScraper extends BaseScraper {
     }
     if (!listings.length && looksLikeClientRenderedShell(html)) {
       if (spaXhrEnabled('freddie', process.env)) {
-        const xhr = await captureSpaXhr(searchUrl, { sourceKey: 'freddie' });
+        const xhr = await (this.captureSpaXhr || captureSpaXhr)(searchUrl, { sourceKey: 'freddie' });
         if (xhr.ok && Array.isArray(xhr.items) && xhr.items.length) {
           const mapped = mapCapturedItems(this, xhr.items, state)
             .map((item) => ({ ...item, provenance: { ...(item.provenance || {}), spaXhr: true, capturedUrls: xhr.capturedUrls || [] } }));
-          const usable = mapped.filter((item) => validateListingShape(item).valid);
+          const usable = [];
+          for (const item of mapped) {
+            try {
+              const std = this.standardizeListing(item);
+              if (this.passesFilter(std) && validateListingShape(std).valid) {
+                usable.push(std);
+              }
+            } catch (_) {}
+          }
           if (usable.length) return { listings: usable, html, spaXhr: true };
         }
       }
@@ -218,6 +241,7 @@ class FreddieMacScraper extends BaseScraper {
 
     return {
       id: `FRE-${propId}`,
+      source: this.sourceKey,
       state: p.state || state,
       county: p.county ?? null,
       city: p.city ?? null,
@@ -243,7 +267,7 @@ class FreddieMacScraper extends BaseScraper {
       photo: p.photo ?? p.image ?? p.imageUrl ?? null,
       sourceUrl: p.url ? (p.url.startsWith('http') ? p.url : `${this.baseUrl}${p.url}`) : `${this.baseUrl}/property/${propId}`,
       raw: JSON.stringify(p).slice(0, 2000),
-      provenance: { origin: 'live', observed: true, publisher: 'Freddie Mac HomeSteps', recordId: String(propId) },
+      provenance: { origin: 'live', observed: true, publisher: 'Freddie Mac HomeSteps', recordId: String(propId), observedAt: new Date().toISOString() },
     };
   }
 

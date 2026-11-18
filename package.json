@@ -91,7 +91,7 @@
     "test:agents": "node --test test/agents.test.js",
     "test:ai": "node test/ai.test.js && node --test test/ai/notice-parser.test.js test/ai/bidding-simulator.test.js test/ai/address-normalizer-helpers.test.js test/ai/cost-tracker-helpers.test.js test/ai/cache-helpers.test.js test/ai/address-normalizer.test.js test/bidding.test.js test/fetch-strategy-ssrf.test.js",
     "test:canary": "node --test test/canary-live.test.js",
-    "test:canonical": "node --test test/canonical-runtime.test.js test/production-boot.test.js test/discovery/query-helpers.test.js test/discovery/discovery-contracts-helpers.test.js test/i18n-completeness.test.js test/ensure-edge-middleware-manifest.test.js test/vercel-handler.test.js test/deploy-vercel-api.test.js",
+    "test:canonical": "node --test test/canonical-runtime.test.js test/production-boot.test.js test/discovery/query-helpers.test.js test/discovery/discovery-contracts-helpers.test.js test/i18n-completeness.test.js test/ensure-edge-middleware-manifest.test.js test/vercel-handler.test.js test/deploy-vercel-api.test.js test/repair-live-enrichment.test.js",
     "test:ci-coverage": "node scripts/verify-test-coverage.js",
     "test:commands": "node --test test/commands.test.js",
     "test:crawler-doctor": "node --test test/crawler-toolchain-doctor.test.js",

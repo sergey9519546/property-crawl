@@ -1,6 +1,6 @@
 # Scraper power & source amount — coverage guarantee
 
-> Generated 2026-11-15T07:50:28.486Z from `server/sources/catalog.js` + `server/scrapers/scheduler.js` + `data.js`.
+> Generated 2026-11-18T12:53:45.542Z from `server/sources/catalog.js` + `server/scrapers/scheduler.js` + `data.js`.
 > **Code guarantee ≠ live inventory guarantee.** Volume depends on publisher reachability.
 
 ## Headline numbers
@@ -9,7 +9,7 @@
 |---|---:|
 | Catalog sources (all ends) | **288** |
 | Scheduled production adapters | **22** |
-| Adapters with Scrapling profiles | **52** |
+| Adapters with Scrapling profiles | **54** |
 | Seed listings in data.js | **2130** |
 | Required end coverage (scheduled) | **10/10** |
 
@@ -65,10 +65,10 @@
 | `fannie` (Fannie Mae HomePath) | P2_DISCOVERY_ADAPTER | table-extract | 0 | SPA/API often unparseable without partner feed; fail-closed + SPA observation_error |
 | `fl-dor-cadastral` (FL DOR Statewide Cadastral (ArcGIS REST)) | P2_DISCOVERY_ADAPTER | — | 0 | DISCOVERY_ONLY until two clean canaries (parcel evidence, not sale inventory) |
 | `freddie` (Freddie Mac HomeSteps) | P2_DISCOVERY_ADAPTER | table-extract | 0 | SPA/API often unparseable; fail-closed + SPA observation_error |
-| `government-land` (State Trust/Public Land Auction Office) | P2_DISCOVERY_ADAPTER | — | 0 | Enrollment template: GOV_LAND_DISCOVERY_URL required; skipped_not_enrolled until enrolled |
+| `government-land` (State Trust/Public Land Auction Office) | P2_DISCOVERY_ADAPTER | table-extract | 0 | Enrollment template: GOV_LAND_DISCOVERY_URL required; skipped_not_enrolled until enrolled |
 | `hud-usps-vacancy` (HUD/USPS Vacancy Data) | P2_DISCOVERY_ADAPTER | — | 0 | — |
 | `landbank` (Land Bank Search) | P2_BLOCKED_PUBLISHER | — | 0 | Turnstile/CAPTCHA on some portals |
-| `local-surplus` (County/Municipal Surplus Real Property) | P2_DISCOVERY_ADAPTER | — | 0 | Enrollment template: LOCAL_SURPLUS_DISCOVERY_URL required; skipped_not_enrolled until enrolled |
+| `local-surplus` (County/Municipal Surplus Real Property) | P2_DISCOVERY_ADAPTER | table-extract | 0 | Enrollment template: LOCAL_SURPLUS_DISCOVERY_URL required; skipped_not_enrolled until enrolled |
 | `marshals` (U.S. Marshals Asset Forfeiture) | P2_DISCOVERY_ADAPTER | table-extract | 0 | USMS bot-protection / brokered RealLook; fail-closed |
 | `public-notices-email` (Press-Association Public Notice Email Alerts) | P2_DISCOVERY_ADAPTER | — | 0 | DISCOVERY_ONLY; operator IMAP/corpus evidence only |
 | `sheriff` (Ohio Sheriff Sale Auction) | P2_LOCAL_ROUTE | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |

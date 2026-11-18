@@ -26,6 +26,7 @@ class FannieMaeScraper extends BaseScraper {
     // Structural parser not wired for HomePath SPA HTML; flag reserved.
     this.useScrapling = options.useScrapling ?? isScraplingEnabled('fannie');
     this.extract = options.extractImpl || extractWithScrapling;
+    this.captureSpaXhr = options.captureSpaXhrImpl || captureSpaXhr;
     this.lastRunReport = null;
   }
 
@@ -55,10 +56,24 @@ class FannieMaeScraper extends BaseScraper {
         }
       });
 
-      const standardized = allListings
-        .filter(l => this.passesFilter(l))
-        .map(l => this.standardizeListing(l));
-      finalizeRunReport(report, { emitted: standardized.length });
+      const standardized = [];
+      let schemaRejected = 0;
+      for (const l of allListings) {
+        if (!this.passesFilter(l)) continue;
+        try {
+          standardized.push(this.standardizeListing(l));
+        } catch (err) {
+          if (err && err.code === 'LISTING_SCHEMA_INVALID') {
+            schemaRejected += 1;
+            console.warn(`[${this.name}] Dropped schema-invalid Fannie Mae listing (${l?.id || 'unknown'}): ${err.message}`);
+            continue;
+          }
+          throw err;
+        }
+      }
+
+
+      finalizeRunReport(report, { emitted: standardized.length, rejected: schemaRejected });
       if (report.outcome === 'failed') {
         throw new Error(`FANNIE_UPSTREAM_UNAVAILABLE: all ${topStates.length} HomePath state endpoints failed`);
       }
@@ -119,11 +134,19 @@ class FannieMaeScraper extends BaseScraper {
     if (!listings.length && looksLikeClientRenderedShell(html)) {
       // Foolproof P0: optional Scrapling DynamicFetcher capture_xhr lane.
       if (spaXhrEnabled('fannie', process.env)) {
-        const xhr = await captureSpaXhr(searchUrl, { sourceKey: 'fannie' });
+        const xhr = await (this.captureSpaXhr || captureSpaXhr)(searchUrl, { sourceKey: 'fannie' });
         if (xhr.ok && Array.isArray(xhr.items) && xhr.items.length) {
           const mapped = mapCapturedItems(this, xhr.items, state)
             .map((item) => ({ ...item, provenance: { ...(item.provenance || {}), spaXhr: true, capturedUrls: xhr.capturedUrls || [] } }));
-          const usable = mapped.filter((item) => validateListingShape(item).valid);
+          const usable = [];
+          for (const item of mapped) {
+            try {
+              const std = this.standardizeListing(item);
+              if (this.passesFilter(std) && validateListingShape(std).valid) {
+                usable.push(std);
+              }
+            } catch (_) {}
+          }
           if (usable.length) return { listings: usable, html, spaXhr: true };
         }
       }
@@ -220,6 +243,7 @@ class FannieMaeScraper extends BaseScraper {
 
     return {
       id: `FNMA-${propId}`,
+      source: this.sourceKey,
       state: p.state || state,
       county: p.county ?? null,
       city: p.city ?? null,
@@ -245,7 +269,7 @@ class FannieMaeScraper extends BaseScraper {
       photo: p.photo ?? p.image ?? p.imageUrl ?? null,
       sourceUrl: p.url ? (p.url.startsWith('http') ? p.url : `${this.baseUrl}${p.url}`) : `${this.baseUrl}/property/${propId}`,
       raw: JSON.stringify(p).slice(0, 2000),
-      provenance: { origin: 'live', observed: true, publisher: 'Fannie Mae HomePath', recordId: String(propId) },
+      provenance: { origin: 'live', observed: true, publisher: 'Fannie Mae HomePath', recordId: String(propId), observedAt: new Date().toISOString() },
     };
   }
 

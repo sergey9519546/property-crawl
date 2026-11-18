@@ -37,6 +37,7 @@ export function SaleMechanics({ listing, exactSourceUrl, labels, locale = "en" }
         ? interpolate(docCount === 1 ? labels.smRefsCapturedSingle : labels.smRefsCapturedPlural, { count: docCount })
         : `${docCount} reference${docCount === 1 ? "" : "s"} captured`)
     : null;
+  const publishedUpsetAmount = Number((provenance.approximateUpsetPrice as { amount?: unknown } | null | undefined)?.amount ?? sourceFacts.upsetPrice);
   const factCandidates: [string, unknown][] = [
     [labels ? labels.smProgram : "Program", listing.auctionProgram || listing.program],
     [labels ? labels.smAuctionMethod : "Auction method", sourceFacts.auctionMethod],
@@ -45,6 +46,7 @@ export function SaleMechanics({ listing, exactSourceUrl, labels, locale = "en" }
     [labels ? labels.smInteriorAccess : "Interior access available", publishedBoolean(sourceFacts.interiorAccessAvailable, yes, no)],
     [labels ? labels.smClearedForSale : "Cleared for sale", sourceFacts.clearedForSale],
     [labels ? labels.smDepositTerms : "Deposit / payment terms", listing.deposit],
+    ["Approximate upset price", Number.isFinite(publishedUpsetAmount) && publishedUpsetAmount > 0 ? `${formatMoney(publishedUpsetAmount, locale)} (qualified estimate)` : null],
     [labels ? labels.smExecJudgment : "Execution judgment", listing.judgment && Number(listing.judgment) > 0 ? formatMoney(Number(listing.judgment), locale) : null],
     [labels ? labels.smOpeningTiming : "Opening bid timing", listing.openingBid == null && listing.judgment && Number(listing.judgment) > 0 ? (labels ? labels.smAnnouncedMorning : "Announced morning of sale (upset price pending)") : null],
     [labels ? labels.smPublisherDocs : "Publisher documents", docsValue],
