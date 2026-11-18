@@ -510,6 +510,7 @@ export default async function ListingPage({ params, searchParams }: Props) {
               listingId={listing.id}
               address={listing.address}
               propType={listing.propType}
+              source={listing.source}
               photo={detailPhoto}
               gallery={detailGallery}
               photoOrigin={publisherPhoto ? "publisher" : secondaryMedia.accepted ? "secondary" : undefined}

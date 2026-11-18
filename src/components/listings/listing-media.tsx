@@ -17,6 +17,7 @@ type ListingMediaProps = {
   listingId?: string | null;
   address: string;
   propType?: string | null;
+  source?: string | null;
   photo?: string | null;
   gallery?: string[];
   lat?: number | null;
@@ -98,7 +99,7 @@ function publisherPhotoUrl(photo: string | null | undefined) {
   return safeImageUrl(photo) || null;
 }
 
-export function ListingMedia({ listingId, address, propType, photo, gallery = [], lat, lng, locationDisclosure, photoOrigin = "publisher", photoProvider, photoSourceUrl, sourceLabel }: ListingMediaProps) {
+export function ListingMedia({ listingId, address, propType, source, photo, gallery = [], lat, lng, locationDisclosure, photoOrigin = "publisher", photoProvider, photoSourceUrl, sourceLabel }: ListingMediaProps) {
   const { locale, messages: m } = useLocale();
   const canMap = hasCoordinates(lat, lng);
   const publisherPhoto = publisherPhotoUrl(photo);
@@ -440,6 +441,7 @@ export function ListingMedia({ listingId, address, propType, photo, gallery = []
                   listingId={normalizedListingId}
                   address={address}
                   propType={propType}
+                  source={source}
                   statusLabel={canShowPhoto ? "publisher media unavailable" : "source media open"}
                 />
               )}

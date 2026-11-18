@@ -444,7 +444,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
 
         {/* Property Hero Media */}
         {activeTab === "underwrite" && (
-          <div className="relative h-56 sm:h-64 w-full bg-paper bg-cover bg-center overflow-hidden" style={{ backgroundImage: `url("${getPropertyPlaceholder(listing.propType).imageSrc}")` }}>
+          <div className="relative h-56 sm:h-64 w-full bg-paper bg-cover bg-center overflow-hidden" style={{ backgroundImage: `url("${getPropertyPlaceholder(listing.propType, { address: listing.address, source: listing.source }).imageSrc}")` }}>
             {photoUrl ? (
               <img src={photoUrl} alt={listing.address || ""} referrerPolicy="no-referrer" className="w-full h-full object-cover" />
             ) : (
@@ -456,7 +456,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
                   className="w-full h-full object-cover"
                 />
                 <span className="absolute bottom-2 left-2 rounded bg-ink/75 px-2 py-0.5 text-label font-medium text-paper backdrop-blur-sm">
-                  Esri / USGS NAIP aerial view · {getPropertyPlaceholder(listing.propType).typeLabel}
+                  Esri / USGS NAIP aerial view · {getPropertyPlaceholder(listing.propType, { address: listing.address, source: listing.source }).typeLabel}
                 </span>
               </>
             )}

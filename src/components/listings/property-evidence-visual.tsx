@@ -7,6 +7,7 @@ type PropertyEvidenceVisualProps = {
   listingId?: string | null;
   address: string;
   propType?: string | null;
+  source?: string | null;
   compact?: boolean;
   className?: string;
   statusLabel?: string;
@@ -41,6 +42,7 @@ export function PropertyEvidenceVisual({
   listingId,
   address,
   propType,
+  source,
   compact = false,
   className = "",
   statusLabel,
@@ -50,7 +52,7 @@ export function PropertyEvidenceVisual({
   const seed = stableHash(`${listingId || "unresolved"}|${address.toLowerCase()}`);
   const lines = addressLines(address, t.addressUnderReview);
   const recordSuffix = (listingId || seed.toString(16).toUpperCase()).replace(/[^a-z0-9]/gi, "").slice(-8).toUpperCase() || "PENDING";
-  const placeholder = getPropertyPlaceholder(propType);
+  const placeholder = getPropertyPlaceholder(propType, { address, source });
 
   return (
     <div

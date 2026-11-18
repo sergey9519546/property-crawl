@@ -57,7 +57,48 @@ const CATEGORY_CONFIG: Record<
   },
 };
 
-function classifyCategory(rawPropType: string | null | undefined): {
+export interface PropertyPlaceholderContext {
+  address?: string | null;
+  title?: string | null;
+  source?: string | null;
+}
+
+function classifyFromContext(context?: PropertyPlaceholderContext): {
+  category: PropertyPlaceholderCategory;
+  typeLabel: string;
+} | null {
+  if (!context) return null;
+  const text = `${context.address || ""} ${context.title || ""}`.trim().toLowerCase();
+  const source = String(context.source || "").trim().toLowerCase();
+
+  if (/\b(duplex|triplex|quadplex|fourplex|multi[-\s]?family)\b/.test(text)) {
+    return { category: "multi-family", typeLabel: "Multi-Family" };
+  }
+  if (/\b(manufactured|mobile\s+home|modular|trailer(?:\s+park)?|trlr)\b/.test(text)) {
+    return { category: "manufactured-home", typeLabel: "Manufactured" };
+  }
+  if (/\b(condo(?:minium)?|town\s?ho(?:use|me)|co-?op|unit\s+[a-z0-9#-]+|apt\.?\s+[a-z0-9#-]+|pud)\b/.test(text)) {
+    return { category: "condo-townhome", typeLabel: "Condo / Unit" };
+  }
+  if (/\b(commercial|warehouse|industrial|office\s+building|federal\s+(?:office|building)|courthouse|plaza|retail|suite\s+[a-z0-9#-]+)\b/.test(text)) {
+    return { category: "commercial-industrial", typeLabel: "Commercial" };
+  }
+  if (!/\bparking\s+lot\b/.test(text) && /\b(vacant(?:\s+land|\s+lot)?|land\s+sale|unimproved\s+land|acreage|tract\s+\d+|lot\s+\d+[a-z]?|block\s+\d+\s+lot\s+\d+)\b/.test(text)) {
+    return { category: "vacant-land", typeLabel: "Land / Lot" };
+  }
+  if (source === "hud") {
+    return { category: "single-family", typeLabel: "HUD Single-Family" };
+  }
+  if (source === "usda") {
+    return { category: "single-family", typeLabel: "USDA Single-Family" };
+  }
+  return null;
+}
+
+function classifyCategory(
+  rawPropType: string | null | undefined,
+  context?: PropertyPlaceholderContext,
+): {
   category: PropertyPlaceholderCategory;
   typeLabel: string;
 } {
@@ -65,7 +106,7 @@ function classifyCategory(rawPropType: string | null | undefined): {
   const lower = normalized.toLowerCase();
 
   if (!lower || lower === "unknown" || lower === "n/a" || lower === "other") {
-    return { category: "unclassified-parcel", typeLabel: "Unclassified Parcel" };
+    return classifyFromContext(context) || { category: "unclassified-parcel", typeLabel: "Unclassified Parcel" };
   }
   if (lower.includes("land") || lower.includes("lot") || lower.includes("acre") || lower.includes("farm") || lower.includes("vacant")) {
     return { category: "vacant-land", typeLabel: normalized };
@@ -112,8 +153,11 @@ function classifyCategory(rawPropType: string | null | undefined): {
   return { category: "unclassified-parcel", typeLabel: normalized };
 }
 
-export function getPropertyPlaceholder(propType?: string | null): PropertyPlaceholderInfo {
-  const { category, typeLabel } = classifyCategory(propType);
+export function getPropertyPlaceholder(
+  propType?: string | null,
+  context?: PropertyPlaceholderContext,
+): PropertyPlaceholderInfo {
+  const { category, typeLabel } = classifyCategory(propType, context);
   const cfg = CATEGORY_CONFIG[category];
   return {
     category,

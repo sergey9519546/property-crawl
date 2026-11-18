@@ -107,7 +107,7 @@ export function CatchReveal() {
           {/* Left: what the sale posts */}
           <article className="overflow-hidden rounded-card border border-line bg-card shadow-raised">
             <div className="relative h-48 w-full overflow-hidden bg-paper">
-              <div aria-hidden="true" className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url("${getPropertyPlaceholder(listing?.propType).imageSrc}")` }} />
+              <div aria-hidden="true" className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url("${getPropertyPlaceholder(listing?.propType, { address: listing?.address, source: listing?.source }).imageSrc}")` }} />
               {photo ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={photo} alt="" loading="lazy" referrerPolicy="no-referrer" className="relative h-full w-full object-cover" onError={(e) => { e.currentTarget.style.display = "none"; }} />
@@ -116,7 +116,7 @@ export function CatchReveal() {
                 <img src={`/api/property-image?listingId=${encodeURIComponent(listing.id)}&mode=aerial`} alt={`Aerial parcel view for ${listing.address || ""}`} loading="lazy" className="relative h-full w-full object-cover" onError={(e) => { e.currentTarget.style.display = "none"; }} />
               ) : null}
               <span className="absolute left-4 top-4 rounded-full bg-card/90 px-3 py-1 text-label font-semibold text-ink shadow-sm backdrop-blur">
-                {photo ? cr.whatPostsBadge : showAerial ? `${cr.whatPostsBadge} · Aerial parcel view` : `${getPropertyPlaceholder(listing?.propType).typeLabel} · Placeholder`}
+                {photo ? cr.whatPostsBadge : showAerial ? `${cr.whatPostsBadge} · Aerial parcel view` : `${getPropertyPlaceholder(listing?.propType, { address: listing?.address, source: listing?.source }).typeLabel} · Placeholder`}
               </span>
               {!photo && !showAerial && listing?.id ? (
                 <button

@@ -36,3 +36,31 @@ test("getPropertyPlaceholder divides property types into distinct categories and
   }
   assert.equal(distinctImages.size, 7);
 });
+
+test("getPropertyPlaceholder uses factual context hints only when propType is unknown", () => {
+  assert.equal(
+    getPropertyPlaceholder(null, { address: "1401 Pine St Unit 4B, Miami, FL" }).category,
+    "condo-townhome",
+  );
+  assert.equal(
+    getPropertyPlaceholder("Unknown", { address: "Lot 12 Oak Ridge Rd", source: "civilview" }).category,
+    "vacant-land",
+  );
+  assert.equal(
+    getPropertyPlaceholder("", { address: "210 Main St, Newark, NJ", source: "hud" }).category,
+    "single-family",
+  );
+  assert.equal(
+    getPropertyPlaceholder(null, { address: "Louisa Swain Federal Office Building", source: "gsa" }).category,
+    "commercial-industrial",
+  );
+  assert.equal(
+    getPropertyPlaceholder(null, { address: "459 SHUNPIKE Road Cape May Court, House, NJ 08210", source: "civilview" }).category,
+    "unclassified-parcel",
+  );
+  // Explicit propType always wins over address hints
+  assert.equal(
+    getPropertyPlaceholder("Single Family", { address: "100 Main St Unit 2" }).category,
+    "single-family",
+  );
+});

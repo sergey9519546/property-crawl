@@ -32,10 +32,10 @@ function buildAlternativeMetadata(chosen: AlternativeCandidate, t: Messages["med
   };
 }
 
-type Props = { listingId: string; address: string; propType?: string | null; photo?: string | null; photoCount?: number; observed: boolean; photoProvider?: string | null; photoSourceUrl?: string | null; layout?: "fill" | "card" };
+type Props = { listingId: string; address: string; propType?: string | null; source?: string | null; photo?: string | null; photoCount?: number; observed: boolean; photoProvider?: string | null; photoSourceUrl?: string | null; layout?: "fill" | "card" };
 
-export function ListingThumbnail({ listingId, address, propType, photo, photoCount, observed, photoProvider, photoSourceUrl, layout = "fill" }: Props) {
-  const placeholder = getPropertyPlaceholder(propType);
+export function ListingThumbnail({ listingId, address, propType, source, photo, photoCount, observed, photoProvider, photoSourceUrl, layout = "fill" }: Props) {
+  const placeholder = getPropertyPlaceholder(propType, { address, source });
   const { messages, format } = useLocale();
   const t = messages.mediaUi;
   const publisherPhoto = safeImageUrl(photo);

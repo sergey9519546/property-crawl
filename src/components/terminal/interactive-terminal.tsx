@@ -1176,7 +1176,7 @@ export function InteractiveTerminal() {
                       {/* Photo + Tags */}
                       <div className="relative h-48 w-full bg-paper overflow-hidden">
                         <Link href={`/listings/${encodeURIComponent(listing.id)}?returnTo=${encodeURIComponent("/#live-feed")}`} className="block h-full w-full">
-                          <ListingThumbnail listingId={listing.id} address={listing.address} propType={listing.propType} photo={cardPhoto} observed={isObserved} photoProvider={secondaryMedia?.accepted ? secondaryMedia.provider : undefined} photoSourceUrl={secondaryMedia?.accepted ? secondaryMedia.sourceRecordUrl : undefined} />
+                          <ListingThumbnail listingId={listing.id} address={listing.address} propType={listing.propType} source={listing.source} photo={cardPhoto} observed={isObserved} photoProvider={secondaryMedia?.accepted ? secondaryMedia.provider : undefined} photoSourceUrl={secondaryMedia?.accepted ? secondaryMedia.sourceRecordUrl : undefined} />
                         </Link>
                         <div className="absolute top-3 left-3 flex items-center gap-1.5">
                           <span
