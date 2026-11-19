@@ -202,3 +202,67 @@ test('Cloudflare edge worker scheduled() maps cron expressions to actions, abort
     globalThis.fetch = prevFetch;
   }
 });
+
+test('Cloudflare edge worker email() rejects when token missing and forwards raw MIME to /api/scrapers/run', async () => {
+  const prevFetch = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({
+      url: String(url),
+      method: init?.method,
+      headers: Object.fromEntries(new Headers(init?.headers || {}).entries()),
+      body: init?.body ? JSON.parse(init.body) : null,
+    });
+    return new Response(JSON.stringify({ status: 'completed', action: 'email-ingest' }), { status: 200 });
+  };
+
+  try {
+    let rejectedReason = null;
+    await worker.email(
+      {
+        from: 'alerts@floridapublicnotices.com',
+        to: 'ingest@perfectproperty.bid',
+        raw: 'From: alerts@floridapublicnotices.com\r\nSubject: Foreclosure Notice\r\n\r\nBody text',
+        setReject(reason) { rejectedReason = reason; },
+      },
+      {},
+      createCtx()
+    );
+    assert.equal(rejectedReason, 'Email ingestion not configured');
+    assert.equal(calls.length, 0);
+
+    const rawMime = 'From: alerts@floridapublicnotices.com\r\nSubject: Notice of Sale\r\n\r\n123 Oak St, Miami, FL 33130';
+    const rawStream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(rawMime));
+        controller.close();
+      },
+    });
+    const ctx = createCtx();
+    await worker.email(
+      {
+        from: 'alerts@floridapublicnotices.com',
+        to: 'ingest@perfectproperty.bid',
+        headers: new Headers({ subject: 'Notice of Sale' }),
+        raw: rawStream,
+      },
+      {
+        API_ORIGIN: 'https://property-crawl-api.vercel.app',
+        SCRAPER_ADMIN_TOKEN: 'op-secret',
+        EDGE_SHARED_SECRET: 'edge-sec',
+      },
+      ctx
+    );
+    await ctx.flush();
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, 'https://property-crawl-api.vercel.app/api/scrapers/run');
+    assert.equal(calls[0].method, 'POST');
+    assert.equal(calls[0].headers['x-scraper-admin-token'], 'op-secret');
+    assert.equal(calls[0].headers['x-edge-secret'], 'edge-sec');
+    assert.equal(calls[0].body.action, 'email-ingest');
+    assert.equal(calls[0].body.raw, rawMime);
+    assert.equal(calls[0].body.subject, 'Notice of Sale');
+  } finally {
+    globalThis.fetch = prevFetch;
+  }
+});

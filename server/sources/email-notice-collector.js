@@ -18,6 +18,7 @@ const {
   neutralizePromptInjection,
   splitMultiParcelNotice,
   deterministicParse,
+  verifyVerbatimSpan,
 } = require('../ai/notice-parser');
 const { getRedemptionRule } = require('../ai/legal-rules');
 
@@ -191,11 +192,16 @@ function evaluateNoticeConfidence(parsed = {}, options = {}) {
   }
 
   // Check verified character spans if requested
-  const spans = parsed.evidenceSpans || parsed.evidence_spans;
-  if (options.requireVerifiedSpans && spans) {
-    const addrSpanVerified = Boolean(spans.property_address?.verified);
-    const caseSpanVerified = Boolean(spans.case_number?.verified);
-    if (!addrSpanVerified || !caseSpanVerified) {
+  if (options.requireVerifiedSpans) {
+    const spans = parsed.evidenceSpans || parsed.evidence_spans || {};
+    const rawText = typeof options.rawText === 'string' ? options.rawText : '';
+    const addrSpanVerified = Boolean(spans.property_address?.verified) ||
+      Boolean(rawText && parsed.property_address && verifyVerbatimSpan(rawText, parsed.property_address).verified);
+    const caseSpanVerified = Boolean(spans.case_number?.verified) ||
+      Boolean(rawText && parsed.case_number && verifyVerbatimSpan(rawText, parsed.case_number).verified);
+    const apnSpanVerified = !hasParcelId || Boolean(spans.apn?.verified) ||
+      Boolean(rawText && parsed.apn && verifyVerbatimSpan(rawText, parsed.apn).verified);
+    if (!addrSpanVerified || !caseSpanVerified || !apnSpanVerified) {
       reasons.push('UNVERIFIED_CHARACTER_SPANS');
     }
   }

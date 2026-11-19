@@ -533,6 +533,38 @@ class EmailNoticesPipeline {
     };
   }
 
+  async ingestRawEmail(input, options = {}) {
+    let message = null;
+    if (typeof input === 'string') {
+      const parsed = parseRfc822(input);
+      message = {
+        id: options.id || parsed.messageId || `raw-${hashNotice(input).slice(0, 12)}`,
+        from: options.from || parsed.from || '',
+        subject: options.subject || parsed.subject || '',
+        date: options.date || parsed.date || new Date(this.now()).toISOString(),
+        body: parsed.body || '',
+      };
+    } else if (input && typeof input === 'object') {
+      const rawMime = input.raw || input.rawMime || input.mime || '';
+      const parsed = rawMime ? parseRfc822(rawMime) : {};
+      message = {
+        id: input.id || input.messageId || parsed.messageId || `raw-${hashNotice(rawMime || input.body || input.text || '').slice(0, 12)}`,
+        from: input.from || parsed.from || '',
+        subject: input.subject || parsed.subject || '',
+        date: input.date || parsed.date || new Date(this.now()).toISOString(),
+        body: input.body || input.text || parsed.body || '',
+      };
+    } else {
+      throw new Error('ingestRawEmail requires a raw MIME string or message object');
+    }
+    return this.ingestMessages([message], options);
+  }
+
+  async ingestMessages(messages = [], options = {}) {
+    const list = Array.isArray(messages) ? messages.filter(Boolean) : [messages].filter(Boolean);
+    return this._ingestBatch(list, { ...options, markImapSeen: false });
+  }
+
   async ingest() {
     this.checkCredentials();
 
@@ -545,6 +577,14 @@ class EmailNoticesPipeline {
       throw new Error(`IMAP ingestion failed: ${err.message}`);
     }
 
+    try {
+      return await this._ingestBatch(unreadMessages, { markImapSeen: true });
+    } finally {
+      await this.closeActiveImapClient();
+    }
+  }
+
+  async _ingestBatch(unreadMessages = [], options = {}) {
     const reviewStore = this.documentReviewStore || (typeof getStore === 'function' ? getStore(this.db) : null);
 
     const report = {
@@ -720,7 +760,7 @@ class EmailNoticesPipeline {
         }
       }
 
-      if (this._activeImapClient && typeof this._activeImapClient.command === 'function') {
+      if (options.markImapSeen && this._activeImapClient && typeof this._activeImapClient.command === 'function') {
         for (const item of emailPersistStatus) {
           if (item.emailError) continue;
           const durablyHandled = item.emailHasReviews
@@ -733,7 +773,7 @@ class EmailNoticesPipeline {
         }
       }
     } finally {
-      await this.closeActiveImapClient();
+      // Caller (ingest) closes active IMAP client when markImapSeen is enabled.
     }
 
     report.accepted = report.listingsAccepted;

@@ -599,6 +599,8 @@ class PublicNoticesEmailScraper {
     this.sourceId = SOURCE_ID;
     this.env = options.env || process.env;
     this.corpusDir = options.corpusDir || options.env?.IMAP_CORPUS_DIR || process.env.IMAP_CORPUS_DIR || '';
+    this.db = options.db || null;
+    this.usePipeline = options.usePipeline !== false;
     this.circuitBreaker = null;
     this.lastRunReport = null;
   }
@@ -673,12 +675,32 @@ class PublicNoticesEmailScraper {
       };
     }
 
-    const complete = reports.every((r) => r.ok) && (packets.length > 0 || reports.some((r) => r.mode === 'imap'));
+    let pipelineReport = null;
+    if (this.usePipeline) {
+      try {
+        const { EmailNoticesPipeline } = require('../sources/email-notices');
+        const pipeline = new EmailNoticesPipeline({
+          env: this.env,
+          corpusDir: this.corpusDir || undefined,
+          ...(this.db ? { db: this.db } : {}),
+        });
+        if (pipeline.isConfigured()) {
+          pipelineReport = await pipeline.ingest();
+          reports.push({ ok: Boolean(pipelineReport?.ok), mode: 'pipeline', ...pipelineReport });
+        }
+      } catch (err) {
+        reports.push({ ok: false, mode: 'pipeline', error: err.message });
+      }
+    }
+
+    const complete = reports.every((r) => r.ok) && (packets.length > 0 || reports.some((r) => r.mode === 'imap' || r.mode === 'pipeline'));
     return {
       source: this.sourceKey,
-      accepted: packets.length,
-      rejected: 0,
+      accepted: packets.length || Number(pipelineReport?.listingsAccepted || 0),
+      rejected: Number(pipelineReport?.listingsRejected || 0),
       evidencePackets: packets.length,
+      listingsAccepted: Number(pipelineReport?.listingsAccepted || 0),
+      reviewsRouted: Number(pipelineReport?.reviewsRouted || 0),
       publicationStatus: 'evidence_only',
       report: {
         complete,

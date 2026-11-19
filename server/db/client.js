@@ -1712,26 +1712,7 @@ class DatabaseClient {
         idCondition = 'AND id != $' + params.length;
       }
 
-      const sql = `
-        SELECT ${SUMMARY_LISTING_SELECT},
-          CASE WHEN geog IS NOT NULL
-               THEN ST_Distance(geog, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography)
-               ELSE NULL END AS "distanceMeters"
-        FROM listings
-        WHERE (status IN ('active', 'scheduled', 'pending', 'unknown') OR status IS NULL)
-          AND (
-            (geog IS NOT NULL AND ST_DWithin(geog, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, $3))
-            OR
-            (geog IS NULL AND latitude BETWEEN $4 AND $5 AND longitude BETWEEN $6 AND $7)
-          )
-          ${idCondition}
-        ORDER BY
-          CASE WHEN geog IS NOT NULL
-               THEN ST_Distance(geog, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography)
-               ELSE 99999999 END ASC,
-          id ASC
-        LIMIT 200;
-      `;
+      const sql = buildCompsCandidatesSql({ idCondition });
       const res = await this.getReadPool().query(sql, params);
 
       if (res.rows.length > 0) {
@@ -3948,6 +3929,44 @@ class DatabaseClient {
   }
 }
 
+function buildCompsCandidatesSql({ idCondition = '' } = {}) {
+  // Split geog ST_DWithin from the geog IS NULL lat/lng fallback via UNION ALL so
+  // PostgreSQL plans the geog branch with idx_listings_geog (GIST) instead of
+  // falling back to a Seq Scan caused by OR-ing a non-GIST predicate.
+  return `
+    WITH geog_matches AS (
+      SELECT ${SUMMARY_LISTING_SELECT},
+        ST_Distance(geog, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography) AS "distanceMeters"
+      FROM listings
+      WHERE (status IN ('active', 'scheduled', 'pending', 'unknown') OR status IS NULL)
+        AND geog IS NOT NULL
+        AND ST_DWithin(geog, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, $3)
+        ${idCondition}
+      ORDER BY ST_Distance(geog, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography) ASC, id ASC
+      LIMIT 200
+    ),
+    latlng_fallback AS (
+      SELECT ${SUMMARY_LISTING_SELECT},
+        NULL::double precision AS "distanceMeters"
+      FROM listings
+      WHERE (status IN ('active', 'scheduled', 'pending', 'unknown') OR status IS NULL)
+        AND geog IS NULL
+        AND latitude BETWEEN $4 AND $5
+        AND longitude BETWEEN $6 AND $7
+        ${idCondition}
+      ORDER BY id ASC
+      LIMIT 200
+    )
+    SELECT * FROM (
+      SELECT * FROM geog_matches
+      UNION ALL
+      SELECT * FROM latlng_fallback
+    ) combined
+    ORDER BY COALESCE("distanceMeters", 99999999) ASC, id ASC
+    LIMIT 200;
+  `;
+}
+
 module.exports = new DatabaseClient();
 module.exports.DatabaseClient = DatabaseClient;
 module.exports.DEFAULT_LIVE_CACHE_PATH = DEFAULT_LIVE_CACHE_PATH;
@@ -3956,4 +3975,5 @@ module.exports.mapPgListingRow = mapPgListingRow;
 module.exports.prepareListingForPersistence = prepareListingForPersistence;
 module.exports.applyCrossSourceBakeOff = applyCrossSourceBakeOff;
 module.exports.computeBakeOff = computeBakeOff;
+module.exports.buildCompsCandidatesSql = buildCompsCandidatesSql;
 
