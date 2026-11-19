@@ -11,6 +11,60 @@ const path = require('node:path');
 const { isEmail, mailIsConfigured, sendOutboundMail } = require('../../server/delivery/outbound-mail');
 
 const SecuritySanitizer = require('../../server/security/sanitizer');
+
+const pgPools = new Map();
+
+function getPgPool(databaseUrl) {
+  if (!databaseUrl) return null;
+  if (!pgPools.has(databaseUrl)) {
+    const { Pool } = require('pg');
+    const pool = new Pool({
+      connectionString: databaseUrl,
+      max: 3,
+      idleTimeoutMillis: 10_000,
+      connectionTimeoutMillis: 5_000,
+    });
+    pool.on('error', (err) => {
+      console.error('[form-submissions] Idle PostgreSQL client error:', err?.message || err);
+    });
+    pgPools.set(databaseUrl, pool);
+  }
+  return pgPools.get(databaseUrl);
+}
+
+function shouldUsePostgres(env = process.env, options = {}) {
+  if (env.PROPERTY_INVENTORY_BACKEND === 'memory') return false;
+  return Boolean(options.pgPool || String(env.DATABASE_URL || '').trim());
+}
+
+function allowLocalFallback(env = process.env) {
+  return env.NODE_ENV === 'test'
+    || env.PROPERTY_INVENTORY_BACKEND === 'memory'
+    || (env.NODE_ENV !== 'production' && !String(env.DATABASE_URL || '').trim());
+}
+
+async function persistFormSubmissionPg(pool, kind, fields, receivedAt) {
+  const name = fields.name != null ? sanitize(fields.name, 200) : null;
+  const email = fields.email != null ? sanitize(fields.email, 320).toLowerCase() : null;
+  const company = fields.company != null ? sanitize(fields.company, 200) : null;
+  const message = fields.message != null ? sanitize(fields.message, 5000) : null;
+  await pool.query(
+    `INSERT INTO form_submissions (kind, name, email, company, message, payload, received_at)
+     VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::timestamptz)`,
+    [kind, name, email, company, message, JSON.stringify({ kind, receivedAt, ...fields }), receivedAt],
+  );
+  if (kind === 'newsletter') {
+    const validEmail = isEmail(email);
+    if (validEmail) {
+      await pool.query(
+        `INSERT INTO newsletter_subscribers (email, subscribed_at, updated_at)
+         VALUES ($1, $2::timestamptz, $2::timestamptz)
+         ON CONFLICT (email) DO UPDATE SET updated_at = EXCLUDED.updated_at`,
+        [validEmail, receivedAt],
+      );
+    }
+  }
+}
 const DEFAULT_DIR = (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.SERVERLESS)
   ? path.join(require('node:os').tmpdir(), 'property-crawl-cache', 'form-submissions')
   : path.resolve(process.cwd(), '.cache/form-submissions');
@@ -89,17 +143,30 @@ async function forwardWebhook(url, payload, fetchImpl = fetch) {
  * @param {{ webhookUrl?: string, env?: NodeJS.ProcessEnv, fetchImpl?: typeof fetch, outboxDir?: string }} [options]
  */
 async function persistFormSubmission(kind, fields, options = {}) {
+  const env = options.env || process.env;
   const receivedAt = new Date().toISOString();
   const record = { kind, receivedAt, ...fields };
   let storedPath = null;
+  let storedPg = false;
   let storeError = null;
-  try {
-    storedPath = appendJsonl(kind, record);
-  } catch (error) {
-    // Containers without a writable cache must not 500 marketing forms.
-    storeError = String(error?.message || error || 'store-failed');
+  if (shouldUsePostgres(env, options)) {
+    try {
+      const pool = options.pgPool || getPgPool(String(env.DATABASE_URL || '').trim());
+      await persistFormSubmissionPg(pool, kind, fields, receivedAt);
+      storedPg = true;
+    } catch (error) {
+      storeError = String(error?.message || error || 'pg-store-failed');
+    }
+  } else if (allowLocalFallback(env)) {
+    try {
+      storedPath = appendJsonl(kind, record);
+    } catch (error) {
+      // Containers without a writable cache must not 500 marketing forms.
+      storeError = String(error?.message || error || 'store-failed');
+    }
+  } else {
+    storeError = 'DATABASE_URL_UNSET';
   }
-  const env = options.env || process.env;
   let forward = { forwarded: false, reason: 'no-endpoint' };
   let mail = null;
   const webhookUrl = options.webhookUrl
@@ -128,14 +195,17 @@ async function persistFormSubmission(kind, fields, options = {}) {
     ? 'sent'
     : forward.forwarded
       ? 'forwarded'
-      : storedPath || mail?.delivery === 'local'
-        ? 'local'
-        : 'unavailable';
+      : storedPg
+        ? 'postgres'
+        : storedPath || mail?.delivery === 'local'
+          ? 'local'
+          : 'unavailable';
   return {
-    ok: Boolean(storedPath) || forward.forwarded || mail?.sent === true,
+    ok: Boolean(storedPath || storedPg) || forward.forwarded || mail?.sent === true,
     kind,
     receivedAt,
     storedPath,
+    storedPg,
     storeError,
     delivery,
     forward,
@@ -146,6 +216,12 @@ async function persistFormSubmission(kind, fields, options = {}) {
 function removeNewsletterEmail(email, options = {}) {
   const normalized = isEmail(email);
   if (!normalized) return { removed: 0 };
+  const env = options.env || process.env;
+  if (shouldUsePostgres(env, options)) {
+    const pool = options.pgPool || getPgPool(String(env.DATABASE_URL || '').trim());
+    return pool.query('DELETE FROM newsletter_subscribers WHERE email = $1', [normalized])
+      .then((res) => ({ removed: res?.rowCount || 0 }));
+  }
   const file = path.join(submissionDir(), 'newsletter.jsonl');
   if (!fs.existsSync(file)) return { removed: 0 };
   const lockPath = `${file}.lock`;

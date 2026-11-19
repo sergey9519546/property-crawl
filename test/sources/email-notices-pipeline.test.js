@@ -112,7 +112,7 @@ test('mailbox reading queries unread legal notices from press association domain
   assert.equal(unread[1].id, 'msg-03');
 });
 
-test('legal notice extraction parses OCR text, prompt injections, and multi-parcels', () => {
+test('legal notice extraction parses OCR text, prompt injections, and multi-parcels', async () => {
   const pipeline = new EmailNoticesPipeline({
     transport: { getUnreadMessages: async () => [] },
   });
@@ -140,7 +140,7 @@ test('legal notice extraction parses OCR text, prompt injections, and multi-parc
     `,
   };
 
-  const result = pipeline.processEmail(email);
+  const result = await pipeline.processEmail(email);
   assert.equal(result.state, 'TX');
   assert.equal(result.listings.length, 0, 'Adversarial prompt injection quarantines parcels into lowConfidenceNotices');
   assert.equal(result.lowConfidenceNotices.length, 2, 'Should extract and quarantine 2 discrete parcels');
@@ -162,7 +162,7 @@ test('legal notice extraction parses OCR text, prompt injections, and multi-parc
   assert.equal(p2.judgment, 300000);
 });
 
-test('standardize output produces canonical listing objects with full provenance', () => {
+test('standardize output produces canonical listing objects with full provenance', async () => {
   const parsed = {
     property_address: '100 Main St, Columbus, OH 43215',
     city: 'Columbus',
@@ -187,7 +187,7 @@ test('standardize output produces canonical listing objects with full provenance
     emailId: 'test-email-id',
   };
 
-  const canonical = standardizeEmailNoticeListing(parsed, meta);
+  const canonical = await standardizeEmailNoticeListing(parsed, meta);
   assert.equal(canonical.source, 'public-notices-email');
   assert.equal(canonical.state, 'OH');
   assert.equal(canonical.address, '100 Main St, Columbus, OH 43215');
@@ -249,18 +249,18 @@ test('ingestion flow upserts accepted listings through db', async () => {
   assert.equal(saved.provenance.observed, true);
 });
 
-test('unknown-state notice stays UNKNOWN instead of fabricating OH and avoids hidden vault write in processEmail', () => {
+test('unknown-state notice stays UNKNOWN instead of fabricating OH and avoids hidden vault write in processEmail', async () => {
   const { defaultVault } = require('../../server/storage/document-vault');
   const { EmailNoticesPipeline } = require('../../server/sources/email-notices');
-  const origPut = defaultVault.putDocumentSync;
+  const origPut = defaultVault.putDocument;
   let putCalls = 0;
-  defaultVault.putDocumentSync = (...args) => {
+  defaultVault.putDocument = (...args) => {
     putCalls += 1;
     return origPut.apply(defaultVault, args);
   };
   try {
     const pipeline = new EmailNoticesPipeline({ vault: null });
-    const out = pipeline.processEmail({
+    const out = await pipeline.processEmail({
       id: '<unknown-state@example>',
       from: 'notices@other-domain.example',
       subject: 'Foreclosure auction notice',
@@ -275,7 +275,7 @@ test('unknown-state notice stays UNKNOWN instead of fabricating OH and avoids hi
     assert.ok(out.lowConfidenceNotices[0].reasons.includes('UNKNOWN_STATE'));
     assert.equal(putCalls, 0);
   } finally {
-    defaultVault.putDocumentSync = origPut;
+    defaultVault.putDocument = origPut;
   }
 });
 
@@ -291,7 +291,7 @@ test('ingest loads PG reviews, preserves revision, writes docId vault once, and 
   };
 
   const prePipeline = new EmailNoticesPipeline({ vault: null });
-  const preview = prePipeline.processEmail(sampleLowConfEmail);
+  const preview = await prePipeline.processEmail(sampleLowConfEmail);
   const item = preview.lowConfidenceNotices[0];
   const expectedDocId = documentId(item.recordId, 0, item.noticeUrl);
 
@@ -338,7 +338,7 @@ test('ingest loads PG reviews, preserves revision, writes docId vault once, and 
     imapClient: failClient,
     documentReviewStore: failReviewStore,
     vault: {
-      putDocumentSync(key) { failVaultKeys.push(key); },
+      async putDocument(key) { failVaultKeys.push(key); },
     },
   });
   await p1.ingest();
@@ -378,7 +378,7 @@ test('ingest loads PG reviews, preserves revision, writes docId vault once, and 
     password: 'p',
     imapClient: okClient,
     documentReviewStore: okReviewStore,
-    vault: { putDocumentSync() {} },
+    vault: { async putDocument() {} },
   });
   await p2.ingest();
   assert.equal(okReviewStore.loadCalled, true);

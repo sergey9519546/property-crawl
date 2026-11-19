@@ -68,7 +68,7 @@ afterEach(() => {
   } catch (_) {}
 });
 
-test('standardizeEmailNoticeListing produces document evidence with rawText, evidenceSpans, and vault archival', () => {
+test('standardizeEmailNoticeListing produces document evidence with rawText, evidenceSpans, and vault archival', async () => {
   const rawNotice = `NOTICE OF SHERIFF'S SALE
 Case No. 2026-CV-4491
 Bank of America, N.A. vs. Jane Doe
@@ -110,7 +110,7 @@ Property Address: 742 Evergreen Terrace, Springfield, OH 45501`;
     sender: 'legalnotices@ohiocan.org',
   };
 
-  const listing = standardizeEmailNoticeListing(parsed, meta);
+  const listing = await standardizeEmailNoticeListing(parsed, meta);
 
   assert.ok(listing.id.startsWith('email-notice-oh-'));
   assert.equal(listing.openingBid, 120000);

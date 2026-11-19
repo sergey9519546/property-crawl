@@ -57,3 +57,13 @@ test('a rejected Resend response is not reported as sent', async () => {
   assert.equal(result.delivery, 'local');
   assert.match(fs.readFileSync(path.join(dir, 'outbox.jsonl'), 'utf8'), /403/);
 });
+
+test('mailConfig accepts Display Name <addr@domain> format and rejects malformed or CRLF values', () => {
+  const { mailConfig } = require('../server/delivery/outbound-mail');
+  assert.equal(mailConfig({ RESEND_API_KEY: 're_test', RESEND_FROM: 'PerfectProperty <ops@example.com>' }).configured, true);
+  assert.equal(mailConfig({ RESEND_API_KEY: 're_test', RESEND_FROM: '"PerfectProperty Ops" <ops@example.com>' }).configured, true);
+  assert.equal(mailConfig({ RESEND_API_KEY: 're_test', RESEND_FROM: 'ops@example.com' }).configured, true);
+  assert.equal(mailConfig({ RESEND_API_KEY: 're_test', RESEND_FROM: 'PerfectProperty <not-an-email>' }).configured, false);
+  assert.equal(mailConfig({ RESEND_API_KEY: 're_test', RESEND_FROM: '<ops@example.com>' }).configured, false);
+  assert.equal(mailConfig({ RESEND_API_KEY: 're_test', RESEND_FROM: 'PerfectProperty\r\n<ops@example.com>' }).configured, false);
+});
