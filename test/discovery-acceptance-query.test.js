@@ -10,7 +10,7 @@ function row(id, state = 'CA') {
 }
 
 test('query module returns the specified page and facet contract', async () => {
-  const result = await discovery.search(database([row('a'), row('b', 'TX'), row('c')]), { q: '', state: '', county: '', source: '', type: '', program: '', lifecycle: '', occupancy: '', freshness: '', saleFrom: null, saleTo: null, maxBid: null, hasDocuments: null, bbox: null, sort: 'score', cursor: null, limit: 2, facets: ['state'] });
+  const result = await discovery.search(database([row('a'), row('b', 'TX'), row('c')]), { q: '', state: '', county: '', source: '', type: '', program: '', lifecycle: '', occupancy: '', freshness: '', saleFrom: null, saleTo: null, maxBid: null, hasDocuments: null, hasPhoto: null, bbox: null, sort: 'score', cursor: null, limit: 2, facets: ['state'] });
   assert.equal(result.listings.length, 2);
   assert.equal(result.total, 3);
   assert.equal(result.page.hasMore, true);
@@ -20,7 +20,7 @@ test('query module returns the specified page and facet contract', async () => {
 
 test('query cursor becomes 409 when the underlying revision changes', async () => {
   const rows = [row('a'), row('b')];
-  const filters = { q: '', state: '', county: '', source: '', type: '', program: '', lifecycle: '', occupancy: '', freshness: '', saleFrom: null, saleTo: null, maxBid: null, hasDocuments: null, bbox: null, sort: 'score', cursor: null, limit: 1, facets: [] };
+  const filters = { q: '', state: '', county: '', source: '', type: '', program: '', lifecycle: '', occupancy: '', freshness: '', saleFrom: null, saleTo: null, maxBid: null, hasDocuments: null, hasPhoto: null, bbox: null, sort: 'score', cursor: null, limit: 1, facets: [] };
   const first = await discovery.search(database(rows), filters);
   rows.push(row('new'));
   await assert.rejects(() => discovery.search(database(rows), { ...filters, cursor: first.page.nextCursor }), (error) => error.status === 409);
@@ -28,7 +28,7 @@ test('query cursor becomes 409 when the underlying revision changes', async () =
 
 test('map query returns GeoJSON and bounds coordinates', async () => {
   const unknown = row('unknown'); delete unknown.lat; delete unknown.lng;
-  const result = await discovery.map(database([row('a'), unknown]), { q: '', state: '', county: '', source: '', type: '', program: '', lifecycle: '', occupancy: '', freshness: '', saleFrom: null, saleTo: null, maxBid: null, hasDocuments: null, bbox: [-125, 24, -66, 50], sort: 'score', cursor: null, limit: 2, facets: [] });
+  const result = await discovery.map(database([row('a'), unknown]), { q: '', state: '', county: '', source: '', type: '', program: '', lifecycle: '', occupancy: '', freshness: '', saleFrom: null, saleTo: null, maxBid: null, hasDocuments: null, hasPhoto: null, bbox: [-125, 24, -66, 50], sort: 'score', cursor: null, limit: 2, facets: [] });
   assert.equal(result.type, 'FeatureCollection');
   assert.equal(result.features.length, 1);
   assert.deepEqual(result.features[0].geometry.coordinates, [-118, 34]);
@@ -37,7 +37,7 @@ test('map query returns GeoJSON and bounds coordinates', async () => {
 test('query refuses an inventory larger than the bounded non-Postgres adapter scan', async () => {
   const rows = Array.from({ length: 10000 }, (_, index) => row(`row-${index}`));
   const bounded = { getListings: async () => ({ listings: rows, total: 10001 }) };
-  await assert.rejects(() => discovery.search(bounded, { q: '', state: '', county: '', source: '', type: '', program: '', lifecycle: '', occupancy: '', freshness: '', saleFrom: null, saleTo: null, maxBid: null, hasDocuments: null, bbox: null, sort: 'score', cursor: null, limit: 10, facets: [] }), (error) => error.status === 503);
+  await assert.rejects(() => discovery.search(bounded, { q: '', state: '', county: '', source: '', type: '', program: '', lifecycle: '', occupancy: '', freshness: '', saleFrom: null, saleTo: null, maxBid: null, hasDocuments: null, hasPhoto: null, bbox: null, sort: 'score', cursor: null, limit: 10, facets: [] }), (error) => error.status === 503);
 });
 
 test('a state-table redemption stamp is not a published redemption term', () => {
@@ -56,7 +56,7 @@ test('a state-table redemption stamp is not a published redemption term', () => 
 });
 
 test('search filters and facet counts use the same filtered inventory', async () => {
-  const result = await discovery.search(database([row('ca-1', 'CA'), row('ca-2', 'CA'), row('tx-1', 'TX')]), { q: 'ca-1', state: 'ca', county: '', source: 'servicelink', type: '', program: '', lifecycle: '', occupancy: '', freshness: '', saleFrom: null, saleTo: null, maxBid: null, hasDocuments: null, bbox: null, sort: 'score', cursor: null, limit: 10, facets: ['state'] });
+  const result = await discovery.search(database([row('ca-1', 'CA'), row('ca-2', 'CA'), row('tx-1', 'TX')]), { q: 'ca-1', state: 'ca', county: '', source: 'servicelink', type: '', program: '', lifecycle: '', occupancy: '', freshness: '', saleFrom: null, saleTo: null, maxBid: null, hasDocuments: null, hasPhoto: null, bbox: null, sort: 'score', cursor: null, limit: 10, facets: ['state'] });
   assert.equal(result.total, 1);
   assert.equal(result.listings[0].id, 'ca-1');
   assert.deepEqual(result.facets.state, [{ value: 'CA', count: 1 }]);
@@ -67,7 +67,7 @@ test('cursorDecode rejects non-object payloads with 400', async () => {
   const arrCursor = Buffer.from('["abc"]').toString('base64url');
   const numCursor = Buffer.from('12345').toString('base64url');
   const rows = [row('a'), row('b')];
-  const filters = { q: '', state: '', county: '', source: '', type: '', program: '', lifecycle: '', occupancy: '', freshness: '', saleFrom: null, saleTo: null, maxBid: null, hasDocuments: null, bbox: null, sort: 'score', limit: 10, facets: [] };
+  const filters = { q: '', state: '', county: '', source: '', type: '', program: '', lifecycle: '', occupancy: '', freshness: '', saleFrom: null, saleTo: null, maxBid: null, hasDocuments: null, hasPhoto: null, bbox: null, sort: 'score', limit: 10, facets: [] };
   await assert.rejects(() => discovery.search(database(rows), { ...filters, cursor: nullCursor }), (err) => err.status === 400);
   await assert.rejects(() => discovery.search(database(rows), { ...filters, cursor: arrCursor }), (err) => err.status === 400);
   await assert.rejects(() => discovery.search(database(rows), { ...filters, cursor: numCursor }), (err) => err.status === 400);

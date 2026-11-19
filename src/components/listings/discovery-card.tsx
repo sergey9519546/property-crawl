@@ -150,6 +150,11 @@ export const DiscoveryCard = React.memo(function DiscoveryCard({ listing, href, 
       {locality ? <p className="mt-1 text-sm text-ink-3">{locality}</p> : null}
       <TriageChips listing={listing} className="mt-1.5" />
       {facts.length ? <p className="mt-2 text-xs text-ink-3">{facts.join(" · ")}</p> : null}
+      {listing.catchSummary ? (
+        <p className="mt-2 rounded-control bg-catch-wash px-2 py-1.5 text-xs leading-relaxed text-catch-ink">
+          <span className="font-bold">{m.listingsUi.catchLabel}: </span>{listing.catchSummary}
+        </p>
+      ) : null}
       <dl className="mt-4 grid grid-cols-2 gap-3 border-y border-line py-3">
         <div>
           <dt className="text-xs text-ink-3">{m.listingsUi.openingAmountLabel}</dt>

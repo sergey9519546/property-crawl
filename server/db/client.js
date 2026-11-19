@@ -5,6 +5,7 @@ const { seedProvenance } = require('./seed-provenance');
 const { loadLiveRecords } = require('./live-record-store');
 const { createAiCacheStore } = require('./ai-cache-store');
 const { computeTriage, buildParcelKey, extractRawApn, extractCountyFips, normalizePropType, collectVerifiedImages } = require('../scrapers/normalization');
+const { computeCatchSummary } = require('../intelligence/catch-summary');
 const { resolveStateQuery } = require('./us-state-query');
 // Listing-admission gate (server/sources/catalog.js): a DISCOVERY_ONLY
 // catalog source is discovery evidence, never an actionable sale listing.
@@ -108,7 +109,8 @@ const LISTING_SELECT = `
   transaction_outcome AS "transactionOutcome",
   has_documents AS "hasDocuments",
   triage_priority::int AS "triagePriority",
-  triage_priority_refreshed_at::text AS "triagePriorityRefreshedAt"
+  triage_priority_refreshed_at::text AS "triagePriorityRefreshedAt",
+  catch_summary        AS "catchSummary"
 `;
 
 const SUMMARY_LISTING_SELECT = `
@@ -145,7 +147,8 @@ const SUMMARY_LISTING_SELECT = `
   fetched_at::text     AS "fetchedAt",
   status,
   triage_priority::int AS "triagePriority",
-  triage_priority_refreshed_at::text AS "triagePriorityRefreshedAt"
+  triage_priority_refreshed_at::text AS "triagePriorityRefreshedAt",
+  catch_summary        AS "catchSummary"
 `;
 
 // How long a persisted triage_priority ranking may drive sort=triage. The
@@ -238,6 +241,13 @@ function mapPgListingRow(row) {
       : (assessorRoll?.assessmentYear ?? assessorRoll?.taxYear ?? null),
     triage: Object.prototype.hasOwnProperty.call(row, 'triage') ? row.triage : null,
     sourceFacts: Object.prototype.hasOwnProperty.call(row, 'sourceFacts') ? row.sourceFacts : null,
+    // Deterministic "Here's the Catch" one-liner (migration 042). Aliased from
+    // catch_summary so both SELECT-alias and raw-column paths normalize.
+    catchSummary: (Object.prototype.hasOwnProperty.call(row, 'catchSummary') && row.catchSummary != null && row.catchSummary !== '')
+      ? row.catchSummary
+      : (Object.prototype.hasOwnProperty.call(row, 'catch_summary') && row.catch_summary != null && row.catch_summary !== ''
+        ? row.catch_summary
+        : null),
   };
 }
 
@@ -395,6 +405,14 @@ function prepareListingForPersistence(listing = {}) {
     };
   }
   normalized.triage = computeTriage(normalized);
+  // Deterministic "Here's the Catch" one-liner — $0, computed from fields already
+  // present on the normalized record. Title warnings are sourced from the existing
+  // arbitrateTitleRisk result when available in provenance; fall back to empty.
+  const persistedTitleWarnings = Array.isArray(normalized.provenance?.titleWarnings)
+    ? normalized.provenance.titleWarnings
+    : (Array.isArray(listing.titleWarnings) ? listing.titleWarnings : []);
+  const persistedRiskLevel = normalized.provenance?.riskLevel || listing.riskLevel || null;
+  normalized.catchSummary = computeCatchSummary(normalized, persistedTitleWarnings, persistedRiskLevel);
   return normalized;
 }
 
@@ -1962,10 +1980,21 @@ class DatabaseClient {
           if (provenance === null) return [];
           // Live listings without images get an empty array — never fabricate URLs.
           const images = Array.isArray(l.images) && l.images.length > 0 ? l.images : [];
+          // Deterministic "Here's the Catch" one-liner — same $0 computation the
+          // Postgres write path uses, so a seed record and its persisted twin
+          // report the same catch. Title warnings/risk come from provenance when
+          // the seed carries them, else empty.
+          const catchSummary = computeCatchSummary(
+            { ...l, images },
+            Array.isArray(provenance?.titleWarnings) ? provenance.titleWarnings
+              : (Array.isArray(l.titleWarnings) ? l.titleWarnings : []),
+            provenance?.riskLevel || l.riskLevel || null,
+          );
           return [{
             ...l,
             images,
             provenance,
+            catchSummary,
             sourceObservedAt: l.sourceObservedAt ?? null,
             fetchedAt: l.fetchedAt ?? null,
             price: l.price ?? null,
@@ -2393,13 +2422,14 @@ class DatabaseClient {
         provenance, source_observed_at, fetched_at,
         price, listing_date, redemption_days, redemption_warning, senior_lien_risk,
         senior_lien_warning, cash_to_close, cash_to_close_details, status,
-        auction_program, lifecycle_status, transaction_outcome, has_documents, parcel_key
+        auction_program, lifecycle_status, transaction_outcome, has_documents, parcel_key,
+        catch_summary
       ) VALUES (
         $1,$2,$3,$4,$5,$6,$7,$8,$9,
         CASE WHEN $8::float8 IS NOT NULL AND $9::float8 IS NOT NULL
           THEN ST_SetSRID(ST_MakePoint($9,$8), 4326)::geography ELSE NULL END,
         $10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,
-        $43, $44, $45, $46, $47
+        $43, $44, $45, $46, $47, $48
       )
       ON CONFLICT (id) DO UPDATE SET
         source_key = EXCLUDED.source_key,
@@ -2457,6 +2487,7 @@ class DatabaseClient {
         transaction_outcome = COALESCE(EXCLUDED.transaction_outcome, listings.transaction_outcome),
         has_documents = COALESCE(EXCLUDED.has_documents, listings.has_documents),
         parcel_key = COALESCE(EXCLUDED.parcel_key, listings.parcel_key),
+        catch_summary = COALESCE(EXCLUDED.catch_summary, listings.catch_summary),
         updated_at = NOW()
       WHERE EXCLUDED.source_observed_at IS NULL
          OR listings.source_observed_at IS NULL
@@ -2478,6 +2509,7 @@ class DatabaseClient {
         enriched.auctionProgram ?? null, enriched.lifecycleStatus ?? null, enriched.transactionOutcome ?? null,
         typeof enriched.hasDocuments === 'boolean' ? enriched.hasDocuments : null,
         enriched.parcelKey ?? null,
+        enriched.catchSummary ?? null,
       ];
       const queryClient = options.client || this.pool;
       const result = await queryClient.query(sql, params);
@@ -2535,7 +2567,7 @@ class DatabaseClient {
 
     for (let i = 0; i < listings.length; i += CHUNK) {
       const chunk = listings.slice(i, i + CHUNK);
-      // Build parameterized VALUES list.  Each listing maps to 47 params ($N..$N+46).
+      // Build parameterized VALUES list.  Each listing maps to 48 params ($N..$N+47).
       const valueParts = [];
       const params = [];
       let pIdx = 1;
@@ -2551,7 +2583,7 @@ class DatabaseClient {
           `${p(17)},${p(18)},${p(19)},${p(20)},${p(21)},${p(22)},${p(23)},${p(24)},` +
           `${p(25)},${p(26)},${p(27)},${p(28)},${p(29)},${p(30)},${p(31)},${p(32)},` +
           `${p(33)},${p(34)},${p(35)},${p(36)},${p(37)},${p(38)},${p(39)},${p(40)},` +
-          `${p(41)},${p(42)},${p(43)},${p(44)},${p(45)},${p(46)})`
+          `${p(41)},${p(42)},${p(43)},${p(44)},${p(45)},${p(46)},${p(47)})`
         );
         params.push(
           e.id, e.source, e.state, e.county, e.city, e.zip, e.address, e.lat, e.lng,
@@ -2568,8 +2600,9 @@ class DatabaseClient {
           e.auctionProgram ?? null, e.lifecycleStatus ?? null, e.transactionOutcome ?? null,
           typeof e.hasDocuments === 'boolean' ? e.hasDocuments : null,
           e.parcelKey ?? null,
+          e.catchSummary ?? null,
         );
-        pIdx += 47;
+        pIdx += 48;
       }
 
       const resolvedOpeningBidSql = 'COALESCE(EXCLUDED.opening_bid, listings.opening_bid)';
@@ -2583,7 +2616,8 @@ class DatabaseClient {
         provenance, source_observed_at, fetched_at,
         price, listing_date, redemption_days, redemption_warning, senior_lien_risk,
         senior_lien_warning, cash_to_close, cash_to_close_details, status,
-        auction_program, lifecycle_status, transaction_outcome, has_documents, parcel_key
+        auction_program, lifecycle_status, transaction_outcome, has_documents, parcel_key,
+        catch_summary
       ) VALUES ${valueParts.join(',')}
       ON CONFLICT (id) DO UPDATE SET
         source_key = EXCLUDED.source_key,
@@ -2641,6 +2675,7 @@ class DatabaseClient {
         transaction_outcome = COALESCE(EXCLUDED.transaction_outcome, listings.transaction_outcome),
         has_documents = COALESCE(EXCLUDED.has_documents, listings.has_documents),
         parcel_key = COALESCE(EXCLUDED.parcel_key, listings.parcel_key),
+        catch_summary = COALESCE(EXCLUDED.catch_summary, listings.catch_summary),
         updated_at = NOW()
       WHERE EXCLUDED.source_observed_at IS NULL
          OR listings.source_observed_at IS NULL

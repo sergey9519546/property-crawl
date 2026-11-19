@@ -743,7 +743,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
         date: "sale date",
         "bid-asc": "opening bid, low to high",
         images: "most photos",
-      } as Record<string, string>)[filters.sort ?? ""] ?? "Deal Score, highest first"}.`
+      } as Record<string, string>)[filters.sort ?? ""] ?? "triage research priority"}.`
     : format(lUi.sortByPrefix, {
         label: ({
           score: lUi.sortOptions.score,
@@ -754,7 +754,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
           date: lUi.sortOptions.date,
           "bid-asc": lUi.sortOptions.bidAsc,
           images: lUi.sortOptions.images,
-        } as Record<string, string>)[filters.sort ?? ""] ?? lUi.sortOptions.score,
+        } as Record<string, string>)[filters.sort ?? ""] ?? lUi.sortOptions.triage,
       });
 
   return (
@@ -949,7 +949,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
               already checks for the banner. */}
           <p className="mt-1 text-xs text-ink-3" data-testid="score-sort-honesty">
             {payload?.listings
-              && (filters.sort || "score") === "score"
+              && (filters.sort || "triage") === "triage"
               && summarizeInventoryHonesty(payload.listings).dealScorePresent === 0
               && payload.listings.length > 0
               ? "No listing on this page has a Deal Score yet; ranking prioritizes soonest upcoming auction sales and research triage signals."
@@ -961,7 +961,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
         <div className="flex flex-wrap gap-2">
           <select
             aria-label="Sort results"
-            value={filters.sort || "score"}
+            value={filters.sort || "triage"}
             onChange={(event) => setFilters({ sort: event.target.value })}
             className="min-h-10 rounded-lg border border-line-strong bg-card px-3 text-xs font-semibold"
           >

@@ -130,7 +130,9 @@ class PgCollectionJobStore {
 
 function sourceRunUnsafe(result) {
   if (!result || result.error || result.observationError || !(result.accepted > 0)) return true;
-  return ['failed', 'empty'].includes(result.report?.outcome);
+  if (['failed', 'empty'].includes(result.report?.outcome)) return true;
+  if (result.rejected > 0 && !result.report) return true;
+  return false;
 }
 
 function sourceScopeComplete(result) { const report=result?.report||{};return report.complete===true&&report.fullSweepComplete===true&&report.truncated!==true&&report.scope&&typeof report.scope==='object'&&!Array.isArray(report.scope)&&Object.keys(report.scope).length>0; }

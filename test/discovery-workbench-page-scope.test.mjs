@@ -264,7 +264,7 @@ test("unknown sale dates sort after every real date, and real dates keep their o
 
 test("the calendar groups and sorts through the sentinel and the comparator", () => {
   assert.match(workbench, /const UNKNOWN_SALE_DATE = "Date not published";/);
-  assert.match(workbench, /listing\.saleDate \|\| UNKNOWN_SALE_DATE/, "grouping uses one sentinel");
+  assert.match(workbench, /normalizeSaleDateKey\(listing\.saleDate\)/, "grouping uses one sentinel");
   assert.match(
     workbench,
     /\.sort\(\(\[a\], \[b\]\) => compareSaleDateGroups\(a, b\)\)/,

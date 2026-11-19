@@ -32,6 +32,7 @@ const {
   buildParcelKey,
   computeTriage,
   observationTimestamp,
+  normalizePropType,
 } = require('../server/scrapers/normalization');
 
 const SOURCE_KEY = 'servicelink';
@@ -335,7 +336,7 @@ function normalizeServiceLinkRecord(record, options = {}) {
   const city = cleanText(property.city, ['City', 'Unknown']);
   const zip = cleanText(property.postalCode, ['00000', 'Unknown']);
   const title = cleanText(property.address) || formattedAddress;
-  const propType = cleanText(property.propertyType, ['Unknown']);
+  const propType = normalizePropType(property.propertyType);
 
   // Coordinates
   const latitude = finiteNumber(property.latitude);

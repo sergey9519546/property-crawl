@@ -251,7 +251,7 @@ test('accelerated discovery schema, triggers, search parity, explain plan, and a
       return origQuery(sql, params);
     };
     try {
-      await discovery.search(pg, discovery.queryFromUrl(new URL('http://localhost/api/listings?q=Christopher&limit=12&facets=freshness,program')));
+      await discovery.search(pg, discovery.queryFromUrl(new URL('http://localhost/api/listings?q=Christopher&limit=12&facets=freshness,program&sort=score')));
     } finally {
       embedded.pool.query = origQuery;
     }
@@ -399,6 +399,7 @@ test('discovery.search falls back cleanly on synthetic Postgres tables without m
         has_documents BOOLEAN,
         triage_priority INT,
         triage_priority_refreshed_at TIMESTAMPTZ,
+        catch_summary TEXT,
         updated_at TIMESTAMPTZ DEFAULT NOW()
       );
       INSERT INTO listings (id, source_key, state, county, city, zip, address, provenance)
@@ -581,6 +582,7 @@ test('pre-034 Postgres upgrades cleanly through split 034 (DDL) and 035 (backfil
         has_documents BOOLEAN,
         triage_priority INT,
         triage_priority_refreshed_at TIMESTAMPTZ,
+        catch_summary TEXT,
         updated_at TIMESTAMPTZ DEFAULT NOW()
       );
       CREATE TABLE discovery_schema_migrations (

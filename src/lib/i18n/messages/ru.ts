@@ -1005,6 +1005,7 @@ export const ruMessages: Messages = {
     medianPrefix: "Медиана:",
     saleCount: { one: "{count} лот", few: "{count} лота", many: "{count} лотов", other: "{count} лота" },
     openingAmountLabel: "Стартовая сумма",
+    catchLabel: "Подводные камни",
     judgmentPrefix: "Судебный долг:",
     assessedPrefix: "Кадастровая оценка:",
     saleDateLabel: "Дата торгов",

@@ -217,7 +217,7 @@ function queryFromUrl(url) {
     throw new DiscoveryQueryError(400, "lat and lng must be valid coordinates supplied together");
   if (!Number.isFinite(radiusKm) || radiusKm <= 0 || radiusKm > 20000)
     throw new DiscoveryQueryError(400, "radiusKm must be between 0 and 20000");
-  const sort = get("sort") === "bid" ? "bid-asc" : (get("sort") || "score");
+  const sort = get("sort") === "bid" ? "bid-asc" : (get("sort") || "triage");
   if (!['score', 'date', 'bid-asc', 'equity', 'opportunity', 'triage', 'images'].includes(sort)) throw new DiscoveryQueryError(400, "Invalid sort");
   // Also dropped by the a58f76f refactor. A zoom outside the map's usable range
   // silently produces a query the map layer cannot render; an offset combined
@@ -476,11 +476,32 @@ function actionableEvidenceTier(row) {
     && Number.isFinite(Number(lat)) && Number.isFinite(Number(lng));
   return (hasPriceOrRoll ? 2 : 0) + (hasCoords ? 1 : 0);
 }
+function triageSortKey(row, now) {
+  const triagePriorityRaw = row.triagePriority ?? row.triage_priority;
+  const triagePriority = triagePriorityRaw === null || triagePriorityRaw === undefined ? null : Number(triagePriorityRaw);
+  const saleDateRaw = row.saleDate || row.sale_date || null;
+  const saleDate = saleDateRaw ? Date.parse(saleDateRaw) : null;
+  const upcoming = saleDate !== null && Number.isFinite(saleDate) && saleDate >= now;
+  const startOfToday = Math.floor(now / 86400000) * 86400000;
+  const days = upcoming ? (saleDate - startOfToday) / 86400000 : 0;
+  const dateComp = upcoming ? 1e6 - Math.min(1e6, Math.max(0, days)) : 0;
+  if (triagePriority !== null && Number.isFinite(triagePriority)) {
+    return triagePriority * 1e8 + dateComp;
+  }
+  if (upcoming) return dateComp;
+  return -1;
+}
 function compare(a, b, sort, resolvedState = null) {
   if (resolvedState && (sort === "score" || sort === "opportunity" || sort === "triage" || !sort)) {
     const aStateMatch = text(a.state).toUpperCase() === resolvedState;
     const bStateMatch = text(b.state).toUpperCase() === resolvedState;
     if (aStateMatch !== bStateMatch) return aStateMatch ? -1 : 1;
+  }
+  if (sort === 'triage') {
+    const aTriageKey = triageSortKey(a, Date.now());
+    const bTriageKey = triageSortKey(b, Date.now());
+    if (aTriageKey !== bTriageKey) return bTriageKey - aTriageKey;
+    return String(b.id).localeCompare(String(a.id));
   }
   let av,
     bv,

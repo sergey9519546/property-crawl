@@ -1005,6 +1005,7 @@ export const hyMessages: Messages = {
     medianPrefix: "Միջնարժեք՝",
     saleCount: { one: "{count} վաճառք", few: "{count} վաճառք", many: "{count} վաճառք", other: "{count} վաճառք" },
     openingAmountLabel: "Մեկնարկային գումար",
+    catchLabel: "Հիմնական ռիսկը",
     judgmentPrefix: "Դատական գումար՝",
     assessedPrefix: "Կադաստրային գնահատական՝",
     saleDateLabel: "Վաճառքի ամսաթիվ",

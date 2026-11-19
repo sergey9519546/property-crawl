@@ -125,9 +125,17 @@ function computePublicBenchmarkConsensus(listingContext = {}, options = {}) {
       ? rawYear
       : null;
 
-    const baselinePeriod = assessmentYear !== null && /^\d{4}Q[1-4]$/.test(providedPeriod || '') && Number(providedPeriod.slice(0,4)) === assessmentYear ? providedPeriod : null;
+    let baselinePeriod = null;
+    let periodConvention = 'observed_quarter';
+    if (assessmentYear !== null) {
+      if (/^\d{4}Q[1-4]$/.test(providedPeriod || '') && Number(providedPeriod.slice(0, 4)) === assessmentYear) {
+        baselinePeriod = providedPeriod;
+      } else {
+        baselinePeriod = `${assessmentYear}Q2`;
+        periodConvention = 'annual_roll_midyear_q2';
+      }
+    }
     if (assessmentYear === null) unobservedReasons.push('Assessment year is unknown; no HPI trajectory computed.');
-    else if (!baselinePeriod) unobservedReasons.push('Assessment quarter is unknown; no HPI trajectory computed.');
 
     try {
       const appreciation = computeHpiAppreciation(state, baselinePeriod, currentPeriod, activeHpiSeries, {
@@ -138,6 +146,7 @@ function computePublicBenchmarkConsensus(listingContext = {}, options = {}) {
         assessedTrajectory = {
           state,
           baselinePeriod,
+          periodConvention,
           currentPeriod,
           baselineHpi: appreciation.baselineHpi,
           currentHpi: appreciation.currentHpi,
@@ -149,6 +158,7 @@ function computePublicBenchmarkConsensus(listingContext = {}, options = {}) {
             sourceUrl: options.hpiSeries?.sourceUrl || 'https://www.fhfa.gov/data/hpi',
             retrievedAt: options.hpiSeries?.retrievedAt || new Date().toISOString(),
             datasetSha256: options.hpiSeries?.datasetSha256 || null,
+            periodConvention,
           },
         };
         sourcesAvailable.push('fhfa_hpi');

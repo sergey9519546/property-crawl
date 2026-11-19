@@ -27,9 +27,11 @@
     "discovery_source_runs",
     "discovery_worker_health",
     "document_reviews",
+    "form_submissions",
     "ingestion_logs",
     "listing_history",
     "listings",
+    "newsletter_subscribers",
     "saved_deals",
     "saved_searches",
     "source_observation_runs",
@@ -1357,6 +1359,62 @@
       "default": "now()"
     },
     {
+      "table": "form_submissions",
+      "column": "company",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "form_submissions",
+      "column": "email",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "form_submissions",
+      "column": "id",
+      "type": "bigint",
+      "nullable": false,
+      "default": "nextval('form_submissions_id_seq'::regclass)"
+    },
+    {
+      "table": "form_submissions",
+      "column": "kind",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "form_submissions",
+      "column": "message",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "form_submissions",
+      "column": "name",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "form_submissions",
+      "column": "payload",
+      "type": "jsonb",
+      "nullable": false,
+      "default": "'{}'::jsonb"
+    },
+    {
+      "table": "form_submissions",
+      "column": "received_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
       "table": "geography_columns",
       "column": "coord_dimension",
       "type": "integer",
@@ -1633,6 +1691,13 @@
       "table": "listings",
       "column": "cash_to_close_details",
       "type": "jsonb",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "listings",
+      "column": "catch_summary",
+      "type": "text",
       "nullable": true,
       "default": null
     },
@@ -1992,6 +2057,27 @@
       "type": "character varying",
       "nullable": true,
       "default": null
+    },
+    {
+      "table": "newsletter_subscribers",
+      "column": "email",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "newsletter_subscribers",
+      "column": "subscribed_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "newsletter_subscribers",
+      "column": "updated_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
     },
     {
       "table": "saved_deals",

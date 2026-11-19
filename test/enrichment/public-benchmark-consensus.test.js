@@ -68,6 +68,30 @@ describe('Three-Way Public-Record Benchmark Consensus (Hack #4)', () => {
 
     // STRICT ZERO-FABRICATION INVARIANT:
     assert.equal(result.estLow, null);
+  });
+
+  test('resolves annual-roll midyear Q2 convention when assessmentPeriod is omitted', () => {
+    const listingContext = {
+      address: '100 King St, St. Augustine, FL 32084',
+      county: 'ST. JOHNS',
+      state: 'FL',
+      zip: '32084',
+      openingBid: 160000,
+      assessmentYear: 2020,
+      // assessmentPeriod omitted
+      parcel: {
+        county: 'ST. JOHNS',
+        canonicalApn: '123456-0000',
+        assessedValue: { total: 250000 },
+      },
+    };
+
+    const result = computePublicBenchmarkConsensus(listingContext);
+    assert.ok(result.assessedTrajectory);
+    assert.equal(result.assessedTrajectory.baselinePeriod, '2020Q2');
+    assert.equal(result.assessedTrajectory.periodConvention, 'annual_roll_midyear_q2');
+    assert.equal(result.assessedTrajectory.provenance.periodConvention, 'annual_roll_midyear_q2');
+    assert.ok(result.assessedTrajectory.hpiMultiplier > 1.0);
     assert.equal(result.estHigh, null);
     assert.equal(result.dealScore, null);
   });

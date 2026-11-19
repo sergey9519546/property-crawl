@@ -611,8 +611,8 @@ test('sort=score sinks terminal, superseded, and absent records and rewards acti
     listingSelect: 'id, status, lifecycle_status AS "lifecycleStatus", deal_score::int AS "dealScore", opening_bid::numeric AS "openingBid", est_low::numeric AS "estLow", est_high::numeric AS "estHigh", sale_date::text AS "saleDate", triage_priority::int AS "triagePriority", latitude::float8 AS lat, longitude::float8 AS lng, provenance',
   };
 
-  const memoryResult = await query.search(memoryDatabase, query.queryFromUrl(new URL('http://localhost/api/listings?sort=score&limit=10')));
-  const pgResult = await query.search(pgDatabase, query.queryFromUrl(new URL('http://localhost/api/listings?sort=score&limit=10')));
+  const memoryResult = await query.search(memoryDatabase, query.queryFromUrl(new URL('http://localhost/api/listings?sort=score&limit=10&includeSuperseded=1')));
+  const pgResult = await query.search(pgDatabase, query.queryFromUrl(new URL('http://localhost/api/listings?sort=score&limit=10&includeSuperseded=1')));
 
   const memIds = memoryResult.listings.map((l) => l.id);
   const pgIds = pgResult.listings.map((l) => l.id);

@@ -4,6 +4,7 @@ const Validator = require('../security/validation');
 const { readMediaStore, attachMedia } = require('../db/property-media-store');
 const discovery = require('../discovery/query');
 const { buildDocumentEvidence } = require('../intelligence/document-evidence');
+const { computeCatchSummary } = require('../intelligence/catch-summary');
 const { computeTriage, buildParcelKey, extractRawApn, extractCountyFips, collectVerifiedImages } = require('../scrapers/normalization');
 const { applyCrossSourceBakeOff } = defaultDb;
 const { annotateListing, summarizeInventory } = require('../scrapers/listing-intelligence');
@@ -126,6 +127,19 @@ function presentListing(listing) {
   // Triage + parcel identity are presentation-layer fields: they are computed
   // here so both the in-memory and Postgres listing paths emit the same shape.
   presented.triage = computeTriage(presented);
+  // "Here's the Catch" one-liner. Persisted at ingest (migration 042), but
+  // derived here when it is absent so records written before that column
+  // existed -- and any backend that skips the write path -- emit the same shape
+  // as fresh rows. Same reasoning as `triage` above: a presentation-layer
+  // derivation, identical across the in-memory and Postgres paths, $0 and
+  // deterministic. A persisted value always wins.
+  if (!presented.catchSummary) {
+    const titleWarnings = Array.isArray(presented.provenance?.titleWarnings)
+      ? presented.provenance.titleWarnings
+      : (Array.isArray(presented.titleWarnings) ? presented.titleWarnings : []);
+    const riskLevel = presented.provenance?.riskLevel || presented.riskLevel || null;
+    presented.catchSummary = computeCatchSummary(presented, titleWarnings, riskLevel) ?? null;
+  }
   const hudSafmr = listing.hudSafmr || (listing.zip ? getHudSafmrBenchmark({ zip: listing.zip, bedrooms: listing.beds ?? 2 }) : null);
   if (hudSafmr) presented.hudSafmr = hudSafmr;
   const apn = extractRawApn(listing) ?? listing.apn ?? listing.parcelNumber ?? listing.parcelId

@@ -1003,6 +1003,7 @@ export const enMessages = {
     medianPrefix: "Median:",
     saleCount: { one: "{count} sale", few: "{count} sales", many: "{count} sales", other: "{count} sales" },
     openingAmountLabel: "Opening amount",
+    catchLabel: "The catch",
     judgmentPrefix: "Judgment:",
     assessedPrefix: "Assessed:",
     saleDateLabel: "Sale date",

@@ -65,6 +65,21 @@ test('the provenance the client actually reads is not stripped', () => {
     'the strip must not remove fields the client renders');
 });
 
+test('the derived catch one-liner is served on the grid and read by the card', () => {
+  // catchSummary is a short derived sentence, not the raw notice or the
+  // provenance mass, so it must survive the grid strip -- the card renders it.
+  // If the strip ever widens to top-level fields, this is the canary.
+  const stripMapper = /items\.map\(\(\{([^}]*)\}\) =>/.exec(code);
+  assert.ok(stripMapper, 'could not locate the grid strip mapper');
+  assert.ok(!/\bcatchSummary\b/.test(stripMapper[1]),
+    'catchSummary must not be stripped from grid cards');
+  const card = fs.readFileSync(path.join(ROOT, 'src', 'components', 'listings', 'discovery-card.tsx'), 'utf8');
+  assert.match(card, /listing\.catchSummary/,
+    'the grid card must render the derived catch one-liner');
+  assert.match(card, /listingsUi\.catchLabel/,
+    'the catch label must come from the localized message catalog');
+});
+
 test('the single-listing route still returns raw', () => {
   // The detail response is assembled separately and must keep the field.
   const detail = /res\.json\(\s*\{\s*\.\.\.presentListing\(/.exec(code);

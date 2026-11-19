@@ -95,6 +95,16 @@ export interface PropertyListing {
   provenance?: Record<string, unknown> | null;
   sourceObservedAt?: string | null;
   fetchedAt?: string | null;
+  /**
+   * Deterministic "Here's the Catch" one-liner, computed at ingest from the
+   * publisher fields plus the title-risk engine
+   * (server/intelligence/catch-summary.js) — never from an LLM.
+   *
+   * Null when the record carries no actionable catch signal. Safe for the grid:
+   * it is a short derived sentence, not the raw notice or provenance mass that
+   * GET /api/listings strips.
+   */
+  catchSummary?: string | null;
   triage?: {
     isNew: boolean;
     priceDropped: boolean;
