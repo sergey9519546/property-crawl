@@ -852,10 +852,42 @@ async function compactPgObservations(pool, options = {}) {
   };
 }
 
+const { aggregateCountyObservationStats } = require('../intelligence/auction-microstructure');
+
+async function loadCountyObservationStats(pool, { state, county, minSample = 1 } = {}) {
+  if (!pool || typeof pool.query !== 'function' || !state || !county) return null;
+  const targetState = String(state).trim().toUpperCase();
+  const targetCounty = String(county).trim();
+  if (!targetState || !targetCounty) return null;
+
+  const result = await queryWithStatementTimeout(
+    pool,
+    `SELECT so.source_key, so.record_id, so.listing_id, so.observed_at, so.sale_date, so.status,
+            COALESCE(NULLIF(so.raw_payload->>'state', ''), l.state) AS state,
+            COALESCE(NULLIF(so.raw_payload->>'county', ''), l.county) AS county
+       FROM source_observations so
+       LEFT JOIN listings l ON l.id = so.listing_id
+      WHERE UPPER(COALESCE(NULLIF(so.raw_payload->>'state', ''), l.state, '')) = $1
+        AND LOWER(COALESCE(NULLIF(so.raw_payload->>'county', ''), l.county, '')) = LOWER($2)
+      ORDER BY so.observed_at ASC, so.id ASC
+      LIMIT 5000`,
+    [targetState, targetCounty],
+  );
+  const rows = Array.isArray(result?.rows) ? result.rows : [];
+  if (rows.length === 0) return null;
+  const stats = aggregateCountyObservationStats(rows, {
+    state: targetState,
+    county: targetCounty,
+    minSample,
+  });
+  return stats.totalDockets > 0 ? stats : null;
+}
+
 module.exports = {
   compactPgObservations,
   importObservationRun,
   loadObservationsForRecord,
+  loadCountyObservationStats,
   loadObservationsFromPg,
   observationStoreStats,
   persistSourceObservations,

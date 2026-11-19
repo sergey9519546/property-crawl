@@ -1,16 +1,19 @@
 const { executeDag } = require('../swarm/dag-orchestrator');
 const db = require('../db/client');
 const { createHash } = require('node:crypto');
-const { loadObservationsForRecord } = require('../db/observations-persistence');
+const { loadObservationsForRecord, loadCountyObservationStats } = require('../db/observations-persistence');
 const { buildPropertyDossier } = require('../intelligence/dossier');
+const { evaluateOpportunitySignals } = require('../intelligence/signals');
 const { validateListingForIngestion } = require('../scrapers/validation');
 const durableEvidence = require('../discovery/evidence');
 const { requireWorkspaceIdentity } = require('../security/workspace-identity');
+const { auditDocketEvidence, summarizeDocketHits } = require('./verify-docket');
 
 function createPropertyIntelligenceHandler(dependencies = {}) {
   const database = dependencies.database || db;
   const publicRecords = dependencies.buildPublicRecordEvidence || ((listing) => require('../public-records').buildPublicRecordEvidence(listing, { allowNetwork: true, timeoutMs: 7000 }));
   const evidenceStore = dependencies.durableEvidence || durableEvidence;
+  const countyStatsLoader = dependencies.loadCountyObservationStats || loadCountyObservationStats;
   const env = dependencies.env || process.env;
   const cache = new Map();
   const inFlight = new Map();
@@ -44,6 +47,17 @@ function createPropertyIntelligenceHandler(dependencies = {}) {
         if (!inFlight.has(key) && inFlight.size >= 2) return res.status(429).json({ error: 'Two property investigations are already running. Retry shortly.' });
         if (!inFlight.has(key)) {
           const work = Promise.resolve().then(() => publicRecords(listing)).then(async (result) => {
+            if (result && !result.docketVerification && (dependencies.courtlistenerClient || env.COURTLISTENER_VERIFY_DOCKET === '1')) {
+              try {
+                result.docketVerification = await auditDocketEvidence(listing, {
+                  lookup: true,
+                  courtlistenerClient: dependencies.courtlistenerClient,
+                  env,
+                });
+              } catch {
+                // Non-fatal: fail closed without blocking public-record research
+              }
+            }
             if (database.isPg) await evidenceStore.saveResearch(database.pool, listing.id, key, result);
             if (cache.size >= 100) cache.delete(cache.keys().next().value);
             const entry = { savedAt: Date.now(), result }; cache.set(key, entry); return entry;
@@ -67,6 +81,14 @@ function createPropertyIntelligenceHandler(dependencies = {}) {
         // must not read a stale local file to pretend otherwise.
         historyUnavailable = true;
       }
+      let countyStats = null;
+      if (database.isPg && database.pool && listing.state && listing.county) {
+        try {
+          countyStats = await countyStatsLoader(database.pool, { state: listing.state, county: listing.county });
+        } catch {
+          countyStats = null;
+        }
+      }
       const { observations: _observations, ...extensions } = stored || {};
       // Anonymous GET must never leak operator-funded research, durable
       // evidence extensions, or public-record lookup results.
@@ -74,9 +96,53 @@ function createPropertyIntelligenceHandler(dependencies = {}) {
         ? requireWorkspaceIdentity.isAuthorized(req, env)
         : Boolean(snapshotId || req.method === 'POST');
       const scopedObservations = authorized ? observations : { records: {}, signals: [] };
-      const publicPayload = buildPropertyDossier(listing, { observations: scopedObservations, publicRecords: authorized ? (evidence?.result || null) : null, historyUnavailable });
+
+      // Non-PII postponement counts are safe to expose publicly on GET even when
+      // raw observation history / personal names remain gated.
+      const nonPiiTrajectory = evaluateOpportunitySignals(listing, {
+        observations,
+        publicRecords: null,
+        historyUnavailable,
+      }).trajectory;
+      const postponementCounts = {
+        priorPostponements: nonPiiTrajectory?.priorPostponements ?? 0,
+        statutoryStayExhausted: Boolean(nonPiiTrajectory?.statutoryStayExhausted),
+      };
+
+      // Extract non-PII aggregate docket status for public & authorized views
+      const rawDocketSummary = evidence?.result?.docketVerification?.docketSummary
+        || stored?.docketVerification?.docketSummary
+        || listing.docketSummary
+        || listing.docketVerification?.docketSummary
+        || null;
+      const rawDocketHits = rawDocketSummary?.dockets
+        || evidence?.result?.docketVerification?.matchedDockets
+        || stored?.docketVerification?.matchedDockets
+        || listing.courtlistenerDockets
+        || listing.bankruptcyDockets
+        || [];
+      const docketSummary = rawDocketSummary || rawDocketHits.length > 0
+        ? summarizeDocketHits(rawDocketHits, {
+            checkedAt: rawDocketSummary?.checkedAt,
+            lookupExecuted: Boolean(rawDocketSummary?.lookupExecuted),
+          })
+        : null;
+
+      const publicPayload = buildPropertyDossier(listing, {
+        observations: scopedObservations,
+        publicRecords: authorized ? (evidence?.result || null) : null,
+        historyUnavailable,
+        countyStats,
+        docketSummary,
+        trajectoryOverride: authorized ? null : postponementCounts,
+      });
       if (!authorized) {
-        return res.json({ ...publicPayload, historyUnavailable, researchRestricted: true });
+        return res.json({
+          ...publicPayload,
+          postponementCounts,
+          historyUnavailable,
+          researchRestricted: true,
+        });
       }
       const execution = await executeDag({
         ...listing,
@@ -85,7 +151,17 @@ function createPropertyIntelligenceHandler(dependencies = {}) {
         countyParcel: evidence?.result?.countyParcel || null,
         observations: scopedObservations,
       }, { allowNetwork: false });
-      return res.json({ ...publicPayload, ...extensions, historyUnavailable, enrichmentExecution:{success:execution.success,dossier:execution.context.dossier || null,telemetry:execution.telemetry} });
+      return res.json({
+        ...publicPayload,
+        ...extensions,
+        postponementCounts,
+        historyUnavailable,
+        enrichmentExecution: {
+          success: execution.success,
+          dossier: execution.context.dossier || null,
+          telemetry: execution.telemetry,
+        },
+      });
     } catch (error) {
       console.error('[Property Intelligence]', error.message);
       return res.status(503).json({ error: 'Property research is temporarily unavailable. Stored listing evidence was preserved.' });

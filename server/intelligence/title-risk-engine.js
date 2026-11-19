@@ -192,9 +192,61 @@ function arbitrateTitleRisk(listing = {}, rawNoticeText = '') {
   };
 
   // 3. Evaluate Bankruptcy Automatic Stay (11 U.S.C. § 362)
+  const rawDocketHits = Array.isArray(listing.courtlistenerDockets)
+    ? listing.courtlistenerDockets
+    : Array.isArray(listing.bankruptcyDockets)
+      ? listing.bankruptcyDockets
+      : Array.isArray(listing.docketSummary?.dockets)
+        ? listing.docketSummary.dockets
+        : Array.isArray(listing.docketVerification?.dockets)
+          ? listing.docketVerification.dockets
+          : Array.isArray(sourceFacts.courtlistenerDockets)
+            ? sourceFacts.courtlistenerDockets
+            : [];
+  const normalizedDocketHits = rawDocketHits
+    .filter((hit) => hit && typeof hit === 'object')
+    .map((hit) => {
+      const courtId = hit.courtId ? String(hit.courtId).toLowerCase() : null;
+      const isBk = typeof hit.isBankruptcy === 'boolean'
+        ? hit.isBankruptcy
+        : Boolean((courtId && /^[a-z]{2,4}b$/i.test(courtId)) || hit.chapter);
+      const isActive = typeof hit.isActive === 'boolean' ? hit.isActive : !hit.dateTerminated;
+      return {
+        docketId: hit.docketId ?? null,
+        caseNumber: hit.caseNumber || hit.docketNumber || null,
+        courtId,
+        dateFiled: hit.dateFiled || null,
+        dateTerminated: hit.dateTerminated || null,
+        isBankruptcy: isBk,
+        chapter: hit.chapter || null,
+        isActive,
+        sourceUrl: hit.sourceUrl || null,
+      };
+    });
+  const bankruptcyDocketHits = normalizedDocketHits.filter((hit) => hit.isBankruptcy);
+  const activeBankruptcyHits = bankruptcyDocketHits.filter((hit) => hit.isActive);
+  const primaryBkHit = activeBankruptcyHits[0] || bankruptcyDocketHits[0] || null;
+  const docketHasActiveBk = activeBankruptcyHits.length > 0;
+  const courtlistenerDocketSummary = {
+    hitCount: normalizedDocketHits.length,
+    bankruptcyHitCount: bankruptcyDocketHits.length,
+    activeBankruptcyCount: activeBankruptcyHits.length,
+    terminatedBankruptcyCount: bankruptcyDocketHits.length - activeBankruptcyHits.length,
+    hasBankruptcyHit: bankruptcyDocketHits.length > 0,
+    activeBankruptcyStaySignal: docketHasActiveBk,
+    status: activeBankruptcyHits.length > 0
+      ? 'active_bankruptcy_docket'
+      : bankruptcyDocketHits.length > 0
+        ? 'terminated_bankruptcy_docket'
+        : normalizedDocketHits.length > 0
+          ? 'civil_docket_match'
+          : (listing.docketSummary?.status || 'not_checked'),
+  };
+
   const bankruptcyStay = analyzeBankruptcyStay({
-    hasBankruptcyFiling: listing.bankruptcy?.active ?? listing.hasBankruptcyFiling,
-    petitionDate: listing.bankruptcy?.petitionDate ?? listing.petitionDate,
+    hasBankruptcyFiling: listing.bankruptcy?.active ?? listing.hasBankruptcyFiling ?? (docketHasActiveBk ? true : undefined),
+    petitionDate: listing.bankruptcy?.petitionDate ?? listing.petitionDate ?? primaryBkHit?.dateFiled,
+    caseNumber: listing.bankruptcy?.caseNumber ?? listing.caseNumber ?? primaryBkHit?.caseNumber,
     priorDismissalsWithin1Year: listing.bankruptcy?.priorDismissalsWithin1Year ?? listing.priorDismissalsWithin1Year,
     hasCourtExtension: listing.bankruptcy?.hasCourtExtension ?? listing.hasCourtExtension,
     hasInRemReliefOrder: listing.bankruptcy?.hasInRemReliefOrder ?? listing.hasInRemReliefOrder,
@@ -370,6 +422,7 @@ function arbitrateTitleRisk(listing = {}, rawNoticeText = '') {
       warningDetails: hoaEval.warningDetails,
     },
     bankruptcyStay,
+    courtlistenerDocketSummary,
     statutoryRedemption: {
       state,
       days: redemptionRule.days,

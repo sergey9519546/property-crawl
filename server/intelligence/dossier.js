@@ -11,6 +11,7 @@ const { calculateSurplusEquityWaterfall } = require('./surplus-waterfall');
 const { evaluateAuctionProceedProbability, calculateDocketClearingAnalytics } = require('./auction-microstructure');
 const { getAuctionDepositRules, calculateRequiredDeposit } = require('./escrow-optimizer');
 const { arbitrateTitleRisk } = require('./title-risk-engine');
+const { summarizeDocketHits } = require('../routes/verify-docket');
 const { triggerWeightManager } = require('../swarm/trigger-weights');
 const {
   normalizeCoordinates: normalizeHazardCoords,
@@ -242,7 +243,7 @@ function resolveSyncFederalHazards(listing = {}, publicRecords = null, hazardCac
 
 function known(value) { return value !== null && value !== undefined && value !== ''; }
 
-function buildPropertyDossier(listing, { observations = { records: {}, signals: [] }, publicRecords = null, operatorInput = null, now = Date.now(), historyUnavailable = false, countyStats = null, hazardCachePaths = null, triggerWeights = triggerWeightManager } = {}) {
+function buildPropertyDossier(listing, { observations = { records: {}, signals: [] }, publicRecords = null, operatorInput = null, now = Date.now(), historyUnavailable = false, countyStats = null, hazardCachePaths = null, triggerWeights = triggerWeightManager, docketVerification = null, docketSummary = null, trajectoryOverride = null } = {}) {
   const timestamp = listing.sourceObservedAt || listing.provenance?.observedAt;
   const publisherObserved = (listing.provenance?.origin === 'live' || listing.provenance?.origin === 'email_notice')
     && validateListingForIngestion(listing).isValid && Date.parse(timestamp) <= now + 300_000;
@@ -285,9 +286,31 @@ function buildPropertyDossier(listing, { observations = { records: {}, signals: 
         : Array.isArray(publicRecords?.municipalRecords?.violations)
           ? publicRecords.municipalRecords.violations
           : null;
-  const listingForTitle = (!Array.isArray(listing.municipalViolations) && resolvedViolations)
+  const rawDocketSummary = docketSummary
+    || docketVerification?.docketSummary
+    || publicRecords?.docketVerification?.docketSummary
+    || publicRecords?.docketSummary
+    || listing.docketSummary
+    || listing.docketVerification?.docketSummary
+    || null;
+  const rawDocketHits = rawDocketSummary?.dockets
+    || docketVerification?.matchedDockets
+    || publicRecords?.docketVerification?.matchedDockets
+    || publicRecords?.courtlistenerDockets
+    || listing.courtlistenerDockets
+    || listing.bankruptcyDockets
+    || listing.provenance?.sourceFacts?.courtlistenerDockets
+    || [];
+  const resolvedDocketSummary = summarizeDocketHits(rawDocketHits, {
+    checkedAt: rawDocketSummary?.checkedAt || new Date(now).toISOString(),
+    lookupExecuted: Boolean(rawDocketSummary?.lookupExecuted),
+  });
+  const baseListingForTitle = (!Array.isArray(listing.municipalViolations) && resolvedViolations)
     ? { ...listing, municipalViolations: resolvedViolations }
     : listing;
+  const listingForTitle = resolvedDocketSummary.hitCount > 0 || resolvedDocketSummary.lookupExecuted
+    ? { ...baseListingForTitle, docketSummary: resolvedDocketSummary, courtlistenerDockets: resolvedDocketSummary.dockets }
+    : baseListingForTitle;
   const titleRisk = listing.titleRisk || publicRecords?.titleRisk || arbitrateTitleRisk(listingForTitle, listing.raw || '');
   const gaps = [];
   const VOI_POINTS = { source_identity: 25, title_docket_joinder: 24, omitted_party_joinder: 24, title: 22, municipal_payoff: 21, municipal_liens: 21, value_and_debt: 20, opening_bid: 18, payment_terms: 15, sale_date_passed: 14, transaction_outcome: 12, source_stale: 10, occupancy: 10, archive_snapshot: 8 };
@@ -380,7 +403,20 @@ function buildPropertyDossier(listing, { observations = { records: {}, signals: 
     ? calculateDocketClearingAnalytics(rawDocketHistory, { county: listing.county, state: listing.state })
     : (countyStats && typeof countyStats === 'object' && Number.isFinite(countyStats.totalDockets) ? countyStats : null);
   const effectiveCountyStats = countyStats || listing.countyStats || (docketClearingAnalytics && docketClearingAnalytics.sampleSufficient ? docketClearingAnalytics : null);
-  const auctionMicrostructure = evaluateAuctionProceedProbability(listing, effectiveCountyStats);
+  const effectiveTrajectory = trajectoryOverride
+    ? {
+        ...opportunityEvaluation.trajectory,
+        priorPostponements: trajectoryOverride.priorPostponements ?? opportunityEvaluation.trajectory?.priorPostponements ?? 0,
+        statutoryStayExhausted: Boolean(trajectoryOverride.statutoryStayExhausted ?? opportunityEvaluation.trajectory?.statutoryStayExhausted),
+      }
+    : opportunityEvaluation.trajectory;
+  const listingForMicrostructure = {
+    ...listing,
+    priorPostponements: effectiveTrajectory?.priorPostponements ?? listing.priorPostponements ?? 0,
+    statutoryStayExhausted: Boolean(effectiveTrajectory?.statutoryStayExhausted || listing.statutoryStayExhausted),
+    bankruptcyStayActive: Boolean(titleRisk?.bankruptcyStay?.stayEffective || listing.bankruptcyStayActive),
+  };
+  const auctionMicrostructure = evaluateAuctionProceedProbability(listingForMicrostructure, effectiveCountyStats);
   // Zero-Fabrication: a published opening bid is a minimum asking term, not a
   // realized gavel price, and the canonical judgment column is `judgment`
   // (LISTING_SELECT in server/db/client.js); `judgmentAmount` is only a legacy
@@ -480,13 +516,14 @@ function buildPropertyDossier(listing, { observations = { records: {}, signals: 
     federalHazards: resolveSyncFederalHazards(listing, publicRecords, hazardCachePaths, now),
     calibration,
     titleRisk,
+    docketStatus: resolvedDocketSummary,
     possessionTimeline,
     auctionDepositTerms,
     auctionMicrostructure,
     docketClearingAnalytics,
     surplusWaterfall,
     opportunitySignals: calibratedOpportunitySignals,
-    trajectory: opportunityEvaluation.trajectory,
+    trajectory: effectiveTrajectory,
     triagePriority: opportunityEvaluation.triagePriority,
     opportunityWeights: opportunityEvaluation.weights,
     componentScores: opportunityEvaluation.componentScores,

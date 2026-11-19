@@ -47,7 +47,53 @@ export const PIPELINE_STAGES: Array<{ id: PipelineStage; label: string; descript
   { id: "settled", label: "Settled / Resold", description: "Deed recorded, possession acquired or redeemed" },
 ];
 
+type EscrowAllocationItem = {
+  id: string;
+  targetBid: number;
+  requiredDeposit: number;
+  depositPercent: number;
+  paymentMethod: string;
+  platform: string;
+  saleDate: string | null;
+  lockupStartDate: string | null;
+  recyclableDate: string | null;
+  refundTurnaroundDays: number;
+  priorityScore: number;
+  status: "FUNDED" | "EXCLUDED_CAPITAL_SHORTFALL" | "EXCLUDED_DATE_CONFLICT";
+  allocatedDeposit?: number;
+  reason: string;
+  original?: {
+    address?: string;
+    state?: string;
+  };
+};
+
+type EscrowDateConflict = {
+  candidateAuction: string;
+  conflictingAuctions: string[];
+  candidateRequiredDeposit: number;
+  overlappingDeposits: number;
+  totalNeeded: number;
+  availableCapital: number;
+  shortfall: number;
+  reason: string;
+};
+
+type EscrowAllocationPayload = {
+  totalCapital: number;
+  totalCommittedCapital: number;
+  remainingUnallocatedCapital: number;
+  maximumExecutableBiddingPower: number;
+  capitalEfficiencyRatio: number;
+  fundedAuctionCount?: number;
+  excludedAuctionCount?: number;
+  allocatedAuctions: EscrowAllocationItem[];
+  dateConflicts: EscrowDateConflict[];
+  notes?: string;
+};
+
 type DashboardPayload = {
+  escrowAllocation?: EscrowAllocationPayload | null;
   count: number;
   totalEstimatedValue: number | null;
   totalEstimatedEquity: number | null;
@@ -112,6 +158,9 @@ export function PortfolioView() {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [refreshing, setRefreshing] = React.useState(false);
+  const [escrowCapital, setEscrowCapital] = React.useState("100000");
+  const [escrowSortBy, setEscrowSortBy] = React.useState<"priority" | "chronological" | "bidding_power">("priority");
+  const [allowRecycling, setAllowRecycling] = React.useState(true);
 
   // Initialize pipeline stages from local storage
   React.useEffect(() => {
@@ -144,8 +193,15 @@ export function PortfolioView() {
     }
     setError(null);
     try {
+      const parsedCap = Number(escrowCapital);
+      const capParam = Number.isFinite(parsedCap) && parsedCap >= 0 ? parsedCap : 100000;
+      const dashQuery = new URLSearchParams({
+        capital: String(capParam),
+        sortBy: escrowSortBy,
+        allowRecycling: String(allowRecycling),
+      }).toString();
       const [dashRes, dropsRes, alertsRes] = await Promise.all([
-        fetch("/api/portfolio/dashboard", { cache: "no-store", credentials: "same-origin" }),
+        fetch(`/api/portfolio/dashboard?${dashQuery}`, { cache: "no-store", credentials: "same-origin" }),
         fetch("/api/price-drops", { cache: "no-store", credentials: "same-origin" }),
         fetch("/api/alerts", { cache: "no-store", credentials: "same-origin" }),
       ]);
@@ -208,7 +264,7 @@ export function PortfolioView() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [session.memberTools]);
+  }, [session.memberTools, escrowCapital, escrowSortBy, allowRecycling]);
 
   React.useEffect(() => {
     loadData();
@@ -808,7 +864,130 @@ export function PortfolioView() {
 
         {/* Allocation Tab */}
         {tab === "allocation" && (
-          <div className="grid gap-6 sm:grid-cols-3">
+          <div className="space-y-6">
+            {/* Escrow & Deposit Capital Optimizer (optimizeEscrowAllocation) */}
+            <div className="rounded-card border border-line bg-card p-5 shadow-sm space-y-5" data-testid="escrow-optimizer-panel">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-ink flex items-center gap-2">
+                    <DollarSign className="h-4 w-4 text-ink-2" />
+                    Escrow &amp; Deposit Capital Optimizer
+                  </h3>
+                  <p className="mt-1 text-xs text-ink-3">
+                    Models pre-auction wire lockups, refund turnaround windows, and concurrent bidding power across your saved auctions.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-end gap-3">
+                  <label className="block text-xs">
+                    <span className="font-semibold text-ink-3 block mb-1">Liquid Capital ($)</span>
+                    <input
+                      type="number"
+                      min={0}
+                      step={5000}
+                      value={escrowCapital}
+                      onChange={(e) => setEscrowCapital(e.target.value)}
+                      className="h-9 w-32 rounded-control border border-line-strong bg-paper px-2.5 text-xs font-semibold text-ink"
+                    />
+                  </label>
+                  <label className="block text-xs">
+                    <span className="font-semibold text-ink-3 block mb-1">Priority Policy</span>
+                    <select
+                      value={escrowSortBy}
+                      onChange={(e) => setEscrowSortBy(e.target.value as "priority" | "chronological" | "bidding_power")}
+                      className="h-9 rounded-control border border-line-strong bg-paper px-2.5 text-xs font-semibold text-ink"
+                    >
+                      <option value="priority">Deal Score / Priority</option>
+                      <option value="chronological">Chronological</option>
+                      <option value="bidding_power">Max Bidding Power</option>
+                    </select>
+                  </label>
+                  <label className="inline-flex h-9 items-center gap-2 rounded-control border border-line bg-paper px-3 text-xs font-semibold text-ink-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={allowRecycling}
+                      onChange={(e) => setAllowRecycling(e.target.checked)}
+                      className="rounded border-line-strong"
+                    />
+                    Recycle deposits
+                  </label>
+                </div>
+              </div>
+
+              {dashboard?.escrowAllocation ? (
+                <>
+                  <div className="grid gap-3 sm:grid-cols-4">
+                    <div className="rounded-control border border-line bg-paper p-3">
+                      <span className="text-label font-bold uppercase tracking-wider text-ink-3">Peak Committed</span>
+                      <p className="mt-1 text-lg font-bold text-ink">{formatMoney(dashboard.escrowAllocation.totalCommittedCapital)}</p>
+                    </div>
+                    <div className="rounded-control border border-line bg-paper p-3">
+                      <span className="text-label font-bold uppercase tracking-wider text-ink-3">Remaining Capital</span>
+                      <p className="mt-1 text-lg font-bold text-ink">{formatMoney(dashboard.escrowAllocation.remainingUnallocatedCapital)}</p>
+                    </div>
+                    <div className="rounded-control border border-line bg-paper p-3">
+                      <span className="text-label font-bold uppercase tracking-wider text-ink-3">Max Bidding Power</span>
+                      <p className="mt-1 text-lg font-bold text-yours">{formatMoney(dashboard.escrowAllocation.maximumExecutableBiddingPower)}</p>
+                    </div>
+                    <div className="rounded-control border border-line bg-paper p-3">
+                      <span className="text-label font-bold uppercase tracking-wider text-ink-3">Capital Efficiency</span>
+                      <p className="mt-1 text-lg font-bold text-ink">{dashboard.escrowAllocation.capitalEfficiencyRatio}x</p>
+                    </div>
+                  </div>
+
+                  {dashboard.escrowAllocation.dateConflicts.length > 0 && (
+                    <div className="rounded-control border border-catch/30 bg-catch-wash p-3.5 space-y-1.5">
+                      <p className="text-xs font-bold text-catch-ink flex items-center gap-1.5">
+                        <AlertCircle className="h-3.5 w-3.5" />
+                        {dashboard.escrowAllocation.dateConflicts.length} Deposit Lockup Conflict(s) Detected
+                      </p>
+                      <ul className="space-y-1 text-xs text-catch-ink">
+                        {dashboard.escrowAllocation.dateConflicts.map((conflict, idx) => (
+                          <li key={`${conflict.candidateAuction}-${idx}`}>{conflict.reason}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {dashboard.escrowAllocation.allocatedAuctions.length === 0 ? (
+                    <p className="text-xs text-ink-3">{dashboard.escrowAllocation.notes || "Save auctions to your watchlist to simulate escrow lockup schedules."}</p>
+                  ) : (
+                    <div className="divide-y divide-line rounded-control border border-line">
+                      {dashboard.escrowAllocation.allocatedAuctions.map((item) => (
+                        <div key={item.id} className="flex flex-col gap-2 p-3 sm:flex-row sm:items-center sm:justify-between">
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className={`rounded-full px-2 py-0.5 text-label font-bold uppercase ${
+                                item.status === "FUNDED"
+                                  ? "bg-yours-wash text-yours border border-yours/30"
+                                  : "bg-catch-wash text-catch-ink border border-catch/30"
+                              }`}>
+                                {item.status === "FUNDED" ? "Funded" : item.status === "EXCLUDED_DATE_CONFLICT" ? "Date Conflict" : "Capital Shortfall"}
+                              </span>
+                              <span className="text-xs font-bold text-ink truncate">
+                                {item.original?.address || item.id}{item.original?.state ? ` (${item.original.state})` : ""}
+                              </span>
+                            </div>
+                            <p className="mt-1 text-xs text-ink-3">
+                              {item.platform} · {item.paymentMethod.replace(/_/g, " ")} · Deposit: <strong>{formatMoney(item.requiredDeposit)}</strong> ({Math.round(item.depositPercent * 100)}%) · Target Bid: <strong>{formatMoney(item.targetBid)}</strong>
+                            </p>
+                            <p className="mt-0.5 text-label text-ink-3">{item.reason}</p>
+                          </div>
+                          {item.saleDate && (
+                            <span className="shrink-0 text-xs font-semibold text-ink-2">
+                              Gavel: {displayDate(item.saleDate)}
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <p className="text-xs text-ink-3">Save deals to your watchlist to compute optimal deposit recycling.</p>
+              )}
+            </div>
+
+            <div className="grid gap-6 sm:grid-cols-3">
             {/* By State */}
             <div className="rounded-card border border-line bg-card p-5 shadow-sm space-y-3">
               <h3 className="text-xs font-bold uppercase tracking-wider text-ink-3 flex items-center gap-2">
@@ -877,6 +1056,7 @@ export function PortfolioView() {
                 )}
               </div>
             </div>
+          </div>
           </div>
         )}
       </div>
