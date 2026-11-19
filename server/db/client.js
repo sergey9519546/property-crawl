@@ -3636,7 +3636,7 @@ class DatabaseClient {
     const serviceLinkFreshWindowDays = Math.max(1, Math.trunc(Number(options.serviceLinkFreshWindowDays) || 3));
     const serviceLinkHardStaleDays = Math.max(serviceLinkStaleDays, Math.trunc(Number(options.serviceLinkHardStaleDays) || 7));
     const concludedGraceDays = Math.max(1, Math.trunc(Number(options.concludedGraceDays) || 1));
-    const observationRetentionDays = Math.max(7, Math.trunc(Number(options.observationRetentionDays) || 30));
+    const observationRetentionDays = Math.max(7, Math.trunc(Number(options.observationRetentionDays) || 14));
     const purgeQuery = (sql, params = [], timeoutMs = 12_000) => queryWithStatementTimeout(this.pool, sql, params, timeoutMs);
 
     let hasFreshServiceLinkLive = false;
@@ -3922,10 +3922,35 @@ class DatabaseClient {
       console.warn('[DB] purgeStaleListings snapshot/checkpoint cleanup failed:', snapErr?.message || snapErr);
     }
 
+    let historyDeleted = 0;
+    try {
+      const histBatchSize = Math.min(2000, Math.max(batchSize, 200));
+      for (let batch = 0; batch < Math.min(maxBatches, 10) && !budgetExceeded(); batch += 1) {
+        const histRes = await purgeQuery(
+          `DELETE FROM listing_history
+            WHERE id IN (
+              SELECT id
+                FROM listing_history
+               WHERE recorded_at < NOW() - INTERVAL '21 days'
+               LIMIT $1
+            )`,
+          [histBatchSize],
+        );
+        const batchHist = histRes.rowCount || 0;
+        historyDeleted += batchHist;
+        if (batchHist < histBatchSize) break;
+        if (batchPauseMs > 0 && batch + 1 < Math.min(maxBatches, 10) && !budgetExceeded()) {
+          await new Promise((resolve) => setTimeout(resolve, batchPauseMs));
+        }
+      }
+    } catch (histErr) {
+      console.warn('[DB] purgeStaleListings listing_history cleanup failed:', histErr?.message || histErr);
+    }
+
     if (deleted > 0) {
       await this.pool.query("SELECT nextval('discovery_listing_revision_seq')").catch(() => {});
     }
-    return { deleted, observationsDeleted, snapshotsDeleted };
+    return { deleted, observationsDeleted, snapshotsDeleted, historyDeleted };
   }
 }
 

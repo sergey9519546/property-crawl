@@ -3,13 +3,24 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const EMAIL = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
+
+function isValidFromAddress(value) {
+  const from = String(value || '').trim();
+  if (!from || /[\r\n]/.test(from) || from.length > 320) return false;
+  if (EMAIL.test(from)) return true;
+  const match = from.match(/^([^<>]+?)\s*<([^<>\s]+)>$/);
+  if (!match) return false;
+  const displayName = match[1].trim();
+  const addr = match[2].trim();
+  return Boolean(displayName) && EMAIL.test(addr);
+}
 
 function mailConfig(env = process.env) {
   const apiKey = String(env.RESEND_API_KEY || '').trim();
   const from = String(env.RESEND_FROM || '').trim();
   return {
-    configured: Boolean(apiKey && from && EMAIL.test(from)),
+    configured: Boolean(apiKey && isValidFromAddress(from)),
     apiKey,
     from,
   };

@@ -183,7 +183,7 @@ class DefaultImapClient {
 /**
  * Standardize extracted notice fields into a canonical listing object
  */
-function standardizeEmailNoticeListing(parsed = {}, meta = {}) {
+async function standardizeEmailNoticeListing(parsed = {}, meta = {}) {
   const rawState = parsed.state || meta.state || 'UNKNOWN';
   const state = String(rawState).trim().toUpperCase() || 'UNKNOWN';
   const stateSlug = state === 'UNKNOWN' ? 'unknown' : state.toLowerCase();
@@ -202,9 +202,9 @@ function standardizeEmailNoticeListing(parsed = {}, meta = {}) {
 
   if (meta.rawSnippet && meta.skipVault !== true && meta.vault !== null) {
     const targetVault = meta.vault || defaultVault;
-    if (targetVault && typeof targetVault.putDocumentSync === 'function') {
+    if (targetVault && typeof targetVault.putDocument === 'function') {
       try {
-        targetVault.putDocumentSync(`reviews/${encodeURIComponent(recordId)}.txt`, meta.rawSnippet, {
+        await targetVault.putDocument(`reviews/${encodeURIComponent(recordId)}.txt`, meta.rawSnippet, {
           contentType: 'text/plain',
           metadata: { recordId, source: sourceKey },
         });
@@ -426,7 +426,7 @@ class EmailNoticesPipeline {
     }
   }
 
-  processEmail(email = {}) {
+  async processEmail(email = {}) {
     const rawBody = String(email.body || '');
     const state = detectNoticeState(email);
     const feedInfo = FEED_CONFIG[state] || null;
@@ -484,7 +484,7 @@ class EmailNoticesPipeline {
       }
 
       const contentHash = hashNotice(snippet);
-      const listing = standardizeEmailNoticeListing(
+      const listing = await standardizeEmailNoticeListing(
         { ...parsed, state: resolvedState },
         {
           state: resolvedState,
@@ -618,7 +618,7 @@ class EmailNoticesPipeline {
         let emailHasReviews = false;
         let emailError = false;
         try {
-          const { listings, lowConfidenceNotices } = this.processEmail(email);
+          const { listings, lowConfidenceNotices } = await this.processEmail(email);
           report.listingsGenerated += (listings.length + (lowConfidenceNotices?.length || 0));
 
           for (const candidate of listings) {
@@ -658,12 +658,7 @@ class EmailNoticesPipeline {
             const vault = this.vault;
             if (vault && item.rawSnippet) {
               try {
-                if (typeof vault.putDocumentSync === 'function') {
-                  vault.putDocumentSync(`reviews/${encodeURIComponent(docId)}.txt`, item.rawSnippet, {
-                    contentType: 'text/plain',
-                    metadata: { recordId: item.recordId, source: this.sourceKey, reason: 'LOW_CONFIDENCE_NOTICE' },
-                  });
-                } else if (typeof vault.putDocument === 'function') {
+                if (typeof vault.putDocument === 'function') {
                   await vault.putDocument(`reviews/${encodeURIComponent(docId)}.txt`, item.rawSnippet, {
                     contentType: 'text/plain',
                     metadata: { recordId: item.recordId, source: this.sourceKey, reason: 'LOW_CONFIDENCE_NOTICE' },

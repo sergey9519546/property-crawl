@@ -330,15 +330,15 @@ async function handleDocumentReview(req, res, dependencies = {}) {
         ...(store.quarantined ? { storeQuarantinedTo: store.quarantined } : {}),
         ...(store.writesBlocked ? { writesBlocked: true } : {}),
       } : {}),
-      reviews: requested.map((entry) => {
+      reviews: await Promise.all(requested.map(async (entry) => {
         const review = normalizeReview(entry.review || entry);
         let rawText = entry.rawText || null;
         if (!rawText) {
           const vault = dependencies.vault || defaultVault;
           try {
-            if (typeof vault.getDocumentSync === 'function') {
-              const doc = vault.getDocumentSync(`reviews/${encodeURIComponent(entry.id)}.txt`)
-                || vault.getDocumentSync(`reviews/${encodeURIComponent(entry.listingId)}.txt`);
+            if (typeof vault.getDocument === 'function') {
+              const doc = (await vault.getDocument(`reviews/${encodeURIComponent(entry.id)}.txt`))
+                || (await vault.getDocument(`reviews/${encodeURIComponent(entry.listingId)}.txt`));
               if (doc?.data) rawText = doc.data.toString('utf8');
             }
           } catch (_) {}
@@ -363,7 +363,7 @@ async function handleDocumentReview(req, res, dependencies = {}) {
           extractedFields: extractedFields || null,
           ...(entry.hydration ? { hydration: entry.hydration } : {}),
         };
-      }),
+      })),
       hydration: {
         enabled: Boolean(hydrate),
         storeCount: stored.length,

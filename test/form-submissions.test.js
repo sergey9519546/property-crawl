@@ -104,6 +104,39 @@ test('removeNewsletterEmail deletes only the exact newsletter address', async ()
   process.env.PROPERTY_FORM_SUBMISSIONS_DIR = '';
 });
 
+test('persistFormSubmission and removeNewsletterEmail use Postgres when DATABASE_URL is configured and fail closed in production without it', async () => {
+  const queries = [];
+  const pgPool = {
+    async query(sql, params) {
+      queries.push({ sql, params });
+      return { rowCount: 1, rows: [] };
+    },
+  };
+  const res = await persistFormSubmission('newsletter', { email: 'pguser@example.com' }, {
+    env: { DATABASE_URL: 'postgres://user:pass@localhost:5432/db', NODE_ENV: 'production' },
+    pgPool,
+  });
+  assert.equal(res.ok, true);
+  assert.equal(res.storedPg, true);
+  assert.equal(res.storedPath, null);
+  assert.equal(res.delivery, 'postgres');
+  assert.equal(queries.length, 2);
+
+  const removed = await removeNewsletterEmail('pguser@example.com', {
+    env: { DATABASE_URL: 'postgres://user:pass@localhost:5432/db', NODE_ENV: 'production' },
+    pgPool,
+  });
+  assert.equal(removed.removed, 1);
+  assert.equal(queries.length, 3);
+
+  const prodMissing = await persistFormSubmission('contact', { name: 'A', email: 'a@b.com', message: 'hi' }, {
+    env: { NODE_ENV: 'production' },
+  });
+  assert.equal(prodMissing.ok, false);
+  assert.equal(prodMissing.delivery, 'unavailable');
+  assert.equal(prodMissing.storeError, 'DATABASE_URL_UNSET');
+});
+
 test('newsletter route delegates to shared form store', async () => {
   const routePath = path.resolve(__dirname, '../src/app/api/newsletter/route.ts');
   const source = fs.readFileSync(routePath, 'utf8');
@@ -149,4 +182,37 @@ test('removeNewsletterEmail breaks stale lock files cleanly', () => {
   assert.doesNotMatch(content, /stale@example.com/);
   assert.match(content, /keep2@example.com/);
   process.env.PROPERTY_FORM_SUBMISSIONS_DIR = '';
+});
+
+test('persistFormSubmission and removeNewsletterEmail use Postgres when DATABASE_URL is configured and fail closed in production without it', async () => {
+  const queries = [];
+  const pgPool = {
+    async query(sql, params) {
+      queries.push({ sql, params });
+      return { rowCount: 1, rows: [] };
+    },
+  };
+  const res = await persistFormSubmission('newsletter', { email: 'pguser@example.com' }, {
+    env: { DATABASE_URL: 'postgres://user:pass@localhost:5432/db', NODE_ENV: 'production' },
+    pgPool,
+  });
+  assert.equal(res.ok, true);
+  assert.equal(res.storedPg, true);
+  assert.equal(res.storedPath, null);
+  assert.equal(res.delivery, 'postgres');
+  assert.equal(queries.length, 2);
+
+  const removed = await removeNewsletterEmail('pguser@example.com', {
+    env: { DATABASE_URL: 'postgres://user:pass@localhost:5432/db', NODE_ENV: 'production' },
+    pgPool,
+  });
+  assert.equal(removed.removed, 1);
+  assert.equal(queries.length, 3);
+
+  const prodMissing = await persistFormSubmission('contact', { name: 'A', email: 'a@b.com', message: 'hi' }, {
+    env: { NODE_ENV: 'production' },
+  });
+  assert.equal(prodMissing.ok, false);
+  assert.equal(prodMissing.delivery, 'unavailable');
+  assert.equal(prodMissing.storeError, 'DATABASE_URL_UNSET');
 });

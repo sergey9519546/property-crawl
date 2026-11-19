@@ -129,7 +129,7 @@ class PgCollectionJobStore {
 }
 
 function sourceRunUnsafe(result) {
-  if (!result || result.error || result.observationError || result.accepted === 0 || result.rejected > 0) return true;
+  if (!result || result.error || result.observationError || !(result.accepted > 0)) return true;
   return ['failed', 'empty'].includes(result.report?.outcome);
 }
 

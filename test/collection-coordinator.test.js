@@ -136,6 +136,9 @@ test('an unrelated source failure still evaluates positive matches from the comp
 
 test('partial clean observations remain safe for positive matching but never claim complete scope', () => {
   const safety=huntSafety({ skipped: false, sourceResults: [{ sourceId: 'treasury', accepted: 16, rejected: 0, report: null }] });
+  const withRejected = huntSafety({ skipped: false, sourceResults: [{ sourceId: 'hud', accepted: 5, rejected: 2, error: null, observationError: null, report: { outcome: 'success' } }] });
+  assert.equal(withRejected.safe, true);
+  assert.deepEqual(withRejected.safePositiveSourceIds, ['hud']);
   assert.equal(safety.safe,true);assert.deepEqual(safety.safePositiveSourceIds,['treasury']);assert.deepEqual(safety.completeSourceIds,[]);
 });
 test('a truncated source report makes the collection job partial', async () => {

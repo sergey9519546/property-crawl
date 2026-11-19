@@ -27,7 +27,7 @@ export async function POST(request: Request) {
   }
   let result: { removed: number };
   try {
-    result = removeNewsletterEmail(email);
+    result = await removeNewsletterEmail(email);
   } catch {
     return Response.json({ error: "The subscriber list could not be updated. Please try again later." }, { status: 503, headers: responseHeaders });
   }
