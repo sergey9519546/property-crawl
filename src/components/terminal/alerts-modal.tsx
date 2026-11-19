@@ -308,7 +308,7 @@ export function AlertsModal({ isOpen, onClose, availableStates, listings, onAppl
                       disabled={promotingId === search.id}
                       className="inline-flex items-center gap-1 rounded-lg border border-line-strong bg-paper px-2 py-1 text-xs font-semibold text-ink-2 hover:bg-line disabled:opacity-60"
                     >
-                      {promotingId === search.id ? t.alertsPromotingBtn : promotedHunts[search.id] ? t.alertsPromotedHunt : t.alertsPromoteHunt}
+                      {promotingId === search.id ? t.alertsPromotingBtn : promotedHunts[search.id] ? t.alertsPromotedHunt : (t.alertsPromoteHunt || "Promote to Hunt")}
                     </button>
                     {promotedHunts[search.id] && (
                       <a
