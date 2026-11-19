@@ -5,6 +5,7 @@ import type { PointerEvent as ReactPointerEvent } from "react";
 import { AlertTriangle, Box, Compass, Layers, LoaderCircle, MapPin, RotateCcw } from "lucide-react";
 import { Listing } from "@/data/listings";
 import { inspectParcelBoundaryInputs } from "@/lib/listing-map-policy";
+import { fetchParcelBoundaryCached } from "@/lib/parcel-boundary-cache";
 import { useLocale } from "@/components/i18n/locale-provider";
 import { formatLocaleNumber } from "@/lib/i18n/translator";
 
@@ -59,13 +60,30 @@ function isPosition(value: unknown): value is Position {
     && Number.isFinite(value[1]);
 }
 
-function outerRing(feature: ParcelFeature | null): Position[] {
+function allRings(feature: ParcelFeature | null): { ring: Position[]; isHole: boolean }[] {
   if (!feature) return [];
-  const coordinates = feature.geometry.coordinates;
-  const ring = feature.geometry.type === "Polygon"
-    ? (coordinates as number[][][])[0]
-    : (coordinates as number[][][][])[0]?.[0];
-  return Array.isArray(ring) ? ring.filter(isPosition) : [];
+  const out: { ring: Position[]; isHole: boolean }[] = [];
+  if (feature.geometry.type === "Polygon") {
+    const rings = feature.geometry.coordinates as number[][][];
+    rings.forEach((raw, idx) => {
+      const clean = Array.isArray(raw) ? raw.filter(isPosition) : [];
+      if (clean.length >= 4) out.push({ ring: clean, isHole: idx > 0 });
+    });
+  } else if (feature.geometry.type === "MultiPolygon") {
+    const polys = feature.geometry.coordinates as number[][][][];
+    polys.forEach((poly) => {
+      if (!Array.isArray(poly)) return;
+      poly.forEach((raw, idx) => {
+        const clean = Array.isArray(raw) ? raw.filter(isPosition) : [];
+        if (clean.length >= 4) out.push({ ring: clean, isHole: idx > 0 });
+      });
+    });
+  }
+  return out;
+}
+
+function outerRing(feature: ParcelFeature | null): Position[] {
+  return allRings(feature)[0]?.ring ?? [];
 }
 
 function haversineMeters(pt1: Position, pt2: Position): number {
@@ -112,10 +130,15 @@ interface LocalEdge {
 interface LocalParcelGeometry {
   vertices: LocalVertex[];
   edges: LocalEdge[];
+  secondaryRings: { vertices: LocalVertex[]; isHole: boolean }[];
+  maxSpanFeet: number;
   radius: number;
 }
 
-function buildLocalParcelGeometry(ring: Position[]): LocalParcelGeometry | null {
+function buildLocalParcelGeometry(
+  ring: Position[],
+  extraRings: { ring: Position[]; isHole: boolean }[] = [],
+): LocalParcelGeometry | null {
   if (ring.length < 4) return null;
   const unique = ring.slice(0, -1);
   if (unique.length < 3) return null;
@@ -144,6 +167,16 @@ function buildLocalParcelGeometry(ring: Position[]): LocalParcelGeometry | null 
     y: (p.y - centerY) * normScale,
   }));
 
+  const secondaryRings = extraRings
+    .map(({ ring: r, isHole }) => {
+      const pts = r.slice(0, -1).map(([lng, lat]) => ({
+        x: ((lng - meanLng) * metersPerLng - centerX) * normScale,
+        y: ((lat - meanLat) * metersPerLat - centerY) * normScale,
+      }));
+      return { vertices: pts, isHole };
+    })
+    .filter((entry) => entry.vertices.length >= 3);
+
   const edges: LocalEdge[] = [];
   for (let i = 0; i < unique.length; i++) {
     const nextIdx = (i + 1) % unique.length;
@@ -162,7 +195,7 @@ function buildLocalParcelGeometry(ring: Position[]): LocalParcelGeometry | null 
     });
   }
 
-  return { vertices, edges, radius: 115 };
+  return { vertices, edges, secondaryRings, maxSpanFeet: Math.max(1, Math.round(maxSpan * 3.28084)), radius: 115 };
 }
 
 interface ProjectedPoint {
@@ -259,11 +292,11 @@ export function Parcel3DVisualizer({ listing }: Parcel3DProps) {
     if (preflight.lat !== null) query.set("lat", String(preflight.lat));
     if (preflight.lng !== null) query.set("lng", String(preflight.lng));
 
-    void fetch(`/api/parcel-boundary?${query.toString()}`, { signal: controller.signal })
-      .then(async (response) => {
-        const body = await response.json().catch(() => null);
-        if (!response.ok) {
-          throw new Error(body?.error || t.parcelNoSourceGeo);
+    const cacheKey = listing.id || query.toString();
+    void fetchParcelBoundaryCached(`/api/parcel-boundary?${query.toString()}`, cacheKey)
+      .then((body) => {
+        if (!body || body.__error) {
+          throw new Error(body?.__error || t.parcelNoSourceGeo);
         }
         return body as ParcelFeature;
       })
@@ -287,8 +320,9 @@ export function Parcel3DVisualizer({ listing }: Parcel3DProps) {
     };
   }, [listing.id, preflight.eligible, unavailableMessage, preflight.state, preflight.county, preflight.apn, preflight.lat, preflight.lng, t.parcelNoSourceGeo, t.parcelUnusableGeo, t.parcelUnavailableMsg]);
 
-  const ring = useMemo(() => outerRing(loadState.feature), [loadState.feature]);
-  const localGeo = useMemo(() => buildLocalParcelGeometry(ring), [ring]);
+  const rings = useMemo(() => allRings(loadState.feature), [loadState.feature]);
+  const ring = rings[0]?.ring ?? [];
+  const localGeo = useMemo(() => buildLocalParcelGeometry(ring, rings.slice(1)), [ring, rings]);
   const metadata = loadState.feature?.properties ?? null;
   const perimeter = metadata?.perimeterFt ?? computeClientPerimeter(ring);
   const coordCount = metadata?.coordinatesCount ?? (ring.length > 0 ? ring.length : null);
@@ -305,7 +339,19 @@ export function Parcel3DVisualizer({ listing }: Parcel3DProps) {
 
   const scene = useMemo(() => {
     if (!localGeo) return null;
-    const { vertices, edges } = localGeo;
+    const { vertices, edges, secondaryRings, maxSpanFeet } = localGeo;
+
+    const secondaryPolygons = secondaryRings.map((entry, idx) => {
+      const pts = entry.vertices.map((v) =>
+        projectPoint(v.x, v.y, effectiveExtrusion, yawDeg, tiltDeg, is2d),
+      );
+      return {
+        key: `sec-${idx}`,
+        points: polygonString(pts),
+        isHole: entry.isHole,
+      };
+    });
+    const scaleBarFeet = Math.max(10, Math.round((maxSpanFeet * (92 / 230)) / 10) * 10);
 
     const baseProjected = vertices.map((v) => projectPoint(v.x, v.y, 0, yawDeg, tiltDeg, is2d));
     const topProjected = vertices.map((v) =>
@@ -420,12 +466,15 @@ export function Parcel3DVisualizer({ listing }: Parcel3DProps) {
       gridLines,
       contourPolygons,
       labeledEdges,
+      secondaryPolygons,
+      scaleBarFeet,
       compassDirs,
       compassNorthEnd: compassDirs[0],
     };
   }, [localGeo, yawDeg, tiltDeg, is2d, effectiveExtrusion, hasObservedTopography, showContours]);
 
   function handlePointerDown(e: ReactPointerEvent<SVGSVGElement>) {
+    if (e.pointerType === "touch") return;
     setDragging(true);
     dragOrigin.current = {
       x: e.clientX,
@@ -472,6 +521,7 @@ export function Parcel3DVisualizer({ listing }: Parcel3DProps) {
     setTiltDeg(DEFAULT_TILT);
     setExtruded(true);
     setShowSetbackGuide(true);
+    setShowContours(true);
   }
 
   return (
@@ -583,6 +633,19 @@ export function Parcel3DVisualizer({ listing }: Parcel3DProps) {
                 filter={`url(#${glowId})`}
               />
 
+              {/* MultiPolygon secondary parcels & interior holes */}
+              {scene.secondaryPolygons.map((poly) => (
+                <polygon
+                  key={poly.key}
+                  points={poly.points}
+                  fill={poly.isHole ? "#090d16" : "#fbf9f5"}
+                  fillOpacity={poly.isHole ? "0.75" : "0.16"}
+                  stroke={poly.isHole ? "#94a3b8" : "#fbf9f5"}
+                  strokeWidth={poly.isHole ? "1.3" : "2"}
+                  strokeDasharray={poly.isHole ? "3 3" : undefined}
+                />
+              ))}
+
               {/* Illustrative interior setback ring (visual reference only) */}
               {showSetbackGuide ? (
                 <polygon
@@ -621,13 +684,15 @@ export function Parcel3DVisualizer({ listing }: Parcel3DProps) {
               ))}
 
               {/* Haversine edge-footage callouts */}
-              {scene.labeledEdges.map((edge) => (
+              {scene.labeledEdges.map((edge) => {
+                const labelWidth = Math.max(46, String(edge.feet).length * 7 + 18);
+                return (
                 <g key={edge.key}>
                   <rect
-                    x={(edge.sx - 20).toFixed(1)}
+                    x={(edge.sx - labelWidth / 2).toFixed(1)}
                     y={(edge.sy - 9).toFixed(1)}
-                    width="40"
-                    height="17"
+                    width={labelWidth}
+                    height="18"
                     rx="4"
                     fill="#090d16"
                     fillOpacity="0.82"
@@ -647,7 +712,28 @@ export function Parcel3DVisualizer({ listing }: Parcel3DProps) {
                     {edge.feet}&prime;
                   </text>
                 </g>
-              ))}
+                );
+              })}
+
+              {/* Scale bar & illustrative setback legend */}
+              <g aria-label="Parcel scale bar">
+                <rect x="16" y="294" width="112" height="28" rx="6" fill="#090d16" fillOpacity="0.78" stroke="#ffffff" strokeOpacity="0.16" strokeWidth="0.75" />
+                <line x1="26" y1="312" x2="118" y2="312" stroke="#fbf9f5" strokeWidth="1.5" />
+                <line x1="26" y1="308" x2="26" y2="315" stroke="#fbf9f5" strokeWidth="1.5" />
+                <line x1="118" y1="308" x2="118" y2="315" stroke="#fbf9f5" strokeWidth="1.5" />
+                <text x="72" y="306" textAnchor="middle" fill="#cbd5e1" fontSize="9.5" fontFamily="monospace" fontWeight="600">
+                  ~{scene.scaleBarFeet} ft
+                </text>
+              </g>
+              {showSetbackGuide ? (
+                <g aria-label="Illustrative setback legend">
+                  <rect x="136" y="294" width="136" height="28" rx="6" fill="#090d16" fillOpacity="0.78" stroke="#fbbf24" strokeOpacity="0.35" strokeWidth="0.75" />
+                  <line x1="145" y1="308" x2="165" y2="308" stroke="#fbbf24" strokeWidth="1.4" strokeDasharray="3 3" />
+                  <text x="171" y="311" fill="#fde68a" fontSize="9.5" fontWeight="600">
+                    Illustrative setback
+                  </text>
+                </g>
+              ) : null}
 
               {/* Interactive rotating N / E / S / W Compass Rose */}
               <g aria-label={t.parcelCompassAria}>

@@ -182,6 +182,13 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
   const researchRequest = useRef<AbortController | null>(null);
   const loadPublic = useCallback(async (requestGeneration: number) => {
     publicRequest.current?.abort();
+    if (!listingId || listingId.startsWith('custom-')) {
+      setDossier(null);
+      setHazards(null);
+      setBusy(false);
+      setError('');
+      return;
+    }
     const controller = new AbortController(); publicRequest.current = controller;
     setBusy(true); setError('');
     try {
@@ -203,6 +210,7 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
   useEffect(() => { const requestGeneration=++generation.current;researchRequest.current?.abort();setDossier(null);setHazards(null);void loadPublic(requestGeneration);return()=>{publicRequest.current?.abort();researchRequest.current?.abort();}; }, [loadPublic]);
 
   async function research() {
+    if (!listingId || listingId.startsWith('custom-')) return;
     if (!session.authenticated) { session.requestUnlock(); return; }
     researchRequest.current?.abort(); const controller=new AbortController();researchRequest.current=controller;
     const requestGeneration=generation.current;setBusy(true);setError('');

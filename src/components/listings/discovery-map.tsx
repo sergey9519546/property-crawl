@@ -103,11 +103,75 @@ export function DiscoveryMap({
           event.stopPropagation();
           if (!props.id) return;
           if (clustered) {
-            const nextZoom = Math.min((map.getZoom?.() ?? 5) + 2.5, 16);
-            if (typeof map.easeTo === "function" && nextZoom > (map.getZoom?.() ?? 0) + 0.25) {
+            const currentZoom = map.getZoom?.() ?? 5;
+            const nextZoom = Math.min(currentZoom + 2.5, 16);
+            if (typeof map.easeTo === "function" && nextZoom > currentZoom + 0.25) {
               map.easeTo({ center: [point[0], point[1]], zoom: nextZoom, duration: 400 });
               return;
             }
+            popupRef.current?.remove();
+            const clusterRoot = document.createElement("div");
+            clusterRoot.className = "grid max-h-64 w-64 gap-2 overflow-y-auto p-1 text-left";
+            const header = document.createElement("p");
+            header.className = "text-label font-bold text-ink";
+            header.textContent = `${props.count} records at this location`;
+            const status = document.createElement("p");
+            status.className = "text-label text-ink-3";
+            status.textContent = "Loading records…";
+            clusterRoot.append(header, status);
+            popupRef.current = new maplibre.Popup({ offset: 14, closeButton: true, maxWidth: "290px" })
+              .setLngLat([point[0], point[1]])
+              .setDOMContent(clusterRoot)
+              .addTo(map);
+            const eps = 0.0008;
+            const clusterBbox = [point[0] - eps, point[1] - eps, point[0] + eps, point[1] + eps].map((v) => v.toFixed(5)).join(",");
+            const clusterParams = discoverySearchParams(filters, { bbox: clusterBbox, limit: 20 });
+            void fetch(`/api/listings?${clusterParams}`, { cache: "no-store" })
+              .then((res) => (res.ok ? res.json() : null))
+              .then((data) => {
+                const items = Array.isArray(data?.listings) ? data.listings : [];
+                status.remove();
+                if (items.length === 0) {
+                  const fallbackLink = document.createElement("a");
+                  fallbackLink.href = `/listings/${encodeURIComponent(props.id!)}`;
+                  fallbackLink.className = "inline-flex min-h-10 items-center justify-center rounded-lg bg-ink px-3 text-xs font-semibold text-white";
+                  fallbackLink.textContent = m.listingsUi.openRecordBtn;
+                  fallbackLink.onclick = (click) => {
+                    click.preventDefault();
+                    click.stopPropagation();
+                    onOpenRef.current(props.id!);
+                  };
+                  clusterRoot.append(fallbackLink);
+                  return;
+                }
+                for (const item of items) {
+                  const row = document.createElement("div");
+                  row.className = "grid gap-1 border-t border-line pt-2 first:border-t-0 first:pt-0";
+                  const link = document.createElement("a");
+                  link.href = `/listings/${encodeURIComponent(item.id)}`;
+                  link.className = "text-xs font-bold text-ink hover:underline";
+                  link.textContent = item.address || item.id;
+                  link.onclick = (click) => {
+                    click.preventDefault();
+                    click.stopPropagation();
+                    onOpenRef.current(item.id);
+                  };
+                  const sub = document.createElement("p");
+                  sub.className = "text-label text-ink-3";
+                  sub.textContent = [
+                    [item.city, item.state].filter(Boolean).join(", "),
+                    typeof item.openingBid === "number" && Number.isFinite(item.openingBid) && item.openingBid > 0
+                      ? `$${Math.round(item.openingBid).toLocaleString("en-US")}`
+                      : null,
+                  ].filter(Boolean).join(" · ");
+                  row.append(link, sub);
+                  clusterRoot.append(row);
+                }
+              })
+              .catch(() => {
+                status.textContent = "Unable to expand cluster records.";
+              });
+            return;
           }
           popupRef.current?.remove();
           const root = document.createElement("div");

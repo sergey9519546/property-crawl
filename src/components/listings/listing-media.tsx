@@ -11,11 +11,16 @@ import { AlternativeStreetView } from "@/components/listings/alternative-street-
 import { InteractiveStreetView } from "@/components/listings/interactive-street-view";
 import { useLocale } from "@/components/i18n/locale-provider";
 import { AERIAL_IMAGERY_STYLE, OPENFREEMAP_POSITRON_STYLE, RASTER_STREET_STYLE } from "@/lib/map-style";
+import { inspectParcelBoundaryInputs } from "@/lib/listing-map-policy";
+import { fetchParcelBoundaryCached } from "@/lib/parcel-boundary-cache";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 type ListingMediaProps = {
   listingId?: string | null;
   address: string;
+  state?: string | null;
+  county?: string | null;
+  apn?: string | null;
   propType?: string | null;
   source?: string | null;
   photo?: string | null;
@@ -99,7 +104,7 @@ function publisherPhotoUrl(photo: string | null | undefined) {
   return safeImageUrl(photo) || null;
 }
 
-export function ListingMedia({ listingId, address, propType, source, photo, gallery = [], lat, lng, locationDisclosure, photoOrigin = "publisher", photoProvider, photoSourceUrl, sourceLabel }: ListingMediaProps) {
+export function ListingMedia({ listingId, address, state, county, apn, propType, source, photo, gallery = [], lat, lng, locationDisclosure, photoOrigin = "publisher", photoProvider, photoSourceUrl, sourceLabel }: ListingMediaProps) {
   const { locale, messages: m } = useLocale();
   const canMap = hasCoordinates(lat, lng);
   const publisherPhoto = publisherPhotoUrl(photo);
@@ -108,7 +113,6 @@ export function ListingMedia({ listingId, address, propType, source, photo, gall
   const photoLabel = photoOrigin === "secondary" ? `${photoProvider || "Verified"} property photos` : "Publisher photo";
   const [photoIndex, setPhotoIndex] = React.useState(0);
   const [failedPhotoUrls, setFailedPhotoUrls] = React.useState<Set<string>>(() => new Set());
-  const [failedThumbs, setFailedThumbs] = React.useState<Set<string>>(() => new Set());
   const canShowPhoto = photos.length > 0;
   const publisherGalleryUnavailable = canShowPhoto && photos.every((url) => failedPhotoUrls.has(url));
   const normalizedListingId = typeof listingId === "string" ? listingId.trim() : "";
@@ -132,7 +136,6 @@ export function ListingMedia({ listingId, address, propType, source, photo, gall
   React.useEffect(() => {
     setPhotoIndex(0);
     setFailedPhotoUrls(new Set());
-    setFailedThumbs(new Set());
   }, [publisherMediaKey]);
 
   // The Street View request belongs to the listing, so only a change of listing
@@ -208,15 +211,29 @@ export function ListingMedia({ listingId, address, propType, source, photo, gall
           if (disposed || parcelFetched) return;
           parcelFetched = true;
           if (!normalizedListingId) return;
+          const parcelPreflight = inspectParcelBoundaryInputs({
+            id: normalizedListingId,
+            state: state ?? undefined,
+            county: county ?? undefined,
+            apn: apn ?? undefined,
+            lat: lat ?? undefined,
+            lng: lng ?? undefined,
+          });
+          if (state && !parcelPreflight.eligible) return;
 
           void (async () => {
             try {
-              const response = await fetch(
-                `/api/parcel-boundary?listingId=${encodeURIComponent(normalizedListingId)}`,
-                { signal: parcelAbortController.signal },
-              );
-              if (!response.ok || disposed || parcelAbortController.signal.aborted) return;
-              const data = (await response.json()) as ParcelBoundaryPayload | null;
+              const query = new URLSearchParams({ listingId: normalizedListingId });
+              if (parcelPreflight.apn) query.set("apn", parcelPreflight.apn);
+              if (parcelPreflight.state) query.set("state", parcelPreflight.state);
+              if (parcelPreflight.county) query.set("county", parcelPreflight.county);
+              if (parcelPreflight.lat !== null) query.set("lat", String(parcelPreflight.lat));
+              if (parcelPreflight.lng !== null) query.set("lng", String(parcelPreflight.lng));
+              const data = (await fetchParcelBoundaryCached(
+                `/api/parcel-boundary?${query.toString()}`,
+                normalizedListingId,
+              )) as (ParcelBoundaryPayload & { __error?: string }) | null;
+              if (!data || data.__error || disposed || parcelAbortController.signal.aborted) return;
               const geometryType = data?.geometry?.type;
               if (
                 disposed
@@ -446,16 +463,17 @@ export function ListingMedia({ listingId, address, propType, source, photo, gall
         >
           {(!canShowPhoto || publisherGalleryUnavailable) ? (
             <div className="relative h-full w-full">
-              {aerialState === "ready" && normalizedListingId ? (
+              {(aerialState === "loading" || aerialState === "ready") && normalizedListingId ? (
                 <>
                   <img
                     src={`/api/property-image?listingId=${encodeURIComponent(normalizedListingId)}&mode=aerial`}
                     alt={`Aerial parcel imagery for ${address}`}
-                    className="h-full w-full object-cover"
+                    className={`h-full w-full object-cover transition-opacity ${aerialState === "loading" ? "opacity-60" : "opacity-100"}`}
+                    onLoad={() => setAerialState("ready")}
                     onError={() => setAerialState("error")}
                   />
-                  <span className="absolute left-4 top-4 rounded-control bg-ink/85 px-3 py-1.5 text-label font-semibold text-white backdrop-blur">
-                    Esri / USGS NAIP aerial parcel view · Overhead satellite context
+                  <span className="absolute left-3 top-3 rounded-control bg-ink/85 px-2.5 py-1 text-label font-semibold text-white backdrop-blur sm:left-4 sm:top-4 sm:px-3 sm:py-1.5">
+                    {aerialState === "loading" ? "Loading Esri / USGS NAIP aerial view…" : "Esri / USGS NAIP aerial parcel view · Overhead satellite context"}
                   </span>
                 </>
               ) : (
@@ -467,16 +485,18 @@ export function ListingMedia({ listingId, address, propType, source, photo, gall
                   statusLabel={canShowPhoto ? "publisher media unavailable" : "source media open"}
                 />
               )}
-              <div className="absolute bottom-5 right-5 flex max-w-[min(88%,28rem)] flex-col items-end gap-2">
+              <div className="absolute bottom-3 right-3 z-10 flex max-w-[min(92%,28rem)] flex-col items-end gap-1.5 sm:bottom-5 sm:right-5 sm:gap-2">
                 {(normalizedListingId || canMap) ? (
-                  <div className="flex flex-wrap items-center justify-end gap-2">
-                    {normalizedListingId && aerialState !== "ready" ? (
+                  <div className="flex flex-wrap items-center justify-end gap-1.5 sm:gap-2">
+                    {normalizedListingId ? (
                       <button
                         type="button"
-                        onClick={() => setAerialState("ready")}
-                        className="inline-flex min-h-11 items-center gap-2 rounded-control border border-white/70 bg-card/95 px-4 py-2.5 text-sm font-bold text-ink shadow-xl backdrop-blur hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-ink"
+                        disabled={aerialState === "loading"}
+                        aria-pressed={aerialState === "ready"}
+                        onClick={() => setAerialState((prev) => (prev === "ready" ? "idle" : "loading"))}
+                        className="inline-flex min-h-11 items-center gap-1.5 rounded-control border border-white/70 bg-card/95 px-3 py-2 text-xs font-bold text-ink shadow-xl backdrop-blur hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-ink disabled:opacity-60 sm:gap-2 sm:px-4 sm:py-2.5 sm:text-sm"
                       >
-                        <ImageIcon className="h-3.5 w-3.5" aria-hidden /> Aerial satellite view
+                        <ImageIcon className="h-3.5 w-3.5" aria-hidden /> {aerialState === "loading" ? "Loading aerial…" : aerialState === "ready" ? "Hide aerial view" : "Aerial satellite view"}
                       </button>
                     ) : null}
                     {normalizedListingId ? (
@@ -484,7 +504,7 @@ export function ListingMedia({ listingId, address, propType, source, photo, gall
                         type="button"
                         disabled={streetView.status === "loading"}
                         onClick={loadStreetView}
-                        className="inline-flex min-h-11 items-center gap-2 rounded-control border border-white/70 bg-card/95 px-4 py-2.5 text-sm font-bold text-ink shadow-xl backdrop-blur hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-ink disabled:opacity-60"
+                        className="inline-flex min-h-11 items-center gap-1.5 rounded-control border border-white/70 bg-card/95 px-3 py-2 text-xs font-bold text-ink shadow-xl backdrop-blur hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-ink disabled:opacity-60 sm:gap-2 sm:px-4 sm:py-2.5 sm:text-sm"
                       >
                         <Camera className="h-3.5 w-3.5" aria-hidden /> {streetView.status === "loading" ? m.detailUi.mediaCheckingStreetView : streetView.status === "unavailable" ? m.detailUi.mediaRetryStreetView : m.detailUi.mediaCheckStreetView}
                       </button>
@@ -493,7 +513,7 @@ export function ListingMedia({ listingId, address, propType, source, photo, gall
                       <button
                         type="button"
                         onClick={() => selectMode("map")}
-                        className="inline-flex min-h-11 items-center gap-2 rounded-control border border-white/70 bg-card/95 px-4 py-2.5 text-sm font-bold text-ink shadow-xl backdrop-blur hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-ink"
+                        className="inline-flex min-h-11 items-center gap-1.5 rounded-control border border-white/70 bg-card/95 px-3 py-2 text-xs font-bold text-ink shadow-xl backdrop-blur hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-ink sm:gap-2 sm:px-4 sm:py-2.5 sm:text-sm"
                       >
                         <MapIcon className="h-3.5 w-3.5" aria-hidden /> {m.detailUi.mediaPropertyMap}
                       </button>
@@ -517,7 +537,7 @@ export function ListingMedia({ listingId, address, propType, source, photo, gall
                     onClick={() => setPhotoIndex(idx)}
                     className={`relative h-9 w-12 shrink-0 overflow-hidden rounded border transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white ${photoIndex === idx ? "border-white ring-1 ring-white" : "border-white/30 opacity-75 hover:opacity-100"}`}
                   >
-                    {failedThumbs.has(thumbUrl) ? (
+                    {failedPhotoUrls.has(thumbUrl) ? (
                       <span className="grid h-full w-full place-items-center bg-paper text-meta font-bold text-ink-3">{idx + 1}</span>
                     ) : (
                       <img
@@ -526,7 +546,7 @@ export function ListingMedia({ listingId, address, propType, source, photo, gall
                         referrerPolicy="no-referrer"
                         className="h-full w-full object-cover"
                         loading="lazy"
-                        onError={() => setFailedThumbs((prev) => {
+                        onError={() => setFailedPhotoUrls((prev) => {
                           const next = new Set(prev);
                           next.add(thumbUrl);
                           return next;

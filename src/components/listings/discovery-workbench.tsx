@@ -432,6 +432,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
     }
   }, [filters, cursor, requestKey, setCursor]);
   React.useEffect(() => {
+    if (filters.view === "map") return;
     // Always revalidate on mount so client route state stays live.
     const delay = filters.q ? 250 : 0;
     const timer = window.setTimeout(() => void refresh(), delay);
@@ -439,7 +440,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
       window.clearTimeout(timer);
       requestRef.current?.controller.abort();
     };
-  }, [refresh, filters.q]);
+  }, [refresh, filters.q, filters.view]);
   React.useEffect(() => {
     if (!session.memberTools) {
       try {
@@ -1076,6 +1077,12 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
           truncated={Boolean(payload?.page?.hasMore)}
           compareIds={compare.ids}
           onCompare={compare.toggle}
+          pageNumber={cursorStack.length + 1}
+          hasPrev={cursorStack.length > 0}
+          hasMore={Boolean(payload?.page?.hasMore)}
+          loading={loading}
+          onPrevious={previous}
+          onNext={next}
         />
       ) : (
         <>
@@ -1224,18 +1231,43 @@ function compareSaleDateGroups(a: string, b: string) {
   return a.localeCompare(b);
 }
 
+function normalizeSaleDateKey(raw?: string | null): string {
+  if (!raw || typeof raw !== "string") return UNKNOWN_SALE_DATE;
+  const trimmed = raw.trim();
+  if (!trimmed) return UNKNOWN_SALE_DATE;
+  const isoMatch = trimmed.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (isoMatch) return isoMatch[1];
+  const parsed = Date.parse(trimmed);
+  if (Number.isFinite(parsed)) {
+    return new Date(parsed).toISOString().slice(0, 10);
+  }
+  return trimmed;
+}
+
 function DiscoveryCalendar({
   listings,
   filters,
   truncated,
   compareIds,
   onCompare,
+  pageNumber,
+  hasPrev,
+  hasMore,
+  loading,
+  onPrevious,
+  onNext,
 }: {
   listings: PropertyListing[];
   filters: DiscoveryFilters;
   truncated: boolean;
   compareIds: string[];
   onCompare: (id: string) => void;
+  pageNumber: number;
+  hasPrev: boolean;
+  hasMore: boolean;
+  loading: boolean;
+  onPrevious: () => void;
+  onNext: () => void;
 }) {
   const [calendarRollup, setCalendarRollup] = React.useState<AuctionCalendarResponse | null>(null);
   const { locale, messages: m, format, plural } = useLocale();
@@ -1310,7 +1342,7 @@ function DiscoveryCalendar({
 
   const groups = new Map<string, PropertyListing[]>();
   for (const listing of listings) {
-    const day = listing.saleDate || UNKNOWN_SALE_DATE;
+    const day = normalizeSaleDateKey(listing.saleDate);
     const items = groups.get(day) || [];
     items.push(listing);
     groups.set(day, items);
@@ -1566,6 +1598,33 @@ function DiscoveryCalendar({
             </article>
           ))}
       </div>
+      {(hasPrev || hasMore) && (
+        <div className="mt-6 flex items-center justify-between rounded-xl border border-line bg-paper p-3">
+          <button
+            type="button"
+            aria-label="Previous calendar page"
+            disabled={!hasPrev || loading}
+            onClick={onPrevious}
+            className="inline-flex min-h-11 items-center gap-1 rounded-lg px-3 py-2 text-xs font-bold disabled:opacity-40"
+          >
+            <ChevronLeft size={15} />
+            {cUi.previousBtn}
+          </button>
+          <span className="text-xs text-ink-3">
+            {format(cUi.pageNumber, { page: pageNumber })}
+          </span>
+          <button
+            type="button"
+            aria-label="Next calendar page"
+            disabled={!hasMore || loading}
+            onClick={onNext}
+            className="inline-flex min-h-11 items-center gap-1 rounded-lg bg-ink px-3 py-2 text-xs font-bold text-white disabled:opacity-40"
+          >
+            {cUi.nextBtn}
+            <ChevronRight size={15} />
+          </button>
+        </div>
+      )}
     </section>
   );
 }

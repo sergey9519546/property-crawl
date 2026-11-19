@@ -116,7 +116,7 @@ export function MarketMap({ listings, onUnderwrite, returnTo = "/listings?view=m
       element.dataset.active = active ? "true" : "false";
       element.setAttribute("aria-pressed", active ? "true" : "false");
     });
-  }, [selectedId]);
+  }, [selectedId, selected, mappable]);
 
   React.useEffect(() => {
     const parcelPreflight = selected ? inspectParcelBoundaryInputs(selected) : null;
@@ -207,7 +207,7 @@ export function MarketMap({ listings, onUnderwrite, returnTo = "/listings?view=m
     return () => {
       active = false;
     };
-  }, [selectedId]);
+  }, [selectedId, selected, mappable]);
 
   React.useEffect(() => {
     const container = mapContainerRef.current;
@@ -464,7 +464,7 @@ export function MarketMap({ listings, onUnderwrite, returnTo = "/listings?view=m
             <div data-testid="map-fallback-list" className="mx-auto mt-3 grid max-w-3xl gap-2 sm:grid-cols-2">
               {mappable.map((listing) => (
                 <button key={listing.id} type="button" onClick={() => selectListing(listing, false)} className="flex min-h-16 items-center justify-between gap-3 rounded-card border border-line bg-card px-4 py-3 text-left shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink" aria-label={interpolate(t.mmInspectNoTilesAria, { address: listing.address })}>
-                  <span className="min-w-0"><span className="block truncate text-sm font-bold text-ink">{listing.address}</span><span className="block text-xs text-ink-3">{listing.city}, {listing.state} · {interpolate(t.mmCountySuffix, { county: listing.county })}</span></span>
+                  <span className="min-w-0"><span className="block truncate text-sm font-bold text-ink">{listing.address}</span><span className="block text-xs text-ink-3">{[displayText(listing.city, listing.state), listing.state].filter(Boolean).join(", ")}{listing.county ? ` · ${interpolate(t.mmCountySuffix, { county: listing.county })}` : ""}</span></span>
                   <span className="shrink-0 rounded-control bg-paper px-2 py-1 text-xs font-extrabold text-ink-2">{knownNumber(listing.dealScore) ?? "—"}</span>
                 </button>
               ))}
@@ -530,7 +530,7 @@ function MapPreview({
           {sourceDisplayText(SOURCES[listing.source]?.label ?? listing.source)} · {score !== null ? interpolate(t.mmModeledScore, { score }) : t.mmUnscored}
         </p>
         <h4 className="mt-1 text-lg font-bold tracking-[-0.02em] text-ink">
-          <Link href={`/listings/${encodeURIComponent(listing.id)}`} className="hover:underline underline-offset-4">
+          <Link href={`/listings/${encodeURIComponent(listing.id)}?returnTo=${encodeURIComponent(returnTo)}`} className="hover:underline underline-offset-4">
             {listing.address}
           </Link>
         </h4>
@@ -571,7 +571,7 @@ function MapPreview({
       </div>
       <div className="mt-2 grid grid-cols-2 gap-2">
         <button type="button" onClick={() => onUnderwrite(listing)} className="inline-flex h-11 items-center justify-center gap-1 rounded-control bg-ink px-3 text-xs font-bold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2">{t.mmUnderwriteBtn} <ArrowRight className="h-3.5 w-3.5" aria-hidden /></button>
-        <Link href={`/listings/${encodeURIComponent(listing.id)}`} className="inline-flex h-11 items-center justify-center gap-1 rounded-control border border-line-strong px-3 text-xs font-bold text-ink hover:bg-paper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink">{t.mmListingPageLink} <ArrowRight className="h-3.5 w-3.5" aria-hidden /></Link>
+        <Link href={`/listings/${encodeURIComponent(listing.id)}?returnTo=${encodeURIComponent(returnTo)}`} className="inline-flex h-11 items-center justify-center gap-1 rounded-control border border-line-strong px-3 text-xs font-bold text-ink hover:bg-paper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink">{t.mmListingPageLink} <ArrowRight className="h-3.5 w-3.5" aria-hidden /></Link>
       </div>
     </article>
   );
