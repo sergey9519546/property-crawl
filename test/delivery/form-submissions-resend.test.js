@@ -19,7 +19,8 @@ test('Form Inbound Delivery: formats safe HTML notification with sanitized input
   };
   const html = formatContactNotificationHtml(fields, '2026-10-20T20:00:00.000Z');
 
-  assert.ok(html.includes('Jane Doe <script>alert(1)</script>')); // sanitized string slice
+  assert.ok(!html.includes('<script>alert(1)</script>'));
+  assert.ok(html.includes('Jane Doe &lt;script&gt;alert(1)&lt;/script&gt;')); // escaped HTML
   assert.ok(html.includes('jane@example.com'));
   assert.ok(html.includes('Interested in your enterprise beta.<br>Please contact me.'));
   assert.ok(html.includes('New Inbound Contact Inquiry'));

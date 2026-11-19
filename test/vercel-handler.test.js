@@ -383,3 +383,19 @@ test('configureServerlessEnv populates all /tmp cache overrides and _wireStoresA
   assert.equal(ended, true);
   assert.equal(wiredDb, fakeDb);
 });
+
+test('applyForwardedClientIp enforces EDGE_SHARED_SECRET when configured', () => {
+  const { applyForwardedClientIp } = require('../server/vercel-handler');
+  const env = { TRUSTED_PROXY_COUNT: '1', EDGE_SHARED_SECRET: 'edge-top-secret' };
+  const reqForged = { headers: { 'x-pp-client-ip': '203.0.113.5', 'x-forwarded-for': '10.0.0.1' }, socket: { remoteAddress: '10.0.0.1' } };
+  assert.equal(applyForwardedClientIp(reqForged, env), false);
+  assert.equal(reqForged.headers['x-forwarded-for'], '10.0.0.1');
+
+  const reqWrong = { headers: { 'x-pp-client-ip': '203.0.113.5', 'x-edge-secret': 'wrong-secret', 'x-forwarded-for': '10.0.0.1' }, socket: { remoteAddress: '10.0.0.1' } };
+  assert.equal(applyForwardedClientIp(reqWrong, env), false);
+  assert.equal(reqWrong.headers['x-forwarded-for'], '10.0.0.1');
+
+  const reqValid = { headers: { 'x-pp-client-ip': '203.0.113.5', 'x-edge-secret': 'edge-top-secret', 'x-forwarded-for': '10.0.0.1' }, socket: { remoteAddress: '10.0.0.1' } };
+  assert.equal(applyForwardedClientIp(reqValid, env), true);
+  assert.equal(reqValid.headers['x-forwarded-for'], '203.0.113.5');
+});

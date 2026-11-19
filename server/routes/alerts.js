@@ -1,5 +1,5 @@
 const db = require('../db/client');
-const { resolveWatchlistIdentity } = require('../security/workspace-identity');
+const { resolveWatchlistIdentity, requireUserIdentity } = require('../security/workspace-identity');
 const { generateInvestorDigestReport, dispatchInvestorAlertDigest } = require('../delivery/alert-digest');
 
 const EMAIL_REGEX = /^[^\s@\r\n]+@[^\s@\r\n]+\.[^\s@\r\n]+$/;
@@ -55,7 +55,9 @@ async function handleAlerts(req, res) {
   if (method === 'POST') {
     const { listingId, action, recipientEmail } = req.body || {};
     if (action === 'dispatch_digest') {
-      const saved = await db.getSavedDeals(userId);
+      const authenticatedUserId = requireUserIdentity(req, res);
+      if (!authenticatedUserId) return;
+      const saved = await db.getSavedDeals(authenticatedUserId);
       const recipient = (recipientEmail || req.body?.recipient || req.body?.email || '').trim();
       const evaluation = {
         results: saved.map((deal) => ({ identityKey: deal.id, listingId: deal.id, status: 'match' })),
@@ -89,6 +91,14 @@ async function handleAlerts(req, res) {
       const cleanState = state.trim().toUpperCase();
       const cleanCounty = county.trim().toLowerCase();
 
+      const isVerifiedSession = userId.startsWith('workspace:') || userId.startsWith('account:');
+      if (!isVerifiedSession && typeof db.getSavedSearches === 'function') {
+        const existingSearches = await db.getSavedSearches(userId);
+        if (Array.isArray(existingSearches) && existingSearches.length >= 10) {
+          return res.status(429).json({ error: 'Maximum 10 county alert subscriptions reached for this session' });
+        }
+      }
+
       const search = await db.createSavedSearch(userId, {
         label: `${county.trim()}, ${cleanState} Digest`,
         filters: {
@@ -97,6 +107,7 @@ async function handleAlerts(req, res) {
           notifyEmail: cleanEmail,
           email: cleanEmail,
           cadence: resolvedCadence,
+          verified: isVerifiedSession,
         },
       });
 

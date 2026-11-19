@@ -85,6 +85,21 @@ test('verifyScrapySignature: accepts valid HMAC-SHA256 signature', () => {
   assert.equal(result.valid, true);
 });
 
+test('verifyScrapySignature: rejects stale x-timestamp > 300s and accepts fresh timestamp', () => {
+  const secret = 'production-grade-scrapy-secret-67890';
+  const body = JSON.stringify({ recipe: 'foreclosure', items: [] });
+  const validSig = signPayload(body, secret);
+  const nowMs = 1_760_000_000_000;
+
+  const stale = verifyScrapySignature(body, validSig, secret, { timestamp: String(Math.floor(nowMs / 1000) - 301), nowMs });
+  assert.equal(stale.valid, false);
+  assert.equal(stale.status, 401);
+  assert.match(stale.error, /timestamp/i);
+
+  const fresh = verifyScrapySignature(body, validSig, secret, { timestamp: String(Math.floor(nowMs / 1000) - 30), nowMs });
+  assert.equal(fresh.valid, true);
+});
+
 test('validateScrapyPayload: enforces recipe schema, items array, and MAX_ITEMS_PER_BATCH (500)', () => {
   // Non-object
   assert.equal(validateScrapyPayload(null).valid, false);

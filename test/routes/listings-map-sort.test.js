@@ -22,6 +22,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
+if (!process.env.DATABASE_URL && !process.env.PROPERTY_DB && !process.env.PROPERTY_INVENTORY_BACKEND) {
+  process.env.PROPERTY_INVENTORY_BACKEND = 'memory';
+}
 const handleListings = require('../../server/routes/listings');
 
 function fakeRes() {

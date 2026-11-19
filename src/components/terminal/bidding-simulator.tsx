@@ -247,7 +247,7 @@ export function BiddingSimulator({ listing, publishedUpsetEstimate }: BiddingSim
       const res = await fetch(`/api/listings/${encodeURIComponent(listing.id)}/assessor`, { cache: "no-store" });
       if (!res.ok) throw new Error("Assessor lookup returned " + res.status);
       const data = await res.json();
-      const figure = data?.marketComparison ?? data?.rawFigure;
+      const figure = data?.marketComparison;
       if (figure && Number.isFinite(figure) && figure > 0) {
         const rounded = Math.round(figure).toString();
         updateCustomValuation(rounded);
@@ -317,8 +317,10 @@ export function BiddingSimulator({ listing, publishedUpsetEstimate }: BiddingSim
         isHomestead,
       })
     : null;
-  const surplusAnalysis = typeof listing.judgment === "number" && listing.judgment > 0
-    ? computeConstitutionalSurplus({ openingBid, judgmentDebt: listing.judgment })
+  const rawRealizedBid = (listing as { realizedBid?: unknown }).realizedBid;
+  const realizedBid = typeof rawRealizedBid === "number" ? rawRealizedBid : null;
+  const surplusAnalysis = realizedBid !== null && realizedBid > 0 && typeof listing.judgment === "number" && listing.judgment > 0
+    ? computeConstitutionalSurplus({ openingBid: realizedBid, judgmentDebt: listing.judgment })
     : null;
   const hudSafmr = listing.hudSafmr;
   const modeledDscr = hudSafmr && openingBid !== null ? (() => {

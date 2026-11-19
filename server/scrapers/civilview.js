@@ -535,6 +535,7 @@ class CivilViewScraper extends BaseScraper {
     }
     const deadlineAt = Number(options?.deadlineAt) || 0;
     let abortedForDeadline = false;
+    const startOffsetSnapshot = this.countyRotationOffset; const isSliceMode = Boolean(options?.slice);
     return this.executeWithRetry(async () => {
       const report = {
         outcome: 'failed',
@@ -753,8 +754,9 @@ class CivilViewScraper extends BaseScraper {
       // cursor and feeds it to setCheckpoint before the next scrapeFeed. A null
       // token means the window already covered every county, so the rotation
       // restarts from the priority list rather than staying wedged.
-      if (rotationTotal > this.maxCounties) {
-        const nextOffset = (this.countyRotationOffset + this.maxCounties) % rotationTotal;
+      const tailCompleted = isSliceMode && !abortedForDeadline && rotationTotal > 0 && ((startOffsetSnapshot % rotationTotal) + this.maxCounties) >= rotationTotal;
+      if (rotationTotal > this.maxCounties && !tailCompleted) {
+        const nextOffset = (startOffsetSnapshot + this.maxCounties) % rotationTotal;
         this.countyRotationOffset = nextOffset;
         report.nextContinuationToken = String(nextOffset);
       } else {

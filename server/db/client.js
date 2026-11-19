@@ -639,12 +639,16 @@ class DatabaseClient {
       throw new Error('DISCOVERY_MODE=advanced requires DATABASE_URL');
     }
     if (target === 'tcp') {
+      const isServerlessHosted = Boolean(
+        this.env.VERCEL || this.env.AWS_LAMBDA_FUNCTION_NAME || this.env.SERVERLESS
+      );
       const isRenderHosted = String(this.env.RENDER || '').toLowerCase() === 'true'
         || Boolean(this.env.RENDER_SERVICE_ID);
+      const isPgBouncerPooler = /:6543(?:\/|\?|$)/.test(String(this.env.DATABASE_URL || ''));
       const configuredMax = Number(this.env.DATABASE_POOL_MAX);
       const poolMax = Number.isInteger(configuredMax) && configuredMax > 0
         ? Math.min(configuredMax, 50)
-        : (isRenderHosted ? 4 : 10);
+        : (isServerlessHosted ? 2 : (isRenderHosted ? 4 : 10));
       const configuredConnectTimeout = Number(this.env.DATABASE_CONNECTION_TIMEOUT_MS);
       const connectionTimeoutMillis = Number.isFinite(configuredConnectTimeout) && configuredConnectTimeout > 0
         ? Math.min(configuredConnectTimeout, 60_000)
@@ -653,8 +657,10 @@ class DatabaseClient {
       const statementTimeoutMs = Number.isFinite(configuredStatementTimeout) && configuredStatementTimeout >= 0
         ? Math.min(Math.trunc(configuredStatementTimeout), 120_000)
         : 30_000;
-      const idleTimeoutMillis = isRenderHosted ? 15000 : 60000;
-      const statementTimeoutOpt = statementTimeoutMs > 0 ? { statement_timeout: statementTimeoutMs } : {};
+      const idleTimeoutMillis = isServerlessHosted ? 5000 : (isRenderHosted ? 15000 : 60000);
+      const statementTimeoutOpt = (statementTimeoutMs > 0 && !isServerlessHosted && !isPgBouncerPooler)
+        ? { statement_timeout: statementTimeoutMs }
+        : {};
       try {
         const { Pool } = require('pg');
         this.pool = new Pool({

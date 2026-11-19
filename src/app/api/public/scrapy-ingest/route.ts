@@ -57,7 +57,8 @@ export async function POST(request: Request) {
     );
   }
 
-  const auth = verifyScrapySignature(rawBody, signature);
+  const timestamp = request.headers.get("x-timestamp") || undefined;
+  const auth = verifyScrapySignature(rawBody, signature, undefined, { timestamp });
   if (!auth.valid) {
     return Response.json(
       { error: auth.error },

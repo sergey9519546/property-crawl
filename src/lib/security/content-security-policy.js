@@ -45,6 +45,7 @@ function buildContentSecurityPolicy({
     "worker-src 'self' blob:",
     "child-src 'self' blob:",
     "frame-src https:",
+    "frame-ancestors 'self'",
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",

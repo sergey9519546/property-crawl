@@ -123,7 +123,8 @@ class UsdaResalesScraper extends BaseScraper {
 
       const nextIndex = startOffset + attemptedStatesList.length;
       const partialSweep = deadlineStopped || (targetStates.length < totalStates) || (attemptedStatesList.length < targetStates.length);
-      const nextContinuationToken = partialSweep && totalStates > 0 ? String(nextIndex % totalStates) : null;
+      const hasMoreAhead = totalStates > 0 && (deadlineStopped || nextIndex < totalStates);
+      const nextContinuationToken = hasMoreAhead ? String(nextIndex % totalStates) : null;
       this.stateOffset = nextContinuationToken ? Number(nextContinuationToken) : 0;
 
       this.lastRunReport = {

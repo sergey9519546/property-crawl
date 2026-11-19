@@ -58,7 +58,7 @@ function sameBrowserOrigin(origin: string, requestUrl: string) {
 }
 
 export async function proxyPropertyApi(request: Request, dependencies: {
-  fetchImpl?: typeof fetch; apiUrl?: string; operatorToken?: string; accountId?: string;
+  fetchImpl?: typeof fetch; apiUrl?: string; operatorToken?: string; accountId?: string; role?: string;
 } = {}) {
   const url = new URL(request.url);
   if (!API_PATH.test(url.pathname)) return jsonError(404, "Unknown API route");
@@ -79,9 +79,15 @@ export async function proxyPropertyApi(request: Request, dependencies: {
     const realIp = request.headers.get("x-real-ip");
     if (realIp) headers.set("x-forwarded-for", realIp);
   }
+  const xffParts = (request.headers.get("x-forwarded-for") || "").split(",").map((part) => part.trim()).filter(Boolean);
+  const configuredProxyCount = Number(process.env.TRUSTED_PROXY_COUNT);
+  const selectedXffIp = Number.isFinite(configuredProxyCount) && configuredProxyCount > 0 && xffParts.length > 0
+    ? xffParts[Math.max(0, xffParts.length - Math.floor(configuredProxyCount))]
+    : (xffParts[0] || "");
   const clientIp =
     request.headers.get("x-real-ip")?.trim() ||
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    request.headers.get("cf-connecting-ip")?.trim() ||
+    selectedXffIp ||
     "";
   if (clientIp) headers.set("x-pp-client-ip", clientIp);
   const watchlistCookie = (request.headers.get("cookie") || "")
@@ -91,7 +97,12 @@ export async function proxyPropertyApi(request: Request, dependencies: {
   if (watchlistCookie) headers.set("cookie", watchlistCookie);
   // Same-origin mutation marker for API-side CSRF checks when Origin is stripped.
   headers.set("x-workspace-request", "1");
-  if (dependencies.operatorToken) headers.set("Authorization", `Bearer ${dependencies.operatorToken}`);
+  if (dependencies.operatorToken) {
+    headers.set("Authorization", `Bearer ${dependencies.operatorToken}`);
+    if (dependencies.role) headers.set("x-pp-role", dependencies.role);
+  }
+  const edgeSecret = String(process.env.EDGE_SHARED_SECRET || "").trim();
+  if (edgeSecret) headers.set("x-edge-secret", edgeSecret);
   // Member scope: set only by proxyMemberPropertyApi after it verified the session.
   if (dependencies.operatorToken && dependencies.accountId) headers.set("x-pp-account", dependencies.accountId);
   else {

@@ -475,3 +475,18 @@ test('POST /api/alerts (dispatch_digest): delivers via Resend when RESEND_API_KE
     else delete process.env.RESEND_API_KEY;
   }
 });
+
+test('POST /api/alerts (dispatch_digest): rejects unauthenticated anonymous device sessions (401)', async () => {
+  const req = {
+    method: 'POST',
+    url: '/api/alerts',
+    headers: { cookie: 'pp_watchlist=anon_device_token_123456' },
+    body: { action: 'dispatch_digest', recipientEmail: 'victim@example.com' },
+  };
+  const res = makeRes();
+
+  await handleAlerts(req, res);
+
+  assert.equal(res.statusCode, 401);
+  assert.match(res.body.error, /sign in/i);
+});

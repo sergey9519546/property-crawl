@@ -254,6 +254,7 @@ class SheriffSaleScraper extends BaseScraper {
       }
     }
     const deadlineAt = Number(options?.deadlineAt) || 0;
+    const isSliceMode = Boolean(options?.slice);
     return this.executeWithRetry(async () => {
       const totalCounties = this.counties.length;
       const startOffset = totalCounties > 0 ? (this.countyRotationOffset % totalCounties) : 0;
@@ -266,10 +267,11 @@ class SheriffSaleScraper extends BaseScraper {
         }
       }
       const partialSweep = totalCounties > sliceCount;
-      const nextContinuationToken = partialSweep
+      const hasMoreAhead = (startOffset + sliceCount) < totalCounties;
+      const nextContinuationToken = partialSweep && (!isSliceMode || hasMoreAhead)
         ? String((startOffset + sliceCount) % totalCounties)
         : null;
-      this.countyRotationOffset = partialSweep ? Number(nextContinuationToken) : 0;
+      this.countyRotationOffset = nextContinuationToken ? Number(nextContinuationToken) : 0;
 
       // Expand targetCounties so multi-portal counties sharing (state, name) run atomically in one pass.
       const countyPortalKey = (c) => `${String(c?.state || '').toUpperCase()}:${String(c?.name || '').toLowerCase()}`;
@@ -349,13 +351,6 @@ class SheriffSaleScraper extends BaseScraper {
         !effectivePartialSweep &&
         report.complete !== false
       );
-      if (skippedDeadlineCount > 0) {
-        const completedCount = Math.max(0, targetCounties.length - skippedDeadlineCount);
-        const deadlineToken = totalCounties > 0 ? String((startOffset + completedCount) % totalCounties) : null;
-        this.countyRotationOffset = deadlineToken ? Number(deadlineToken) : 0;
-        report.partialSweep = true;
-        report.nextContinuationToken = deadlineToken;
-      }
       const totalPortalsByCounty = new Map();
       for (const c of this.counties) {
         const k = countyPortalKey(c);
@@ -367,6 +362,20 @@ class SheriffSaleScraper extends BaseScraper {
         const k = countyPortalKey(outcome.county);
         if (!outcomesByCounty.has(k)) outcomesByCounty.set(k, []);
         outcomesByCounty.get(k).push(outcome);
+      }
+      if (skippedDeadlineCount > 0) {
+        let completedBaseCount = 0;
+        for (const bc of baseSlice) {
+          const outcomes = outcomesByCounty.get(countyPortalKey(bc)) || [];
+          const expected = totalPortalsByCounty.get(countyPortalKey(bc)) || 1;
+          if (outcomes.length < expected || outcomes.some((o) => o.skippedDeadline)) break;
+          completedBaseCount += 1;
+        }
+        const deadlineFinished = isSliceMode && (startOffset + completedBaseCount) >= totalCounties;
+        const deadlineToken = (!deadlineFinished && totalCounties > 0) ? String((startOffset + completedBaseCount) % totalCounties) : null;
+        this.countyRotationOffset = deadlineToken ? Number(deadlineToken) : 0;
+        report.partialSweep = true;
+        report.nextContinuationToken = deadlineToken;
       }
       const completedCounties = [];
       if (report.outcome !== 'unverified_empty') {

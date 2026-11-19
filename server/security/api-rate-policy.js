@@ -21,6 +21,10 @@ function limiterClass(req) {
   catch { return 'general'; }
   if ((method === 'GET' || method === 'HEAD') && (pathname === '/api/health' || pathname === '/api/health/ready')) return 'readiness';
   if (method === 'GET' && pathname === '/api/property-image') return 'media';
+  if ((method === 'POST' || method === 'PATCH' || method === 'DELETE') && (
+    pathname === '/api/enrich' || pathname === '/api/alerts' || pathname === '/api/parse'
+    || pathname === '/api/public/scrapy-ingest' || /^\/api\/listings\/[^/]+\/(?:packet|decision-packet|assessor)$/.test(pathname)
+  )) return 'sensitive';
   return 'general';
 }
 
@@ -29,16 +33,19 @@ function createApiRatePolicy({
   maxRequests = DEFAULT_MAX_REQUESTS,
   readinessMaxRequests = maxRequests,
   mediaMaxRequests = maxRequests,
+  sensitiveMaxRequests = maxRequests,
   trustedProxyCount = trustedProxyCountFromEnv(),
 } = {}) {
   const generalLimit = boundedLimit(maxRequests);
   const readinessLimit = boundedLimit(readinessMaxRequests, generalLimit);
   const mediaLimit = boundedLimit(mediaMaxRequests, generalLimit);
+  const sensitiveLimit = boundedLimit(sensitiveMaxRequests, generalLimit);
   const proxyCount = Math.max(0, Math.floor(Number(trustedProxyCount) || 0));
   const middlewareByClass = {
     general: new MemoryRateLimiter({ windowMs, maxRequests: generalLimit, trustedProxyCount: proxyCount }).middleware(),
     readiness: new MemoryRateLimiter({ windowMs, maxRequests: readinessLimit, trustedProxyCount: proxyCount }).middleware(),
     media: new MemoryRateLimiter({ windowMs, maxRequests: mediaLimit, trustedProxyCount: proxyCount }).middleware(),
+    sensitive: new MemoryRateLimiter({ windowMs, maxRequests: sensitiveLimit, trustedProxyCount: proxyCount }).middleware(),
   };
   return (req, res, next) => middlewareByClass[limiterClass(req)](req, res, next);
 }

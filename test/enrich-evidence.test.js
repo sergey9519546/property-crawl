@@ -98,12 +98,33 @@ test('enrichment AI narrative is opt-in, routes to configured provider, and fall
     status: 'scheduled',
   });
 
-  // 1. Offline / missing API key falls back cleanly without breaking deterministic summary
-  let resPayload = null;
+  // 1. Missing operator secret fails closed (503) and bad/missing Bearer token fails closed (401)
+  let unconfigStatus = null;
+  let unconfigPayload = null;
   await handleEnrich(
     { method: 'POST', body: { listingId: listing.id, includeAiNarrative: true } },
+    { status(c) { unconfigStatus = c; return this; }, json(p) { unconfigPayload = p; } },
+    { env: {}, fetchFn: async () => { throw new Error('must not call fetch without auth'); } }
+  );
+  assert.equal(unconfigStatus, 503);
+  assert.match(unconfigPayload.error, /not configured/i);
+
+  let unauthStatus = null;
+  let unauthPayload = null;
+  await handleEnrich(
+    { method: 'POST', body: { listingId: listing.id, includeAiNarrative: true } },
+    { status(c) { unauthStatus = c; return this; }, json(p) { unauthPayload = p; } },
+    { env: { SCRAPER_ADMIN_TOKEN: 'enrich-secret' }, fetchFn: async () => { throw new Error('must not call fetch without token'); } }
+  );
+  assert.equal(unauthStatus, 401);
+  assert.match(unauthPayload.error, /unlock/i);
+
+  // 2. Authorized operator offline / missing API key falls back cleanly without breaking deterministic summary
+  let resPayload = null;
+  await handleEnrich(
+    { method: 'POST', headers: { authorization: 'Bearer enrich-secret' }, body: { listingId: listing.id, includeAiNarrative: true } },
     { status() { return this; }, json(p) { resPayload = p; } },
-    { env: {}, fetchFn: async () => { throw new Error('must not call fetch without keys'); } }
+    { env: { SCRAPER_ADMIN_TOKEN: 'enrich-secret' }, fetchFn: async () => { throw new Error('must not call fetch without keys'); } }
   );
   assert.equal(resPayload.model, 'evidence-summary-v1');
   assert.equal(resPayload.costUsd, 0);
@@ -113,13 +134,13 @@ test('enrichment AI narrative is opt-in, routes to configured provider, and fall
   assert.equal(resPayload.narrativeReason, 'api_key_missing');
   assert.match(resPayload.analysis, /2100 West Boulevard/);
 
-  // 2. Configured OpenAI key produces grounded aiNarrative alongside deterministic analysis
+  // 3. Configured OpenAI key with operator auth produces grounded aiNarrative alongside deterministic analysis
   let aiPayload = null;
   await handleEnrich(
-    { method: 'POST', body: { listingId: listing.id, includeAiNarrative: true } },
+    { method: 'POST', headers: { authorization: 'Bearer enrich-secret' }, body: { listingId: listing.id, includeAiNarrative: true } },
     { status() { return this; }, json(p) { aiPayload = p; } },
     {
-      env: { OPENAI_API_KEY: 'sk-test-enrich' },
+      env: { SCRAPER_ADMIN_TOKEN: 'enrich-secret', OPENAI_API_KEY: 'sk-test-enrich' },
       fetchFn: async () => ({
         ok: true,
         json: async () => ({

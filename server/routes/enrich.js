@@ -1,6 +1,10 @@
 const db = require('../db/client');
 const SecuritySanitizer = require('../security/sanitizer');
 const ModelRouter = require('../ai/model_router');
+const { requireWorkspaceIdentity } = require('../security/workspace-identity');
+const { CostRecord, CostTracker } = require('../ai/cost_tracker');
+
+let runtimeCostTracker = new CostTracker({ budgetLimitUsd: Number(process.env.AI_BUDGET_LIMIT_USD) || 5.0 });
 
 const SUMMARY_MODEL = 'evidence-summary-v1';
 
@@ -219,11 +223,38 @@ async function handleEnrich(req, res, deps = {}) {
     });
   }
 
+  const env = deps.env || process.env;
+  const identity = requireWorkspaceIdentity(req, res, env);
+  if (!identity) return;
+
+  const activeTracker = deps.costTracker || runtimeCostTracker;
+  if (activeTracker && activeTracker.isOverBudget) {
+    return res.status(429).json({
+      error: 'AI narrative budget exceeded',
+      analysis,
+      aiNarrative: null,
+      narrativeFallback: true,
+      narrativeReason: 'budget_exceeded',
+      costUsd: 0,
+      verified: false,
+    });
+  }
+
   const ai = await generateAiNarrative(listing, {
-    env: deps.env || process.env,
+    env,
     fetchFn: deps.fetchFn || globalThis.fetch,
     model: model || null,
   });
+  if (activeTracker && typeof activeTracker.add === 'function' && Number(ai?.costUsd) > 0 && !ai?.cached) {
+    const updatedTracker = activeTracker.add(new CostRecord({
+      provider: ai.provider || 'openai',
+      model: ai.model || SUMMARY_MODEL,
+      inputTokens: 0,
+      outputTokens: 0,
+      costUsd: Number(ai.costUsd),
+    }));
+    if (!deps.costTracker) runtimeCostTracker = updatedTracker;
+  }
 
   return res.json({
     analysis,

@@ -35,7 +35,7 @@ const PG_DUMP = findPgBinary('pg_dump');
 const PG_RESTORE = findPgBinary('pg_restore');
 
 function parseDbTarget() {
-  const connStr = process.env.DATABASE_URL || process.env.DISCOVERY_DATABASE_URL || '';
+  const connStr = process.env.DATABASE_DIRECT_URL || process.env.DATABASE_URL || process.env.DISCOVERY_DATABASE_URL || '';
   if (connStr) {
     try {
       const parsed = new URL(connStr);
@@ -50,14 +50,14 @@ function parseDbTarget() {
       // Fall through to env vars
     }
   }
-  const host = process.env.PGHOST || 'dpg-dbbc8su7bikc73819uo0-a.oregon-postgres.render.com';
+  const host = process.env.PGHOST;
   const port = process.env.PGPORT || '5432';
-  const user = process.env.PGUSER || 'property_crawl_db_user';
-  const database = process.env.PGDATABASE || 'property_crawl_db';
+  const user = process.env.PGUSER || 'postgres';
+  const database = process.env.PGDATABASE || 'postgres';
   const password = process.env.PGPASSWORD;
 
-  if (!password) {
-    throw new Error('Database export failed: PGPASSWORD environment variable is required and must not be hardcoded.');
+  if (!host || !password) {
+    throw new Error('Database export failed: DATABASE_DIRECT_URL / DATABASE_URL (or PGHOST + PGPASSWORD) is required.');
   }
 
   return { host, port, user, database, password };

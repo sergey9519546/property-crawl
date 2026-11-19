@@ -292,7 +292,7 @@ function createSourceNetworkHandler(dependencies = {}) {
           if (evidenceJobs.has(source.id)) return res.status(409).json({ error: 'This evidence collection is already running' });
           evidenceJobs.add(source.id);
           const startedAt = Date.now();
-          (async () => {
+          const evidenceRun = (async () => {
             try {
               const result = await evidenceCollectors[source.id]({ perPage: 10, daysBack: 30 });
               await recordRunSafely(source.id, {
@@ -315,6 +315,10 @@ function createSourceNetworkHandler(dependencies = {}) {
               evidenceJobs.delete(source.id);
             }
           })();
+          if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.SERVERLESS) {
+            await evidenceRun;
+            return res.status(200).json({ status: 'collected', sourceId: source.id, message: 'Collected official notices into the evidence review queue.' });
+          }
           return res.status(202).json({ status: 'collecting', sourceId: source.id, message: 'Collecting official notices into the evidence review queue.' });
         }
         if (!source?.adapterKey || !collector.realScraperKeys.has(source.adapterKey)) return res.status(400).json({ error: 'This source uses the evidence import workflow', workflow: source?.workflow || null });
@@ -327,6 +331,10 @@ function createSourceNetworkHandler(dependencies = {}) {
           return res.status(202).json({ status: 'collecting', sourceId: source.id, accepted: true, job });
         }
         if (collector.isRunning) return res.status(409).json({ error: 'A collection is already running; refresh coverage to see its result' });
+        if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.SERVERLESS) {
+          const result = await collector.runAll({ sourceIds: [source.adapterKey], slice: true, scraperTimeoutMs: 25_000, trigger: 'source_network_slice' });
+          return res.status(200).json({ status: 'collected', sourceId: source.id, accepted: true, result });
+        }
         collector.runAll({ sourceIds: [source.adapterKey] }).catch((error) => console.error('[Source Network] Collection failed:', error.message));
         return res.status(202).json({ status: 'collecting', sourceId: source.id, accepted: true });
       }

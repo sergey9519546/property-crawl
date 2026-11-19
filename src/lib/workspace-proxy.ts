@@ -58,7 +58,7 @@ export async function proxyPrivatePropertyApi(request: Request, options: { permi
       role: session.role,
     });
   }
-  return proxyPropertyApi(request, { operatorToken: configuration.credential });
+  return proxyPropertyApi(request, { operatorToken: configuration.credential, role: session.role ?? undefined });
 }
 
 // Per-user tools (hunts, saved searches, portfolio, price drops): the operator
@@ -80,7 +80,7 @@ export async function proxyMemberPropertyApi(request: Request, options: { permis
         role: session.role,
       });
     }
-    return proxyPropertyApi(request, { operatorToken: configuration.credential });
+    return proxyPropertyApi(request, { operatorToken: configuration.credential, role: session.role ?? undefined });
   }
   const member = await currentMember(request);
   if (!member) return error(401, "Sign in to continue");
@@ -110,7 +110,7 @@ export async function proxyWatchlistPropertyApi(request: Request) {
       // Read-only viewer sessions stay isolated from operator watchlist credentials.
       return proxyPropertyApi(request);
     }
-    return proxyPropertyApi(request, { operatorToken: configuration.credential });
+    return proxyPropertyApi(request, { operatorToken: configuration.credential, role: session.role ?? undefined });
   }
   const member = configuration.configured ? await currentMember(request) : null;
   if (member?.entitled) return proxyPropertyApi(request, { operatorToken: configuration.credential, accountId: member.id });

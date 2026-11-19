@@ -21,7 +21,7 @@ const SUPPORTED_RECIPES = Object.freeze([
  * HMAC-SHA256 (hex) over raw request body using SCRAPY_INGEST_SECRET.
  * Header: `x-signature: <hex>` (no sha256= prefix).
  */
-function verifyScrapySignature(rawBody, signatureHeader, secret = process.env.SCRAPY_INGEST_SECRET) {
+function verifyScrapySignature(rawBody, signatureHeader, secret = process.env.SCRAPY_INGEST_SECRET, options = {}) {
   if (!secret || typeof secret !== 'string' || !secret.trim()) {
     return { valid: false, status: 503, error: 'Scrapy ingest secret not configured' };
   }
@@ -44,6 +44,24 @@ function verifyScrapySignature(rawBody, signatureHeader, secret = process.env.SC
 
     if (expectedBuf.length !== providedBuf.length || !crypto.timingSafeEqual(expectedBuf, providedBuf)) {
       return { valid: false, status: 401, error: 'Invalid signature' };
+    }
+
+    const rawTimestamp = options?.timestamp;
+    const requireTimestamp = Boolean(options?.requireTimestamp);
+    if (requireTimestamp && (rawTimestamp === undefined || rawTimestamp === null || String(rawTimestamp).trim() === '')) {
+      return { valid: false, status: 401, error: 'Missing webhook timestamp' };
+    }
+    if (rawTimestamp !== undefined && rawTimestamp !== null && String(rawTimestamp).trim() !== '') {
+      const text = String(rawTimestamp).trim();
+      const parsedNum = Number(text);
+      const tsMs = /^\d+(?:\.\d+)?$/.test(text)
+        ? (parsedNum > 1e12 ? parsedNum : parsedNum * 1000)
+        : Date.parse(text);
+      const nowMs = Number.isFinite(options?.nowMs) ? options.nowMs : Date.now();
+      const maxAgeMs = Math.max(1, Number(options?.maxAgeSeconds ?? 300) || 300) * 1000;
+      if (!Number.isFinite(tsMs) || Math.abs(nowMs - tsMs) > maxAgeMs) {
+        return { valid: false, status: 401, error: 'Expired or invalid webhook timestamp' };
+      }
     }
 
     return { valid: true };

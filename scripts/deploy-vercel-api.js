@@ -65,6 +65,7 @@ function stageVercelApiBundle({ rootDir = DEFAULT_ROOT, stageDir } = {}) {
         $schema: 'https://openapi.vercel.sh/vercel.json',
         framework: null,
         rewrites: [{ source: '/(.*)', destination: '/api' }],
+        functions: { 'api/index.js': { maxDuration: 60 } },
       },
       null,
       2,

@@ -57,12 +57,17 @@ function createHuntsHandler(dependencies = {}) {
     // A member sees and edits only their own hunts; the operator sees all.
     const owner = memberAccountId(req);
     if (req.headers['x-pp-account'] && !owner) return res.status(400).json({ error: 'Invalid member account' });
-    const visible = (hunt) => !owner || (hunt && hunt.owner === owner);
+    const isAnalystScope = !owner && String(req.headers['x-pp-role'] || '').toLowerCase() === 'analyst';
+    const visible = (hunt) => {
+      if (owner) return Boolean(hunt && hunt.owner === owner);
+      if (isAnalystScope) return !(hunt && hunt.owner && String(hunt.owner).startsWith('account:'));
+      return true;
+    };
 
     try {
       const durable = getDurableStore();
       const idMatch = url.pathname.match(/^\/api\/hunts\/(hunt_[a-f0-9]{24})(?:\/(events|evaluate))?$/);
-      if (owner && idMatch) {
+      if ((owner || isAnalystScope) && idMatch) {
         const existing = durable ? await durable.get(idMatch[1]) : hunts.getHunt(idMatch[1], { filePath }).hunt;
         if (!visible(existing)) return res.status(404).json({ error: 'Hunt was not found' });
       }

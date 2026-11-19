@@ -54,6 +54,7 @@ const configuredApiLimit = Number(process.env.PROPERTY_API_RATE_LIMIT);
 const apiLimiter = createApiRatePolicy({
   windowMs: 60000,
   maxRequests: Number.isInteger(configuredApiLimit) && configuredApiLimit >= 1 && configuredApiLimit <= 10000 ? configuredApiLimit : 120,
+  sensitiveMaxRequests: Number.isInteger(configuredApiLimit) && configuredApiLimit >= 500 ? configuredApiLimit : 20,
 });
 
 let lastHealthCache = { timestamp: 0, freshness: null, observationStore: null };

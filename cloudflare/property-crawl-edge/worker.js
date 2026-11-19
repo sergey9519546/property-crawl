@@ -39,17 +39,20 @@ function sanitizeKey(raw) {
   }
 }
 
-function buildUpstreamHeaders(request) {
+function buildUpstreamHeaders(request, env) {
   const headers = new Headers(request.headers);
   const existingXff = (headers.get('x-forwarded-for') || '').trim();
   const cfIp = (headers.get('cf-connecting-ip') || '').trim();
   if (!existingXff && cfIp) headers.set('x-forwarded-for', cfIp);
-  const existingClientIp = (headers.get('x-pp-client-ip') || '').trim();
-  if (!existingClientIp) {
+  if (cfIp) {
+    headers.set('x-pp-client-ip', cfIp);
+  } else {
+    headers.delete('x-pp-client-ip');
     const firstXff = existingXff.split(',').map((ip) => ip.trim()).find(Boolean);
-    const clientIp = firstXff || cfIp;
-    if (clientIp) headers.set('x-pp-client-ip', clientIp);
+    if (firstXff) headers.set('x-pp-client-ip', firstXff);
   }
+  const edgeSecret = String(env?.EDGE_SHARED_SECRET || '').trim();
+  if (edgeSecret) headers.set('x-edge-secret', edgeSecret);
   headers.delete('host');
   return headers;
 }
@@ -272,7 +275,7 @@ export default {
             upstreamUrl,
             {
               method: 'GET',
-              headers: buildUpstreamHeaders(request),
+              headers: buildUpstreamHeaders(request, env),
             },
             url.pathname,
             request.method
@@ -312,7 +315,7 @@ export default {
           upstreamUrl,
           {
             method: request.method,
-            headers: buildUpstreamHeaders(request),
+            headers: buildUpstreamHeaders(request, env),
             body: isRead ? undefined : request.body,
           },
           url.pathname,

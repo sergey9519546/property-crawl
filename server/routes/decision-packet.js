@@ -37,12 +37,13 @@ function extractCookie(req, name) {
 
 function resolveRequestAuth(req, env = process.env) {
   const configuredToken = resolveOperatorToken(env);
-  let presented = presentedRunToken(req);
-  if (!presented) {
-    presented = extractCookie(req, 'pp_operator_session') || extractCookie(req, 'workspace_session');
-  }
+  const presented = presentedRunToken(req);
 
   if (!presented) {
+    const cookieToken = extractCookie(req, 'pp_operator_session') || extractCookie(req, 'workspace_session');
+    if (cookieToken && configuredToken) {
+      return { authenticated: false, role: null, reason: 'invalid_credentials' };
+    }
     return { authenticated: false, role: null, reason: 'missing_credentials' };
   }
 

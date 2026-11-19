@@ -24,7 +24,8 @@ function configureServerlessEnv(env = process.env) {
     PROPERTY_MEDIA_CACHE_PATH: path.join(cacheRoot, 'property-media.json'),
     PROPERTY_DOCUMENT_REVIEW_STORE_PATH: path.join(cacheRoot, 'document-review-store.json'),
     PROPERTY_HUNTS_PATH: path.join(cacheRoot, 'saved-hunts.json'),
-    PROPERTY_RESEARCH_PATH: path.join(cacheRoot, 'research-workspaces.json'),
+    PROPERTY_RESEARCH_WORKSPACE_PATH: path.join(cacheRoot, 'research-workspaces.json'),
+    PROPERTY_FORM_SUBMISSIONS_DIR: path.join(cacheRoot, 'form-submissions'),
     PROPERTY_ACCOUNTS_PATH: path.join(cacheRoot, 'accounts.json'),
     PROPERTY_EMAIL_NOTICE_PATH: path.join(cacheRoot, 'email-notices.json'),
     PROPERTY_EVIDENCE_DIR: path.join(cacheRoot, 'discovery-snapshots'),
@@ -72,6 +73,14 @@ function applyForwardedClientIp(req, env = process.env) {
   if (trustedProxyCount <= 0) return false;
   if (!req || !req.headers || typeof req.headers !== 'object') return false;
 
+  const expectedEdgeSecret = String(env?.EDGE_SHARED_SECRET || env?.INTERNAL_PROXY_SECRET || '').trim();
+  if (expectedEdgeSecret) {
+    const nodeCrypto = require('node:crypto');
+    const sha256 = (value) => nodeCrypto.createHash('sha256').update(String(value || ''), 'utf8').digest();
+    const rawSecret = req.headers['x-edge-secret'];
+    const providedSecret = (Array.isArray(rawSecret) ? String(rawSecret[0] || '') : String(rawSecret || '')).trim();
+    if (!providedSecret || !nodeCrypto.timingSafeEqual(sha256(providedSecret), sha256(expectedEdgeSecret))) return false;
+  }
   const rawHeader = req.headers['x-pp-client-ip'];
   const raw = (Array.isArray(rawHeader) ? String(rawHeader[0] || '') : String(rawHeader || '')).trim();
   if (!raw || raw.length > MAX_CLIENT_IP_HEADER_LEN || !CLIENT_IP_HEADER_RE.test(raw)) {

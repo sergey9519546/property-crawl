@@ -133,6 +133,7 @@ function createScrapersHandler(dependencies = {}) {
       if (action === 'next-slice') {
         const SLICE_PRIORITY = ['servicelink', 'hud', 'sheriff', 'civilview', 'gsa', 'usda', 'treasury', 'irs'];
         const database = resolveDatabase();
+        const sliceLastRunAt = createScrapersHandler._sliceLastRunAt || (createScrapersHandler._sliceLastRunAt = new Map());
         let chosenSource = SLICE_PRIORITY[0];
         let reason = 'default_priority';
         const explicitReqSources = Array.isArray(body.sources) && body.sources.length > 0
@@ -144,41 +145,44 @@ function createScrapersHandler(dependencies = {}) {
         } else if (database?.isPg && database?.pool) {
           try {
             const cpRes = await database.pool.query(
-              'SELECT source_key, cursor FROM discovery_checkpoints WHERE source_key = ANY($1::text[])',
+              'SELECT source_key, cursor, updated_at FROM discovery_checkpoints WHERE source_key = ANY($1::text[])',
               [SLICE_PRIORITY]
             );
             const activeCheckpoints = new Map();
+            const cpUpdatedBySource = new Map();
+            const isNonZeroToken = (val) => typeof val === 'string' && val.trim() !== '' && val.trim() !== '0';
             for (const row of cpRes.rows || []) {
               const cur = row.cursor;
+              if (row.updated_at) cpUpdatedBySource.set(row.source_key, Date.parse(row.updated_at) || 0);
               const hasActive = typeof cur === 'string'
-                ? cur.trim() !== ''
+                ? isNonZeroToken(cur)
                 : Boolean(cur && typeof cur === 'object' && (
-                    (typeof cur.continuationToken === 'string' && cur.continuationToken.trim() !== '') ||
-                    (typeof cur.nextCursor === 'string' && cur.nextCursor.trim() !== '') ||
-                    (Array.isArray(cur.completedStates) && Object.keys(cur).length > 0)
+                    isNonZeroToken(cur.continuationToken) ||
+                    isNonZeroToken(cur.nextCursor) ||
+                    (Array.isArray(cur.completedStates) && cur.completedStates.length > 0)
                   ));
               if (hasActive) activeCheckpoints.set(row.source_key, cur);
             }
+            const obsRes = await database.pool.query(
+              'SELECT source_key, MAX(source_observed_at) AS latest_at FROM listings WHERE source_key = ANY($1::text[]) GROUP BY source_key',
+              [SLICE_PRIORITY]
+            );
+            const latestBySource = new Map((obsRes.rows || []).map((r) => [r.source_key, r.latest_at ? Date.parse(r.latest_at) : 0]));
             const resumed = SLICE_PRIORITY.find((key) => activeCheckpoints.has(key));
-            if (resumed) {
+            const activityMs = (key) => Math.max(latestBySource.get(key) || 0, cpUpdatedBySource.get(key) || 0, sliceLastRunAt.get(key) || 0);
+            const starving = latestBySource.size > 0
+              ? SLICE_PRIORITY.reduce((oldest, key) => (activityMs(key) < activityMs(oldest) ? key : oldest), SLICE_PRIORITY[0])
+              : null;
+            if (resumed && (!starving || (activityMs(resumed) - activityMs(starving)) <= 15 * 60_000)) {
               chosenSource = resumed;
               reason = 'active_continuation_cursor';
             } else {
-              const obsRes = await database.pool.query(
-                'SELECT source_key, MAX(source_observed_at) AS latest_at FROM listings WHERE source_key = ANY($1::text[]) GROUP BY source_key',
-                [SLICE_PRIORITY]
-              );
-              const latestBySource = new Map((obsRes.rows || []).map((r) => [r.source_key, r.latest_at ? Date.parse(r.latest_at) : 0]));
-              const missing = SLICE_PRIORITY.find((key) => !latestBySource.has(key));
-              if (missing) {
+              const missing = SLICE_PRIORITY.find((key) => !latestBySource.has(key) && !activeCheckpoints.has(key));
+              if (missing && latestBySource.size > 0) {
                 chosenSource = missing;
                 reason = 'missing_from_inventory';
               } else {
-                chosenSource = SLICE_PRIORITY.reduce((oldest, key) => {
-                  const oldestMs = latestBySource.get(oldest) ?? Infinity;
-                  const candidateMs = latestBySource.get(key) ?? Infinity;
-                  return candidateMs < oldestMs ? key : oldest;
-                }, SLICE_PRIORITY[0]);
+                chosenSource = starving || SLICE_PRIORITY.reduce((oldest, key) => (activityMs(key) < activityMs(oldest) ? key : oldest), SLICE_PRIORITY[0]);
                 reason = 'oldest_observation';
               }
             }
@@ -188,6 +192,7 @@ function createScrapersHandler(dependencies = {}) {
           }
         }
         try {
+          sliceLastRunAt.set(chosenSource, Date.now());
           const sliceTimeoutRaw = Number(body.timeoutMs ?? url.searchParams.get('timeoutMs'));
           const scraperTimeoutMs = Number.isFinite(sliceTimeoutRaw) && sliceTimeoutRaw > 0
             ? Math.min(Math.floor(sliceTimeoutRaw), 120_000)
@@ -243,7 +248,7 @@ function createScrapersHandler(dependencies = {}) {
       }
 
       // If client requested non-blocking trigger
-      if (req.headers && req.headers['x-async'] === 'true') {
+      if (req.headers && req.headers['x-async'] === 'true' && !(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.SERVERLESS)) {
         runPromise.catch(err => console.error('[Scrapers Route] Async run error:', err));
         return res.json({ status: 'triggered', message: 'Ingestion cycle running in background', options: runOptions });
       }

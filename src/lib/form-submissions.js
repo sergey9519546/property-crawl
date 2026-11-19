@@ -10,7 +10,10 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { isEmail, mailIsConfigured, sendOutboundMail } = require('../../server/delivery/outbound-mail');
 
-const DEFAULT_DIR = path.resolve(process.cwd(), '.cache/form-submissions');
+const SecuritySanitizer = require('../../server/security/sanitizer');
+const DEFAULT_DIR = (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.SERVERLESS)
+  ? path.join(require('node:os').tmpdir(), 'property-crawl-cache', 'form-submissions')
+  : path.resolve(process.cwd(), '.cache/form-submissions');
 
 function submissionDir() {
   return process.env.PROPERTY_FORM_SUBMISSIONS_DIR
@@ -23,9 +26,9 @@ function sanitize(value, max) {
 }
 
 function formatContactNotificationHtml(fields, receivedAt) {
-  const safeName = sanitize(fields.name || 'Anonymous User', 100);
-  const safeEmail = sanitize(fields.email || 'None Provided', 100);
-  const safeMessage = sanitize(fields.message || '', 5000).replace(/\n/g, '<br>');
+  const safeName = SecuritySanitizer.escapeHtml(sanitize(fields.name || 'Anonymous User', 100));
+  const safeEmail = SecuritySanitizer.escapeHtml(sanitize(fields.email || 'None Provided', 100));
+  const safeMessage = SecuritySanitizer.escapeHtml(sanitize(fields.message || '', 5000)).replace(/\n/g, '<br>');
   return `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff; color: #0f172a;">
       <h2 style="font-size: 18px; font-weight: 700; margin-bottom: 16px; border-bottom: 2px solid #0f172a; padding-bottom: 8px;">

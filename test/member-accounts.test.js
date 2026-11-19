@@ -193,7 +193,9 @@ test('billing portal fails closed 503 when unconfigured and Stripe webhook handl
   assert.match(portfolioSrc, /href="\/sign-in"/);
 
   const intelligenceSrc = fs.readFileSync(path.resolve(__dirname, '../src/components/listings/property-intelligence.tsx'), 'utf8');
-  assert.match(intelligenceSrc, /Benchmark Evidence &(?:amp;)? Assessor Coverage/);
+  const enMessagesSrc = fs.readFileSync(path.resolve(__dirname, '../src/lib/i18n/messages/en.ts'), 'utf8');
+  assert.match(intelligenceSrc, /t\.benchHeading/);
+  assert.match(enMessagesSrc, /Benchmark Evidence &(?:amp;)? Assessor Coverage/);
   assert.match(intelligenceSrc, /forfeitureRiskTerms/);
   assert.match(intelligenceSrc, /constitutionalBasis/);
 });

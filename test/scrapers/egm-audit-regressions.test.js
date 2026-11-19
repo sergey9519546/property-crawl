@@ -75,4 +75,63 @@ test('Cloudflare edge worker no longer caches /api/listings and defines schedule
   assert.doesNotMatch(src.match(/const CACHEABLE_PATHS = new Set\(\[[\s\S]*?\]\)/)[0], /'\/api\/listings'/);
   assert.match(src, /token === 'origin'/);
   assert.match(src, /async scheduled\(controller, env, ctx\)/);
+  assert.match(src, /x-edge-secret/);
+});
+
+test('next-slice ignores idle "0" wrap cursors so stale Tier A/B sources do not starve', async () => {
+  const { createScrapersHandler } = require('../../server/routes/scrapers');
+  process.env.SCRAPER_ADMIN_TOKEN = 'test-slice-token-2';
+  let ranWith = null;
+  const mockDb = {
+    isPg: true,
+    pool: {
+      async query(sql) {
+        if (sql.includes('discovery_checkpoints')) {
+          return {
+            rows: [
+              { source_key: 'sheriff', cursor: '0', updated_at: new Date().toISOString() },
+              { source_key: 'civilview', cursor: { continuationToken: '0' }, updated_at: new Date().toISOString() },
+            ],
+          };
+        }
+        if (sql.includes('raw_notice') || sql.includes('lifecycle_status')) return { rows: [] };
+        return { rows: [{ source: 'sheriff', cnt: 0, n: 0 }] };
+      },
+    },
+    async purgeStaleListings() { return { deleted: 0, observationsDeleted: 0 }; },
+  };
+  const handler = createScrapersHandler({
+    database: mockDb,
+    scheduler: { database: mockDb, async runAll(opts) { ranWith = opts; return { totalIngested: 0 }; } },
+  });
+  const res = { statusCode: 200, body: null, status(c) { this.statusCode = c; return this; }, json(b) { this.body = b; return this; } };
+  try {
+    await handler({ method: 'POST', url: '/api/scrapers/run', headers: { authorization: 'Bearer test-slice-token-2' }, body: { action: 'next-slice' } }, res);
+    assert.equal(res.statusCode, 200);
+    assert.notEqual(res.body.reason, 'resuming');
+    assert.equal(ranWith.slice, true);
+  } finally {
+    delete process.env.SCRAPER_ADMIN_TOKEN;
+  }
+});
+
+test('slice mode returns nextContinuationToken=null on tail completion instead of wrapping to "0"', async () => {
+  const { TreasuryForfeitureScraper } = require('../../server/scrapers/treasury');
+  const { UsdaResalesScraper } = require('../../server/scrapers/usda');
+
+  const treasury = new TreasuryForfeitureScraper({ useScrapling: false });
+  treasury.maxItems = 2;
+  treasury.crawlJitter = async () => {};
+  treasury.fetchText = async () => '<html><body><a href="sale1.shtml">Sale 1</a></body></html>';
+  treasury.fetchDetail = async () => null;
+  await treasury.scrapeFeed({ slice: true, continuationToken: '0' });
+  assert.equal(treasury.lastRunReport.nextContinuationToken, null);
+  assert.equal(treasury.lastRunReport.complete, true);
+
+  const usda = new UsdaResalesScraper({ useScrapling: false, maxStates: 2 });
+  usda.fetchText = async () => '<select id="stateCode"><option value="01">Alabama (1)</option></select>';
+  usda.searchState = async () => [];
+  await usda.scrapeFeed({ slice: true, continuationToken: '0' });
+  assert.equal(usda.lastRunReport.nextContinuationToken, null);
+  assert.equal(usda.lastRunReport.complete, true);
 });

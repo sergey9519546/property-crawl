@@ -146,13 +146,17 @@ async function migrate(pool, options = {}) {
   }
 }
 function migrationTarget(env = process.env) {
-  return require('../server/db/database-target').resolveDatabaseTarget(env);
+  const effectiveEnv = env.DATABASE_DIRECT_URL ? { ...env, DATABASE_URL: env.DATABASE_DIRECT_URL } : env;
+  return require('../server/db/database-target').resolveDatabaseTarget(effectiveEnv);
 }
 
 async function openConfiguredPool(env = process.env) {
+  const effectiveEnv = env.DATABASE_DIRECT_URL
+    ? { ...env, DATABASE_URL: env.DATABASE_DIRECT_URL }
+    : env;
   const { databaseTargetReason } = require('../server/db/database-target');
-  const target = migrationTarget(env);
-  const reason = databaseTargetReason(env);
+  const target = migrationTarget(effectiveEnv);
+  const reason = databaseTargetReason(effectiveEnv);
   if (reason) console.log(reason);
   if (target === 'embedded') {
     const { startEmbeddedPostgres } = require('../server/db/pglite-pool');
@@ -165,7 +169,7 @@ async function openConfiguredPool(env = process.env) {
     throw error;
   }
   const { Pool } = require('pg');
-  return new Pool({ connectionString: env.DATABASE_URL });
+  return new Pool({ connectionString: effectiveEnv.DATABASE_URL });
 }
 
 if (require.main === module) {

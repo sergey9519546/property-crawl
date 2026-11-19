@@ -8,7 +8,9 @@ const path = require('node:path');
 const { inspectPublisherPhoto } = require('./media-policy');
 const { evaluateDrift, calculateFieldYield, computeDomStructureHash } = require('./drift-detector');
 
-const DEFAULT_TELEMETRY_PATH = path.resolve(__dirname, '../../.cache/scraper-telemetry.json');
+const DEFAULT_TELEMETRY_PATH = (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.SERVERLESS)
+  ? path.join(require('node:os').tmpdir(), 'property-crawl-cache', 'scraper-telemetry.json')
+  : path.resolve(__dirname, '../../.cache/scraper-telemetry.json');
 
 class ScraperTelemetry {
   constructor(options = {}) {
@@ -49,6 +51,14 @@ class ScraperTelemetry {
       this._saveNow();
     }, 200);
     this._saveTimer.unref?.();
+  }
+
+  flush() {
+    if (this._saveTimer) {
+      clearTimeout(this._saveTimer);
+      this._saveTimer = null;
+    }
+    this._saveNow();
   }
 
   _saveNow() {

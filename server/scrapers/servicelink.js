@@ -25,7 +25,12 @@ const DEFAULT_MAX_PAGES = (process.env.VERCEL === '1' || process.env.NOW_REGION)
 const MAX_PAGES = 100;
 const DEFAULT_LIMIT = (process.env.RENDER === 'true' || process.env.NODE_ENV === 'production') ? 100 : 25;
 const MAX_LIMIT = 100;
-const DEFAULT_CHECKPOINT_PATH = path.resolve(process.cwd(), '.cache', 'servicelink-checkpoint.json');
+const cacheRootDir = () => (
+  process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.SERVERLESS
+    ? path.join(require('node:os').tmpdir(), 'property-crawl-cache')
+    : path.resolve(process.cwd(), '.cache')
+);
+const DEFAULT_CHECKPOINT_PATH = path.join(cacheRootDir(), 'servicelink-checkpoint.json');
 const rawPublisherRecords = new WeakMap();
 
 function boundedPositiveInt(value, fallback, maximum) {
@@ -119,7 +124,7 @@ function writeCheckpointFile(filePath, checkpoint) {
 
 function clearCheckpointFile(filePath) {
   const file = explicitCheckpointPath(filePath);
-  if (file === DEFAULT_CHECKPOINT_PATH) { const sweepFile = path.resolve(process.cwd(), '.cache', 'sweep-checkpoints', 'servicelink.json'); if (fs.existsSync(sweepFile)) { try { fs.unlinkSync(sweepFile); } catch {} } } if (!file || !fs.existsSync(file)) return false;
+  if (file === DEFAULT_CHECKPOINT_PATH) { const sweepFile = path.join(cacheRootDir(), 'sweep-checkpoints', 'servicelink.json'); if (fs.existsSync(sweepFile)) { try { fs.unlinkSync(sweepFile); } catch {} } } if (!file || !fs.existsSync(file)) return false;
   fs.unlinkSync(file);
   return true;
 }
@@ -278,7 +283,7 @@ class ServiceLinkScraper extends BaseScraper {
       if (this.restart) {
         clearCheckpointFile(this.checkpointPath);
       } else if (!explicitToken) {
-        const saved = readCheckpointFile(this.checkpointPath) || (this.checkpointPath === DEFAULT_CHECKPOINT_PATH ? readCheckpointFile(path.resolve(process.cwd(), '.cache', 'sweep-checkpoints', 'servicelink.json')) : null);
+        const saved = readCheckpointFile(this.checkpointPath) || (this.checkpointPath === DEFAULT_CHECKPOINT_PATH ? readCheckpointFile(path.join(cacheRootDir(), 'sweep-checkpoints', 'servicelink.json')) : null);
         if (saved) {
           this.setCheckpoint(saved);
         }
