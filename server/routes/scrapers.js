@@ -78,6 +78,37 @@ function createScrapersHandler(dependencies = {}) {
         }
       }
 
+      if (action === 'migrate') {
+        const database = resolveDatabase();
+        if (!database || !database.isPg || !database.pool) {
+          return res.status(503).json({ error: 'Migrate requires an active PostgreSQL database connection' });
+        }
+        let directPool = null;
+        try {
+          const { migrate, openConfiguredPool } = require('../../scripts/discovery-migrate');
+          const targetPool = process.env.DATABASE_DIRECT_URL
+            ? (directPool = await openConfiguredPool(process.env))
+            : database.pool;
+          await migrate(targetPool, { statementTimeoutMs: 45_000 });
+          const migRes = await targetPool.query(
+            'SELECT name, applied_at FROM discovery_schema_migrations ORDER BY name DESC LIMIT 5'
+          );
+          const countRes = await targetPool.query('SELECT count(*)::int AS n FROM discovery_schema_migrations');
+          return res.json({
+            status: 'completed',
+            action: 'migrate',
+            report: {
+              appliedCount: Number(countRes.rows[0]?.n || 0),
+              latest: migRes.rows || [],
+            },
+          });
+        } catch (err) {
+          return res.status(err?.status || 500).json({ error: err?.message || 'Migrate operation failed' });
+        } finally {
+          if (directPool) await directPool.end().catch(() => {});
+        }
+      }
+
       if (action === 'prune') {
         const database = resolveDatabase();
         if (!database || !database.isPg || !database.pool) {
@@ -185,7 +216,7 @@ function createScrapersHandler(dependencies = {}) {
           const sliceTimeoutRaw = Number(body.timeoutMs ?? url.searchParams.get('timeoutMs'));
           const scraperTimeoutMs = Number.isFinite(sliceTimeoutRaw) && sliceTimeoutRaw > 0
             ? Math.min(Math.floor(sliceTimeoutRaw), 120_000)
-            : 26_000;
+            : 15_000;
           const result = await activeScheduler.runAll({
             sourceIds: [chosenSource],
             slice: true,

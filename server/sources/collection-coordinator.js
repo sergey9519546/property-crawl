@@ -8,7 +8,9 @@ const path = require('node:path');
 
 const { notifyHuntWebhook, notifyHuntEmail } = require('../delivery/webhook-notify');
 const { acquireOwnedLock, releaseOwnedLock, replaceFileWithRetry } = require('../intelligence/research-store');
-const DEFAULT_JOB_PATH = path.resolve(__dirname, '../../.cache/collection-jobs.json');
+const DEFAULT_JOB_PATH = (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.SERVERLESS)
+  ? path.join(require('node:os').tmpdir(), 'property-crawl-cache', 'collection-jobs.json')
+  : path.resolve(__dirname, '../../.cache/collection-jobs.json');
 const MAX_JOBS = 200;
 const ID = /^job_[a-f0-9]{24}$/;
 const IDEMPOTENCY_KEY = /^[A-Za-z0-9._:-]{8,160}$/;

@@ -192,7 +192,7 @@ function decorateResponse(res, req) {
       try {
         const compressed = zlib.gzipSync(json, { level: 1 });
         res.setHeader('Content-Encoding', 'gzip');
-        res.setHeader('Vary', 'Origin, Accept-Encoding');
+        res.setHeader('Vary', req.headers.origin ? 'Origin, Accept-Encoding' : 'Accept-Encoding');
         return res.end(compressed);
       } catch {
         // Fall back to uncompressed JSON on compression error
@@ -204,7 +204,7 @@ function decorateResponse(res, req) {
     res.setHeader('Content-Type', 'application/json');
     if (acceptsGzip && req.method !== 'HEAD' && gzip && !res.headersSent) {
       res.setHeader('Content-Encoding', 'gzip');
-      res.setHeader('Vary', 'Origin, Accept-Encoding');
+      res.setHeader('Vary', req.headers.origin ? 'Origin, Accept-Encoding' : 'Accept-Encoding');
       return res.end(gzip);
     }
     res.end(json);
