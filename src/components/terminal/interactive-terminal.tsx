@@ -58,7 +58,7 @@ import {
 import { cn } from "@/lib/utils";
 import { displayDate, displayMoney, displayText, knownNumber } from "@/lib/listing-display";
 import { getExactSourceListingUrl } from "@/lib/listing-links";
-import { loadListingInventory } from "@/lib/listing-inventory";
+import { loadListingSummary, loadServerListingPage } from "@/lib/listing-inventory";
 import { sourceRecordCountsAtAddress } from "@/lib/listing-record-groups";
 import { inspectPublisherPhoto } from "@server/scrapers/media-policy";
 import { inspectSecondaryMedia } from "@server/scrapers/secondary-property-media";
@@ -151,6 +151,11 @@ export function InteractiveTerminal() {
   const [syncStatus, setSyncStatus] = useState<"loading" | "ready" | "refreshing" | "error">("loading");
   const [syncCount, setSyncCount] = useState(0);
   const [syncTotal, setSyncTotal] = useState(0);
+  const [serverQueryTotal, setServerQueryTotal] = useState(0);
+  const [summaryFacets, setSummaryFacets] = useState<Record<string, Record<string, number>>>({});
+  const summaryFacetsRef = React.useRef<Record<string, Record<string, number>>>({});
+  const syncTotalRef = React.useRef(0);
+  const initialFilterSkip = React.useRef(true);
   const [observedCount, setObservedCount] = useState(0);
   const [inventoryNotice, setInventoryNotice] = useState("");
   const [workspaceRecords, setWorkspaceRecords] = useState<PropertyListing[]>([]);
@@ -201,45 +206,84 @@ export function InteractiveTerminal() {
     setUrlReady(true);
   }, []);
 
-  const loadListings = useCallback(async (refresh = false) => {
+  const loadListings = useCallback(async (refresh = false, targetOffset = 0, append = false) => {
     const generation = ++refreshGeneration.current;
     setSyncStatus(refresh ? "refreshing" : "loading");
     try {
-      // A manual refresh must bypass the shared load: it is the user asking for
-      // current records, not a second component mounting.
-      const payload = await loadListingInventory<PropertyListing>(fetch, undefined, { forceRefresh: refresh });
+      const qs = new URLSearchParams();
+      if (searchQuery.trim()) qs.set("q", searchQuery.trim());
+      if (selectedState !== "all") qs.set("state", selectedState);
+      if (selectedSource !== "all") qs.set("source", selectedSource);
+      if (propertyType !== "all") qs.set("type", propertyType);
+      if (occupancy !== "all") qs.set("occupancy", occupancy);
+      if (sortBy === "date") qs.set("sort", "date");
+      else if (sortBy === "bid") qs.set("sort", "bid-asc");
+      else if (sortBy === "score") qs.set("sort", "score");
+
+      const needsSummary = refresh || (!append && Object.keys(summaryFacetsRef.current).length === 0);
+      const [page, summary] = await Promise.all([
+        loadServerListingPage<PropertyListing>(fetch, { limit: 12, offset: targetOffset, queryParams: qs, forceRefresh: refresh }),
+        needsSummary ? loadListingSummary(fetch).catch(() => null) : Promise.resolve(null),
+      ]);
       if (generation !== refreshGeneration.current) return;
-      const nextListings = payload.listings;
-      setListings(nextListings);
+
+      let computedListings: PropertyListing[] = [];
+      setListings((prev) => {
+        if (!append) {
+          computedListings = page.listings;
+          return page.listings;
+        }
+        const seen = new Set(prev.map((l) => l.id));
+        computedListings = [...prev, ...page.listings.filter((l) => !seen.has(l.id))];
+        return computedListings;
+      });
+      setServerQueryTotal(page.total);
+      if (summary?.facets) {
+        summaryFacetsRef.current = summary.facets;
+        setSummaryFacets(summary.facets);
+      } else if (page.facets && Object.keys(summaryFacetsRef.current).length === 0) {
+        summaryFacetsRef.current = page.facets;
+        setSummaryFacets(page.facets);
+      }
+
+      const overallTotal = summary?.total && summary.total > 0
+        ? summary.total
+        : (syncTotalRef.current > 0 && qs.size > 0 ? syncTotalRef.current : page.total);
+      syncTotalRef.current = overallTotal;
       try {
         window.sessionStorage.setItem(
           "perfectproperty:inventory-cache",
           JSON.stringify({
-            listings: nextListings.slice(0, 120),
-            total: payload.total,
-            truncated: payload.truncated,
+            listings: computedListings.slice(0, 48),
+            total: overallTotal,
+            truncated: false,
           }),
         );
       } catch {}
-      window.dispatchEvent(new CustomEvent("perfectproperty:inventory", { detail: nextListings }));
-      setSyncCount(payload.listings.length);
-      setSyncTotal(payload.total);
-      setObservedCount(nextListings.filter(isObservedSourceRecord).length);
-      setInventoryNotice(payload.truncated ? `Showing ${nextListings.length} of ${payload.total} records. The local inventory safety limit was reached.` : "");
+      setSyncCount(computedListings.length);
+      setSyncTotal(overallTotal);
+      setObservedCount(computedListings.filter(isObservedSourceRecord).length);
+      setInventoryNotice("");
       hasLoadedInventory.current = true;
       fullInventorySettled.current = true;
       setSyncStatus("ready");
     } catch {
       if (generation !== refreshGeneration.current) return;
       setSyncStatus("error");
-      // Distinguish "a refresh failed, the records you already have may be
-      // stale" from "nothing ever loaded". The second case must not claim that
-      // last-loaded records remain, because there are none.
       setInventoryNotice(hasLoadedInventory.current
         ? "Refresh failed. Last loaded records remain available; source freshness has not been confirmed."
         : "Inventory could not be loaded, so no records are shown. Unverified records are never substituted for missing ones.");
     }
-  }, []);
+  }, [searchQuery, selectedState, selectedSource, propertyType, occupancy, sortBy]);
+
+  useEffect(() => {
+    if (!urlReady || !hasLoadedInventory.current) return;
+    if (initialFilterSkip.current) {
+      initialFilterSkip.current = false;
+      return;
+    }
+    void loadListings(false, 0, false);
+  }, [urlReady, searchQuery, selectedState, selectedSource, propertyType, occupancy, sortBy, loadListings]);
 
   useEffect(() => {
     let cancelled = false;
@@ -510,7 +554,14 @@ export function InteractiveTerminal() {
     () => filtered.slice(0, visibleCount),
     [filtered, visibleCount],
   );
-  const remaining = filtered.length - visible.length;
+  const remaining = Math.max(0, Math.max(filtered.length, serverQueryTotal) - visible.length);
+
+  React.useEffect(() => {
+    if (!hasLoadedInventory.current) return;
+    if (visibleCount > listings.length && listings.length < serverQueryTotal && syncStatus === "ready") {
+      void loadListings(false, listings.length, true);
+    }
+  }, [visibleCount, listings.length, serverQueryTotal, syncStatus, loadListings]);
 
   const { knownBids, medianBid, knownEquity, avgEquity, knownScores } = useMemo(() => {
     const kb = filtered.map((listing) => knownNumber(listing.openingBid)).filter((value): value is number => value !== null).sort((a, b) => a - b);
@@ -550,7 +601,7 @@ export function InteractiveTerminal() {
 
   const savedListings = inventory.filter((l) => savedIds.has(l.id));
   const availableStates = Array.from(
-    new Set(listings.map((listing) => listing.state).filter(Boolean)),
+    new Set([...Object.keys(summaryFacets.state || {}), ...listings.map((listing) => listing.state).filter(Boolean)]),
   ).sort((a, b) => (STATE_LABELS[a] ?? a).localeCompare(STATE_LABELS[b] ?? b));
 
   const collectFilterOptions = (baseline: string[], values: Array<string | null | undefined>) => {
@@ -565,14 +616,14 @@ export function InteractiveTerminal() {
   };
   const availablePropertyTypes = collectFilterOptions(
     ["Single Family", "Multi-Family", "Condo", "Land"],
-    listings.map((l) => l.propType),
+    [...Object.keys(summaryFacets.type || {}), ...listings.map((l) => l.propType)],
   );
   const availableOccupancies = collectFilterOptions(
     ["Vacant", "Occupied", "Unknown"],
-    listings.map((l) => l.occupancy),
+    [...Object.keys(summaryFacets.occupancy || {}), ...listings.map((l) => l.occupancy)],
   );
   const availableSources = Array.from(
-    new Set([...Object.keys(SOURCES), ...listings.map((l) => l.source).filter(Boolean)]),
+    new Set([...Object.keys(SOURCES), ...Object.keys(summaryFacets.source || {}), ...listings.map((l) => l.source).filter(Boolean)]),
   );
 
   return (
@@ -1213,14 +1264,12 @@ export function InteractiveTerminal() {
                   <div
                     key={listing.id}
                     data-listing-id={listing.id}
-                    className="bg-card rounded-card border border-line overflow-hidden shadow-card hover:shadow-raised transition duration-200 flex flex-col justify-between group"
+                    className="relative bg-card rounded-card border border-line overflow-hidden shadow-card hover:shadow-raised transition duration-200 flex flex-col justify-between group"
                   >
                     <div>
                       {/* Photo + Tags */}
-                      <div className="relative h-48 w-full bg-paper overflow-hidden">
-                        <Link href={`/listings/${encodeURIComponent(listing.id)}?returnTo=${encodeURIComponent("/#live-feed")}`} className="block h-full w-full">
-                          <ListingThumbnail listingId={listing.id} address={listing.address} propType={listing.propType} source={listing.source} photo={cardPhoto} observed={isObserved} photoProvider={secondaryMedia?.accepted ? secondaryMedia.provider : undefined} photoSourceUrl={secondaryMedia?.accepted ? secondaryMedia.sourceRecordUrl : undefined} />
-                        </Link>
+                      <div className="relative z-20 h-48 w-full bg-paper overflow-hidden">
+                        <ListingThumbnail listingId={listing.id} address={listing.address} propType={listing.propType} source={listing.source} photo={cardPhoto} observed={isObserved} photoProvider={secondaryMedia?.accepted ? secondaryMedia.provider : undefined} photoSourceUrl={secondaryMedia?.accepted ? secondaryMedia.sourceRecordUrl : undefined} />
                         <div className="absolute top-3 left-3 z-20 flex items-center gap-1.5">
                           <span
                             className="text-label font-extrabold uppercase px-2 py-0.5 rounded-md text-white shadow-sm"
@@ -1239,7 +1288,7 @@ export function InteractiveTerminal() {
                           onClick={(e) => { e.stopPropagation(); toggleSave(listing.id); }}
                           aria-label={isSaved ? `Remove ${listing.address} from watchlist` : `Add ${listing.address} to watchlist`}
                           aria-pressed={isSaved}
-                          className="absolute top-3 right-3 z-20 p-1.5 rounded-full bg-card/90 backdrop-blur-md text-ink-2 hover:text-ink shadow"
+                          className="absolute top-3 right-3 z-20 grid min-h-11 min-w-11 place-items-center rounded-full bg-card/90 backdrop-blur-md text-ink-2 hover:text-ink shadow"
                         >
                           <Bookmark className={cn("w-4 h-4", isSaved && "fill-ink text-ink")} />
                         </button>
@@ -1250,7 +1299,7 @@ export function InteractiveTerminal() {
                         <div className="flex items-start justify-between gap-2">
                           <div>
                             <h3 className="font-bold text-base text-ink line-clamp-1">
-                              <Link href={`/listings/${encodeURIComponent(listing.id)}?returnTo=${encodeURIComponent("/#live-feed")}`} className="hover:underline underline-offset-2">
+                              <Link href={`/listings/${encodeURIComponent(listing.id)}?returnTo=${encodeURIComponent("/#live-feed")}`} className="hover:underline underline-offset-2 after:absolute after:inset-0 after:z-10 after:content-['']">
                                 {listing.address}
                               </Link>
                             </h3>
@@ -1295,7 +1344,7 @@ export function InteractiveTerminal() {
                       </div>
                     </div>
 
-                    <div className="px-5 pb-2">
+                    <div className="relative z-20 px-5 pb-2">
                       <button
                         type="button"
                         aria-pressed={compare.ids.includes(listing.id)}
@@ -1308,7 +1357,7 @@ export function InteractiveTerminal() {
                       </button>
                     </div>
                     {/* Card Action */}
-                    <div className="grid grid-cols-3 gap-2 px-5 pb-5 pt-1">
+                    <div className="relative z-20 grid grid-cols-1 sm:grid-cols-3 gap-2 px-5 pb-5 pt-1">
                       <button
                         onClick={() => setSelectedListing(listing)}
                         className="w-full inline-flex h-10 items-center justify-center rounded-control bg-ink text-white text-xs font-bold hover:bg-ink-2 transition gap-1 shadow-sm"

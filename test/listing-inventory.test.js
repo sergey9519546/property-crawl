@@ -42,11 +42,16 @@ test('concurrent consumers share one pass over the inventory', () => {
   );
 });
 
-test('a manual refresh is never served a cached pass', () => {
+test('a manual refresh passes forceRefresh via server-paged terminal loader', () => {
   assert.ok(/forceRefresh/.test(loader), 'the loader must accept an explicit bypass');
   assert.ok(
-    /loadListingInventory<PropertyListing>\(fetch, undefined, \{ forceRefresh: refresh \}\)/.test(terminal),
+    /loadServerListingPage<PropertyListing>\(fetch, \{[\s\S]{0,160}forceRefresh: refresh[\s\S]{0,120}\}\)/.test(terminal),
     'the terminal refresh path must pass forceRefresh, or a refresh serves stale records',
+  );
+  assert.doesNotMatch(
+    terminal,
+    /loadListingInventory<PropertyListing>/,
+    'InteractiveTerminal on / must not crawl 20 pages of limit=500 on mount',
   );
 });
 

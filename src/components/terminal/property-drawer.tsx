@@ -43,6 +43,7 @@ import { sourceDisplayText } from "@/lib/source-display";
 import { computeCashToClose, computeCreMetrics, generateLetterOfIntent, generateInvestmentCommitteeMemo, redemptionLabel } from "@/lib/underwriting";
 import type { CashAmountField, CashInputBasis } from "@/lib/underwriting";
 import { getWatchlistComps, type WatchlistCompsResponse } from "@/lib/intelligence-client";
+import { readUnderwriteScenario } from "@/lib/underwrite-scenario";
 
 export interface PropertyDrawerProps {
   listing: Listing | null;
@@ -190,6 +191,9 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
   const openingBid = positiveNumber(listing.openingBid);
   const estLow = positiveNumber(listing.estLow);
   const estHigh = positiveNumber(listing.estHigh);
+  const scenarioForMemo = readUnderwriteScenario(listing.id);
+  const buyerMemoValuation = positiveNumber(scenarioForMemo?.customValuation);
+  const hasValuationForMemo = estHigh !== null || buyerMemoValuation !== null;
   const mid = positiveNumber(listing.mid);
   const sqft = positiveNumber(listing.sqft);
   const dealScore = knownNumber(listing.dealScore);
@@ -273,16 +277,19 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
   };
 
   const handleDownloadIcMemo = () => {
-    if (!listing || openingBid === null || estHigh === null) {
+    if (!listing || openingBid === null || !hasValuationForMemo) {
       setAiAnalysis(t.memoNeedEvidenceError);
       return;
     }
+    const memoListing = estHigh !== null
+      ? listing
+      : { ...listing, estLow: estLow ?? buyerMemoValuation, estHigh: buyerMemoValuation };
     const memoMetrics = isCommercialOrMulti && sqft !== null ? computeCreMetrics({
       sqft,
       openingBid,
       propType: listing.propType ?? undefined,
     }) : undefined;
-    const text = generateInvestmentCommitteeMemo(listing, memoMetrics);
+    const text = generateInvestmentCommitteeMemo(memoListing, memoMetrics);
     const blob = new Blob([text], { type: "text/markdown;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -354,7 +361,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
         <div
           role="tablist"
           aria-label={t.tabsAria}
-          className="bg-paper px-6 py-2 border-b border-line flex items-center gap-2"
+          className="bg-paper px-6 py-2 border-b border-line flex items-center gap-2 overflow-x-auto whitespace-nowrap"
           onKeyDown={(event) => {
             const order: Array<"underwrite" | "3d" | "bidding" | "signals"> = ["underwrite", "3d", "bidding", "signals"];
             const idx = order.indexOf(activeTab);
@@ -870,14 +877,14 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
 
                   <button
                     onClick={handleDownloadIcMemo}
-                    disabled={openingBid === null || estHigh === null}
+                    disabled={openingBid === null || !hasValuationForMemo}
                     className="flex items-center justify-center gap-2 h-10 px-3 rounded-control border border-line bg-card text-ink text-xs font-bold hover:bg-paper transition shadow-sm disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     <FileText className="w-3.5 h-3.5" />
                     <span>{t.exportIcMemo}</span>
                   </button>
                 </div>
-                {(openingBid === null || estHigh === null) && (
+                {(openingBid === null || !hasValuationForMemo) && (
                   <p className="text-label leading-relaxed text-ink-3">{t.execDocsDisabledNote}</p>
                 )}
               </div>

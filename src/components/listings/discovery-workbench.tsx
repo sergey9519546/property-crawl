@@ -786,7 +786,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
           <SlidersHorizontal size={15} /> More filters
         </button>
         {moreFiltersOpen && (
-          <div className="mt-3 grid gap-3 rounded-xl bg-paper p-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mt-3 grid max-w-full gap-3 overflow-x-hidden rounded-xl bg-paper p-3 sm:grid-cols-2 lg:grid-cols-4">
             {(["source", "program", "lifecycle", "occupancy", "freshness"] as const).map((field) => (
               <select key={field} aria-label={filterLabels[field]} value={selectedFacetValue(field)} onChange={(event) => selectValue(field, event.target.value)} className="min-h-10 rounded-lg border border-line-strong bg-card px-3 text-sm">
                 <option value="all">{localizedDefaults[field]}</option>

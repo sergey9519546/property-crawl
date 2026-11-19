@@ -128,9 +128,9 @@ test('production-e2e-pg job is blocking so PostgreSQL migration and parity failu
   );
   const extJob = all.find(j => j.name === 'extended-suite');
   assert.ok(extJob, 'ci.yml must retain extended-suite');
-  assert.match(
+  assert.doesNotMatch(
     withoutComments(extJob.body),
     /continue-on-error:\s*true/,
-    'extended-suite stays advisory for optional external env suites'
+    'extended-suite is blocking so real failures fail CI'
   );
 });

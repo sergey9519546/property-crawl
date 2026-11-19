@@ -112,6 +112,66 @@ async function loadPages<T extends RecordIdentity>(
   return { listings: [...records.values()], total, truncated };
 }
 
+export type ListingSummaryPayload = {
+  total: number;
+  facets?: Record<string, Record<string, number>>;
+  dataMode?: string | null;
+};
+
+export async function loadServerListingPage<T extends RecordIdentity>(
+  fetchImpl: typeof fetch,
+  options: {
+    limit?: number;
+    offset?: number;
+    queryParams?: URLSearchParams | string;
+    signal?: AbortSignal;
+    forceRefresh?: boolean;
+  } = {},
+): Promise<{ listings: T[]; total: number; facets?: Record<string, Record<string, number>> }> {
+  const limit = Math.max(1, Math.min(100, options.limit ?? 12));
+  const offset = Math.max(0, options.offset ?? 0);
+  const qs = options.queryParams instanceof URLSearchParams
+    ? options.queryParams.toString()
+    : String(options.queryParams || "").replace(/^\?/, "");
+  const suffix = qs ? `&${qs}` : "";
+  const response = await fetchImpl(`/api/listings?limit=${limit}&offset=${offset}${suffix}`, {
+    cache: "no-store",
+    signal: options.signal || AbortSignal.timeout(15_000),
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok || !Array.isArray(payload?.listings)) {
+    throw new Error("Inventory could not be refreshed. Your last loaded records are retained.");
+  }
+  const total = Number.isSafeInteger(payload.total) && payload.total >= 0
+    ? payload.total
+    : payload.listings.length;
+  return {
+    listings: payload.listings as T[],
+    total,
+    facets: payload.facets && typeof payload.facets === "object" ? payload.facets : undefined,
+  };
+}
+
+export async function loadListingSummary(
+  fetchImpl: typeof fetch,
+  signal?: AbortSignal,
+): Promise<ListingSummaryPayload> {
+  const response = await fetchImpl("/api/listings?limit=1&summary=1", {
+    cache: "no-store",
+    signal: signal || AbortSignal.timeout(10_000),
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok || !payload || typeof payload !== "object") {
+    throw new Error("Inventory summary unavailable.");
+  }
+  const total = Number.isSafeInteger(payload.total) && payload.total >= 0 ? payload.total : 0;
+  return {
+    total,
+    facets: payload.facets && typeof payload.facets === "object" ? payload.facets : undefined,
+    dataMode: typeof payload.dataMode === "string" ? payload.dataMode : null,
+  };
+}
+
 export async function loadListingInventory<T extends RecordIdentity>(
   fetchImpl: typeof fetch = fetch,
   signal?: AbortSignal,

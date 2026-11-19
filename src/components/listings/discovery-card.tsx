@@ -85,11 +85,9 @@ export const DiscoveryCard = React.memo(function DiscoveryCard({ listing, href, 
       }
     : null;
 
-  return <article className="flex min-w-0 flex-col overflow-hidden rounded-card border border-line bg-card shadow-card transition-shadow hover:shadow-raised" aria-label={listing.address}>
-    <div className="relative shrink-0">
-      <Link href={href} prefetch={false} className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-3" aria-label={`Inspect ${listing.address}`}>
-        <ListingThumbnail listingId={listing.id} address={listing.address} propType={listing.propType} source={listing.source} photo={listing.photo} photoCount={Array.isArray(listing.images) && listing.images.length > 0 ? listing.images.length : (listing.photo ? 1 : 0)} observed={observed} layout="card" />
-      </Link>
+  return <article className="relative flex min-w-0 flex-col overflow-hidden rounded-card border border-line bg-card shadow-card transition-shadow hover:shadow-raised" aria-label={listing.address}>
+    <div className="relative z-20 shrink-0">
+      <ListingThumbnail listingId={listing.id} address={listing.address} propType={listing.propType} source={listing.source} photo={listing.photo} photoCount={Array.isArray(listing.images) && listing.images.length > 0 ? listing.images.length : (listing.photo ? 1 : 0)} observed={observed} layout="card" />
       {program ? <span className="absolute left-3 top-3 z-20 max-w-[calc(100%-5rem)] rounded-control bg-card/95 px-2.5 py-1.5 text-xs font-semibold text-ink-2 shadow-sm">{sourceDisplayText(program)}</span> : null}
       <button type="button" onClick={() => onSave(listing.id)} disabled={saving} aria-label={format(saved ? m.listingsUi.removeFromWatchlistAddress : m.listingsUi.addToWatchlistAddress, { address: listing.address })} aria-pressed={saved} className="absolute right-3 top-3 z-20 grid h-11 w-11 place-items-center rounded-full border border-line bg-card text-ink-2 shadow-sm transition hover:bg-paper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-3 disabled:opacity-60">
         {saving ? <Loader2 size={17} className="animate-spin" /> : <Bookmark size={17} className={saved ? "fill-ink text-ink" : ""} />}
@@ -148,7 +146,7 @@ export const DiscoveryCard = React.memo(function DiscoveryCard({ listing, href, 
           </span>
         ) : null}
       </div>
-      <h2 className="text-lg font-semibold leading-6 tracking-tight text-ink"><Link href={href} prefetch={false} className="rounded-control hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-3">{street}</Link></h2>
+      <h2 className="text-lg font-semibold leading-6 tracking-tight text-ink"><Link href={href} prefetch={false} className="rounded-control hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-3 after:absolute after:inset-0 after:z-10 after:content-['']">{street}</Link></h2>
       {locality ? <p className="mt-1 text-sm text-ink-3">{locality}</p> : null}
       <TriageChips listing={listing} className="mt-1.5" />
       {facts.length ? <p className="mt-2 text-xs text-ink-3">{facts.join(" · ")}</p> : null}
@@ -192,7 +190,7 @@ export const DiscoveryCard = React.memo(function DiscoveryCard({ listing, href, 
         })() : null}
         {opportunity && knownNumber(opportunity.rank) !== null ? <span title={opportunity.note}>{format(m.listingsUi.opportunityRank, { rank: opportunity.rank })}</span> : null}
       </div>
-      <div className="mt-auto grid gap-2 pt-4">
+      <div className="relative z-20 mt-auto grid gap-2 pt-4">
         <button type="button" aria-pressed={compared} aria-label={`${compared ? m.listingsUi.removeBtn : m.listingsUi.compareBtn}: ${listing.address}`} disabled={compareFull && !compared} onClick={() => onCompare(listing.id)} className="inline-flex min-h-11 items-center justify-center rounded-control border border-line-strong bg-card px-3 text-xs font-semibold text-ink-2 transition hover:border-ink-3 hover:bg-paper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-3 disabled:cursor-not-allowed disabled:opacity-50">
           {compared ? m.listingsUi.inCompareBtn : compareFull ? m.listingsUi.compareFullBtn : m.listingsUi.compareBtn}
         </button>

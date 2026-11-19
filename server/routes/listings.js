@@ -722,8 +722,8 @@ async function handleListings(req, res, dbOverride = null, options = {}) {
       intelligence: intelligenceScope(presentedListings.length, viewListingsAll.length, filters),
       pipeline: summarizeInventory(viewListings),
       listings: stripGridListings(viewListings),
-      total: isIntelligenceView
-        ? viewListings.length
+      total: (isIntelligenceView && filters.minQuality > 0)
+        ? viewListingsAll.length
         : result.total,
       // Surface the same honesty signals the health endpoint provides so
       // clients (workbench, tests) can see demo vs postgres without a second call.

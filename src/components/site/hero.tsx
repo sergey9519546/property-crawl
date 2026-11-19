@@ -15,7 +15,7 @@ import {
   type MarketSuggestion,
 } from "@/lib/hero-market-suggestions";
 
-const H1_WORDS = ["Find", "the", "deal", "before", "everyone", "else."];
+// Dead static H1_WORDS removed; headline flows from i18n h.headline
 
 /**
  * Hero — Unicorn Studio WebGL shader in a rounded panel (arcade structure).
@@ -37,18 +37,6 @@ export function Hero() {
   const queryUrl = url.trim();
   const deferredUrl = React.useDeferredValue(queryUrl);
   const [marketListings, setMarketListings] = React.useState<ListingMarket[]>([]);
-
-  React.useEffect(() => {
-    const onInventory = (event: Event) => {
-      const incoming = (event as CustomEvent<ListingMarket[]>).detail;
-      if (!Array.isArray(incoming) || incoming.length === 0) return;
-      setMarketListings((prev) => mergeMarketListings(prev, incoming));
-    };
-    window.addEventListener("perfectproperty:inventory", onInventory);
-    return () => {
-      window.removeEventListener("perfectproperty:inventory", onInventory);
-    };
-  }, []);
 
   React.useEffect(() => {
     return () => {
@@ -180,7 +168,7 @@ export function Hero() {
   return (
     <section
       id="hero"
-      className="relative isolate w-full overflow-visible pt-[120px] pb-[340px] sm:pt-[192px] sm:pb-[460px] lg:pb-[540px] xl:min-h-[820px] xl:pb-[184px] xl:pt-[104px]"
+      className="relative isolate w-full overflow-visible pt-[120px] pb-[200px] sm:pt-[192px] sm:pb-[220px] lg:pb-[260px] xl:min-h-[820px] xl:pb-[184px] xl:pt-[104px]"
       
       onMouseMove={onMouseMove}
       onMouseLeave={onMouseLeave}
@@ -228,10 +216,10 @@ export function Hero() {
           }}
         >
         <motion.h1
+          aria-label={h.headline}
           className="text-display font-semibold tracking-[-0.02em] text-ink sm:text-[48px] sm:leading-[52px]"
           style={{ margin: 0, maxWidth: 620 }}
         >
-          <span className="sr-only">{h.headline}</span>
           <span aria-hidden className="flex flex-wrap justify-center gap-x-[0.25em]">
             {h1Words.map((w, i) => (
               <motion.span
@@ -295,16 +283,22 @@ export function Hero() {
               }, 300);
             }}
             onKeyDown={(event) => {
-              if (!suggestionsOpen || suggestions.length === 0) return;
+              const hasSearchAllRow = deferredUrl.length >= 2;
+              const maxIndex = hasSearchAllRow ? suggestions.length : suggestions.length - 1;
+              if (!suggestionsOpen || maxIndex < 0) return;
               if (event.key === "ArrowDown") {
                 event.preventDefault();
-                setActiveSuggestion((current) => Math.min(current + 1, suggestions.length - 1));
+                setActiveSuggestion((current) => Math.min(current + 1, maxIndex));
               } else if (event.key === "ArrowUp") {
                 event.preventDefault();
                 setActiveSuggestion((current) => Math.max(current - 1, 0));
               } else if (event.key === "Enter" && activeSuggestion >= 0) {
                 event.preventDefault();
-                selectSuggestion(suggestions[activeSuggestion]);
+                if (hasSearchAllRow && activeSuggestion === suggestions.length) {
+                  window.location.assign(`/listings?q=${encodeURIComponent(deferredUrl)}`);
+                } else if (suggestions[activeSuggestion]) {
+                  selectSuggestion(suggestions[activeSuggestion]);
+                }
               } else if (event.key === "Escape") {
                 setSuggestionsOpen(false);
               }
@@ -369,13 +363,18 @@ export function Hero() {
               ))}
               {deferredUrl.length >= 2 ? (
                 <li
+                  id={`hero-address-suggestion-${suggestions.length}`}
                   key="search-database-all"
+                  role="option"
+                  aria-selected={activeSuggestion === suggestions.length}
                   onMouseDown={(e) => {
                     e.preventDefault();
                     window.location.assign(`/listings?q=${encodeURIComponent(deferredUrl)}`);
                   }}
                   onClick={() => window.location.assign(`/listings?q=${encodeURIComponent(deferredUrl)}`)}
-                  className="flex cursor-pointer items-center justify-between border-t border-line bg-go/10 px-3.5 py-3 text-sm font-semibold text-ink transition-colors hover:bg-go/20"
+                  className={`flex cursor-pointer items-center justify-between border-t border-line bg-go/10 px-3.5 py-3 text-sm font-semibold text-ink transition-colors ${
+                    activeSuggestion === suggestions.length ? "bg-go/25 ring-1 ring-line-strong" : "hover:bg-go/20"
+                  }`}
                 >
                   <span className="flex items-center gap-2">
                     <Database className="h-4 w-4 text-go" />
