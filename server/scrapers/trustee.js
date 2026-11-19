@@ -55,6 +55,23 @@ const DEFAULT_TRUSTEE_JURISDICTIONS = Object.freeze([
   'miami-dade',
 ]);
 
+function parseJurisdictionOffset(cursor, jurisdictions = DEFAULT_TRUSTEE_JURISDICTIONS) {
+  if (cursor === null || cursor === undefined || cursor === '') return null;
+  let raw = cursor;
+  if (typeof raw === 'object') {
+    raw = raw.continuationToken ?? raw.nextCursor ?? raw.jurisdictionOffset ?? raw.offset ?? null;
+    if (raw === null || raw === undefined || raw === '') return null;
+  }
+  const str = String(raw).trim();
+  if (!str) return null;
+  if (/^\d+$/.test(str)) {
+    const n = Number(str);
+    return Number.isSafeInteger(n) && n >= 0 ? n : null;
+  }
+  const idx = jurisdictions.findIndex((j) => String(j).toLowerCase() === str.toLowerCase());
+  return idx >= 0 ? idx : null;
+}
+
 function accumulateRecorderEvidence(report, jurKey, entry = {}) {
   if (!report) return null;
   const key = String(jurKey || entry.jurisdiction || entry.platform || 'unknown').toLowerCase();
@@ -95,6 +112,16 @@ class TrusteeSaleScraper extends BaseScraper {
     this.timeoutMs = 15000;
     this.fixtureOnly = Boolean(options.fixtureOnly);
     this.lastRunReport = null;
+    const initialOffset = parseJurisdictionOffset(
+      options.jurisdictionOffset ?? options.cursor ?? options.continuationToken ?? options.checkpoint
+    );
+    this.jurisdictionOffset = initialOffset != null ? initialOffset : 0;
+  }
+
+  setCheckpoint(checkpoint) {
+    const offset = parseJurisdictionOffset(checkpoint);
+    this.jurisdictionOffset = offset != null ? offset : 0;
+    return this;
   }
 
   getJurisdictionCircuitBreaker(scopeKey, url = null) {
@@ -211,10 +238,34 @@ class TrusteeSaleScraper extends BaseScraper {
       ? [options.jurisdiction]
       : (Array.isArray(options.jurisdictions) ? options.jurisdictions : DEFAULT_TRUSTEE_JURISDICTIONS);
 
+    const runOffset = parseJurisdictionOffset(
+      options.jurisdictionOffset ?? options.cursor ?? options.continuationToken ?? options.checkpoint,
+      jurisdictions
+    );
+    if (runOffset != null) this.jurisdictionOffset = runOffset;
+
+    const deadlineAt = Number(options?.deadlineAt) || 0;
+    const shouldStopForDeadline = () => Boolean(deadlineAt && Date.now() >= deadlineAt - 1800);
+    const totalJurs = jurisdictions.length;
+    const startOffset = totalJurs > 1 && !options.jurisdiction
+      ? ((this.jurisdictionOffset % totalJurs) + totalJurs) % totalJurs
+      : 0;
+    const orderedJurisdictions = startOffset > 0
+      ? [...jurisdictions.slice(startOffset), ...jurisdictions.slice(0, startOffset)]
+      : jurisdictions;
+
     const standardized = [];
     const seenRefs = new Set();
+    let abortedForDeadline = false;
+    let processedJurisdictions = 0;
 
-    for (const rawJur of jurisdictions) {
+    for (let jurIdx = 0; jurIdx < orderedJurisdictions.length; jurIdx++) {
+      if (shouldStopForDeadline()) {
+        abortedForDeadline = true;
+        break;
+      }
+      const rawJur = orderedJurisdictions[jurIdx];
+      processedJurisdictions = jurIdx + 1;
       const jurKey = String(rawJur || '').toLowerCase().trim();
 
       // -----------------------------------------------------------------------
@@ -830,6 +881,29 @@ class TrusteeSaleScraper extends BaseScraper {
       report.fullSweepComplete = false;
       if (!standardized.length && !report.failures.length) report.outcome = 'evidence_only';
     }
+
+    if (abortedForDeadline && orderedJurisdictions.length > 1 && processedJurisdictions < orderedJurisdictions.length) {
+      const nextOffset = (startOffset + processedJurisdictions) % orderedJurisdictions.length;
+      this.jurisdictionOffset = nextOffset;
+      report.nextContinuationToken = String(nextOffset);
+      report.nextCursor = report.nextContinuationToken;
+      report.partialSweep = true;
+      report.truncated = true;
+      report.complete = false;
+      report.fullSweepComplete = false;
+    } else {
+      this.jurisdictionOffset = 0;
+      report.nextContinuationToken = null;
+      report.nextCursor = null;
+      report.partialSweep = Boolean(report.truncated);
+    }
+
+    Object.defineProperties(standardized, {
+      partialSweep: { value: report.partialSweep, enumerable: false, writable: true, configurable: true },
+      nextCursor: { value: report.nextCursor, enumerable: false, writable: true, configurable: true },
+      nextContinuationToken: { value: report.nextContinuationToken, enumerable: false, writable: true, configurable: true },
+      report: { value: report, enumerable: false, writable: true, configurable: true },
+    });
 
     return standardized;
   }

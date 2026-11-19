@@ -8,6 +8,8 @@ function headerValue(headers = {}, name) {
 }
 
 function presentedRunToken(req) {
+  const adminToken = headerValue(req.headers, 'x-scraper-admin-token');
+  if (typeof adminToken === 'string' && adminToken.trim()) return adminToken.trim();
   const direct = headerValue(req.headers, 'x-scraper-token');
   if (typeof direct === 'string' && direct.trim()) return direct.trim();
   const authorization = headerValue(req.headers, 'authorization');
@@ -150,8 +152,40 @@ function createScrapersHandler(dependencies = {}) {
         }
       }
 
+      if (action === 'email-ingest') {
+        try {
+          const { EmailNoticesPipeline } = require('../sources/email-notices');
+          const pipeline = dependencies.emailNoticesPipeline || new EmailNoticesPipeline({
+            db: resolveDatabase(),
+            env,
+          });
+          let report;
+          if (Array.isArray(body.messages)) {
+            report = await pipeline.ingestMessages(body.messages);
+          } else if (
+            typeof body.raw === 'string' ||
+            typeof body.rawMime === 'string' ||
+            typeof body.mime === 'string' ||
+            typeof body.body === 'string' ||
+            typeof body.text === 'string' ||
+            (body.email && (typeof body.email === 'string' || typeof body.email === 'object'))
+          ) {
+            report = await pipeline.ingestRawEmail(body.email || body);
+          } else {
+            report = await pipeline.ingest();
+          }
+          return res.json({ status: 'completed', action: 'email-ingest', report });
+        } catch (err) {
+          const status = err?.code === 'IMAP_CREDENTIALS_UNSET' ? 503 : (err?.status || 500);
+          return res.status(status).json({
+            error: err?.message || 'Email ingestion failed',
+            ...(err?.code ? { code: err.code } : {}),
+          });
+        }
+      }
+
       if (action === 'next-slice') {
-        const SLICE_PRIORITY = ['servicelink', 'hud', 'sheriff', 'civilview', 'gsa', 'usda', 'treasury', 'irs'];
+        const SLICE_PRIORITY = ['servicelink', 'hud', 'sheriff', 'civilview', 'gsa', 'usda', 'treasury', 'irs', 'trustee'];
         const database = resolveDatabase();
         const sliceLastRunAt = createScrapersHandler._sliceLastRunAt || (createScrapersHandler._sliceLastRunAt = new Map());
         let chosenSource = SLICE_PRIORITY[0];

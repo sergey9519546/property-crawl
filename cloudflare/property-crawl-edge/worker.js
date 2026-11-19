@@ -411,4 +411,55 @@ export default {
       await task;
     }
   },
+  async email(message, env, ctx) {
+    const token = String(env?.SCRAPER_ADMIN_TOKEN || env?.PROPERTY_OPERATOR_SECRET || '').trim();
+    if (!token) {
+      console.warn(JSON.stringify({ event: 'edge_email_skipped', reason: 'missing_scraper_admin_token', from: message?.from || null }));
+      if (typeof message?.setReject === 'function') {
+        message.setReject('Email ingestion not configured');
+      }
+      return;
+    }
+    const apiOrigin = String(env?.API_ORIGIN || env?.ORIGIN_URL || 'https://property-crawl-api.vercel.app').replace(/\/+$/, '');
+    const edgeSecret = String(env?.EDGE_SHARED_SECRET || '').trim();
+    let raw = '';
+    if (typeof message?.raw === 'string') {
+      raw = message.raw;
+    } else if (message?.raw) {
+      raw = await new Response(message.raw).text();
+    } else if (typeof message?.text === 'string') {
+      raw = message.text;
+    }
+    const subject = typeof message?.headers?.get === 'function' ? (message.headers.get('subject') || '') : '';
+    const task = fetch(`${apiOrigin}/api/scrapers/run`, {
+      method: 'POST',
+      headers: {
+        'X-Scraper-Admin-Token': token,
+        ...(edgeSecret ? { 'x-edge-secret': edgeSecret } : {}),
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        action: 'email-ingest',
+        raw,
+        from: message?.from || '',
+        to: message?.to || '',
+        subject,
+      }),
+      signal: typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(55_000) : undefined,
+    })
+      .then(async (res) => {
+        const text = await res.text().catch(() => '');
+        console.log(JSON.stringify({ event: 'edge_email_complete', status: res.status, ok: res.ok, body: text.slice(0, 300) }));
+      })
+      .catch((err) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(JSON.stringify({ event: 'edge_email_error', error: msg }));
+      });
+    if (ctx && typeof ctx.waitUntil === 'function') {
+      ctx.waitUntil(task);
+    } else {
+      await task;
+    }
+  },
 };
