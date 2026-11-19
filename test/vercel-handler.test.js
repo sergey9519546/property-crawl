@@ -50,6 +50,11 @@ test('configureServerlessEnv applies /tmp cache defaults and disables background
     env.PROPERTY_ACCOUNTS_PATH,
     path.join(os.tmpdir(), 'property-crawl-cache', 'accounts.json'),
   );
+  assert.equal(env.PROPERTY_EVIDENCE_DIR, path.join(os.tmpdir(), 'property-crawl-cache', 'discovery-snapshots'));
+  assert.equal(env.PROPERTY_SOURCE_INTAKE_PATH, path.join(os.tmpdir(), 'property-crawl-cache', 'source-intake.json'));
+  assert.equal(env.SCRAPER_TELEMETRY_PATH, path.join(os.tmpdir(), 'property-crawl-cache', 'scraper-telemetry.json'));
+  assert.equal(env.SERVICELINK_CHECKPOINT_PATH, path.join(os.tmpdir(), 'property-crawl-cache', 'servicelink-checkpoint.json'));
+  assert.equal(env.SCRAPER_TIMEOUT_MS, '45000');
 });
 
 test('configureServerlessEnv preserves explicit operator overrides on Vercel and ignores non-serverless environments', () => {
@@ -64,6 +69,8 @@ test('configureServerlessEnv preserves explicit operator overrides on Vercel and
     PROPERTY_IMAGE_CENSUS_GEOCODER_FALLBACK: '0',
     PROPERTY_IMAGE_GOOGLE_PANORAMAX_FALLBACK: '0',
     PROPERTY_IMAGE_GOOGLE_MAPILLARY_FALLBACK: '0',
+    PROPERTY_EVIDENCE_DIR: path.join(customDir, 'evidence'),
+    SCRAPER_TIMEOUT_MS: '90000',
   };
   assert.equal(configureServerlessEnv(env), true);
   assert.equal(env.SCRAPER_BACKGROUND_ENABLED, '1');
@@ -72,6 +79,8 @@ test('configureServerlessEnv preserves explicit operator overrides on Vercel and
   assert.equal(env.PROPERTY_IMAGE_CENSUS_GEOCODER_FALLBACK, '0');
   assert.equal(env.PROPERTY_IMAGE_GOOGLE_PANORAMAX_FALLBACK, '0');
   assert.equal(env.PROPERTY_IMAGE_GOOGLE_MAPILLARY_FALLBACK, '0');
+  assert.equal(env.PROPERTY_EVIDENCE_DIR, path.join(customDir, 'evidence'));
+  assert.equal(env.SCRAPER_TIMEOUT_MS, '90000');
 });
 
 test('createServerlessDispatcher caches verified DB check and retries after transient failures', async () => {
@@ -297,4 +306,36 @@ test('proxyPropertyApi sets x-pp-client-ip from x-real-ip or first x-forwarded-f
   );
   assert.equal(seenHeaders[2].get('x-forwarded-for'), null);
   assert.equal(seenHeaders[2].get('x-pp-client-ip'), null);
+});
+
+test('IngestionScheduler.runAll clears a stale isRunning lock but still skips an active fresh lock', async () => {
+  const { IngestionScheduler } = require('../server/scrapers/scheduler');
+  const stubDb = { createListing: async () => null };
+  const scheduler = new IngestionScheduler({
+    database: stubDb,
+    telemetry: {
+      recordRun() {},
+      shouldBypassCircuit: () => false,
+      recordBlocked() {},
+      recordZero() {},
+      getHealthReport: () => ({ systemStatus: 'idle', sources: {} }),
+    },
+    realScrapers: [{ sourceKey: 'hud', name: 'HUD', async scrapeFeed() { return []; }, getRawPublisherRecord() { return null; } }],
+    networkEnabled: false,
+    scraperTimeoutMs: 45_000,
+  });
+
+  // Active fresh lock must still be skipped
+  scheduler.isRunning = true;
+  scheduler.cycleStartedAt = new Date(Date.now() - 5_000).toISOString();
+  const activeRes = await scheduler.runAll({ sourceIds: ['hud'], allowNetwork: true });
+  assert.equal(activeRes.skipped, true);
+
+  // Stale lock older than staleThresholdMs (>= 60_000ms) must recover and run
+  scheduler.isRunning = true;
+  scheduler.cycleStartedAt = new Date(Date.now() - 120_000).toISOString();
+  const staleRes = await scheduler.runAll({ sourceIds: ['hud'], allowNetwork: true });
+  assert.equal(staleRes.skipped, false);
+  assert.equal(staleRes.sourceResults.length, 1);
+  assert.equal(scheduler.isRunning, false);
 });

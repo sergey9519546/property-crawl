@@ -434,6 +434,18 @@ class IngestionScheduler {
       console.log('[Scheduler] Real scraper execution disabled for this environment.');
       return { totalIngested: 0, totalRejected: 0, durationMs: 0, skipped: true };
     }
+    const overrideTimeout = Number(options.scraperTimeoutMs);
+    const effectiveTimeoutMs = Number.isFinite(overrideTimeout) && overrideTimeout > 0
+      ? overrideTimeout
+      : this.scraperTimeoutMs;
+    const startedMs = this.cycleStartedAt ? Date.parse(this.cycleStartedAt) : NaN;
+    const staleThresholdMs = Math.max((effectiveTimeoutMs || DEFAULT_SCRAPER_TIMEOUT_MS) + 15_000, 60_000);
+    if (this.isRunning && Number.isFinite(startedMs) && Date.now() - startedMs > staleThresholdMs) {
+      console.warn('[Scheduler] Clearing stale in-progress lock from an earlier timed-out cycle.');
+      this.isRunning = false;
+      this.inFlight.clear();
+      this.cycleStartedAt = null;
+    }
     if (this.isRunning) {
       console.log('[Scheduler] Scrape run already in progress, skipping...');
       return { totalIngested: 0, totalRejected: 0, durationMs: 0, skipped: true };
@@ -578,7 +590,7 @@ class IngestionScheduler {
           this.inFlight.set(scraper.sourceKey, Date.now());
           let items;
           try {
-            items = await withScraperTimeout(scraper, this.scraperTimeoutMs);
+            items = await withScraperTimeout(scraper, effectiveTimeoutMs);
           } finally {
             this.inFlight.delete(scraper.sourceKey);
           }

@@ -86,15 +86,21 @@ function createScrapersHandler(dependencies = {}) {
         ? Boolean(body.allowNetwork)
         : (url.searchParams.get('allowNetwork') !== null ? url.searchParams.get('allowNetwork') === 'true' : undefined);
       const trigger = body.trigger || url.searchParams.get('trigger') || 'api_on_demand';
+      const rawTimeoutMs = body.timeoutMs ?? url.searchParams.get('timeoutMs');
+      const parsedTimeoutMs = rawTimeoutMs != null && rawTimeoutMs !== '' ? Number(rawTimeoutMs) : NaN;
+      const scraperTimeoutMs = Number.isFinite(parsedTimeoutMs) && parsedTimeoutMs > 0
+        ? Math.min(Math.floor(parsedTimeoutMs), 120_000)
+        : undefined;
 
       const runOptions = {
         ...(sourceIds ? { sourceIds } : {}),
         ...(wave ? { wave } : {}),
         ...(allowNetwork !== undefined ? { allowNetwork } : {}),
+        ...(scraperTimeoutMs !== undefined ? { scraperTimeoutMs } : {}),
         trigger
       };
 
-      const hasExplicitOptions = Boolean(sourceIds || wave || allowNetwork !== undefined);
+      const hasExplicitOptions = Boolean(sourceIds || wave || allowNetwork !== undefined || scraperTimeoutMs !== undefined);
       let runPromise;
       try {
         if (hasExplicitOptions && typeof activeScheduler.validateRunOptions === 'function') activeScheduler.validateRunOptions(runOptions);
