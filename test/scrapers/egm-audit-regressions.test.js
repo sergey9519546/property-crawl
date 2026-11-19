@@ -135,3 +135,44 @@ test('slice mode returns nextContinuationToken=null on tail completion instead o
   assert.equal(usda.lastRunReport.nextContinuationToken, null);
   assert.equal(usda.lastRunReport.complete, true);
 });
+
+test('scheduler deletes discovery_checkpoints row when tail slice completes with nextContinuationToken=null', async () => {
+  const { IngestionScheduler } = require('../../server/scrapers/scheduler');
+  const pgQueries = [];
+  const fakeDb = {
+    isPg: true,
+    pool: {
+      async query(sql, params) {
+        pgQueries.push({ sql, params });
+        return { rows: [] };
+      },
+    },
+    async createListing() { return null; },
+  };
+  const scheduler = new IngestionScheduler({ database: fakeDb, discoveryStore: null, skipCircuitBreaker: true });
+  scheduler.telemetry = { recordRun() {}, flush() {} };
+  const tailStub = {
+    name: 'TreasuryTailStub',
+    sourceKey: 'treasury',
+    isEnabled: () => true,
+    getCollectionScope: () => ({}),
+    getRawPublisherRecord: (item) => item,
+    lastRunReport: {
+      outcome: 'empty',
+      partialSweep: true,
+      truncated: true,
+      complete: false,
+      fullSweepComplete: false,
+      nextContinuationToken: null,
+      failures: [],
+    },
+    async scrapeFeed() { return []; },
+  };
+  scheduler.realScrapers = [tailStub];
+  scheduler.scrapers = [tailStub];
+  await scheduler.runAll({ sourceIds: ['treasury'], allowNetwork: true, slice: true });
+  assert.ok(
+    pgQueries.some((q) => q.sql.includes('DELETE FROM discovery_checkpoints WHERE source_key = $1') && q.params?.[0] === 'treasury'),
+    'expected tail slice completion with null continuationToken to delete discovery_checkpoints row',
+  );
+});

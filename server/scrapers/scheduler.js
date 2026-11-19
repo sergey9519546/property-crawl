@@ -795,7 +795,7 @@ class IngestionScheduler {
                   atomicWriteJsonSync(path.join(cacheDir, `${scraper.sourceKey}-checkpoint.json`), checkpointData);
                 } catch (_) {}
               }
-            } else if (report?.complete === true && !hasReportFailures(rawReport)) {
+            } else if ((report?.complete === true || (!cursorToken && report?.partialSweep === true)) && !hasReportFailures(rawReport) && report?.outcome !== 'failed' && report?.outcome !== 'unverified_empty') {
               this.sourceCheckpoints.delete(scraper.sourceKey);
               if (this.database?.isPg && this.database?.pool) {
                 try { await this.database.pool.query('DELETE FROM discovery_checkpoints WHERE source_key = $1', [scraper.sourceKey]); } catch (_) {}
