@@ -19,6 +19,7 @@ const {
 
 const GENESIS_HASH = '0'.repeat(64);
 const DEFAULT_LEDGER_PATH = path.resolve(__dirname, '../../.cache/evidence-ledger.json');
+const resolveLedgerDefaultPath = () => process.env.PROPERTY_EVIDENCE_LEDGER_PATH || ((process.env.VERCEL === '1' || process.env.NOW_REGION) ? path.join(require('node:os').tmpdir(), 'property-crawl-cache', 'evidence-ledger.json') : DEFAULT_LEDGER_PATH);
 
 function defaultSnapshotLedgerPath() {
   const dir = process.env.PROPERTY_EVIDENCE_DIR || path.resolve(/*turbopackIgnore: true*/ __dirname, '../../.cache/discovery-snapshots');
@@ -354,7 +355,7 @@ function updateVerifiedLedgerCache(target, sig, chain, isJsonArray) {
 }
 
 function loadLedgerFromFile(filePath) {
-  const target = filePath || DEFAULT_LEDGER_PATH;
+  const target = filePath || resolveLedgerDefaultPath();
   const resolved = path.resolve(/*turbopackIgnore: true*/ target);
   try {
     const sig = statSignature(target);
@@ -385,7 +386,7 @@ function loadLedgerFromFile(filePath) {
  * verified chain, falling back to full chain verification on any change.
  */
 function getLedgerHealth(filePath) {
-  const target = filePath || DEFAULT_LEDGER_PATH;
+  const target = filePath || resolveLedgerDefaultPath();
   const resolved = path.resolve(/*turbopackIgnore: true*/ target);
   const sig = statSignature(target);
   if (!sig) {
@@ -459,12 +460,12 @@ function persistSuffix(target, chain, existing) {
 }
 
 function saveLedgerToFile(filePath, chain) {
-  const target = filePath || DEFAULT_LEDGER_PATH;
+  const target = filePath || resolveLedgerDefaultPath();
   return withLedgerLock(target, () => persistSuffix(target, chain, loadLedgerFromFile(target)));
 }
 
 async function appendLedgerToFile(filePath, entryData, { timeoutMs = 5000 } = {}) {
-  const target = filePath || DEFAULT_LEDGER_PATH;
+  const target = filePath || resolveLedgerDefaultPath();
   const resolved = path.resolve(/*turbopackIgnore: true*/ target);
   const deadline = Date.now() + timeoutMs;
   for (;;) {

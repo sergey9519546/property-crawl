@@ -184,6 +184,7 @@ export function DiscoveryMap({
   React.useEffect(() => {
     let disposed = false;
     let fallbackTimer: number | null = null;
+    let secondaryTimer: number | null = null;
     void import("maplibre-gl").then(({ Map, NavigationControl, AttributionControl }) => {
       if (disposed || !ref.current) return;
       const map = new Map({ container: ref.current, style: OPENFREEMAP_POSITRON_STYLE, center: [-98.5795, 39.8283], zoom: 3.25, attributionControl: false });
@@ -194,16 +195,20 @@ export function DiscoveryMap({
       const applyFallback = () => {
         if (disposed || fallbackApplied) return;
         fallbackApplied = true;
-        try { map.setStyle(RASTER_STREET_STYLE); } catch {}
+        fallbackApplied = true;
+        try { map.setStyle(RASTER_STREET_STYLE); } catch { setError(m.listingsUi.mapUnavailable); return; }
+        secondaryTimer = window.setTimeout(() => {
+          if (!disposed && !map.isStyleLoaded() && !map.loaded()) setError(m.listingsUi.mapUnavailable);
+        }, 5_000);
       };
-      map.on("error", () => { if (!map.isStyleLoaded()) applyFallback(); });
+      map.on("error", () => { if (disposed || map.isStyleLoaded()) return; if (fallbackApplied) { setError(m.listingsUi.mapUnavailable); return; } applyFallback(); });
       fallbackTimer = window.setTimeout(() => { if (!map.isStyleLoaded() && !disposed) applyFallback(); }, 3_500);
       const requestPins = () => { if (!disposed) void loadRef.current?.(); };
       map.once("load", requestPins);
       map.on("moveend", requestPins);
       requestAnimationFrame(requestPins);
     }).catch(() => setError("Map engine could not load. Use the ranked grid to continue research."));
-    return () => { disposed = true; if (fallbackTimer !== null) window.clearTimeout(fallbackTimer); requestRef.current?.controller.abort(); popupRef.current?.remove(); markerRef.current.forEach((marker) => marker.remove()); mapRef.current?.remove(); mapRef.current = null; };
+    return () => { disposed = true; if (fallbackTimer !== null) window.clearTimeout(fallbackTimer); if (secondaryTimer !== null) window.clearTimeout(secondaryTimer); requestRef.current?.controller.abort(); popupRef.current?.remove(); markerRef.current.forEach((marker) => marker.remove()); mapRef.current?.remove(); mapRef.current = null; };
   }, []);
 
   React.useEffect(() => { if (mapRef.current) void load(); }, [load]);

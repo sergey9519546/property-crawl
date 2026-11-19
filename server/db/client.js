@@ -1371,6 +1371,18 @@ class DatabaseClient {
       if (parts.length !== 2) return null;
       sql += ` AND (zip IS NULL OR TRIM(zip) = '') AND state = $2 AND LOWER(city) = $3`;
       params.push(parts[0].toUpperCase(), parts[1].toLowerCase());
+    } else if (kind === 'county') {
+      const m = String(key || '').trim().match(/^([A-Za-z]{2})(?:::|-)(.+)$/);
+      if (!m) return null;
+      const normCounty = m[2].trim().toLowerCase()
+        .replace(/['’]/g, '')
+        .replace(/\.+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .replace(/\s+(?:county|parish|borough)$/, '')
+        .trim();
+      if (!normCounty) return null;
+      sql += ` AND state = $2 AND btrim(regexp_replace(regexp_replace(regexp_replace(lower(coalesce(county,'')), '[''’]', '', 'g'), '\\.+', ' ', 'g'), '\\s+(county|parish|borough)\\s*$', '')) = $3`;
+      params.push(m[1].toUpperCase(), normCounty);
     } else {
       return null;
     }
@@ -2475,7 +2487,7 @@ class DatabaseClient {
         enriched.seniorLienRisk, enriched.seniorLienWarning || null,
         enriched.cashToClose ?? null, enriched.cashToCloseDetails, enriched.status || 'unknown',
         enriched.auctionProgram ?? null, enriched.lifecycleStatus ?? null, enriched.transactionOutcome ?? null,
-        enriched.hasDocuments === true
+        typeof enriched.hasDocuments === 'boolean' ? enriched.hasDocuments : null,
       ];
       const queryClient = options.client || this.pool;
       const result = await queryClient.query(sql, params);
@@ -2564,7 +2576,7 @@ class DatabaseClient {
           e.seniorLienRisk, e.seniorLienWarning || null,
           e.cashToClose ?? null, e.cashToCloseDetails, e.status || 'unknown',
           e.auctionProgram ?? null, e.lifecycleStatus ?? null, e.transactionOutcome ?? null,
-          e.hasDocuments === true
+          typeof e.hasDocuments === 'boolean' ? e.hasDocuments : null,
         );
         pIdx += 46;
       }

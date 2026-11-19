@@ -122,7 +122,7 @@ function isAdaptiveAllowed(field) {
 
 class SelectorStore {
   constructor(options = {}) {
-    this.cacheDir = options.cacheDir || DEFAULT_CACHE_DIR;
+    this.cacheDir = options.cacheDir || process.env.PROPERTY_SELECTOR_CACHE_DIR || ((process.env.VERCEL === '1' || process.env.NOW_REGION) ? path.join(require('node:os').tmpdir(), 'property-crawl-cache', 'scrapling-selectors') : DEFAULT_CACHE_DIR);
     this.persist = options.persist !== false;
     this.memoryStore = new Map();
   }

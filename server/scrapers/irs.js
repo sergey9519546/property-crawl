@@ -73,7 +73,7 @@ const ASSET_TYPE_LABELS = {
 
 class IrsSeizedScraper extends BaseScraper {
   constructor(options = {}) {
-    super({ ...options, name: 'IrsAuctionCollector', sourceKey: 'irs' });
+    super({ ...options, name: 'IrsAuctionCollector', sourceKey: 'irs', maxRetries: options.maxRetries || ((process.env.VERCEL === '1' || process.env.NOW_REGION) ? 1 : 2) });
     this.baseUrl = 'https://www.irsauctions.gov';
     this.detailConcurrency = Math.min(4, Math.max(1, Math.floor(Number(options.detailConcurrency) || 2)));
     this.lastRunReport = null;
@@ -85,7 +85,8 @@ class IrsSeizedScraper extends BaseScraper {
     this._spiderDetailCache = new Map();
   }
 
-  async scrapeFeed() {
+  async scrapeFeed(options = {}) {
+    const deadlineAt = Number(options?.deadlineAt) || 0;
     return this.executeWithRetry(async () => {
       if (this._spiderDetailCache) this._spiderDetailCache.clear();
 
@@ -155,10 +156,14 @@ class IrsSeizedScraper extends BaseScraper {
         }
       }
 
+      let attemptedCount = 0;
+      let deadlineStopped = false;
       const detailResults = await mapWithConcurrency(
         cards,
         this.detailConcurrency,
         async ({ slug, title }) => {
+          if (deadlineAt && Date.now() >= deadlineAt - 1500) { deadlineStopped = true; return null; }
+          attemptedCount += 1;
           await this.crawlJitter();
           return this.fetchDetail(slug, title);
         }
@@ -174,9 +179,9 @@ class IrsSeizedScraper extends BaseScraper {
         }
       });
 
-      const recordsRejected = cards.length - listings.length - failures.length;
-      const complete = failures.length === 0 && recordsRejected === 0;
-      this.lastRunReport = { outcome: complete ? (listings.length ? 'success' : 'empty') : 'partial_failure', scope: { endpoint: '/auction/items', filters: { assetClass: 'real_estate', publisherAssetTypeId: REAL_ESTATE_ASSET_TYPE_ID, appliedBy: 'client_side_publisher_asset_type' } }, recordsDiscovered: cards.length, recordsEmitted: listings.length, recordsRejected, recordsExcluded: excluded.length, exclusions: excluded, scopeUnverified, failures, complete, fullSweepComplete: complete, truncated: false, fixtureFallbackUsed: false };
+      const recordsRejected = Math.max(0, attemptedCount - listings.length - failures.length);
+      const complete = failures.length === 0 && recordsRejected === 0 && !deadlineStopped;
+      this.lastRunReport = { outcome: complete ? (listings.length ? 'success' : 'empty') : 'partial_failure', scope: { endpoint: '/auction/items', filters: { assetClass: 'real_estate', publisherAssetTypeId: REAL_ESTATE_ASSET_TYPE_ID, appliedBy: 'client_side_publisher_asset_type' } }, recordsDiscovered: cards.length, recordsAttempted: attemptedCount, recordsEmitted: listings.length, recordsRejected, recordsExcluded: excluded.length, exclusions: excluded, scopeUnverified, failures, complete, fullSweepComplete: complete, partialSweep: deadlineStopped, truncated: deadlineStopped, fixtureFallbackUsed: false };
       console.log(`[${this.name}] Scraped ${listings.length} IRS properties`);
       // Schema-invalid items must not break the entire scrapeFeed call —
       // the run report above already counts them as recordsRejected. Catch
@@ -193,6 +198,13 @@ class IrsSeizedScraper extends BaseScraper {
             throw err;
           }
         }
+      }
+      if (deadlineStopped) {
+        Object.defineProperties(standardized, {
+          partialSweep: { value: true, enumerable: false, writable: true, configurable: true },
+          truncated: { value: true, enumerable: false, writable: true, configurable: true },
+          report: { value: this.lastRunReport, enumerable: false, writable: true, configurable: true },
+        });
       }
       return standardized;
     });
@@ -275,7 +287,7 @@ class IrsSeizedScraper extends BaseScraper {
 
     // Second line: "Drexel Hill, 19026 PA"
     const cityLine = parcelPrefixedLand ? addrLines[2] : addrLines[1];
-    const cityMatch = cityLine.match(/^(.+?),\s*(\d{5})\s+([A-Z]{2})$/);
+    const cityMatch = cityLine.match(/^(.+?),\s*(\d{5})(?:-\d{4})?\s+([A-Z]{2})$/);
     if (!cityMatch) return null;
 
     const city = (scraplingRecord && scraplingRecord.city) ? scraplingRecord.city : cityMatch[1].trim();
@@ -333,7 +345,7 @@ class IrsSeizedScraper extends BaseScraper {
     const apnMatch = `${publisherTitle} ${desc}`.match(/(?:Parcel\s*(?:ID|#|No\.?)|APN|PIN)\s*[:#]?\s*([A-Za-z0-9._-]+)/i);
     const apn = apnMatch ? apnMatch[1].trim() : (parcelPrefixedLand ? addrLines[0].replace(/^parcel\s+id[:\s]*/i, '').trim() : null);
 
-    const id = `IRS-${state}-${slug.toUpperCase().slice(0, 18)}`;
+    const id = `IRS-${state}-${slug.toUpperCase().slice(0, 48)}`;
     const fullAddress = `${street}, ${city}, ${state} ${zip}`;
     const gallery = extractDetailImages({ source: 'irs', html, sourceUrl: detailUrl, address: fullAddress });
 

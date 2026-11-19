@@ -123,6 +123,7 @@ export function InteractiveTerminal() {
   // says why is the honest state, and the API replaces this within a tick.
   const [listings, setListings] = useState<PropertyListing[]>([]);
   const hasLoadedInventory = React.useRef(false);
+  const fullInventorySettled = React.useRef(false);
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
   const [watchlistHydrated, setWatchlistHydrated] = useState(false);
   const [selectedListing, setSelectedListing] = useState<PropertyListing | null>(null);
@@ -226,6 +227,7 @@ export function InteractiveTerminal() {
       setObservedCount(nextListings.filter(isObservedSourceRecord).length);
       setInventoryNotice(payload.truncated ? `Showing ${nextListings.length} of ${payload.total} records. The local inventory safety limit was reached.` : "");
       hasLoadedInventory.current = true;
+      fullInventorySettled.current = true;
       setSyncStatus("ready");
     } catch {
       if (generation !== refreshGeneration.current) return;
@@ -252,14 +254,8 @@ export function InteractiveTerminal() {
       started = true;
       void loadListings();
     };
-    const hash = typeof window !== "undefined" ? window.location.hash : "";
-    if (hash === "#live-feed" || hash === "#live-search") {
-      startLoad();
-      return () => { cancelled = true; };
-    }
-    const onEarlyDemand = () => startLoad();
     const onProgress = (event: Event) => {
-      if (cancelled || hasLoadedInventory.current) return;
+      if (cancelled || fullInventorySettled.current) return;
       const detail = (event as CustomEvent<{ listings?: PropertyListing[]; total?: number }>).detail;
       if (!detail || !Array.isArray(detail.listings) || detail.listings.length === 0) return;
       setListings(detail.listings);
@@ -268,6 +264,13 @@ export function InteractiveTerminal() {
       setObservedCount(detail.listings.filter(isObservedSourceRecord).length);
     };
     window.addEventListener("perfectproperty:inventory-progress", onProgress);
+    const hash = typeof window !== "undefined" ? window.location.hash : "";
+    if (hash === "#live-feed" || hash === "#live-search") {
+      startLoad();
+      return () => { cancelled = true; window.removeEventListener("perfectproperty:inventory-progress", onProgress); };
+    }
+    const onEarlyDemand = () => startLoad();
+    /* progress listener registered before #live-feed early return */
     const feedEl = typeof document !== "undefined" ? document.getElementById("live-feed") : null;
     const observer = typeof IntersectionObserver !== "undefined" && feedEl
       ? new IntersectionObserver((entries) => {
@@ -476,7 +479,7 @@ export function InteractiveTerminal() {
     () => [...workspaceRecords.filter((record) => !listings.some((item) => item.id === record.id)), ...listings],
     [workspaceRecords, listings],
   );
-  const observedRecordCountsAtAddress = sourceRecordCountsAtAddress(inventory, isObservedSourceRecord);
+  const observedRecordCountsAtAddress = useMemo(() => sourceRecordCountsAtAddress(inventory, isObservedSourceRecord), [inventory]);
   const filtered = useMemo(
     () => selectFilteredListings(inventory, filters, { isObserved: isObservedSourceRecord }),
     [inventory, filters],
@@ -509,11 +512,18 @@ export function InteractiveTerminal() {
   );
   const remaining = filtered.length - visible.length;
 
-  const knownBids = filtered.map((listing) => knownNumber(listing.openingBid)).filter((value): value is number => value !== null).sort((a, b) => a - b);
-  const medianBid = knownBids.length > 0 ? knownBids[Math.floor(knownBids.length / 2)] : null;
-  const knownEquity = filtered.map((listing) => knownNumber(listing.equity)).filter((value): value is number => value !== null);
-  const avgEquity = knownEquity.length > 0 ? Math.round(knownEquity.reduce((sum, value) => sum + value, 0) / knownEquity.length) : null;
-  const knownScores = filtered.map((listing) => knownNumber(listing.dealScore)).filter((value): value is number => value !== null);
+  const { knownBids, medianBid, knownEquity, avgEquity, knownScores } = useMemo(() => {
+    const kb = filtered.map((listing) => knownNumber(listing.openingBid)).filter((value): value is number => value !== null).sort((a, b) => a - b);
+    const ke = filtered.map((listing) => knownNumber(listing.equity)).filter((value): value is number => value !== null);
+    const ks = filtered.map((listing) => knownNumber(listing.dealScore)).filter((value): value is number => value !== null);
+    return {
+      knownBids: kb,
+      medianBid: kb.length > 0 ? kb[Math.floor(kb.length / 2)] : null,
+      knownEquity: ke,
+      avgEquity: ke.length > 0 ? Math.round(ke.reduce((sum, value) => sum + value, 0) / ke.length) : null,
+      knownScores: ks,
+    };
+  }, [filtered]);
   // A sort by deal score or equity ranks nothing when no record carries one,
   // and the grid cannot tell the user that from the unchanged order it shows.
   const unrankedSortReason =

@@ -238,7 +238,7 @@ function parseListObjectsV2Xml(xml) {
 class DocumentVault {
   constructor(options = {}) {
     this.env = options.env || process.env;
-    this.vaultDir = options.vaultDir || this.env.PROPERTY_VAULT_DIR || DEFAULT_VAULT_DIR;
+    this.vaultDir = options.vaultDir || this.env.PROPERTY_VAULT_DIR || ((this.env.VERCEL === '1' || this.env.NOW_REGION) ? path.join(require('node:os').tmpdir(), 'property-crawl-cache', 'vault') : DEFAULT_VAULT_DIR);
     this.requireDurable = options.requireDurable !== undefined
       ? Boolean(options.requireDurable)
       : (this.env.REQUIRE_DURABLE_VAULT === '1' || this.env.REQUIRE_DURABLE_VAULT === 'true');

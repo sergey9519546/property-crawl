@@ -127,6 +127,14 @@ function hostnameMatches(hostname, allowedRoot) {
   return Boolean(root) && (host === root || host.endsWith(`.${root}`));
 }
 
+const TEXAS_TAX_SALE_ROOT_HOSTS = new Set([
+  'www.dentoncounty.gov', 'dentoncounty.gov',
+  'www.epcounty.com', 'epcounty.com',
+  'www.fortbendcountytx.gov', 'fortbendcountytx.gov',
+  'www.mctx.org', 'mctx.org',
+  'www.wilco.org', 'wilco.org',
+]);
+
 function hasRecordQuery(url) {
   return [...url.searchParams.keys()].some((key) => RECORD_QUERY_KEYS.has(key.toLowerCase()));
 }
@@ -251,6 +259,7 @@ function hasSourceRecordShape(source, url) {
       return (/^\/usms-inventory\/[^/]+$/.test(path) && hasStablePathToken(url))
         || (/^\/what-we-do\/asset-forfeiture\/real-property\/.+/.test(path) && hasStablePathToken(url));
     case 'sheriff':
+      if (path === '/' && TEXAS_TAX_SALE_ROOT_HOSTS.has(url.hostname) && hasRecordQuery(url)) return true;
       return path !== '/' && path !== '/search' && (hasRecordQuery(url) || hasStablePathToken(url) || /tax[-_]?sales?|resale/i.test(path) || url.pathname.split('/').some((seg) => /^\d{3,}$/.test(seg)));
     case 'servicelink':
       return /^\/property-details\/[a-z0-9][a-z0-9-]{7,}$/i.test(path)

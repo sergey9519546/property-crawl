@@ -127,7 +127,7 @@ class UsMarshalsScraper extends BaseScraper {
       if (cells.length >= 4) {
         const clean = cells.map(c => c.replace(/<[^>]+>/g, '').trim());
         const address = clean[0] || clean[1];
-        const stateMatch = address.match(/,\s*([A-Z]{2})\s+(\d{5})?/);
+        const stateMatch = address.match(/,\s*([A-Z]{2})(?:\s+(\d{5}))?\b/);
         const state = stateMatch?.[1] || null;
         const zip = stateMatch?.[2] || null;
         const priceMatch = row.match(/\$([0-9,]+)/);
@@ -252,7 +252,7 @@ class UsMarshalsScraper extends BaseScraper {
       if (addressMatch && idMatch && linkMatch) {
         const address = addressMatch[1].trim();
         const price = priceMatch ? parseInt(priceMatch[1].replace(/,/g, ''), 10) : null;
-        const stateMatch = address.match(/,\s*([A-Z]{2})\s+(\d{5})?/);
+        const stateMatch = address.match(/,\s*([A-Z]{2})(?:\s+(\d{5}))?\b/);
         const state = stateMatch?.[1] || null;
         if (!state) continue;
         const id = `USMS-${idMatch[1]}`;

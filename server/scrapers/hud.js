@@ -89,7 +89,8 @@ class HudHomeScraper extends BaseScraper {
     // canonical layer base so requests and scope evidence never gain /query/query.
     this.inventoryUrl = options.inventoryUrl ? String(options.inventoryUrl).replace(/\/query\/?$/i, '').replace(/\/$/, '') : null;
     this.states = configuredStates(options.states ?? process.env.HUD_STATES);
-    this.maxStates = positiveInt(options.maxStates ?? process.env.HUD_MAX_STATES, this.states.length, ALL_HUD_JURISDICTIONS.length);
+    const defaultHudMaxStates = (process.env.VERCEL === '1' || process.env.NOW_REGION) ? 6 : this.states.length;
+    this.maxStates = positiveInt(options.maxStates ?? process.env.HUD_MAX_STATES, defaultHudMaxStates, ALL_HUD_JURISDICTIONS.length);
     this.maxPagesPerState = positiveInt(options.maxPagesPerState ?? process.env.HUD_MAX_PAGES_PER_STATE, DEFAULT_MAX_PAGES_PER_STATE, 20);
     this.pageSize = positiveInt(options.pageSize ?? process.env.HUD_PAGE_SIZE, DEFAULT_PAGE_SIZE, 100);
     this.stateConcurrency = positiveInt(options.stateConcurrency ?? process.env.HUD_STATE_CONCURRENCY, DEFAULT_STATE_CONCURRENCY, 4);
@@ -140,7 +141,8 @@ class HudHomeScraper extends BaseScraper {
     return this;
   }
 
-  async scrapeFeed() {
+  async scrapeFeed(options = {}) {
+    const deadlineAt = Number(options?.deadlineAt) || 0;
     return this.executeWithRetry(async () => {
       if (this.states.length === 0) throw new HudScrapeError('No valid HUD jurisdictions configured', this.createRunReport([]));
       const checkpoint = this.checkpointState();
@@ -151,8 +153,12 @@ class HudHomeScraper extends BaseScraper {
       report.pagesPreviouslyCommitted = this.pagesCommitted;
       report.statesPreviouslyCompleted = checkpoint.completedStates.size;
       report.attemptedStates = states;
-      const results = await mapWithConcurrency(states, this.stateConcurrency,
-        (state) => this.fetchStateHudHomes(state, checkpoint.nextPages[state] || 1));
+      const results = await mapWithConcurrency(states, this.stateConcurrency, (state) => {
+        if (deadlineAt && Date.now() >= deadlineAt - 2000) {
+          return { state, listings: [], pagesAttempted: 0, pagesFetched: 0, sourceRows: 0, malformedRows: 0, usedHtmlFallback: false, truncated: true, nextPage: checkpoint.nextPages[state] || 1 };
+        }
+        return this.fetchStateHudHomes(state, checkpoint.nextPages[state] || 1, deadlineAt);
+      });
       const allListings = [];
       for (let index = 0; index < results.length; index += 1) {
         const state = states[index];
@@ -222,8 +228,8 @@ class HudHomeScraper extends BaseScraper {
     });
   }
 
-  async fetchStateHudHomes(state, startPage = 1) {
-    if (this.inventoryUrl) return this.fetchArcGisState(state, startPage);
+  async fetchStateHudHomes(state, startPage = 1, deadlineAt = 0) {
+    if (this.inventoryUrl) return this.fetchArcGisState(state, startPage, deadlineAt);
     const listings = [];
     let pagesAttempted = 0;
     let pagesFetched = 0;
@@ -232,6 +238,9 @@ class HudHomeScraper extends BaseScraper {
     try {
       for (let pageIndex = 0; pageIndex < this.maxPagesPerState; pageIndex += 1) {
         const pageNo = startPage + pageIndex;
+        if (deadlineAt && Date.now() >= deadlineAt - 2000) {
+          return { state, listings, pagesAttempted, pagesFetched, sourceRows, malformedRows, usedHtmlFallback: false, truncated: true, nextPage: pageNo };
+        }
         pagesAttempted += 1;
         const page = await this.fetchDataGridPage(state, pageNo);
         pagesFetched += 1;
@@ -257,7 +266,7 @@ class HudHomeScraper extends BaseScraper {
     }
   }
 
-  async fetchArcGisState(state, startPage = 1) {
+  async fetchArcGisState(state, startPage = 1, deadlineAt = 0) {
     const listings = [];
     let pagesAttempted = 0;
     let pagesFetched = 0;
@@ -265,6 +274,9 @@ class HudHomeScraper extends BaseScraper {
     let malformedRows = 0;
     for (let pageIndex = 0; pageIndex < this.maxPagesPerState; pageIndex += 1) {
       const pageNo = startPage + pageIndex;
+      if (deadlineAt && Date.now() >= deadlineAt - 2000) {
+        return { state, listings, pagesAttempted, pagesFetched, sourceRows, malformedRows, usedHtmlFallback: false, truncated: true, nextPage: pageNo };
+      }
       pagesAttempted += 1;
       const offset = (pageNo - 1) * this.pageSize;
       const query = new URLSearchParams({
@@ -321,7 +333,8 @@ class HudHomeScraper extends BaseScraper {
     const caseNum = String(p.CASE_NUM).trim();
     if (!/^\d{3}-\d{6}$/.test(caseNum)) return null;
     const city = String(p.CITY || '').trim() || null;
-    const zip = p.DISPLAY_ZIP_CODE == null ? null : String(p.DISPLAY_ZIP_CODE).padStart(5, '0');
+    const rawZip = p.DISPLAY_ZIP_CODE == null ? '' : String(p.DISPLAY_ZIP_CODE).trim().replace(/\D/g, '').slice(0, 5);
+    const zip = rawZip ? rawZip.padStart(5, '0') : null;
     const address = [String(p.ADDRESS).trim(), city, String(p.STATE_CODE || state).trim(), zip].filter(Boolean).join(', ');
     const latValue = p.MAP_LATITUDE ?? feature.geometry?.y;
     const lngValue = p.MAP_LONGITUDE ?? feature.geometry?.x;

@@ -26,8 +26,8 @@ const { attachParcelIdentity } = require('./normalization');
 
 const DETAIL_PATH = '/Sales/SaleDetails';
 const DEFAULT_TIMEOUT_MS = 30000;
-const DEFAULT_MAX_COUNTIES = (process.env.RENDER === 'true' || process.env.NODE_ENV === 'production') ? 8 : 4;
-const DEFAULT_DETAIL_LIMIT = (process.env.RENDER === 'true' || process.env.NODE_ENV === 'production') ? 120 : 60;
+const DEFAULT_MAX_COUNTIES = (process.env.VERCEL === '1' || process.env.NOW_REGION) ? 2 : ((process.env.RENDER === 'true' || process.env.NODE_ENV === 'production') ? 8 : 4);
+const DEFAULT_DETAIL_LIMIT = (process.env.VERCEL === '1' || process.env.NOW_REGION) ? 25 : ((process.env.RENDER === 'true' || process.env.NODE_ENV === 'production') ? 120 : 60);
 
 // Module-scope helpers. These are parsing primitives with no scraper state:
 // they are not part of the CivilViewScraper interface.
@@ -78,7 +78,11 @@ function parseAddress(raw) {
   const clean = lines.join(' ').replace(/\s*,+\s*,+/g, ', ').replace(/\s+,/g, ',').trim();
   if (!clean) return { street: '', city: '', state: '', zip: '' };
   const stateZip = clean.match(/\b([A-Z]{2})\s+(\d{5})(?:-\d{4})?\b/);
-  if (!stateZip) return { street: clean, city: '', state: '', zip: '' };
+  if (!stateZip) {
+    const commaState = clean.match(/^(.+?),\s*([A-Za-z .'-]+),\s*([A-Z]{2})\s*$/);
+    if (commaState) return { street: commaState[1].trim(), city: commaState[2].trim(), state: commaState[3], zip: '' };
+    return { street: clean, city: '', state: '', zip: '' };
+  }
 
   const state = stateZip[1];
   const zip = stateZip[2];
@@ -125,7 +129,7 @@ function formatAddress(parsed, raw) {
 
 function parseSaleDate(raw) {
   if (!raw) return null;
-  const match = String(raw).trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+\d{1,2}:\d{2}\s*(?:AM|PM))?$/i);
+  const match = String(raw).trim().match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})\b/i);
   if (!match) return null;
   return `${match[3]}-${match[1].padStart(2, '0')}-${match[2].padStart(2, '0')}`;
 }
@@ -450,7 +454,7 @@ class CivilViewScraper extends BaseScraper {
       name: 'CivilViewScraper',
       sourceKey: 'civilview',
       timeoutMs: options.timeoutMs || DEFAULT_TIMEOUT_MS,
-      maxRetries: options.maxRetries || 3,
+      maxRetries: options.maxRetries || ((process.env.VERCEL === '1' || process.env.NOW_REGION) ? 1 : 3),
     });
     this.baseUrl = options.baseUrl || 'https://salesweb.civilview.com';
     this.useScrapling = options.useScrapling ?? isScraplingEnabled('civilview');
@@ -486,6 +490,10 @@ class CivilViewScraper extends BaseScraper {
     this.maxDetailPages = positiveInt(
       options.maxDetailPages ?? process.env.CIVILVIEW_DETAIL_LIMIT,
       DEFAULT_DETAIL_LIMIT,
+    );
+    this.detailConcurrency = positiveInt(
+      options.detailConcurrency ?? process.env.CIVILVIEW_DETAIL_CONCURRENCY,
+      (process.env.VERCEL === '1' || process.env.NOW_REGION) ? 3 : 1,
     );
     this.fetchImpl = options.fetchImpl || globalThis.fetch;
     this.random = options.random || Math.random;
@@ -523,7 +531,10 @@ class CivilViewScraper extends BaseScraper {
       if (runOffset != null) this.countyRotationOffset = runOffset;
       if (options.maxCounties) this.maxCounties = positiveInt(options.maxCounties, DEFAULT_MAX_COUNTIES);
       if (options.maxDetailPages) this.maxDetailPages = positiveInt(options.maxDetailPages, DEFAULT_DETAIL_LIMIT);
+      if (options.detailConcurrency) this.detailConcurrency = positiveInt(options.detailConcurrency, 3);
     }
+    const deadlineAt = Number(options?.deadlineAt) || 0;
+    let abortedForDeadline = false;
     return this.executeWithRetry(async () => {
       const report = {
         outcome: 'failed',
@@ -611,6 +622,7 @@ class CivilViewScraper extends BaseScraper {
         report.countiesAttempted += 1;
         const failuresBefore = report.failures.length;
         let discoveredCounty = null;
+        let countyAborted = false;
         try {
           const discovered = await this.fetchCountySummaries(county);
           discoveredCounty = discovered;
@@ -622,6 +634,26 @@ class CivilViewScraper extends BaseScraper {
             Math.ceil(remainingDetailBudget / Math.max(1, countiesRemaining)),
           );
           const selected = this.prioritizeSummaries(discovered.summaries, county).slice(0, countyBudget);
+          countyAborted = false;
+          const prefetchedHtml = new Map();
+          if (this.detailConcurrency > 1 && selected.length > 0) {
+            for (let b = 0; b < selected.length; b += this.detailConcurrency) {
+              if (deadlineAt && Date.now() >= deadlineAt - 1800) { countyAborted = true; abortedForDeadline = true; break; }
+              const batch = selected.slice(b, b + this.detailConcurrency);
+              await Promise.all(batch.map(async (item) => {
+                if (this.circuitBreaker.isOpen()) return;
+                try {
+                  const html = await this.fetchText(item.detailUrl, this.timeoutMs, discovered.sessionCookie);
+                  prefetchedHtml.set(item.detailUrl, { ok: true, html });
+                } catch (err) {
+                  prefetchedHtml.set(item.detailUrl, { ok: false, err });
+                }
+              }));
+            }
+          }
+          const fetchDetailHtml = (u, t, c) => prefetchedHtml.has(u)
+            ? (prefetchedHtml.get(u).ok ? Promise.resolve(prefetchedHtml.get(u).html) : Promise.reject(prefetchedHtml.get(u).err))
+            : this.fetchText(u, t, c);
 
           for (const summary of selected) {
             if (this.circuitBreaker.isOpen()) {
@@ -633,14 +665,15 @@ class CivilViewScraper extends BaseScraper {
               break;
             }
 
+            if ((this.detailConcurrency > 1 && !prefetchedHtml.has(summary.detailUrl)) || (deadlineAt && Date.now() >= deadlineAt - 1800)) { countyAborted = true; abortedForDeadline = true; break; }
             report.detailPagesAttempted += 1;
             if (this.observedRecordIds.has(`CIV-${county.state}-${county.id}-${summary.propertyId}`)) report.refreshDetailsAttempted += 1;
             else report.newDetailsAttempted += 1;
             remainingDetailBudget -= 1;
-            await this.crawlJitter();
+            if (!prefetchedHtml.has(summary.detailUrl)) await this.crawlJitter();
 
             try {
-              const detailHtml = await this.fetchText(
+              const detailHtml = await fetchDetailHtml(
                 summary.detailUrl,
                 this.timeoutMs,
                 discovered.sessionCookie,
@@ -680,7 +713,7 @@ class CivilViewScraper extends BaseScraper {
           });
         }
 
-        if (report.failures.length === failuresBefore && discoveredCounty && Array.isArray(discoveredCounty.summaries)) {
+        if (!countyAborted && report.failures.length === failuresBefore && discoveredCounty && Array.isArray(discoveredCounty.summaries)) {
           report.completedCounties.push({
             state: county.state,
             county: county.name,
@@ -692,7 +725,7 @@ class CivilViewScraper extends BaseScraper {
             )],
           });
         }
-        if (remainingDetailBudget <= 0 || this.circuitBreaker.isOpen()) break;
+        if (abortedForDeadline || remainingDetailBudget <= 0 || this.circuitBreaker.isOpen()) break;
         if (index < ordered.length - 1) await this.crawlJitter();
       }
 
@@ -729,7 +762,7 @@ class CivilViewScraper extends BaseScraper {
         report.nextContinuationToken = null;
       }
       const stoppedAtCountyCap = rotationTotal > this.maxCounties;
-      const stoppedAtDetailCap = report.unattemptedSummaries > 0;
+      const stoppedAtDetailCap = report.unattemptedSummaries > 0 || abortedForDeadline;
       report.partialSweep = Boolean(stoppedAtCountyCap || stoppedAtDetailCap);
       report.nextCursor = report.nextContinuationToken;
       Object.defineProperties(emitted, {

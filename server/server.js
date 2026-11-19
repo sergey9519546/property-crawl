@@ -369,7 +369,12 @@ async function handleRequest(req, res) {
         freshness = lastHealthCache.freshness;
         observationStore = lastHealthCache.observationStore;
       } else {
-        if (!lastHealthCache.timestamp || !isFresh) {
+        if (!lastHealthCache.timestamp && db.isPg) {
+          await Promise.race([
+            refreshHealthDiagnostics().catch(() => {}),
+            new Promise((resolve) => setTimeout(resolve, 2500)),
+          ]);
+        } else if (!lastHealthCache.timestamp || !isFresh) {
           refreshHealthDiagnostics().catch(() => {});
         }
         freshness = lastHealthCache.freshness;
@@ -492,7 +497,7 @@ const server = http.createServer((req, res) => {
   });
 });
 
-server.requestTimeout = 30_000;
+server.requestTimeout = 185_000;
 server.headersTimeout = 10_000;
 server.keepAliveTimeout = 5_000;
 
@@ -838,3 +843,4 @@ module.exports = server;
 module.exports.configuredCorsOrigins = configuredCorsOrigins;
 module.exports.isCorsOriginAllowed = isCorsOriginAllowed;
 module.exports.sourceCadences = sourceCadences;
+module.exports._wireStoresAfterVerify = wireStoresAfterVerify;

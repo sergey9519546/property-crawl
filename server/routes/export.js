@@ -233,7 +233,7 @@ async function handleExport(req, res) {
   const saved = savedOnly || url.searchParams.has('userId') || Boolean(req.headers['x-user-id']);
   let directory, file;
   try {
-    const base = path.resolve(__dirname, '../../.cache/discovery-exports');
+    const base = process.env.PROPERTY_EXPORT_DIR || path.resolve(__dirname, '../../.cache/discovery-exports');
     await fs.promises.mkdir(base, { recursive: true });
     directory = await fs.promises.mkdtemp(path.join(base, 'request-'));
     const filename = path.join(directory, 'export');

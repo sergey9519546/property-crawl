@@ -18,7 +18,7 @@ const SOURCE_KEY = 'servicelink';
 const PUBLISHER = 'ServiceLink Auction';
 const API_ORIGIN = 'https://www.servicelinkauction.com';
 const LISTINGS_PATH = '/api/listingsvc/v1/Listings';
-const DEFAULT_MAX_PAGES = (process.env.RENDER === 'true' || process.env.NODE_ENV === 'production') ? 40 : 1;
+const DEFAULT_MAX_PAGES = (process.env.VERCEL === '1' || process.env.NOW_REGION) ? 5 : ((process.env.RENDER === 'true' || process.env.NODE_ENV === 'production') ? 40 : 1);
 // Manual/canary sweeps may explicitly request a larger bounded segment. The
 // default remains one page; 100 pages caps one process run at 2,500 records at
 // the default page size and every page still observes crawl jitter.
@@ -447,6 +447,7 @@ class ServiceLinkScraper extends BaseScraper {
         this.limit = boundedPositiveInt(options.limit, DEFAULT_LIMIT, MAX_LIMIT);
       }
     }
+    const deadlineAt = Number(options?.deadlineAt) || 0;
     this.sweepStartedAt = this.sweepStartedAt || new Date(this.now()).toISOString();
     const report = {
       outcome: 'failed',
@@ -483,6 +484,13 @@ class ServiceLinkScraper extends BaseScraper {
         }
 
         for (let pageNumber = 1; pageNumber <= this.maxPages; pageNumber += 1) {
+          if (deadlineAt && pageNumber > 1 && Date.now() >= deadlineAt - 1800) {
+            if (continuationToken) {
+              report.nextContinuationToken = continuationToken;
+              report.continuationStopped = true;
+            }
+            break;
+          }
           report.pagesRequested += 1;
           const payload = await this.fetchPage(continuationToken);
           report.pagesFetched += 1;

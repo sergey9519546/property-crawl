@@ -154,8 +154,8 @@ const DEFAULT_SCRAPER_TIMEOUT_MS = 10 * 60 * 1000;
  * isRunning flag) forever. Rejects after timeoutMs; the abandoned promise is
  * left to settle on its own and its late result is discarded.
  */
-function withScraperTimeout(scraper, timeoutMs) {
-  const run = Promise.resolve().then(() => scraper.scrapeFeed());
+function withScraperTimeout(scraper, timeoutMs, scrapeOptions = undefined) {
+  const run = Promise.resolve().then(() => scraper.scrapeFeed(scrapeOptions));
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) return run;
   let timer;
   const timeout = new Promise((_, reject) => {
@@ -440,6 +440,9 @@ class IngestionScheduler {
       : this.scraperTimeoutMs;
     const startedMs = this.cycleStartedAt ? Date.parse(this.cycleStartedAt) : NaN;
     const staleThresholdMs = Math.max((effectiveTimeoutMs || DEFAULT_SCRAPER_TIMEOUT_MS) + 15_000, 60_000);
+    const isServerlessSlice = Boolean(options.slice || process.env.VERCEL === '1' || process.env.NOW_REGION);
+    const sliceBudgetMs = Number.isFinite(effectiveTimeoutMs) && effectiveTimeoutMs > 0 ? Math.min(22_000, Math.max(8_000, effectiveTimeoutMs - 5_000)) : 22_000;
+    const scrapeOptions = isServerlessSlice ? { deadlineAt: Date.now() + sliceBudgetMs, slice: true } : undefined;
     if (this.isRunning && Number.isFinite(startedMs) && Date.now() - startedMs > staleThresholdMs) {
       console.warn('[Scheduler] Clearing stale in-progress lock from an earlier timed-out cycle.');
       this.isRunning = false;
@@ -590,7 +593,7 @@ class IngestionScheduler {
           this.inFlight.set(scraper.sourceKey, Date.now());
           let items;
           try {
-            items = await withScraperTimeout(scraper, effectiveTimeoutMs);
+            items = await withScraperTimeout(scraper, effectiveTimeoutMs, scrapeOptions);
           } finally {
             this.inFlight.delete(scraper.sourceKey);
           }
@@ -671,8 +674,8 @@ class IngestionScheduler {
             }
             // An unknown publisher payload stays null. Never label a normalized listing as captured publisher evidence.
             const confidenceScores = (validation.listing.provenance.sourceFacts?.documents || []).map(document => document?.confidenceScore ?? document?.confidence_score).filter(score => typeof score === 'number' && Number.isFinite(score));
-            const snapshot = await recordSnapshot({sourceKey:scraper.sourceKey,recordId:String(validation.listing.provenance.recordId),observedAt:validation.listing.sourceObservedAt || validation.listing.provenance.observedAt,rawPayload:originalPublisherRecord ?? null,provenance:validation.listing.provenance,metadata:{sourceUrl:validation.listing.sourceUrl,confidenceScore:confidenceScores.length ? Math.min(...confidenceScores) : null}});
-            validation.listing.provenance.evidenceLedger = {index:snapshot.ledgerBlock.index,entryHash:snapshot.ledgerBlock.entryHash,payloadSha256:snapshot.payloadSha256};
+            const snapshot = (isServerlessSlice && !(this.discoveryStore && discoveryRun)) ? null : await recordSnapshot({sourceKey:scraper.sourceKey,recordId:String(validation.listing.provenance.recordId),observedAt:validation.listing.sourceObservedAt || validation.listing.provenance.observedAt,rawPayload:originalPublisherRecord ?? null,provenance:validation.listing.provenance,metadata:{sourceUrl:validation.listing.sourceUrl,confidenceScore:confidenceScores.length ? Math.min(...confidenceScores) : null}});
+            if (snapshot) validation.listing.provenance.evidenceLedger = {index:snapshot.ledgerBlock.index,entryHash:snapshot.ledgerBlock.entryHash,payloadSha256:snapshot.payloadSha256};
             let persistedListing = null;
             if(this.discoveryStore&&discoveryRun){
               // raw_payload records what the publisher actually returned. Prefer the
@@ -739,12 +742,12 @@ class IngestionScheduler {
           const complete = (isPartial || hasFailures) ? false : (coverage.complete === true || rawReport.complete === true);
           const fullSweepComplete = (isPartial || hasFailures) ? false : (coverage.fullSweepComplete === true || rawReport.fullSweepComplete === true);
           const report = (scraper.lastRunReport && typeof scraper.lastRunReport === 'object') || isPartial || items?.report || isListingEnvelope
-            ? { outcome: coverage.outcome || (isPartial ? 'partial' : null), truncated, complete, fullSweepComplete, partialSweep, nextCursor, continuationToken, nextContinuationToken, scope: coverage.acquisitionScope || null, coverage, ...(rawReport.county ? { county: rawReport.county } : {}), ...(rawReport.state ? { state: rawReport.state } : {}), ...(Array.isArray(rawReport.completedCounties) ? { completedCounties: rawReport.completedCounties } : {}), ...(Array.isArray(rawReport.completedStates) ? { completedStates: rawReport.completedStates } : {}), ...(Array.isArray(rawReport.failures) && rawReport.failures.length ? { failures: rawReport.failures } : {}), ...(Array.isArray(rawReport.statesFailed) && rawReport.statesFailed.length ? { statesFailed: rawReport.statesFailed } : {}), ...(Array.isArray(rawReport.failedCounties) && rawReport.failedCounties.length ? { failedCounties: rawReport.failedCounties } : {}), ...(rawReport.sweepStartedAt ? { sweepStartedAt: rawReport.sweepStartedAt } : {}), ...(driftAlarm && driftAlarm.hasDrift ? { driftAlarm } : {}) }
+            ? { outcome: coverage.outcome || (isPartial ? 'partial' : null), truncated, complete, fullSweepComplete, partialSweep, nextCursor, continuationToken, nextContinuationToken, scope: coverage.acquisitionScope || null, coverage, ...(rawReport.county ? { county: rawReport.county } : {}), ...(rawReport.state ? { state: rawReport.state } : {}), ...(Array.isArray(rawReport.completedCounties) ? { completedCounties: rawReport.completedCounties } : {}), ...(Array.isArray(rawReport.attemptedStates) ? { attemptedStates: rawReport.attemptedStates } : {}), ...(Array.isArray(rawReport.completedStates) ? { completedStates: rawReport.completedStates } : {}), ...(Array.isArray(rawReport.failures) && rawReport.failures.length ? { failures: rawReport.failures } : {}), ...(Array.isArray(rawReport.statesFailed) && rawReport.statesFailed.length ? { statesFailed: rawReport.statesFailed } : {}), ...(Array.isArray(rawReport.failedCounties) && rawReport.failedCounties.length ? { failedCounties: rawReport.failedCounties } : {}), ...(rawReport.sweepStartedAt ? { sweepStartedAt: rawReport.sweepStartedAt } : {}), ...(driftAlarm && driftAlarm.hasDrift ? { driftAlarm } : {}) }
             : (driftAlarm && driftAlarm.hasDrift ? { driftAlarm } : null);
           let observationError = null;
           try {
             // Listing writes above are awaited before the observation boundary.
-            await this.onSourceRun(scraper.sourceKey, { listings: accepted, error: null, durationMs: latency, rejectedCount: rejectedForScraper, report });
+            await this.onSourceRun(scraper.sourceKey, { listings: accepted, error: null, durationMs: latency, rejectedCount: rejectedForScraper, report, slice: isServerlessSlice, enableAssessorHarvest: options.enableAssessorHarvest, enableAssessorBackfill: options.enableAssessorBackfill });
           } catch (error) {
             observationError = error.message;
             console.error('[Scheduler] Could not persist source history:', error.message);
@@ -825,7 +828,7 @@ class IngestionScheduler {
           const errorDetails=err&&err.transportCode?{code:err.transportCode,hostname:err.hostname||null,retryable:err.retryable===true}:null;
           sourceResults.push({ sourceId: scraper.sourceKey, accepted: 0, rejected: rejectedForScraper, error: err.message, ...(errorDetails?{errorDetails}:{}) });
           if(this.discoveryStore&&discoveryRun)try{await assertLease();await this.discoveryStore.finishRun(discoveryRun.id,{status:'failed',rejected:rejectedForScraper,error:err.message},ownership);}catch(finishError){if(finishError?.code==='DISCOVERY_JOB_LEASE_LOST')throw finishError;}
-          try { await this.onSourceRun(scraper.sourceKey, { listings: [], error: err.message, durationMs: latency, rejectedCount: rejectedForScraper }); }
+          try { await this.onSourceRun(scraper.sourceKey, { listings: [], error: err.message, durationMs: latency, rejectedCount: rejectedForScraper, slice: isServerlessSlice, enableAssessorHarvest: options.enableAssessorHarvest, enableAssessorBackfill: options.enableAssessorBackfill }); }
           catch (historyError) { console.error('[Scheduler] Could not persist source history:', historyError.message); }
           console.error(`[Scheduler] ${scraper.name} encountered an error:`, err.message);
           return 0;
@@ -836,9 +839,9 @@ class IngestionScheduler {
 
       const duration = Date.now() - startTime;
       console.log(`[Scheduler] Ingestion cycle finished. Ingested ${totalIngested} listings in ${duration}ms`);
-      const result = { totalIngested, totalRejected, durationMs: duration, skipped: false, sourceResults, completeCycle, jobId: cycleContext?.jobId || options.jobId || null };
+      const result = { totalIngested, totalRejected, durationMs: duration, skipped: false, slice: isServerlessSlice, sourceResults, completeCycle, jobId: cycleContext?.jobId || options.jobId || null };
       if (!options.coordinatorManaged) {
-        try { await this.onCycleComplete(result, { ...cycleContext, completeCycle, trigger: options.trigger || 'scheduler', ...ownership, leaseGuard }); }
+        try { await this.onCycleComplete(result, { ...cycleContext, completeCycle, slice: isServerlessSlice, trigger: options.trigger || 'scheduler', ...ownership, leaseGuard }); }
         catch (error) { console.error('[Scheduler] Could not finalize collection job:', error.message); if(error?.code==='DISCOVERY_JOB_LEASE_LOST')throw error; }
       }
       return result;
@@ -860,9 +863,10 @@ const fs = require('node:fs');
     // band (0 of 10,285 live records carry one), and the county roll is the
     // honest source where a statutory market conversion is enrolled.
     // Bounded per run, disk-cached, fail-open.
+    const isSliceRun = Boolean(run.slice || process.env.VERCEL === '1' || process.env.NOW_REGION);
     const shouldHarvest = run.enableAssessorHarvest !== undefined
       ? Boolean(run.enableAssessorHarvest)
-      : (this?.enableAssessorHarvest ?? scheduler?.enableAssessorHarvest ?? true);
+      : (isSliceRun ? false : (this?.enableAssessorHarvest ?? scheduler?.enableAssessorHarvest ?? true));
     if (!run.error && run.listings.length && shouldHarvest) {
       try {
         const { harvestAssessorRolls } = require('../enrichment/assessor-harvest');
@@ -895,7 +899,7 @@ const fs = require('node:fs');
     // re-observes them. Bounded per run, cache-backed, fail-open.
     const shouldBackfill = run.enableAssessorBackfill !== undefined
       ? Boolean(run.enableAssessorBackfill)
-      : (this?.enableAssessorBackfill ?? scheduler?.enableAssessorBackfill ?? true);
+      : (isSliceRun ? false : (this?.enableAssessorBackfill ?? scheduler?.enableAssessorBackfill ?? true));
     if (shouldRunBackfill((this && typeof this === 'object') ? this : scheduler, shouldBackfill, run)) {
     try {
       const { backfillAssessorRolls, resolveNjCadastralBatch } = require('../enrichment/assessor-backfill');
@@ -935,6 +939,24 @@ const fs = require('node:fs');
           );
         } catch (absenceError) {
           console.warn('[Scheduler] Publisher absence reconciliation failed (non-fatal):', absenceError.message);
+        }
+      }
+    }
+    if (!run.error && Array.isArray(run.report?.completedStates) && Array.isArray(run.report?.attemptedStates) && !runCompletedForDb) {
+      const targetDb = (this && this.database) || scheduler?.database || db;
+      if (typeof targetDb.reconcilePublisherAbsence === 'function') {
+        const completedSet = new Set(run.report.completedStates.map((s) => String(s || '').toUpperCase()));
+        const failedSet = new Set((run.report.failures || []).map((f) => String(f?.state || '').toUpperCase()));
+        for (const rawSt of run.report.attemptedStates) {
+          const st = String(rawSt || '').toUpperCase();
+          if (!st || !completedSet.has(st) || failedSet.has(st)) continue;
+          const stateSeenIds = run.listings.filter((l) => l && String(l.state || '').toUpperCase() === st && l.id).map((l) => l.id);
+          if (stateSeenIds.length === 0) continue;
+          try {
+            await reconcileAbsenceBg(targetDb, sourceId, stateSeenIds, { runCompleted: true, state: st });
+          } catch (absenceError) {
+            console.warn(`[Scheduler] State absence reconciliation failed for ${st} (non-fatal):`, absenceError.message);
+          }
         }
       }
     }
@@ -1083,7 +1105,7 @@ scheduler.onCycleStart = async ({ jobId, trigger, sourceIds }) => {
 scheduler.onCycleComplete = async (result, context = {}) => {
   const id = context.jobId || result.jobId;
   if (id) await collectionCoordinator.finalize(id, result, {owner:context.owner,leaseGuard:context.leaseGuard});
-  if (db.isPg && typeof db.purgeStaleListings === 'function') {
+  if (db.isPg && typeof db.purgeStaleListings === 'function' && !(context.slice || result.slice || process.env.VERCEL === '1' || process.env.NOW_REGION)) {
     try {
       const purged = await runBgDb(db, () => db.purgeStaleListings());
       if (purged?.deleted > 0 || purged?.observationsDeleted > 0) {

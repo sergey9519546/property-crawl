@@ -133,6 +133,8 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
   const [generatingAiMemo, setGeneratingAiMemo] = useState<boolean>(false);
   const [compsData, setCompsData] = useState<WatchlistCompsResponse | null>(null);
   const [compsLoading, setCompsLoading] = useState<boolean>(false);
+  const [photoFailed, setPhotoFailed] = useState<boolean>(false);
+  useEffect(() => { setPhotoFailed(false); }, [listing?.id, listing?.photo]);
 
   useEffect(() => {
     setActiveTab("underwrite");
@@ -206,6 +208,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
     || Boolean(listing.redemptionWarning)
     || (redemptionDays !== null && redemptionDays > 0);
   const photoUrl = safeImageUrl(listing.photo);
+
 
   const cashToClose = explicitCashScenario(listing, openingBid);
 
@@ -445,8 +448,8 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
         {/* Property Hero Media */}
         {activeTab === "underwrite" && (
           <div className="relative h-56 sm:h-64 w-full bg-paper bg-cover bg-center overflow-hidden" style={{ backgroundImage: `url("${getPropertyPlaceholder(listing.propType, { address: listing.address, source: listing.source }).imageSrc}")` }}>
-            {photoUrl ? (
-              <img src={photoUrl} alt={listing.address || ""} referrerPolicy="no-referrer" className="w-full h-full object-cover" />
+            {photoUrl && !photoFailed ? (
+              <img src={photoUrl} alt={listing.address || ""} referrerPolicy="no-referrer" onError={() => setPhotoFailed(true)} className="w-full h-full object-cover" />
             ) : (
               <>
                 <img

@@ -227,7 +227,7 @@ class SheriffSaleScraper extends BaseScraper {
     this.useScrapling = options.useScrapling ?? isScraplingEnabled('sheriff');
     this.extract = options.extractImpl || extractWithScrapling;
     this.lastRunReport = null;
-    const defaultCountyBudget = (process.env.RENDER === 'true' || process.env.NODE_ENV === 'production') ? 20 : this.counties.length;
+    const defaultCountyBudget = (process.env.VERCEL === '1' || process.env.NOW_REGION) ? 4 : ((process.env.RENDER === 'true' || process.env.NODE_ENV === 'production') ? 20 : this.counties.length);
     this.maxCounties = Math.max(1, Number(options.maxCounties || process.env.SHERIFF_MAX_COUNTIES || defaultCountyBudget || 1));
     const initialOffset = parseCountyOffset(options.countyOffset ?? options.checkpoint ?? process.env.SHERIFF_COUNTY_OFFSET ?? 0);
     this.countyRotationOffset = initialOffset != null ? initialOffset : 0;
@@ -253,6 +253,7 @@ class SheriffSaleScraper extends BaseScraper {
         this.maxCounties = Math.max(1, Number(options.maxCounties));
       }
     }
+    const deadlineAt = Number(options?.deadlineAt) || 0;
     return this.executeWithRetry(async () => {
       const totalCounties = this.counties.length;
       const startOffset = totalCounties > 0 ? (this.countyRotationOffset % totalCounties) : 0;
@@ -292,6 +293,9 @@ class SheriffSaleScraper extends BaseScraper {
       this._lastExtraction = null;
       const concurrency = Math.max(1, Math.min(4, Number(process.env.SHERIFF_COUNTY_CONCURRENCY) || 3));
       const countyResults = await mapWithConcurrency(targetCounties, concurrency, async (c) => {
+        if (deadlineAt && Date.now() >= deadlineAt - 2000) {
+          return { county: c, ok: false, skippedDeadline: true, listings: [] };
+        }
         const unit = `${c.name},${c.state}`;
         try {
           const countyListings = await this.scrapeCounty(c, report);
@@ -336,13 +340,22 @@ class SheriffSaleScraper extends BaseScraper {
       }
       applyEmptyInventoryHonesty(report, { emitted: standardized.length, htmlSamples: this._htmlSamples || [], sourceKey: 'sheriff' });
 
+      const skippedDeadlineCount = portalOutcomes.filter((o) => o && o.skippedDeadline).length;
       const errors = Array.isArray(report.failures) ? report.failures : [];
+      const effectivePartialSweep = partialSweep || skippedDeadlineCount > 0;
       const isRunComplete = Boolean(
         errors.length === 0 &&
         (!Array.isArray(report.statesFailed) || report.statesFailed.length === 0) &&
-        !partialSweep &&
+        !effectivePartialSweep &&
         report.complete !== false
       );
+      if (skippedDeadlineCount > 0) {
+        const completedCount = Math.max(0, targetCounties.length - skippedDeadlineCount);
+        const deadlineToken = totalCounties > 0 ? String((startOffset + completedCount) % totalCounties) : null;
+        this.countyRotationOffset = deadlineToken ? Number(deadlineToken) : 0;
+        report.partialSweep = true;
+        report.nextContinuationToken = deadlineToken;
+      }
       const totalPortalsByCounty = new Map();
       for (const c of this.counties) {
         const k = countyPortalKey(c);
@@ -377,9 +390,9 @@ class SheriffSaleScraper extends BaseScraper {
       report.complete = isRunComplete;
       report.fullSweepComplete = isRunComplete;
       Object.defineProperties(standardized, {
-        partialSweep: { value: partialSweep, enumerable: false, writable: true, configurable: true },
-        nextContinuationToken: { value: nextContinuationToken, enumerable: false, writable: true, configurable: true },
-        nextCursor: { value: nextContinuationToken, enumerable: false, writable: true, configurable: true },
+        partialSweep: { value: effectivePartialSweep, enumerable: false, writable: true, configurable: true },
+        nextContinuationToken: { value: report.nextContinuationToken, enumerable: false, writable: true, configurable: true },
+        nextCursor: { value: report.nextContinuationToken, enumerable: false, writable: true, configurable: true },
         complete: { value: isRunComplete, enumerable: false, writable: true, configurable: true },
         report: { value: report, enumerable: false, writable: true, configurable: true },
       });

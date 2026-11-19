@@ -28,6 +28,7 @@ const { scanAllListings } = require('../db/listings-scan');
 const { resolveOperatorToken } = require('../security/operator-token');
 const { presentedRunToken, tokensMatch } = require('./scrapers');
 const emailFeeds = require('../sources/email-feeds.json');
+const canonicalizeEmailSourceKey = (source) => { const norm = String(source || '').trim().toLowerCase(); if (!norm || norm === 'email-notices' || norm === 'press-association-email' || norm === 'public-notices-email') return 'public-notices-email'; return norm; };
 const FEED_CONFIG = emailFeeds.feeds || {};
 
 const MAX_DOCUMENT_ID_LENGTH = 200;
@@ -484,7 +485,7 @@ async function handleDocumentReview(req, res, dependencies = {}) {
 
       listingPacket = {
         id: listingId,
-        source: existingListing?.source || previousRaw?.source || 'email-notices',
+        source: canonicalizeEmailSourceKey(existingListing?.source || previousRaw?.source || 'public-notices-email'),
         state: existingListing?.state || state,
         county: mergedFields.county || existingListing?.county || null,
         city: mergedFields.city || existingListing?.city || null,

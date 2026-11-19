@@ -232,7 +232,7 @@ export function MarketMap({ listings, onUnderwrite, returnTo = "/listings?view=m
         setMapCreated(true);
         map.addControl(new maplibre.AttributionControl({ compact: true, customAttribution: "OpenFreeMap · OpenStreetMap · CARTO" }), "bottom-left");
 
-        let fallbackApplied = false;
+        let fallbackApplied = false; let tileErrorAfterFallback = false;
         const switchToRasterFallback = () => {
           if (disposed || fallbackApplied) return false;
           fallbackApplied = true;
@@ -245,30 +245,50 @@ export function MarketMap({ listings, onUnderwrite, returnTo = "/listings?view=m
         };
         const updateView = () => syncView(map);
         const markReady = () => {
-          if (disposed) return;
+          if (disposed || tileErrorAfterFallback) return;
           setMapReady(true);
           setMapUnavailable(false);
           syncView(map);
         };
         map.on("moveend", updateView);
         map.on("zoomend", updateView);
-        map.once("styledata", () => { if (map.isStyleLoaded()) markReady(); });
-        map.once("render", () => { if (map.isStyleLoaded()) markReady(); });
+        let fallbackTimeoutId: number | null = null;
+        const checkReady = () => {
+          if (disposed) return;
+          if (!tileErrorAfterFallback && (map.loaded() || (!fallbackApplied && map.isStyleLoaded()))) {
+            markReady();
+            map.off("styledata", checkReady);
+            map.off("idle", checkReady);
+          }
+        };
+        map.on("styledata", checkReady);
+        map.on("idle", checkReady);
         map.once("load", markReady);
         map.on("error", () => {
           if (disposed || map.loaded()) return;
+          if (fallbackApplied) {
+            tileErrorAfterFallback = true; setMapUnavailable(true);
+            return;
+          }
           if (!switchToRasterFallback()) setMapUnavailable(true);
         });
         loadTimeout = window.setTimeout(() => {
           if (disposed || map.loaded() || map.isStyleLoaded()) return;
           if (!switchToRasterFallback()) {
-            setMapUnavailable(true);
+            tileErrorAfterFallback = true; setMapUnavailable(true);
           } else {
-            window.setTimeout(() => {
+            fallbackTimeoutId = window.setTimeout(() => {
               if (!map.loaded() && !map.isStyleLoaded() && !disposed) setMapUnavailable(true);
             }, 5_000);
           }
         }, 3_500);
+        const origRemove = map.remove.bind(map);
+        map.remove = () => {
+          if (fallbackTimeoutId !== null) window.clearTimeout(fallbackTimeoutId);
+          map.off("styledata", checkReady);
+          map.off("idle", checkReady);
+          return origRemove();
+        };
       })
       .catch(() => {
         if (!disposed) setMapUnavailable(true);

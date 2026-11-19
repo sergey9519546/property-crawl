@@ -295,7 +295,7 @@ const IS_TEST_RUNTIME =
   process.execArgv.some((arg) => arg === '--test' || arg.startsWith('--test-'));
 
 const defaultTriggerWeightManager = new TriggerWeightManager({
-  filePath: process.env.TRIGGER_WEIGHTS_PATH || DEFAULT_STORAGE_PATH,
+  filePath: process.env.PROPERTY_TRIGGER_WEIGHTS_PATH || process.env.TRIGGER_WEIGHTS_PATH || ((process.env.VERCEL === '1' || process.env.NOW_REGION) ? path.join(require('node:os').tmpdir(), 'property-crawl-cache', 'trigger-weights.json') : DEFAULT_STORAGE_PATH),
   autoPersist: !IS_TEST_RUNTIME,
   autoLoad: !IS_TEST_RUNTIME,
 });

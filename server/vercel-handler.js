@@ -28,9 +28,22 @@ function configureServerlessEnv(env = process.env) {
     PROPERTY_ACCOUNTS_PATH: path.join(cacheRoot, 'accounts.json'),
     PROPERTY_EMAIL_NOTICE_PATH: path.join(cacheRoot, 'email-notices.json'),
     PROPERTY_EVIDENCE_DIR: path.join(cacheRoot, 'discovery-snapshots'),
+    PROPERTY_EVIDENCE_LEDGER_PATH: path.join(cacheRoot, 'evidence-ledger.json'),
     PROPERTY_SOURCE_INTAKE_PATH: path.join(cacheRoot, 'source-intake.json'),
     SCRAPER_TELEMETRY_PATH: path.join(cacheRoot, 'scraper-telemetry.json'),
     SERVICELINK_CHECKPOINT_PATH: path.join(cacheRoot, 'servicelink-checkpoint.json'),
+    PROPERTY_VAULT_DIR: path.join(cacheRoot, 'vault'),
+    PROPERTY_COLLECTION_JOBS_PATH: path.join(cacheRoot, 'collection-jobs.json'),
+    ONBOARDING_CACHE_ROOT: path.join(cacheRoot, 'crawler-tools', 'onboarding'),
+    ONBOARDING_CRAWL_CACHE_ROOT: path.join(cacheRoot, 'crawler-tools', 'crawls'),
+    PROPERTY_EXPORT_DIR: path.join(cacheRoot, 'discovery-exports'),
+    PROPERTY_MAIL_OUTBOX_DIR: path.join(cacheRoot, 'mail-outbox'),
+    PROPERTY_SELECTOR_CACHE_DIR: path.join(cacheRoot, 'scrapling-selectors'),
+    PROPERTY_ASSESSOR_CACHE_PATH: path.join(cacheRoot, 'assessor-roll.json'),
+    PROPERTY_HAZARD_CACHE_DIR: path.join(cacheRoot, 'hazards'),
+    PROPERTY_GEOCODER_CACHE_PATH: path.join(cacheRoot, 'geocoding-cache.json'),
+    PROPERTY_COLLECTOR_SNAPSHOT_DIR: path.join(cacheRoot, 'collector-snapshots'),
+    PROPERTY_TRIGGER_WEIGHTS_PATH: path.join(cacheRoot, 'trigger-weights.json'),
     SCRAPER_TIMEOUT_MS: '45000',
     DISCOVERY_STORAGE_PATH: os.tmpdir(),
     DISCOVERY_MIN_FREE_BYTES: String(64 * 1024 * 1024),
@@ -99,7 +112,11 @@ function createServerlessDispatcher({ server, db, env } = {}) {
       verifyPromise = Promise.resolve()
         .then(() => db.verifyConnection())
         .then((connected) => {
-          if (!connected) verifyPromise = null;
+          if (!connected) {
+            verifyPromise = null;
+          } else if (typeof server._wireStoresAfterVerify === 'function') {
+            server._wireStoresAfterVerify(db);
+          }
           return connected;
         })
         .catch((err) => {

@@ -48,12 +48,16 @@ function isPresentationField(field) {
   return isAdaptiveAllowed(field);
 }
 
-function getSelectorStorePath(sourceKey, cacheDir = DEFAULT_CACHE_DIR) {
-  const safeKey = String(sourceKey || 'unknown').replace(/[^a-z0-9_-]/gi, '_').toLowerCase();
-  return path.join(cacheDir, `${safeKey}.json`);
+function resolveCacheDir(cacheDir) {
+  return cacheDir || process.env.PROPERTY_SELECTOR_CACHE_DIR || ((process.env.VERCEL === '1' || process.env.NOW_REGION) ? path.join(require('node:os').tmpdir(), 'property-crawl-cache', 'scrapling-selectors') : DEFAULT_CACHE_DIR);
 }
 
-function loadSelectorStore(sourceKey, cacheDir = DEFAULT_CACHE_DIR) {
+function getSelectorStorePath(sourceKey, cacheDir) {
+  const safeKey = String(sourceKey || 'unknown').replace(/[^a-z0-9_-]/gi, '_').toLowerCase();
+  return path.join(resolveCacheDir(cacheDir), `${safeKey}.json`);
+}
+
+function loadSelectorStore(sourceKey, cacheDir) {
   const target = getSelectorStorePath(sourceKey, cacheDir);
   if (!fs.existsSync(target)) {
     return { version: 1, sourceKey, selectors: {}, relocations: [] };
@@ -72,22 +76,27 @@ function loadSelectorStore(sourceKey, cacheDir = DEFAULT_CACHE_DIR) {
   }
 }
 
-function saveSelectorStore(sourceKey, store, cacheDir = DEFAULT_CACHE_DIR) {
-  if (!fs.existsSync(cacheDir)) {
-    fs.mkdirSync(cacheDir, { recursive: true });
-  }
-  const target = getSelectorStorePath(sourceKey, cacheDir);
-  const tmp = `${target}.${crypto.randomBytes(4).toString('hex')}.tmp`;
-  const payload = JSON.stringify({
-    version: 1,
-    sourceKey,
-    updatedAt: new Date().toISOString(),
-    selectors: store.selectors || {},
-    relocations: (store.relocations || []).slice(-100),
-  }, null, 2);
+function saveSelectorStore(sourceKey, store, cacheDir) {
+  const dir = resolveCacheDir(cacheDir);
+  try {
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    const target = getSelectorStorePath(sourceKey, dir);
+    const tmp = `${target}.${crypto.randomBytes(4).toString('hex')}.tmp`;
+    const payload = JSON.stringify({
+      version: 1,
+      sourceKey,
+      updatedAt: new Date().toISOString(),
+      selectors: store.selectors || {},
+      relocations: (store.relocations || []).slice(-100),
+    }, null, 2);
 
-  fs.writeFileSync(tmp, payload, 'utf8');
-  fs.renameSync(tmp, target);
+    fs.writeFileSync(tmp, payload, 'utf8');
+    fs.renameSync(tmp, target);
+  } catch (_) {
+    // Selector store persistence is best-effort on read-only serverless filesystems.
+  }
 }
 
 /**

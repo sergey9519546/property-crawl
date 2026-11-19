@@ -339,3 +339,47 @@ test('IngestionScheduler.runAll clears a stale isRunning lock but still skips an
   assert.equal(staleRes.sourceResults.length, 1);
   assert.equal(scheduler.isRunning, false);
 });
+
+test('configureServerlessEnv populates all /tmp cache overrides and _wireStoresAfterVerify fires on DB verify', async () => {
+  const { configureServerlessEnv, createServerlessDispatcher } = require('../server/vercel-handler');
+  const testEnv = { VERCEL: '1' };
+  const resolved = configureServerlessEnv(testEnv);
+  assert.ok(resolved);
+  for (const key of [
+    'PROPERTY_VAULT_DIR',
+    'PROPERTY_COLLECTION_JOBS_PATH',
+    'ONBOARDING_CACHE_ROOT',
+    'ONBOARDING_CRAWL_CACHE_ROOT',
+    'PROPERTY_EXPORT_DIR',
+    'PROPERTY_MAIL_OUTBOX_DIR',
+    'PROPERTY_SELECTOR_CACHE_DIR',
+    'PROPERTY_ASSESSOR_CACHE_PATH',
+    'PROPERTY_HAZARD_CACHE_DIR',
+    'PROPERTY_GEOCODER_CACHE_PATH',
+    'PROPERTY_EVIDENCE_LEDGER_PATH',
+    'PROPERTY_COLLECTOR_SNAPSHOT_DIR',
+    'PROPERTY_TRIGGER_WEIGHTS_PATH',
+  ]) {
+    assert.ok(testEnv[key], `Expected ${key} to be populated under VERCEL=1`);
+    assert.ok(testEnv[key].includes('property-crawl-cache'), `Expected ${key} under tmp cache root`);
+  }
+
+  let wiredDb = null;
+  const fakeServer = {
+    listeners: () => [(_req, res) => { res.statusCode = 200; res.end('ok'); }],
+    _wireStoresAfterVerify(database) { wiredDb = database; },
+  };
+  const fakeDb = {
+    isPg: true,
+    postgresReachable: false,
+    async verifyConnection() {
+      this.postgresReachable = true;
+      return true;
+    },
+  };
+  const handler = createServerlessDispatcher({ server: fakeServer, db: fakeDb, env: {} });
+  let ended = false;
+  await handler({ headers: {}, socket: {} }, { statusCode: 0, end() { ended = true; } });
+  assert.equal(ended, true);
+  assert.equal(wiredDb, fakeDb);
+});

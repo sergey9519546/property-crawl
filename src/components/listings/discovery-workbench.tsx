@@ -223,6 +223,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
   // The server already loaded this URL. Keep those rows in the first HTML
   // response, including a county filter, before the browser refetch lands.
   const payload = loadedResult?.key === requestKey ? loadedResult.payload : loadedResult ? null : initialPayload;
+
   const compare = useCompareSelection();
   const compareLabels = React.useMemo(() => {
     const labels: Record<string, string> = {};
@@ -431,6 +432,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
     }
   }, [filters, cursor, requestKey, setCursor]);
   React.useEffect(() => {
+    // Always revalidate on mount so client route state stays live.
     const delay = filters.q ? 250 : 0;
     const timer = window.setTimeout(() => void refresh(), delay);
     return () => {

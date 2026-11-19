@@ -207,9 +207,9 @@ function presentListing(listing) {
 // CPU on absurdly long search strings and keeping the API surface honest.
 const PARAM_CAPS = Object.freeze({
   q:          { maxLen: 256, defaultIfEmpty: ''     },
-  state:      { maxLen: 2,   defaultIfEmpty: 'all'  }, // 2-letter US state code
-  source:     { maxLen: 32,  defaultIfEmpty: 'all'  },
-  type:       { maxLen: 32,  defaultIfEmpty: 'all'  },
+  state:      { maxLen: 160, defaultIfEmpty: 'all'  }, // 2-letter US state code(s) or CSV
+  source:     { maxLen: 160, defaultIfEmpty: 'all'  },
+  type:       { maxLen: 160, defaultIfEmpty: 'all'  },
   status:     { maxLen: 16,  defaultIfEmpty: 'all'  },
   occupancy:  { maxLen: 32,  defaultIfEmpty: 'all'  },
   seniorLien: { maxLen: 16,  defaultIfEmpty: 'all'  },
@@ -446,6 +446,7 @@ async function handleListings(req, res, dbOverride = null, options = {}) {
         if (INTELLIGENCE_SORTS.has(String(mapUrl.searchParams.get('sort')))) {
           mapUrl.searchParams.set('sort', 'score');
         }
+        if (typeof db.inventoryUnavailableReason === 'function') { const unavailable = db.inventoryUnavailableReason(); if (unavailable) return res.status(503).json({ error: 'No inventory is being served.', reason: unavailable, dataMode: typeof db.dataMode === 'function' ? db.dataMode() : null, clusters: [], points: [], total: 0 }); }
         return res.json(await discovery.map(db, discovery.queryFromUrl(mapUrl)));
       }
       catch (error) { return res.status(error.status || 503).json({ error: error.message }); }

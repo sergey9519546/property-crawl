@@ -42,7 +42,7 @@ const ARCGIS_REGISTRY = Object.freeze({
   },
   NJ: {
     name: 'New Jersey Office of GIS (NJGIN) Parcel Data',
-    endpoint: 'https://maps.nj.gov/arcgis/rest/services/Basemap/Parcels/MapServer/0/query',
+    endpoint: 'https://maps.nj.gov/arcgis/rest/services/Framework/Cadastral/MapServer/0/query',
     apnField: 'PAMS_PIN'
   }
 });
@@ -489,10 +489,14 @@ async function handleParcelBoundary(req, res) {
     const county = textValue(params.county ?? listing?.county);
     const apn = textValue(params.apn ?? params.parcelId ?? listing?.apn ?? listing?.parcelNumber ?? listing?.parcelId ?? listing?.provenance?.parcelNumber);
 
-    const lat = coordinate(params.lat ?? listing?.lat, -90, 90);
-    const lng = coordinate(params.lng ?? listing?.lng, -180, 180);
+    const rawLat = coordinate(params.lat ?? listing?.lat, -90, 90);
+    const rawLng = coordinate(params.lng ?? listing?.lng, -180, 180);
+    const isNullIsland = rawLat === 0 && rawLng === 0;
+    const lat = isNullIsland ? null : rawLat;
+    const lng = isNullIsland ? null : rawLng;
 
-    const hasListingCoords = listing && (listing.lat !== null && listing.lat !== undefined && listing.lat !== '') && (listing.lng !== null && listing.lng !== undefined && listing.lng !== '');
+    const listingNullIsland = listing && Number(listing.lat) === 0 && Number(listing.lng) === 0;
+    const hasListingCoords = listing && !listingNullIsland && (listing.lat !== null && listing.lat !== undefined && listing.lat !== '') && (listing.lng !== null && listing.lng !== undefined && listing.lng !== '');
     if (hasListingCoords && !hasObservedListingCoordinates(listing)) {
       throw new ParcelBoundaryError(
         422,

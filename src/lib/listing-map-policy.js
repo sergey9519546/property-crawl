@@ -108,15 +108,15 @@ function inspectParcelBoundaryInputs(listing) {
   const apn = parcelTextValue(
     listing.apn ?? listing.parcelNumber ?? listing.parcelId ?? listing.provenance?.parcelNumber
   );
-  const lat = parcelCoordinate(listing.lat, -90, 90);
-  const lng = parcelCoordinate(listing.lng, -180, 180);
-  const hasListingCoords =
+  const rawLat = parcelCoordinate(listing.lat, -90, 90); const rawLng = parcelCoordinate(listing.lng, -180, 180); const isNullIsland = rawLat === 0 && rawLng === 0; const lat = isNullIsland ? null : rawLat; const lng = isNullIsland ? null : rawLng;
+
+  const hasListingCoords = !isNullIsland && (
     listing.lat !== null &&
     listing.lat !== undefined &&
     listing.lat !== '' &&
     listing.lng !== null &&
     listing.lng !== undefined &&
-    listing.lng !== '';
+    listing.lng !== '');
 
   if (hasListingCoords && !hasObservedParcelCoordinates(listing)) {
     return {

@@ -80,7 +80,7 @@ function parseAcceleratedDisposition(html) {
   const rejected = [];
   const chunks = visiblePage.split(/<li class="usa-card/i).slice(1);
   for (const chunk of chunks) {
-    const stateMatch = chunk.match(/data-state='"([A-Z]{2})"'/);
+    const stateMatch = chunk.match(/data-state=["'](?:"|&quot;)?([A-Z]{2})(?:"|&quot;)?["']/i);
     const title = cardText((chunk.match(/<h3[^>]*>([\s\S]*?)<\/h3>/i) || [])[1]);
     const tags = [...chunk.matchAll(/usa-tag[^>]*>([\s\S]*?)</gi)].map((match) => cardText(match[1]).toUpperCase());
     const address = [...chunk.matchAll(/<a\b[^>]*>([\s\S]*?)<\/a>/gi)]
@@ -102,7 +102,7 @@ function parseAcceleratedDisposition(html) {
       rejected.push({ identity, reason: 'missing_title' });
       continue;
     }
-    const typeMatch = chunk.match(/data-type='"([^"']+)"'/);
+    const typeMatch = chunk.match(/data-type=["'](?:"|&quot;)?([^"']+?)(?:"|&quot;)?["']/i);
     const listed = tags.find((tag) => tag.startsWith('DATE LISTED:')) || '';
     const areaMatch = chunk.match(/Rentable Area:\s*(?:<strong>)?\s*([\d,]+)/i);
     const gross = /Gross Square Footage/i.test(chunk);

@@ -111,7 +111,7 @@ async function crawlOnboardingSource(input = {}, dependencies = {}) {
   const origin = new URL(start.url).origin;
   const scopeHash = scopeFor(source, start.url, maxDepth);
   const sourceScope = { source, startUrl: start.url, maxDepth };
-  const cacheRoot = path.resolve(dependencies.cacheRoot || path.resolve(process.cwd(), '.cache', 'crawler-tools', 'crawls'));
+  const cacheRoot = path.resolve(dependencies.cacheRoot || process.env.ONBOARDING_CRAWL_CACHE_ROOT || ((process.env.VERCEL === '1' || process.env.NOW_REGION) ? path.join(require('node:os').tmpdir(), 'property-crawl-cache', 'crawler-tools', 'crawls') : path.resolve(process.cwd(), '.cache', 'crawler-tools', 'crawls')));
   const statePath = path.join(cacheRoot, `${scopeHash}.json`);
   const fsImpl = dependencies.fs || fs;
   let state;

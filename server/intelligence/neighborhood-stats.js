@@ -156,12 +156,82 @@ function computeNeighborhoodStats(pool, options = {}) {
 // (zip OR city,state) or null if there are no listings in it. This is
 // what /api/neighborhoods/:key surfaces.
 function getNeighborhoodStats(key, pool, options = {}) {
+  if (typeof key === 'string' && key.startsWith('county:')) {
+    return computeCountyStats(key.slice('county:'.length), pool, options);
+  }
   const all = computeNeighborhoodStats(pool, { ...options, includeKeys: [key] });
   return all[0] || null;
 }
 
+function normalizeCountyToken(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/\b(county|parish|borough|census area|municipality)\b/g, ' ')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function computeCountyStats(countyKey, pool, options = {}) {
+  const m = String(countyKey || '').trim().match(/^([A-Za-z]{2})(?:::|-)(.+)$/);
+  if (!m || !Array.isArray(pool)) return null;
+  const state = m[1].toUpperCase();
+  const targetToken = normalizeCountyToken(m[2]);
+  if (!targetToken) return null;
+
+  const maxAgeDays = Number.isFinite(options.maxAgeDays) ? options.maxAgeDays : 365;
+  const nowMs = Number.isFinite(options.nowMs) ? options.nowMs : Date.now();
+  const cutoffMs = nowMs - maxAgeDays * 86_400_000;
+  const matched = [];
+  let displayCounty = null;
+
+  for (const listing of pool) {
+    if (!listing || typeof listing !== 'object') continue;
+    if (String(listing.state || '').toUpperCase() !== state) continue;
+    const rawCounty = String(listing.county || '').trim();
+    if (!rawCounty || normalizeCountyToken(rawCounty) !== targetToken) continue;
+    const observedRaw = listing.sourceObservedAt || listing.observedAt;
+    const observedMs = observedRaw ? Date.parse(observedRaw) : NaN;
+    if (!Number.isFinite(observedMs) || observedMs < cutoffMs) continue;
+    if (!displayCounty) displayCounty = rawCounty;
+    matched.push(listing);
+  }
+
+  if (matched.length === 0) return null;
+
+  const openings = matched.map((l) => finiteOrNull(l.openingBid)).filter((n) => n !== null && n > 0);
+  const sqfts = matched.map((l) => finiteOrNull(l.sqft)).filter((n) => n !== null && n > 0);
+  const scores = matched.map((l) => finiteOrNull(l.dealScore)).filter((n) => n !== null);
+  const discounts = matched.map(discount).filter(Number.isFinite);
+  const sources = {};
+  const propTypes = {};
+  for (const listing of matched) {
+    const src = listing.source ? String(listing.source) : 'unknown';
+    sources[src] = (sources[src] || 0) + 1;
+    const pt = listing.propType ? String(listing.propType) : 'Unknown';
+    propTypes[pt] = (propTypes[pt] || 0) + 1;
+  }
+
+  const rawScore = median(scores);
+  const rawDiscount = median(discounts);
+  const slug = String(m[2]).trim().replace(/[^A-Za-z0-9-]+/g, '-').replace(/^-+|-+$/g, '') || targetToken;
+  return {
+    kind: 'county',
+    key: `${state}-${slug}`,
+    label: `${displayCounty}, ${state}`,
+    count: matched.length,
+    medianOpeningBid: median(openings),
+    meanOpeningBid: openings.length ? Number(mean(openings).toFixed(2)) : null,
+    medianSqft: median(sqfts),
+    medianDealScore: rawScore === null ? null : Number(rawScore.toFixed(1)),
+    medianDiscount: rawDiscount === null ? null : Number(rawDiscount.toFixed(4)),
+    sources,
+    propTypes,
+  };
+}
+
 module.exports = {
   computeNeighborhoodStats,
+  computeCountyStats,
   getNeighborhoodStats,
   unitKey,
   // Internal helpers exposed for tests

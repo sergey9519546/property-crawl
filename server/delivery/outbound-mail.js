@@ -27,6 +27,7 @@ function isEmail(value) {
 function outboxFile(options = {}, env = process.env) {
   if (options.outboxDir) return path.join(path.resolve(options.outboxDir), 'outbox.jsonl');
   if (env.PROPERTY_MAIL_OUTBOX_DIR) return path.join(path.resolve(env.PROPERTY_MAIL_OUTBOX_DIR), 'outbox.jsonl');
+  if (env.VERCEL === '1' || env.NOW_REGION) return path.join(require('node:os').tmpdir(), 'property-crawl-cache', 'mail-outbox', 'outbox.jsonl');
   return path.resolve(process.cwd(), '.cache/mail-outbox/outbox.jsonl');
 }
 
@@ -79,7 +80,7 @@ async function sendOutboundMail({ to, subject, text, html, kind }, options = {})
       signal: AbortSignal.timeout(8000),
     });
     if (!response.ok) {
-      appendOutbox({ ...record, resendStatus: response.status }, options, env);
+      try { appendOutbox({ ...record, resendStatus: response.status }, options, env); } catch { /* ignore read-only outbox */ }
       return { delivery: 'local', sent: false, reason: `http-${response.status}` };
     }
     const body = await response.json().catch(() => ({}));

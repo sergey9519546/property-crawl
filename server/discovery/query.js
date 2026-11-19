@@ -623,7 +623,8 @@ function pgWhere(f, start = 1, options = {}) {
       return part.trim().toLowerCase();
     };
     if (v.includes(",")) {
-      const parts = v.split(",").map(normFilterPart).filter(Boolean);
+      const rawParts = v.split(",").map(normFilterPart).filter(Boolean);
+      const parts = isTypeCol ? [...new Set(rawParts.flatMap((part) => { const aliasSql = PROP_TYPE_ALIAS_SQL[part.toLowerCase()]; return aliasSql ? [part, ...Array.from(aliasSql.matchAll(/'([^']+)'/g), (m) => m[1])] : [part]; }))] : rawParts;
       if (parts.length > 0) {
         const hasUnknown = parts.includes("unknown");
         const known = parts.filter((part) => part !== "unknown");

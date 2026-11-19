@@ -167,6 +167,7 @@ export function ListingThumbnail({ listingId, address, propType, source, photo, 
                 href={alternative.viewerUrl}
                 target="_blank"
                 rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
                 className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-line-strong bg-card px-3 py-1.5 text-xs font-semibold text-ink underline-offset-2 hover:underline"
               >
                 {format(t.openProviderViewer, { provider: alternative.attribution.provider })} <ExternalLink size={12} aria-hidden />
@@ -203,7 +204,7 @@ export function ListingThumbnail({ listingId, address, propType, source, photo, 
             {thumb ? (
               <>
                 {" · "}
-                <a href={alternative.viewerUrl} target="_blank" rel="noopener noreferrer" className="underline">
+                <a href={alternative.viewerUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="underline">
                   {t.openViewer}
                 </a>
               </>
@@ -260,7 +261,7 @@ export function ListingThumbnail({ listingId, address, propType, source, photo, 
           style={{ backgroundImage: `url("${placeholder.imageSrc}")` }}
         />
         <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-gradient-to-b from-paper/20 via-paper/55 to-paper/85" />
-        <div className={layout === "fill" ? "relative z-10 flex h-full flex-col items-center justify-end gap-1.5 px-3 pb-2.5 pt-11 text-center" : "relative z-10 flex h-full flex-col items-center justify-center gap-2 px-5 py-6 text-center"}>
+        <div className={layout === "fill" ? "relative z-10 flex h-full flex-col items-center justify-end gap-1.5 px-3 pb-2.5 pt-11 text-center" : "relative z-10 flex h-full flex-col items-center justify-end gap-1.5 px-4 pb-3 pt-12 text-center"}>
           <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-label font-semibold shadow-sm backdrop-blur-sm ${placeholder.accentClass}`}>
             {placeholder.typeLabel} · Placeholder
           </span>

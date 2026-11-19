@@ -108,6 +108,7 @@ export function ListingMedia({ listingId, address, propType, source, photo, gall
   const photoLabel = photoOrigin === "secondary" ? `${photoProvider || "Verified"} property photos` : "Publisher photo";
   const [photoIndex, setPhotoIndex] = React.useState(0);
   const [failedPhotoUrls, setFailedPhotoUrls] = React.useState<Set<string>>(() => new Set());
+  const [failedThumbs, setFailedThumbs] = React.useState<Set<string>>(() => new Set());
   const canShowPhoto = photos.length > 0;
   const publisherGalleryUnavailable = canShowPhoto && photos.every((url) => failedPhotoUrls.has(url));
   const normalizedListingId = typeof listingId === "string" ? listingId.trim() : "";
@@ -131,6 +132,7 @@ export function ListingMedia({ listingId, address, propType, source, photo, gall
   React.useEffect(() => {
     setPhotoIndex(0);
     setFailedPhotoUrls(new Set());
+    setFailedThumbs(new Set());
   }, [publisherMediaKey]);
 
   // The Street View request belongs to the listing, so only a change of listing
@@ -155,6 +157,8 @@ export function ListingMedia({ listingId, address, propType, source, photo, gall
 
     let disposed = false;
     let timeoutId: number | null = null;
+    let fallbackTimeoutId: number | null = null;
+    let onCheckReady: (() => void) | null = null;
     const parcelAbortController = new AbortController();
     const isAerial = mapLayer === "aerial";
     setMapReady(false);
@@ -188,7 +192,7 @@ export function ListingMedia({ listingId, address, propType, source, photo, gall
           .setLngLat(center)
           .setPopup(new maplibre.Popup({ offset: 28 }).setText(address))
           .addTo(map);
-        let fallbackApplied = false;
+        let fallbackApplied = false; let tileErrorAfterFallback = false;
         let parcelFetched = false;
         const switchToRasterFallback = () => {
           if (disposed || isAerial || fallbackApplied) return false;
@@ -268,24 +272,37 @@ export function ListingMedia({ listingId, address, propType, source, photo, gall
           })();
         };
         const markReady = () => {
-          if (disposed) return;
+          if (disposed || tileErrorAfterFallback) return;
           setMapReady(true);
           setMapUnavailable(false);
           fetchParcelBoundary();
         };
-        map.once("styledata", () => { if (map.isStyleLoaded()) markReady(); });
-        map.once("render", () => { if (map.isStyleLoaded()) markReady(); });
+        const checkReady = () => {
+          if (disposed) return;
+          if (!tileErrorAfterFallback && (map.loaded() || (!fallbackApplied && map.isStyleLoaded()))) {
+            markReady();
+            map.off("styledata", checkReady);
+            map.off("idle", checkReady);
+          }
+        };
+        onCheckReady = checkReady;
+        map.on("styledata", checkReady);
+        map.on("idle", checkReady);
         map.once("load", markReady);
         map.on("error", () => {
           if (disposed || map.loaded()) return;
+          if (fallbackApplied) {
+            tileErrorAfterFallback = true; setMapUnavailable(true);
+            return;
+          }
           if (!switchToRasterFallback()) setMapUnavailable(true);
         });
         timeoutId = window.setTimeout(() => {
           if (disposed || map.loaded() || map.isStyleLoaded()) return;
           if (!switchToRasterFallback()) {
-            setMapUnavailable(true);
+            tileErrorAfterFallback = true; setMapUnavailable(true);
           } else {
-            window.setTimeout(() => {
+            fallbackTimeoutId = window.setTimeout(() => {
               if (!map.loaded() && !map.isStyleLoaded() && !disposed) setMapUnavailable(true);
             }, 5_000);
           }
@@ -299,6 +316,11 @@ export function ListingMedia({ listingId, address, propType, source, photo, gall
       disposed = true;
       parcelAbortController.abort();
       if (timeoutId !== null) window.clearTimeout(timeoutId);
+      if (fallbackTimeoutId !== null) window.clearTimeout(fallbackTimeoutId);
+      if (onCheckReady && mapRef.current) {
+        mapRef.current.off("styledata", onCheckReady);
+        mapRef.current.off("idle", onCheckReady);
+      }
       markerRef.current?.remove();
       markerRef.current = null;
       mapRef.current?.remove();
@@ -495,7 +517,22 @@ export function ListingMedia({ listingId, address, propType, source, photo, gall
                     onClick={() => setPhotoIndex(idx)}
                     className={`relative h-9 w-12 shrink-0 overflow-hidden rounded border transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white ${photoIndex === idx ? "border-white ring-1 ring-white" : "border-white/30 opacity-75 hover:opacity-100"}`}
                   >
-                    <img src={thumbUrl} alt="" referrerPolicy="no-referrer" className="h-full w-full object-cover" loading="lazy" />
+                    {failedThumbs.has(thumbUrl) ? (
+                      <span className="grid h-full w-full place-items-center bg-paper text-meta font-bold text-ink-3">{idx + 1}</span>
+                    ) : (
+                      <img
+                        src={thumbUrl}
+                        alt=""
+                        referrerPolicy="no-referrer"
+                        className="h-full w-full object-cover"
+                        loading="lazy"
+                        onError={() => setFailedThumbs((prev) => {
+                          const next = new Set(prev);
+                          next.add(thumbUrl);
+                          return next;
+                        })}
+                      />
+                    )}
                   </button>
                 ))}
               </div>

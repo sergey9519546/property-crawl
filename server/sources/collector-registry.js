@@ -16,7 +16,7 @@ const DEFAULT_SNAPSHOT_DIR = path.resolve(__dirname, '..', '..', '.cache', 'coll
 
 class CollectorRegistry {
   constructor(options = {}) {
-    this.snapshotDir = options.snapshotDir || DEFAULT_SNAPSHOT_DIR;
+    this.snapshotDir = options.snapshotDir || process.env.PROPERTY_COLLECTOR_SNAPSHOT_DIR || ((process.env.VERCEL === '1' || process.env.NOW_REGION) ? path.join(require('node:os').tmpdir(), 'property-crawl-cache', 'collector-snapshots') : DEFAULT_SNAPSHOT_DIR);
     this.collectors = new Map();
     this.circuitBreakers = new Map();
     this.snapshots = new Map();

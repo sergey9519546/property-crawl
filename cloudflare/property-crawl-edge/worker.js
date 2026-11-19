@@ -2,7 +2,6 @@ const CACHEABLE_PATHS = new Set([
   '/api/coverage',
   '/api/sources',
   '/api/auction-calendar',
-  '/api/listings',
   '/api/neighborhoods',
   '/api/property-image/providers',
 ]);
@@ -255,7 +254,8 @@ export default {
         const isWebSocket = (request.headers.get('upgrade') || '').toLowerCase() === 'websocket';
         const isCacheablePath = CACHEABLE_PATHS.has(url.pathname);
         const isNoStorePath = !isCacheablePath && NO_STORE_PREFIXES.some((p) => url.pathname.startsWith(p));
-        const bypassCache = !isRead || isWebSocket || request.headers.has('authorization') || isNoStorePath;
+        const reqCacheControl = (request.headers.get('cache-control') || '').toLowerCase();
+        const bypassCache = !isRead || isWebSocket || request.headers.has('authorization') || isNoStorePath || /\bno-(?:store|cache)\b/.test(reqCacheControl);
 
         if (!bypassCache && isCacheablePath) {
           const cache = caches.default;
@@ -283,7 +283,7 @@ export default {
 
           const upstreamRes = upstreamResult.response;
           const vary = (upstreamRes.headers.get('vary') || '').trim();
-          const cacheEligible = upstreamRes.status === 200 && !vary.split(',').some((v) => v.trim() === '*');
+          const cacheEligible = upstreamRes.status === 200 && !vary.split(',').some((v) => { const token = v.trim().toLowerCase(); return token === '*' || token === 'origin'; });
           if (cacheEligible) {
             const cloned = new Response(upstreamRes.body, upstreamRes);
             cloned.headers.delete('set-cookie');
@@ -339,6 +339,36 @@ export default {
         error: err instanceof Error ? err.message : String(err),
       }));
       return jsonResponse({ error: 'Internal edge error' }, 500);
+    }
+  },
+  async scheduled(controller, env, ctx) {
+    const token = String(env?.SCRAPER_ADMIN_TOKEN || env?.PROPERTY_OPERATOR_SECRET || '').trim();
+    if (!token) {
+      console.warn(JSON.stringify({ event: 'edge_cron_skipped', reason: 'missing_scraper_admin_token', cron: controller?.cron || null }));
+      return;
+    }
+    const apiOrigin = String(env?.API_ORIGIN || 'https://property-crawl-api.vercel.app').replace(/\/+$/, '');
+    const action = controller?.cron === '17 */6 * * *' ? 'prune' : 'next-slice';
+    const task = fetch(`${apiOrigin}/api/scrapers/run`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({ action }),
+    })
+      .then(async (res) => {
+        const text = await res.text().catch(() => '');
+        console.log(JSON.stringify({ event: 'edge_cron_complete', action, status: res.status, ok: res.ok, body: text.slice(0, 300) }));
+      })
+      .catch((err) => {
+        console.error(JSON.stringify({ event: 'edge_cron_error', action, error: err instanceof Error ? err.message : String(err) }));
+      });
+    if (ctx && typeof ctx.waitUntil === 'function') {
+      ctx.waitUntil(task);
+    } else {
+      await task;
     }
   },
 };

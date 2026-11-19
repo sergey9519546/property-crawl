@@ -38,6 +38,10 @@ class TreasuryForfeitureScraper extends BaseScraper {
     super({ ...options, name: 'TreasuryForfeitureCollector', sourceKey: 'treasury' });
     this.baseUrl = 'https://www.treasury.gov/auctions/treasury/rp';
     this.detailConcurrency = Math.min(4, Math.max(1, Math.floor(Number(options.detailConcurrency) || 2)));
+    this.maxRetries = Math.min(3, Math.max(1, Number(options.maxRetries || ((process.env.VERCEL === '1' || process.env.NOW_REGION) ? 1 : 2))));
+    this.maxItems = Math.max(1, Number(options.maxItems || process.env.TREASURY_MAX_ITEMS || ((process.env.VERCEL === '1' || process.env.NOW_REGION) ? 15 : 100)));
+    const initialOffset = Number.parseInt(options.slugOffset ?? options.checkpoint ?? options.cursor ?? 0, 10);
+    this.slugOffset = Number.isInteger(initialOffset) && initialOffset >= 0 ? initialOffset : 0;
     this.lastRunReport = null;
     this.useScrapling = options.useScrapling ?? isScraplingEnabled('treasury');
     this.extract = options.extractImpl || extractWithScrapling;
@@ -45,7 +49,19 @@ class TreasuryForfeitureScraper extends BaseScraper {
     this._spiderDetailCache = new Map();
   }
 
-  async scrapeFeed() {
+  setCheckpoint(checkpoint) {
+    const n = Number.parseInt(checkpoint, 10);
+    this.slugOffset = Number.isInteger(n) && n >= 0 ? n : 0;
+    return this;
+  }
+
+  async scrapeFeed(options = {}) {
+    if (options && typeof options === 'object') {
+      const cp = options.cursor ?? options.continuationToken ?? options.checkpoint;
+      if (cp != null) this.setCheckpoint(cp);
+      if (options.maxItems) this.maxItems = Math.max(1, Number(options.maxItems));
+    }
+    const deadlineAt = Number(options?.deadlineAt) || 0;
     return this.executeWithRetry(async () => {
       if (this._spiderDetailCache) this._spiderDetailCache.clear();
 
@@ -59,10 +75,13 @@ class TreasuryForfeitureScraper extends BaseScraper {
 
       console.log(`[${this.name}] Found ${slugs.length} property links on listing page`);
 
-      const targetSlugs = slugs;
+      const totalSlugs = slugs.length;
+      const startOffset = totalSlugs > 0 ? (this.slugOffset % totalSlugs) : 0;
+      const targetSlugs = totalSlugs > this.maxItems ? slugs.slice(startOffset, startOffset + this.maxItems) : slugs;
+      let deadlineStopped = false;
       if (this.useSpiderBatch && targetSlugs.length > 0 && typeof this.runSpiderBatch === 'function') {
         try {
-          const urls = targetSlugs.map((slug) => `${this.baseUrl}/${slug}`);
+          const urls = targetSlugs.map((slug) => new URL(slug, `${this.baseUrl}/`).toString());
           const batchResult = await this.runSpiderBatch({
             urls,
             profile: 'treasury-detail',
@@ -80,10 +99,13 @@ class TreasuryForfeitureScraper extends BaseScraper {
           console.warn(`[${this.name}] Spider batch prefetch fallback: ${err.message}`);
         }
       }
+      let attemptedCount = 0;
       const detailResults = await mapWithConcurrency(
         targetSlugs,
         this.detailConcurrency,
         async (slug) => {
+          if (deadlineAt && Date.now() >= deadlineAt - 1500) { deadlineStopped = true; return null; }
+          attemptedCount += 1;
           await this.crawlJitter();
           return this.fetchDetail(slug);
         }
@@ -99,7 +121,11 @@ class TreasuryForfeitureScraper extends BaseScraper {
         }
       });
 
-      this.lastRunReport = { outcome: failures.length ? 'partial_failure' : listings.length ? 'success' : 'empty', scope: { endpoint: '/auctions/treasury/rp/realprop.shtml', filters: { assetClass: 'real_property' } }, recordsDiscovered: slugs.length, recordsEmitted: listings.length, recordsRejected: slugs.length - listings.length - failures.length, failures, complete: failures.length === 0, fullSweepComplete: failures.length === 0, truncated: false, fixtureFallbackUsed: false };
+      const partialSweep = (attemptedCount < totalSlugs) || (targetSlugs.length < totalSlugs) || deadlineStopped;
+      const nextOffset = partialSweep && totalSlugs > 0 ? (startOffset + attemptedCount) % totalSlugs : 0;
+      const nextContinuationToken = partialSweep ? String(nextOffset) : null;
+      this.slugOffset = nextOffset;
+      this.lastRunReport = { outcome: failures.length ? 'partial_failure' : listings.length ? 'success' : 'empty', scope: { endpoint: '/auctions/treasury/rp/realprop.shtml', filters: { assetClass: 'real_property' } }, recordsDiscovered: slugs.length, recordsAttempted: attemptedCount, recordsEmitted: listings.length, recordsRejected: Math.max(0, attemptedCount - listings.length - failures.length), failures, complete: failures.length === 0 && !partialSweep, fullSweepComplete: failures.length === 0 && !partialSweep, partialSweep, truncated: partialSweep, nextContinuationToken, nextCursor: nextContinuationToken, fixtureFallbackUsed: false };
       console.log(`[${this.name}] Scraped ${listings.length} Treasury properties`);
       // Schema-invalid items must not break the entire scrapeFeed call —
       // the run report above already counts them as recordsRejected. Catch
@@ -117,6 +143,12 @@ class TreasuryForfeitureScraper extends BaseScraper {
           }
         }
       }
+      Object.defineProperties(standardized, {
+        partialSweep: { value: partialSweep, enumerable: false, writable: true, configurable: true },
+        nextContinuationToken: { value: nextContinuationToken, enumerable: false, writable: true, configurable: true },
+        nextCursor: { value: nextContinuationToken, enumerable: false, writable: true, configurable: true },
+        report: { value: this.lastRunReport, enumerable: false, writable: true, configurable: true },
+      });
       return standardized;
     });
   }
@@ -129,7 +161,7 @@ class TreasuryForfeitureScraper extends BaseScraper {
   }
 
   async fetchDetail(slug) {
-    const detailUrl = `${this.baseUrl}/${slug}`;
+    const detailUrl = new URL(slug, `${this.baseUrl}/`).toString();
     const detailHtml = await this.fetchText(detailUrl);
 
     // Title is the full address: "4705 Battle Creek Road SE, Salem, Oregon 97302"
@@ -194,7 +226,7 @@ class TreasuryForfeitureScraper extends BaseScraper {
       : get(/Deposit:\s*([^.]+?)(?:\.|Inspection|$)/);
     const saleDateRaw = (scraplingRecord && scraplingRecord.auctionDate)
       ? scraplingRecord.auctionDate
-      : get(/Auction Date and Time:\s*([^I]+?)(?=Inspection|$)/);
+      : get(/Auction Date and Time:\s*([\s\S]+?)(?=Inspection|Deposit|Starting|Parcel|Sale\s+Number|$)/i);
     const parcelNo = (scraplingRecord && scraplingRecord.parcelNumber)
       ? scraplingRecord.parcelNumber
       : get(/Parcel No:\s*(\S+)/);
@@ -333,12 +365,16 @@ class TreasuryForfeitureScraper extends BaseScraper {
 
   parseMoney(s) {
     if (!s) return null;
-    return parseInt(s.replace(/[^\d]/g, ''), 10) || null;
+    const m = String(s).match(/(\d[\d,]*(?:\.\d{1,2})?)/);
+    if (!m) return null;
+    const parsed = parseFloat(m[1].replace(/,/g, ''));
+    return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : null;
   }
 
   parseInt0(s) {
     if (!s) return null;
-    return parseInt(s.replace(/[^\d]/g, ''), 10) || null;
+    const m = String(s).match(/(\d[\d,]*)/);
+    return m ? (parseInt(m[1].replace(/,/g, ''), 10) || null) : null;
   }
 
   // Demo/Unsplash inventory overrides removed (2026-09-14 audit).

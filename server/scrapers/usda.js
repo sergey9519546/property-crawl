@@ -45,32 +45,65 @@ class UsdaScrapeError extends Error {
 
 class UsdaResalesScraper extends BaseScraper {
   constructor(options = {}) {
-    super({ name: 'UsdaResalesCollector', sourceKey: 'usda' });
+    super({
+      name: 'UsdaResalesCollector',
+      sourceKey: 'usda',
+      maxRetries: options.maxRetries || ((process.env.VERCEL === '1' || process.env.NOW_REGION) ? 1 : 2),
+    });
     this.baseUrl = 'https://www.resales.usda.gov';
     this.lastRunReport = null;
     this.useScrapling = options.useScrapling ?? isScraplingEnabled('usda');
     this.extract = options.extractImpl || extractWithScrapling;
+    this.maxStates = Math.max(
+      1,
+      Number(options.maxStates || process.env.USDA_MAX_STATES || ((process.env.VERCEL === '1' || process.env.NOW_REGION) ? 10 : MAX_PUBLISHER_JURISDICTIONS)),
+    );
+    const initialOffset = Number.parseInt(options.stateOffset ?? options.cursor ?? options.checkpoint ?? 0, 10);
+    this.stateOffset = Number.isInteger(initialOffset) && initialOffset >= 0 ? initialOffset : 0;
+  }
+
+  setCheckpoint(checkpoint) {
+    const n = Number.parseInt(checkpoint, 10);
+    this.stateOffset = Number.isInteger(n) && n >= 0 ? n : 0;
+    return this;
   }
 
   getCollectionScope() {
     return { endpoint: '/resales/public/searchSFH', filters: { propertyType: 'Single Family' }, jurisdictionSelection: 'publisher_inventory_options' };
   }
 
-  async scrapeFeed() {
+  async scrapeFeed(options = {}) {
+    if (options && typeof options === 'object') {
+      const cp = options.cursor ?? options.continuationToken ?? options.checkpoint;
+      if (cp != null) this.setCheckpoint(cp);
+      if (options.maxStates) this.maxStates = Math.max(1, Number(options.maxStates));
+    }
+    const deadlineAt = Number(options?.deadlineAt) || 0;
     return this.executeWithRetry(async () => {
       // 1. Load the SFH search page to discover which states have inventory.
       const formHtml = await this.fetchText(`${this.baseUrl}/resales/public/searchSFH`);
       const states = this.parseStateOptions(formHtml);
       console.log(`[${this.name}] ${states.length} states with SFH inventory: ${states.map(s => s.code).join(', ')}`);
 
+      const totalStates = states.length;
+      const startOffset = totalStates > 0 ? (this.stateOffset % totalStates) : 0;
+      const targetStates = totalStates > this.maxStates ? states.slice(startOffset, startOffset + this.maxStates) : states;
+      let deadlineStopped = false;
+
       // 2. POST a search for each state → parse the summary table.
       const listings = [];
+      const attemptedStatesList = [];
       const completedStates = [];
       const completedStateOptions = [];
       const failures = [];
       let sourceRows = 0;
       let malformedRows = 0;
-      for (const { code, state } of states) {
+      for (const { code, state } of targetStates) {
+        if (deadlineAt && Date.now() >= deadlineAt - 1800) {
+          deadlineStopped = true;
+          break;
+        }
+        attemptedStatesList.push(state);
         try {
           const rows = await this.searchState(code);
           sourceRows += rows.length;
@@ -88,14 +121,20 @@ class UsdaResalesScraper extends BaseScraper {
         }
       }
 
+      const nextIndex = startOffset + attemptedStatesList.length;
+      const partialSweep = deadlineStopped || (targetStates.length < totalStates) || (attemptedStatesList.length < targetStates.length);
+      const nextContinuationToken = partialSweep && totalStates > 0 ? String(nextIndex % totalStates) : null;
+      this.stateOffset = nextContinuationToken ? Number(nextContinuationToken) : 0;
+
       this.lastRunReport = {
         outcome: failures.length ? 'partial_failure' : listings.length ? 'success' : 'empty',
         scope: this.getCollectionScope(),
         statesDiscovered: states.length,
         discoveredStates: states.map(({ state }) => state),
         discoveredStateOptions: states.map(({ code }) => code),
-        attemptedStates: states.map(({ state }) => state),
+        attemptedStates: attemptedStatesList,
         statesCompleted: completedStates,
+        completedStates,
         completedStateOptions,
         statesFailed: failures.length,
         sourceRows,
@@ -104,9 +143,12 @@ class UsdaResalesScraper extends BaseScraper {
         recordsEmitted: listings.length,
         recordsRejected: malformedRows,
         failures,
-        complete: failures.length === 0,
-        fullSweepComplete: failures.length === 0,
-        truncated: false,
+        complete: failures.length === 0 && !partialSweep,
+        fullSweepComplete: failures.length === 0 && !partialSweep,
+        partialSweep,
+        truncated: partialSweep,
+        nextContinuationToken,
+        nextCursor: nextContinuationToken,
         fixtureFallbackUsed: false,
         scrapling: this.useScrapling
           ? {
@@ -161,6 +203,12 @@ class UsdaResalesScraper extends BaseScraper {
           this.lastRunReport.outcome = 'empty';
         }
       }
+      Object.defineProperties(standardized, {
+        partialSweep: { value: partialSweep, enumerable: false, writable: true, configurable: true },
+        nextContinuationToken: { value: nextContinuationToken, enumerable: false, writable: true, configurable: true },
+        nextCursor: { value: nextContinuationToken, enumerable: false, writable: true, configurable: true },
+        report: { value: this.lastRunReport, enumerable: false, writable: true, configurable: true },
+      });
       return standardized;
     });
   }
@@ -177,7 +225,9 @@ class UsdaResalesScraper extends BaseScraper {
         const code = o[1].trim();
         const publisherLabel = this.text(o[2]);
         const label = publisherLabel.replace(/\s*\(\d+\)\s*$/, '').trim();
-        const state = STATE_NAME_TO_CODE[label] || (/^[A-Z]{2}$/.test(label) && USDA_JURISDICTIONS.has(label) ? label : null);
+        const labelUpper = label.toUpperCase();
+        const stateEntry = Object.entries(STATE_NAME_TO_CODE).find(([k]) => k.toLowerCase() === label.toLowerCase());
+        const state = STATE_NAME_TO_CODE[label] || (stateEntry ? stateEntry[1] : null) || (/^[A-Z]{2}$/.test(labelUpper) && USDA_JURISDICTIONS.has(labelUpper) ? labelUpper : null);
         if (!/^\d{1,3}$/.test(code) || !state) {
           throw new UsdaScrapeError(`USDA SFH search page exposed an unrecognized jurisdiction option (${code || 'empty'}: ${publisherLabel || 'empty'})`, 'USDA_SEARCH_SCHEMA_UNRECOGNIZED');
         }
@@ -247,17 +297,17 @@ class UsdaResalesScraper extends BaseScraper {
   parseSummaryTable(html) {
     const m = String(html || '').match(/<table[^>]*id\s*=\s*["']propertySummariesTable["'][^>]*>([\s\S]*?)<\/table>/i);
     if (!m) throw new UsdaScrapeError('USDA SFH state response has no property summary table', 'USDA_RESULT_SCHEMA_UNRECOGNIZED');
-    const rows = [...m[1].matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/g)].map(r => r[1]);
+    const rows = [...m[1].matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)].map(r => r[1]);
     // Skip the header row (first row). Each data row has 11 cells.
-    return rows.slice(1).map(rowHtml => [...rowHtml.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)].map(c => c[1]));
+    return rows.slice(1).map(rowHtml => [...rowHtml.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(c => c[1]));
   }
 
   rowToListing(cells) {
     if (!cells || cells.length < 11) return null;
 
     // cell[0]: <img src="..."> + <a href="/resales/public/SFHPropertyDetail?id=N&...">
-    const photoMatch = cells[0].match(/src="([^"]+)"/);
-    const detailMatch = cells[0].match(/href="([^"]*SFHPropertyDetail[^"]*)"/);
+    const photoMatch = cells[0].match(/src=["']([^"']+)["']/i);
+    const detailMatch = cells[0].match(/href=["']([^"']*SFHPropertyDetail[^"']*)["']/i);
 
     const listingType = this.text(cells[1]); // REO Property | Foreclosure
     const address = this.text(cells[2]).replace(/\s*Map\s*$/, '').trim();
@@ -270,7 +320,9 @@ class UsdaResalesScraper extends BaseScraper {
     const baths = this.firstInt(cells[9]);
     const sqft = this.firstInt(cells[10]);
 
-    const state = STATE_NAME_TO_CODE[stateName] || null;
+    const stateEntry = Object.entries(STATE_NAME_TO_CODE).find(([k]) => k.toLowerCase() === stateName.toLowerCase());
+    const stateUpper = stateName.toUpperCase();
+    const state = STATE_NAME_TO_CODE[stateName] || (stateEntry ? stateEntry[1] : null) || (/^[A-Z]{2}$/.test(stateUpper) && USDA_JURISDICTIONS.has(stateUpper) ? stateUpper : null);
     if (!state || !/^\d/.test(address)) return null;
 
     const detailHref = detailMatch ? detailMatch[1].replace(/&amp;/g, '&') : null;

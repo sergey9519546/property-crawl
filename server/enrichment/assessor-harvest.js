@@ -195,7 +195,7 @@ async function harvestAssessorRolls(listings, options = {}) {
   const fetchFn = options.fetchFn || globalThis.fetch;
   const customQueryFn = typeof options.queryFn === 'function' ? options.queryFn : null;
   const limit = resolveHarvestLimit(options);
-  const cachePath = options.cachePath || DEFAULT_CACHE_PATH;
+  const cachePath = options.cachePath || process.env.PROPERTY_ASSESSOR_CACHE_PATH || ((process.env.VERCEL === '1' || process.env.NOW_REGION) ? path.join(require('node:os').tmpdir(), 'property-crawl-cache', 'assessor-roll.json') : DEFAULT_CACHE_PATH);
   const cacheTtlMs = Number.isFinite(options.cacheTtlMs) ? options.cacheTtlMs : DEFAULT_CACHE_TTL_MS;
   const missTtlMs = Number.isFinite(options.missTtlMs) ? options.missTtlMs : DEFAULT_MISS_TTL_MS;
   const wallClock = typeof options.wallClock === 'function' ? options.wallClock : Date.now;

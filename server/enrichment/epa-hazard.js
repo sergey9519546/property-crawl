@@ -62,11 +62,12 @@ function hashCoords(coords, radiusMiles = 0.25) {
   return crypto.createHash('sha256').update(`${coords.lat},${coords.lng},${radiusMiles}`).digest('hex').slice(0, 32);
 }
 
-function loadCache(cachePath = DEFAULT_CACHE_PATH) {
+const resolveDefaultCachePath = () => process.env.PROPERTY_HAZARD_CACHE_DIR ? path.join(process.env.PROPERTY_HAZARD_CACHE_DIR, 'epa-hazard-cache.json') : ((process.env.VERCEL === '1' || process.env.NOW_REGION) ? path.join(require('node:os').tmpdir(), 'property-crawl-cache', 'hazards', 'epa-hazard-cache.json') : DEFAULT_CACHE_PATH);
+function loadCache(cachePath = resolveDefaultCachePath()) {
   return loadJsonDiskCache(cachePath);
 }
 
-function saveCache(cache, cachePath = DEFAULT_CACHE_PATH) {
+function saveCache(cache, cachePath = resolveDefaultCachePath()) {
   saveJsonDiskCache(cache, cachePath);
 }
 
@@ -182,7 +183,7 @@ async function queryEpaHazards({
   lat,
   lng,
   radiusMiles = 0.25,
-  cachePath = DEFAULT_CACHE_PATH,
+  cachePath = resolveDefaultCachePath(),
   fetchFn = globalThis.fetch,
   timeoutMs = 8000,
   now = Date.now()

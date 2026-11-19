@@ -59,7 +59,7 @@ async function resolveNjCadastralBatch({ db, fetchFn, now, limit = 15, perStateL
   if (!db || typeof db.getListings !== 'function' || typeof db.createListing !== 'function' || limit <= 0) {
     return out;
   }
-  const effectiveCachePath = cachePath || DEFAULT_CACHE_PATH;
+  const effectiveCachePath = cachePath || process.env.PROPERTY_ASSESSOR_CACHE_PATH || ((process.env.VERCEL === '1' || process.env.NOW_REGION) ? path.join(require('node:os').tmpdir(), 'property-crawl-cache', 'assessor-roll.json') : DEFAULT_CACHE_PATH);
   const cache = loadCache(effectiveCachePath);
   const cacheTtlMs = DEFAULT_CACHE_TTL_MS;
   const missTtlMs = DEFAULT_MISS_TTL_MS;

@@ -361,9 +361,10 @@ function matchedReconsiderationConditions(item, trigger = {}, timestamp = null) 
     if (condition.operator === 'bid_to_assessed_lte') {
       if (trigger.type !== 'origin') return false;
       const currentBid = item.listingSnapshot?.openingBid;
-      const assessed = item.listingSnapshot?.assessedValue ?? item.listingSnapshot?.assessed ??
-        Number(item.dossierSnapshot?.publicRecords?.parcel?.assessedValue?.total) ??
-        Number(item.dossierSnapshot?.publicRecords?.parcel?.properties?.assessedValue);
+      const assessed = [item.listingSnapshot?.assessedValue, item.listingSnapshot?.assessed, item.dossierSnapshot?.publicRecords?.parcel?.assessedValue?.total, item.dossierSnapshot?.publicRecords?.parcel?.properties?.assessedValue].map((v) => (v === null || v === undefined || v === '' ? NaN : Number(v))).find((n) => Number.isFinite(n) && n > 0) ?? NaN;
+      // positive finite assessed lookup above
+      // fallback resolved above in rawAssessed
+      // keep NaN short-circuit guard intact
       if (typeof currentBid !== 'number' || !Number.isFinite(assessed) || assessed <= 0) return false;
       const ratioPct = (currentBid / assessed) * 100;
       return ratioPct - 1e-9 <= condition.value;

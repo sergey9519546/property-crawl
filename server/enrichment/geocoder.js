@@ -31,14 +31,15 @@ function hashAddress(address) {
 /**
  * Loads the disk cache safely.
  */
-function loadCache(cachePath = DEFAULT_CACHE_PATH) {
+const resolveDefaultCachePath = () => process.env.PROPERTY_GEOCODER_CACHE_PATH || ((process.env.VERCEL === '1' || process.env.NOW_REGION) ? path.join(require('node:os').tmpdir(), 'property-crawl-cache', 'geocoding-cache.json') : DEFAULT_CACHE_PATH);
+function loadCache(cachePath = resolveDefaultCachePath()) {
   return loadJsonDiskCache(cachePath);
 }
 
 /**
  * Saves cache entry safely to disk.
  */
-function saveCache(cache, cachePath = DEFAULT_CACHE_PATH) {
+function saveCache(cache, cachePath = resolveDefaultCachePath()) {
   saveJsonDiskCache(cache, cachePath);
 }
 
@@ -91,7 +92,7 @@ async function geocodeAddress(address, options = {}) {
   const norm = normalizeAddress(address);
   if (!norm) return null;
 
-  const cachePath = options.cachePath || DEFAULT_CACHE_PATH;
+  const cachePath = options.cachePath || resolveDefaultCachePath();
   const hash = hashAddress(norm);
 
   // 1. Check local cache
