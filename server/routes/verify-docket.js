@@ -1,5 +1,6 @@
 const db = require('../db/client');
 const Validator = require('../security/validation');
+const { requireWorkspaceIdentity } = require('../security/workspace-identity');
 const { CourtListenerScraper } = require('../scrapers/courtlistener');
 
 function cleanText(value, maxLength = 240) {
@@ -68,6 +69,203 @@ function isMatchingDocketCandidate(candidate, { caseNumber, defendant, address }
   return addrTokens.length >= 2 && addrTokens.every((t) => haystack.includes(t));
 }
 
+function parseRawPayload(raw) {
+  if (!raw) return {};
+  if (typeof raw === 'object') return raw;
+  try {
+    return JSON.parse(String(raw));
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Extracts a strictly non-PII docket classification from a CourtListener candidate
+ * or pre-normalized docket hit. Personal names (caseName, defendant, plaintiff,
+ * party, attorney) are never included in the returned object.
+ */
+function classifyDocketCandidate(candidate, checkedAt = new Date().toISOString()) {
+  if (!candidate || typeof candidate !== 'object') return null;
+  const sourceFacts = candidate.provenance?.sourceFacts || {};
+  const rawObj = parseRawPayload(candidate.raw);
+  const courtId = cleanText(candidate.courtId || rawObj.court_id || sourceFacts.courtId || '', 24).toLowerCase() || null;
+  const courtName = cleanText(candidate.courtName || rawObj.court || sourceFacts.courtName || '', 160) || null;
+  const caseNumber = cleanText(
+    sourceFacts.caseNumber || candidate.caseNumber || rawObj.docketNumber || candidate.docketNumber || '',
+    80
+  ) || null;
+  const dateFiled = cleanText(candidate.dateFiled || rawObj.dateFiled || sourceFacts.dateFiled || '', 32) || null;
+  const dateTerminated = cleanText(candidate.dateTerminated || rawObj.dateTerminated || sourceFacts.dateTerminated || '', 32) || null;
+  const suitNature = cleanText(candidate.suitNature || rawObj.suitNature || '', 160);
+  const cause = cleanText(candidate.cause || rawObj.cause || '', 160);
+  const chapterSource = `${suitNature} ${cause} ${candidate.chapter || ''} ${rawObj.caseName || ''} ${candidate.address || ''}`;
+  const chapterMatch = chapterSource.match(/\bchapter\s*(7|11|12|13)\b/i);
+  const chapter = candidate.chapter ? cleanText(candidate.chapter, 8) : (chapterMatch ? chapterMatch[1] : null);
+  const isBankruptcyCourt = Boolean(courtId && /^[a-z]{2,4}b$/i.test(courtId));
+  const isBankruptcyText = /(?:bankruptcy|chapter\s*(?:7|11|12|13)|11\s*u\.?s\.?c\.?\s*§?\s*362|title\s*11)/i.test(
+    `${suitNature} ${cause} ${sourceFacts.documents?.[0]?.label || ''}`
+  );
+  const isBankruptcy = typeof candidate.isBankruptcy === 'boolean'
+    ? candidate.isBankruptcy
+    : (isBankruptcyCourt || isBankruptcyText || Boolean(chapter));
+  const isActive = typeof candidate.isActive === 'boolean'
+    ? candidate.isActive
+    : !dateTerminated;
+  const docketIdNum = Number(candidate.docketId || rawObj.docket_id);
+  const docketId = Number.isInteger(docketIdNum) && docketIdNum > 0 ? docketIdNum : null;
+  const sourceUrl = cleanText(candidate.sourceUrl || candidate.provenance?.exactSourceUrl || '', 500) || null;
+  const observedAt = cleanText(candidate.sourceObservedAt || candidate.observedAt || checkedAt, 64) || null;
+
+  return {
+    docketId,
+    caseNumber,
+    courtId,
+    courtName,
+    dateFiled,
+    dateTerminated,
+    isBankruptcy,
+    chapter,
+    isActive,
+    sourceUrl,
+    observedAt,
+  };
+}
+
+/**
+ * Aggregates classified docket hits into a non-PII summary safe for public routes.
+ */
+function summarizeDocketHits(dockets = [], { checkedAt = new Date().toISOString(), lookupExecuted = false } = {}) {
+  const safeDockets = (Array.isArray(dockets) ? dockets : [])
+    .map((d) => classifyDocketCandidate(d, checkedAt))
+    .filter(Boolean);
+
+  const bankruptcyDockets = safeDockets.filter((d) => d.isBankruptcy);
+  const activeBankruptcyCount = bankruptcyDockets.filter((d) => d.isActive).length;
+  const terminatedBankruptcyCount = bankruptcyDockets.length - activeBankruptcyCount;
+
+  let status = 'not_checked';
+  if (activeBankruptcyCount > 0) {
+    status = 'active_bankruptcy_docket';
+  } else if (bankruptcyDockets.length > 0) {
+    status = 'terminated_bankruptcy_docket';
+  } else if (safeDockets.length > 0) {
+    status = 'civil_docket_match';
+  } else if (lookupExecuted) {
+    status = 'no_docket_hits';
+  }
+
+  return {
+    status,
+    checkedAt,
+    lookupExecuted: Boolean(lookupExecuted),
+    hitCount: safeDockets.length,
+    bankruptcyHitCount: bankruptcyDockets.length,
+    activeBankruptcyCount,
+    terminatedBankruptcyCount,
+    hasBankruptcyHit: bankruptcyDockets.length > 0,
+    activeBankruptcyStaySignal: activeBankruptcyCount > 0,
+    dockets: safeDockets,
+  };
+}
+
+/**
+ * Shared docket evidence + CourtListener lookup helper usable by both
+ * `/api/verify-docket` and intelligence pipelines.
+ */
+async function auditDocketEvidence(listing = null, options = {}) {
+  const checkedAt = options.checkedAt || new Date().toISOString();
+  const address = cleanText(options.address || listing?.address, 240);
+  const county = cleanText(options.county || listing?.county, 120);
+  const state = cleanText(options.state || listing?.state, 2).toUpperCase();
+  const attachedCaseNumber = cleanText(
+    options.caseNumber || listing?.caseNumber || listing?.provenance?.sourceFacts?.caseNumber || '',
+    80
+  ) || null;
+
+  const officialEvidence = collectAttachedDocketEvidence(listing, checkedAt);
+  const logs = address
+    ? [`[${checkedAt.slice(11, 19)}] Evidence audit opened for ${address}.`]
+    : [];
+
+  if (officialEvidence.length > 0) {
+    logs.push(`[${checkedAt.slice(11, 19)}] Attached ${officialEvidence.length} publisher docket/notice reference(s) from listing provenance.`);
+  }
+
+  const lookupEnabled = Boolean(options.courtlistenerClient)
+    || Boolean(options.lookup)
+    || (options.env?.COURTLISTENER_VERIFY_DOCKET || process.env.COURTLISTENER_VERIFY_DOCKET) === '1';
+
+  let caseNumber = attachedCaseNumber;
+  const matchedDockets = [];
+  let lookupExecuted = false;
+
+  if (lookupEnabled && (address || attachedCaseNumber)) {
+    lookupExecuted = true;
+    const queryTerm = attachedCaseNumber
+      || cleanText(listing?.defendant, 100)
+      || `${address} ${county} ${state}`.trim();
+    const client = options.courtlistenerClient || new CourtListenerScraper({
+      query: queryTerm,
+      maxRecords: 5,
+      requestTimeoutMs: 6000
+    });
+    logs.push(`[${checkedAt.slice(11, 19)}] Querying CourtListener index for "${queryTerm}".`);
+    try {
+      const candidates = await client.scrapeFeed();
+      const matched = (Array.isArray(candidates) ? candidates : []).filter((c) =>
+        isMatchingDocketCandidate(c, {
+          caseNumber: attachedCaseNumber,
+          defendant: listing?.defendant,
+          address
+        })
+      );
+      for (const candidate of matched) {
+        const classified = classifyDocketCandidate(candidate, checkedAt);
+        if (classified) matchedDockets.push(classified);
+
+        const evidenceUrl = cleanText(candidate.sourceUrl || candidate.provenance?.exactSourceUrl || '', 500);
+        if (!evidenceUrl || officialEvidence.some((e) => e.url === evidenceUrl)) continue;
+        if (!caseNumber) {
+          const matchedCase = cleanText(candidate.provenance?.sourceFacts?.caseNumber || candidate.caseNumber || '', 80);
+          if (matchedCase) caseNumber = matchedCase;
+        }
+        const fallbackLabel = classified?.isBankruptcy
+          ? (caseNumber ? `CourtListener bankruptcy docket ${caseNumber}` : 'CourtListener federal bankruptcy docket')
+          : (caseNumber ? `CourtListener docket ${caseNumber}` : 'CourtListener federal docket');
+        officialEvidence.push({
+          label: cleanText(
+            candidate.provenance?.sourceFacts?.documents?.[0]?.label || fallbackLabel,
+            180
+          ),
+          url: evidenceUrl,
+          fetchedAt: cleanText(candidate.sourceObservedAt || checkedAt, 64)
+        });
+      }
+      logs.push(
+        matched.length > 0
+          ? `[${checkedAt.slice(11, 19)}] Matched ${matched.length} CourtListener federal docket record(s).`
+          : `[${checkedAt.slice(11, 19)}] No matching CourtListener federal docket record found.`
+      );
+    } catch (err) {
+      logs.push(`[${checkedAt.slice(11, 19)}] CourtListener lookup failed cleanly (${cleanText(err?.message || 'error', 120)}).`);
+    }
+  }
+
+  const docketSummary = summarizeDocketHits(matchedDockets, { checkedAt, lookupExecuted });
+
+  return {
+    checkedAt,
+    address,
+    county,
+    state,
+    caseNumber,
+    officialEvidence,
+    matchedDockets,
+    docketSummary,
+    logs,
+  };
+}
+
 /**
  * Fail-closed docket evidence audit.
  *
@@ -110,90 +308,46 @@ async function handleVerifyDocket(req, res, options = {}) {
     });
   }
 
-  const checkedAt = new Date().toISOString();
-  const attachedCaseNumber = cleanText(
-    params.caseNumber || listing?.caseNumber || listing?.provenance?.sourceFacts?.caseNumber || '',
-    80
-  ) || null;
-  const officialEvidence = collectAttachedDocketEvidence(listing, checkedAt);
-  const logs = [
-    `[${checkedAt.slice(11, 19)}] Evidence audit opened for ${address}.`
-  ];
-
-  if (officialEvidence.length > 0) {
-    logs.push(`[${checkedAt.slice(11, 19)}] Attached ${officialEvidence.length} publisher docket/notice reference(s) from listing provenance.`);
-  }
-
   const lookupRequested = params.lookup === true || params.lookup === 'true' || params.lookup === '1';
-  const lookupEnabled = Boolean(options.courtlistenerClient)
-    || lookupRequested
-    || process.env.COURTLISTENER_VERIFY_DOCKET === '1';
+  const audit = await auditDocketEvidence(listing, {
+    address,
+    county,
+    state,
+    caseNumber: params.caseNumber,
+    lookup: lookupRequested,
+    courtlistenerClient: options.courtlistenerClient,
+    env: options.env || process.env,
+  });
 
-  let caseNumber = attachedCaseNumber;
-  if (lookupEnabled) {
-    const queryTerm = attachedCaseNumber
-      || cleanText(listing?.defendant, 100)
-      || `${address} ${county} ${state}`;
-    const client = options.courtlistenerClient || new CourtListenerScraper({
-      query: queryTerm,
-      maxRecords: 5,
-      requestTimeoutMs: 6000
-    });
-    logs.push(`[${checkedAt.slice(11, 19)}] Querying CourtListener index for "${queryTerm}".`);
-    try {
-      const candidates = await client.scrapeFeed();
-      const matched = (Array.isArray(candidates) ? candidates : []).filter((c) =>
-        isMatchingDocketCandidate(c, {
-          caseNumber: attachedCaseNumber,
-          defendant: listing?.defendant,
-          address
-        })
-      );
-      for (const candidate of matched) {
-        const evidenceUrl = cleanText(candidate.sourceUrl || candidate.provenance?.exactSourceUrl || '', 500);
-        if (!evidenceUrl || officialEvidence.some((e) => e.url === evidenceUrl)) continue;
-        if (!caseNumber) {
-          const matchedCase = cleanText(candidate.provenance?.sourceFacts?.caseNumber || candidate.caseNumber || '', 80);
-          if (matchedCase) caseNumber = matchedCase;
-        }
-        officialEvidence.push({
-          label: cleanText(
-            candidate.provenance?.sourceFacts?.documents?.[0]?.label
-              || (caseNumber ? `CourtListener docket ${caseNumber}` : 'CourtListener federal docket'),
-            180
-          ),
-          url: evidenceUrl,
-          fetchedAt: cleanText(candidate.sourceObservedAt || checkedAt, 64)
-        });
-      }
-      logs.push(
-        matched.length > 0
-          ? `[${checkedAt.slice(11, 19)}] Matched ${matched.length} CourtListener federal docket record(s).`
-          : `[${checkedAt.slice(11, 19)}] No matching CourtListener federal docket record found.`
-      );
-    } catch (err) {
-      logs.push(`[${checkedAt.slice(11, 19)}] CourtListener lookup failed cleanly (${cleanText(err?.message || 'error', 120)}).`);
-    }
-  }
+  const { checkedAt, officialEvidence, docketSummary, logs } = audit;
+  let { caseNumber } = audit;
 
   const missingEvidence = [
     ...(officialEvidence.length === 0 ? ['Official court docket response'] : []),
     'Recorded lien and mortgage instruments',
     'County tax balance statement',
-    'Bankruptcy-stay search result'
+    ...(docketSummary.lookupExecuted ? [] : ['Bankruptcy-stay search result'])
   ];
 
   const hasPartialDocket = officialEvidence.length > 0;
   const verificationState = hasPartialDocket ? 'partial_docket_evidence' : 'official_source_required';
-  const statusReason = hasPartialDocket
-    ? 'Partial court/notice evidence is attached, but recorded lien instruments, county tax balance, and live bankruptcy-stay clearance remain unverified.'
-    : 'No official court, recorder, treasurer, or bankruptcy connector is configured for this jurisdiction.';
+  const statusReason = docketSummary.activeBankruptcyStaySignal
+    ? 'CourtListener matched an active federal bankruptcy docket (potential 11 U.S.C. § 362 automatic stay), while recorded lien instruments and county tax balance remain unverified.'
+    : hasPartialDocket
+      ? 'Partial court/notice evidence is attached, but recorded lien instruments, county tax balance, and live bankruptcy-stay clearance remain unverified.'
+      : 'No official court, recorder, treasurer, or bankruptcy connector is configured for this jurisdiction.';
 
   if (!hasPartialDocket) {
     logs.push(`[${checkedAt.slice(11, 19)}] No official ${county} County court response is attached.`);
   }
   logs.push(`[${checkedAt.slice(11, 19)}] No recorder, tax, or full title clearance evidence was received.`);
   logs.push(`[${checkedAt.slice(11, 19)}] Result remains UNVERIFIED. No legal conclusion was generated.`);
+
+  // Gate personal-name / PII fields behind workspace authorization
+  const env = options.env || process.env;
+  const authorized = typeof requireWorkspaceIdentity.isAuthorized === 'function'
+    ? requireWorkspaceIdentity.isAuthorized(req, env)
+    : false;
 
   return res.status(200).json({
     verified: false,
@@ -202,19 +356,21 @@ async function handleVerifyDocket(req, res, options = {}) {
     address,
     county,
     state,
-    caseNumber: hasPartialDocket || attachedCaseNumber ? caseNumber : null,
+    caseNumber: hasPartialDocket || caseNumber ? caseNumber : null,
     status: 'unverified',
     statusReason,
     openingBid: listing?.openingBid ?? null,
     saleDate: listing?.saleDate ?? null,
-    plaintiff: listing?.plaintiff ?? null,
-    defendant: listing?.defendant ?? null,
+    plaintiff: authorized ? (listing?.plaintiff ?? null) : null,
+    defendant: authorized ? (listing?.defendant ?? null) : null,
+    piiGated: !authorized,
     titleIntegrity: hasPartialDocket
       ? 'PARTIAL DOCKET REFERENCE ONLY — official title, tax & lien clearance required'
       : 'UNVERIFIED — official title evidence required',
     seniorLien: null,
     taxDelinquency: null,
     redemptionWindow: null,
+    docketSummary,
     officialEvidence,
     missingEvidence,
     logs,
@@ -230,3 +386,6 @@ ${statusReason} Confirm every legal fact directly with the relevant government o
 }
 
 module.exports = handleVerifyDocket;
+module.exports.auditDocketEvidence = auditDocketEvidence;
+module.exports.summarizeDocketHits = summarizeDocketHits;
+module.exports.classifyDocketCandidate = classifyDocketCandidate;

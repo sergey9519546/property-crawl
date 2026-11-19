@@ -13,6 +13,7 @@
 
 const db = require('../db/client');
 const { computePortfolioDashboard } = require('../intelligence/portfolio-dashboard');
+const { optimizeEscrowAllocation } = require('../intelligence/escrow-optimizer');
 const { requireUserIdentity } = require('../security/workspace-identity');
 
 function defaultIdentity(req, res) {
@@ -87,6 +88,12 @@ function createPortfolioDashboardHandler(dependencies = {}) {
 
     const upcomingWindowDays = boundedInt(url.searchParams.get('upcomingWindowDays'), 30, 1, 180);
     const upcomingLimit = boundedInt(url.searchParams.get('upcomingLimit'), 5, 0, 50);
+    const rawCapital = url.searchParams.get('capital');
+    const capitalNum = rawCapital !== null && rawCapital !== '' ? Number(rawCapital) : null;
+    const hasCapital = Number.isFinite(capitalNum) && capitalNum >= 0;
+    const allowRecycling = url.searchParams.get('allowRecycling') !== 'false';
+    const rawSortBy = url.searchParams.get('sortBy');
+    const sortBy = ['priority', 'chronological', 'bidding_power'].includes(rawSortBy) ? rawSortBy : 'priority';
 
     const savedListings = await loadSavedListings(database, userId);
     const dashboard = computePortfolioDashboard(savedListings, {
@@ -95,11 +102,15 @@ function createPortfolioDashboardHandler(dependencies = {}) {
       upcomingLimit,
       nowMs: now()
     });
+    const escrowAllocation = hasCapital
+      ? optimizeEscrowAllocation(savedListings, capitalNum, { allowRecycling, sortBy })
+      : null;
 
     res.setHeader('Cache-Control', 'no-store');
     return res.json({
-      schema: 'property-crawl.portfolio-dashboard/v1',
-      ...serializeDashboard(dashboard)
+      schema: "property-crawl.portfolio-dashboard/v1",
+      ...serializeDashboard(dashboard),
+      ...(escrowAllocation ? { escrowAllocation } : {}),
     });
   };
 }

@@ -364,9 +364,118 @@ function evaluateAuctionProceedProbability(listing = {}, countyStats = null) {
   };
 }
 
+function medianNumber(values) {
+  if (!Array.isArray(values) || values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0
+    ? Number(((sorted[mid - 1] + sorted[mid]) / 2).toFixed(2))
+    : sorted[mid];
+}
+
+function parseSaleDateMs(row) {
+  const raw = row?.sale_date ?? row?.saleDate ?? row?.fields?.saleDate ?? null;
+  if (!raw) return null;
+  const ms = raw instanceof Date ? raw.getTime() : Date.parse(String(raw).slice(0, 10));
+  return Number.isFinite(ms) ? ms : null;
+}
+
+/**
+ * Aggregates raw `source_observations` rows / snapshots per (state, county) into
+ * `countyStats` (clearing rate, postponement rate, median postponements) suitable
+ * for `evaluateAuctionProceedProbability()`.
+ *
+ * @param {Array<object>} observations
+ * @param {object} [options={}]
+ * @returns {object}
+ */
+function aggregateCountyObservationStats(observations = [], options = {}) {
+  const targetState = options.state ? String(options.state).trim().toUpperCase() : null;
+  const targetCounty = options.county ? String(options.county).trim().toLowerCase() : null;
+  const minSample = Number.isFinite(options.minSample) && options.minSample > 0 ? options.minSample : 1;
+
+  const matchingRows = (Array.isArray(observations) ? observations : []).filter((row) => {
+    if (!row || typeof row !== 'object') return false;
+    const rowState = String(row.state || row.raw_payload?.state || '').trim().toUpperCase();
+    const rowCounty = String(row.county || row.raw_payload?.county || '').trim().toLowerCase();
+    if (targetState && rowState !== targetState) return false;
+    if (targetCounty && rowCounty !== targetCounty) return false;
+    return true;
+  });
+
+  if (matchingRows.length === 0) {
+    return {
+      ...calculateDocketClearingAnalytics([], { minSample }),
+      state: targetState,
+      county: options.county ? String(options.county).trim() : null,
+      medianPostponements: null,
+      totalObservations: 0,
+      uniqueRecords: 0,
+    };
+  }
+
+  const groups = new Map();
+  matchingRows.forEach((row, idx) => {
+    const src = row.source_key || row.source || 'src';
+    const rec = row.record_id || row.recordId || row.listing_id || row.listingId || `row_${idx}`;
+    const key = `${src}::${rec}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(row);
+  });
+
+  const terminalEvents = [];
+  const postponementCounts = [];
+
+  for (const group of groups.values()) {
+    group.sort((a, b) => {
+      const ta = Date.parse(a.observed_at || a.observedAt || 0) || 0;
+      const tb = Date.parse(b.observed_at || b.observedAt || 0) || 0;
+      return ta - tb;
+    });
+
+    let postponements = 0;
+    let prevOutcome = null;
+    let prevSaleMs = null;
+
+    for (const obs of group) {
+      const statusVal = obs.status ?? obs.outcome ?? obs.disposition ?? obs.lifecycleStatus ?? obs.fields?.status ?? '';
+      const outcome = normalizeDocketOutcome(statusVal);
+      const saleMs = parseSaleDateMs(obs);
+
+      if (outcome === 'postponed' && prevOutcome !== 'postponed') {
+        postponements += 1;
+      } else if (prevSaleMs !== null && saleMs !== null && saleMs > prevSaleMs) {
+        postponements += 1;
+      }
+
+      prevOutcome = outcome;
+      if (saleMs !== null) prevSaleMs = saleMs;
+    }
+
+    postponementCounts.push(postponements);
+    const latest = group[group.length - 1];
+    terminalEvents.push({
+      status: latest.status ?? latest.outcome ?? latest.disposition ?? latest.lifecycleStatus ?? latest.fields?.status ?? '',
+      county: latest.county || latest.raw_payload?.county || options.county || null,
+      state: latest.state || latest.raw_payload?.state || targetState || null,
+    });
+  }
+
+  const analytics = calculateDocketClearingAnalytics(terminalEvents, { minSample });
+  return {
+    ...analytics,
+    state: targetState,
+    county: options.county ? String(options.county).trim() : null,
+    medianPostponements: medianNumber(postponementCounts),
+    totalObservations: matchingRows.length,
+    uniqueRecords: groups.size,
+  };
+}
+
 module.exports = {
   DOCKET_OUTCOMES,
   normalizeDocketOutcome,
   calculateDocketClearingAnalytics,
   evaluateAuctionProceedProbability,
+  aggregateCountyObservationStats,
 };
