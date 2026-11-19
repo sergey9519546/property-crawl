@@ -8,41 +8,108 @@ type InventoryResult<T> = { listings: T[]; total: number; truncated: boolean };
 const SHARED_WINDOW_MS = 20_000;
 
 // The hero and the grid both load the whole inventory on mount, and the
-// inventory is ~10,000 records over 10 sequential pages. Without sharing, the
-// home page fetched all of it twice and nothing on the page was usable - not
-// even the hero's market suggestions - until both passes finished.
+// inventory is ~3,500-10,000 records across bounded pages. Without sharing, the
+// home page fetched all of it twice and nothing on the page was usable until
+// both passes finished.
 //
 // Keyed on the fetch implementation so a caller supplying its own fetch (tests,
 // isolated runs) never receives another implementation's result.
 const shared = new WeakMap<typeof fetch, { result: Promise<InventoryResult<any>>; settledAt: number }>();
 
-// Load every bounded API page before replacing the visible inventory. A failed
-// refresh must not silently replace an already useful feed with demo records.
-async function loadPages<T extends RecordIdentity>(fetchImpl: typeof fetch, signal?: AbortSignal): Promise<InventoryResult<T>> {
-  const records = new Map<string, T>();
-  const pageSize = 250;
-  const maxPages = 40;
-  let total = 0;
-  let offset = 0;
-  for (let page = 0; page < maxPages; page++) {
-    const response = await fetchImpl(`/api/listings?limit=${pageSize}&offset=${offset}`, {
-      cache: "no-store", signal: signal || AbortSignal.timeout(15_000),
-    });
-    const payload = await response.json().catch(() => null);
-    if (!response.ok || !Array.isArray(payload?.listings)) throw new Error("Inventory could not be refreshed. Your last loaded records are retained.");
-    total = Number.isSafeInteger(payload.total) && payload.total >= 0 ? payload.total : payload.listings.length;
-    for (const record of payload.listings) {
-      if (!record || typeof record.id !== "string" || !record.id) throw new Error("Invalid inventory record");
-      records.set(record.id, record as T);
-    }
-    offset += payload.listings.length;
-    if (offset >= total) return { listings: [...records.values()], total, truncated: false };
-    if (!payload.listings.length) throw new Error("Inventory changed during pagination. Refresh to retry.");
-    if (typeof window !== "undefined") {
-      await new Promise((resolve) => window.setTimeout(resolve, 40));
+async function fetchListingPage<T extends RecordIdentity>(
+  fetchImpl: typeof fetch,
+  limit: number,
+  offset: number,
+  signal?: AbortSignal,
+): Promise<{ listings: T[]; total: number }> {
+  const response = await fetchImpl(`/api/listings?limit=${limit}&offset=${offset}`, {
+    cache: "no-store",
+    signal: signal || AbortSignal.timeout(15_000),
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok || !Array.isArray(payload?.listings)) {
+    throw new Error("Inventory could not be refreshed. Your last loaded records are retained.");
+  }
+  const total = Number.isSafeInteger(payload.total) && payload.total >= 0
+    ? payload.total
+    : payload.listings.length;
+  for (const record of payload.listings) {
+    if (!record || typeof record.id !== "string" || !record.id) {
+      throw new Error("Invalid inventory record");
     }
   }
-  return { listings: [...records.values()], total, truncated: true };
+  return { listings: payload.listings as T[], total };
+}
+
+// Load every bounded API page before settling the shared inventory. A failed
+// refresh must not silently replace an already useful feed with demo records.
+// Page 0 loads first (~2.3 MB at 500 rows, safely under Vercel's 4.5 MB cap)
+// and emits a progress event on initial loads so the grid renders immediately
+// while remaining pages fetch in parallel batches.
+async function loadPages<T extends RecordIdentity>(
+  fetchImpl: typeof fetch,
+  signal?: AbortSignal,
+  options: { forceRefresh?: boolean } = {},
+): Promise<InventoryResult<T>> {
+  const records = new Map<string, T>();
+  const pageSize = 500;
+  const maxPages = 20;
+  const concurrency = 4;
+
+  const first = await fetchListingPage<T>(fetchImpl, pageSize, 0, signal);
+  const total = first.total;
+  for (const record of first.listings) {
+    records.set(record.id, record);
+  }
+
+  const step = first.listings.length;
+  if (step >= total) {
+    return { listings: [...records.values()], total, truncated: false };
+  }
+  if (!step) {
+    throw new Error("Inventory changed during pagination. Refresh to retry.");
+  }
+
+  if (typeof window !== "undefined" && !options.forceRefresh) {
+    window.dispatchEvent(
+      new CustomEvent("perfectproperty:inventory-progress", {
+        detail: { listings: [...records.values()], total },
+      }),
+    );
+  }
+
+  const remainingOffsets: number[] = [];
+  for (let offset = step; offset < total && remainingOffsets.length < maxPages - 1; offset += step) {
+    remainingOffsets.push(offset);
+  }
+
+  for (let i = 0; i < remainingOffsets.length; i += concurrency) {
+    const batch = remainingOffsets.slice(i, i + concurrency);
+    const pages = await Promise.all(
+      batch.map((offset) => fetchListingPage<T>(fetchImpl, pageSize, offset, signal)),
+    );
+    for (const page of pages) {
+      if (!page.listings.length) {
+        throw new Error("Inventory changed during pagination. Refresh to retry.");
+      }
+      for (const record of page.listings) {
+        records.set(record.id, record);
+      }
+    }
+    if (typeof window !== "undefined" && !options.forceRefresh && i + concurrency < remainingOffsets.length) {
+      window.dispatchEvent(
+        new CustomEvent("perfectproperty:inventory-progress", {
+          detail: { listings: [...records.values()], total },
+        }),
+      );
+    }
+  }
+
+  const lastScheduledEnd = remainingOffsets.length > 0
+    ? remainingOffsets[remainingOffsets.length - 1] + step
+    : step;
+  const truncated = lastScheduledEnd < total;
+  return { listings: [...records.values()], total, truncated };
 }
 
 export async function loadListingInventory<T extends RecordIdentity>(
@@ -54,7 +121,7 @@ export async function loadListingInventory<T extends RecordIdentity>(
   if (!options.forceRefresh && existing && Date.now() - existing.settledAt < SHARED_WINDOW_MS) {
     return existing.result as Promise<InventoryResult<T>>;
   }
-  const result = loadPages<T>(fetchImpl, signal).then((value) => {
+  const result = loadPages<T>(fetchImpl, signal, options).then((value) => {
     shared.set(fetchImpl, { result: Promise.resolve(value), settledAt: Date.now() });
     return value;
   });

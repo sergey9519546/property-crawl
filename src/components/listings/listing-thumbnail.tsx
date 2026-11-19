@@ -260,7 +260,7 @@ export function ListingThumbnail({ listingId, address, propType, source, photo, 
           style={{ backgroundImage: `url("${placeholder.imageSrc}")` }}
         />
         <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-gradient-to-b from-paper/20 via-paper/55 to-paper/85" />
-        <div className="relative z-10 flex h-full flex-col items-center justify-center gap-2 px-5 py-6 text-center">
+        <div className={layout === "fill" ? "relative z-10 flex h-full flex-col items-center justify-end gap-1.5 px-3 pb-2.5 pt-11 text-center" : "relative z-10 flex h-full flex-col items-center justify-center gap-2 px-5 py-6 text-center"}>
           <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-label font-semibold shadow-sm backdrop-blur-sm ${placeholder.accentClass}`}>
             {placeholder.typeLabel} · Placeholder
           </span>

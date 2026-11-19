@@ -42,6 +42,7 @@ import {
   ArrowRight,
   Map as MapIcon,
   SlidersHorizontal,
+  Loader2,
   RotateCcw,
   X as CloseIcon,
   TrendingUp,
@@ -257,6 +258,26 @@ export function InteractiveTerminal() {
       return () => { cancelled = true; };
     }
     const onEarlyDemand = () => startLoad();
+    const onProgress = (event: Event) => {
+      if (cancelled || hasLoadedInventory.current) return;
+      const detail = (event as CustomEvent<{ listings?: PropertyListing[]; total?: number }>).detail;
+      if (!detail || !Array.isArray(detail.listings) || detail.listings.length === 0) return;
+      setListings(detail.listings);
+      setSyncCount(detail.listings.length);
+      setSyncTotal(Number.isSafeInteger(detail.total) && (detail.total as number) >= detail.listings.length ? (detail.total as number) : detail.listings.length);
+      setObservedCount(detail.listings.filter(isObservedSourceRecord).length);
+    };
+    window.addEventListener("perfectproperty:inventory-progress", onProgress);
+    const feedEl = typeof document !== "undefined" ? document.getElementById("live-feed") : null;
+    const observer = typeof IntersectionObserver !== "undefined" && feedEl
+      ? new IntersectionObserver((entries) => {
+          if (entries.some((entry) => entry.isIntersecting)) {
+            startLoad();
+            observer?.disconnect();
+          }
+        }, { rootMargin: "300px 0px" })
+      : null;
+    observer?.observe(feedEl!);
     window.addEventListener("perfectproperty:search", onEarlyDemand, { once: true });
     // Keep t=0..950ms clear for Hero hydration, shader setup, and initial autocomplete
     // typing before below-the-fold bulk inventory polling begins.
@@ -267,10 +288,12 @@ export function InteractiveTerminal() {
       } else {
         startLoad();
       }
-    }, 950);
+    }, 350);
     return () => {
       cancelled = true;
       window.removeEventListener("perfectproperty:search", onEarlyDemand);
+      window.removeEventListener("perfectproperty:inventory-progress", onProgress);
+      observer?.disconnect();
       window.clearTimeout(timerId);
       if (idleId !== null && typeof w.cancelIdleCallback === "function") w.cancelIdleCallback(idleId);
     };
@@ -1100,7 +1123,9 @@ export function InteractiveTerminal() {
             /* Listings Grid */
             filtered.length === 0 ? (
               <div className="p-12 text-center bg-card rounded-card border border-line shadow-card space-y-4">
-                <SlidersHorizontal className="w-10 h-10 mx-auto text-ink-3" />
+                {!(syncStatus === "loading" || (!hasLoadedInventory.current && syncStatus !== "ready" && syncStatus !== "error")) && (
+                  <SlidersHorizontal className="w-10 h-10 mx-auto text-ink-3" />
+                )}
                 {/* An empty list because the load FAILED is not an empty list
                     because the filters are narrow. Telling the user to adjust
                     their criteria here contradicted the error banner above and
@@ -1111,6 +1136,14 @@ export function InteractiveTerminal() {
                     <p className="text-xs text-ink-3 max-w-md mx-auto">
                       The listing feed did not load, so no properties were available to compare against
                       your criteria. This is a connection or data-mode problem, not a filter problem.
+                    </p>
+                  </>
+                ) : syncStatus === "loading" || (!hasLoadedInventory.current && syncStatus !== "ready") ? (
+                  <>
+                    <Loader2 className="w-8 h-8 mx-auto animate-spin text-ink-3" />
+                    <h3 className="text-lg font-bold text-ink">Loading verified property records…</h3>
+                    <p className="text-xs text-ink-3 max-w-md mx-auto">
+                      Fetching live auction, sheriff, and government disposition inventory.
                     </p>
                   </>
                 ) : (
@@ -1178,7 +1211,7 @@ export function InteractiveTerminal() {
                         <Link href={`/listings/${encodeURIComponent(listing.id)}?returnTo=${encodeURIComponent("/#live-feed")}`} className="block h-full w-full">
                           <ListingThumbnail listingId={listing.id} address={listing.address} propType={listing.propType} source={listing.source} photo={cardPhoto} observed={isObserved} photoProvider={secondaryMedia?.accepted ? secondaryMedia.provider : undefined} photoSourceUrl={secondaryMedia?.accepted ? secondaryMedia.sourceRecordUrl : undefined} />
                         </Link>
-                        <div className="absolute top-3 left-3 flex items-center gap-1.5">
+                        <div className="absolute top-3 left-3 z-20 flex items-center gap-1.5">
                           <span
                             className="text-label font-extrabold uppercase px-2 py-0.5 rounded-md text-white shadow-sm"
                             style={{ backgroundColor: src.color }}
@@ -1196,7 +1229,7 @@ export function InteractiveTerminal() {
                           onClick={(e) => { e.stopPropagation(); toggleSave(listing.id); }}
                           aria-label={isSaved ? `Remove ${listing.address} from watchlist` : `Add ${listing.address} to watchlist`}
                           aria-pressed={isSaved}
-                          className="absolute top-3 right-3 p-1.5 rounded-full bg-card/90 backdrop-blur-md text-ink-2 hover:text-ink shadow"
+                          className="absolute top-3 right-3 z-20 p-1.5 rounded-full bg-card/90 backdrop-blur-md text-ink-2 hover:text-ink shadow"
                         >
                           <Bookmark className={cn("w-4 h-4", isSaved && "fill-ink text-ink")} />
                         </button>
