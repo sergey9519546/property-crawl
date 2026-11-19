@@ -6,9 +6,11 @@
  * Fails closed cleanly when RESEND_API_KEY is unset or invalid.
  */
 
+const { DEFAULT_ALERTS_FROM, DEFAULT_CANONICAL_ORIGIN } = require('../app-origin');
+
 const RESEND_API_URL = 'https://api.resend.com/emails';
-const DEFAULT_FROM = 'PerfectProperty Alerts <alerts@perfectproperty.org>';
-const DEFAULT_BASE_URL = 'https://perfectproperty.org';
+const DEFAULT_FROM = DEFAULT_ALERTS_FROM;
+const DEFAULT_BASE_URL = DEFAULT_CANONICAL_ORIGIN;
 
 function escapeHtml(str) {
   if (str == null) return '';

@@ -11,11 +11,13 @@
  * - Supports dryRun mode for testing and CLI dry-runs
  */
 
+const { DEFAULT_APP_HOST, DEFAULT_CANONICAL_ORIGIN } = require('../app-origin');
+
 const INDEXNOW_ENDPOINT = 'https://api.indexnow.org/indexnow';
 const DEFAULT_TEST_KEY = 'default_test_key';
 const MAX_URLS_PER_CHUNK = 10000;
-const DEFAULT_HOST = 'perfectproperty.org';
-const DEFAULT_SITEMAP_URL = 'https://perfectproperty.org/sitemap.xml';
+const DEFAULT_HOST = DEFAULT_APP_HOST;
+const DEFAULT_SITEMAP_URL = `${DEFAULT_CANONICAL_ORIGIN}/sitemap.xml`;
 const DEFAULT_FETCH_TIMEOUT_MS = 15000;
 
 function resolveDefaultHost(env = process.env) {

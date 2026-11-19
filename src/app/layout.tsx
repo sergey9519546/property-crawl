@@ -64,7 +64,7 @@ export async function generateMetadata(): Promise<Metadata> {
       "off-market",
       "real estate investing",
     ],
-    metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || process.env.PUBLIC_APP_ORIGIN || "https://property-crawl.onrender.com"),
+    metadataBase: new URL((process.env.NEXT_PUBLIC_APP_URL || process.env.PUBLIC_APP_ORIGIN || "https://perfectproperty.bid").replace(/\/+$/, "")),
     alternates: {
       canonical: "/",
     },

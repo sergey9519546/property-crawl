@@ -126,7 +126,7 @@ export default async function StateCountiesPage({ params }: { params: Promise<{ 
   const hasRule = !redemption.label.startsWith("Statutory redemption details require");
   const feeSchedule = getStatutoryFeeSchedule(state);
 
-  const siteBaseUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.PUBLIC_APP_ORIGIN || "https://perfectproperty.org").replace(/\/+$/, "");
+  const siteBaseUrl = require("@/lib/app-origin").getCanonicalOrigin();
   const breadcrumbsSchema = {
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",

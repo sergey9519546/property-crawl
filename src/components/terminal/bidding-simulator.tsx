@@ -289,6 +289,8 @@ export function BiddingSimulator({ listing, publishedUpsetEstimate }: BiddingSim
     program: listing.program,
     notes: listing.notes,
     purchasePrice: cash.totalAcquisitionCost ?? openingBid ?? 0,
+    marketValue: estimatedValue,
+    taxAssessedValue: listing.assessed ?? null,
     redemptionDays: publishedRedemption,
     hasIrsLien: hasIrsNoticeFlag,
     isTaxSale: isTaxCandidate,

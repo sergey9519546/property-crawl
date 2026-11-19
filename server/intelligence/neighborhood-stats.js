@@ -233,6 +233,7 @@ module.exports = {
   computeNeighborhoodStats,
   computeCountyStats,
   getNeighborhoodStats,
+  normalizeCountyToken,
   unitKey,
   // Internal helpers exposed for tests
   _internals: { median, mean, discount }

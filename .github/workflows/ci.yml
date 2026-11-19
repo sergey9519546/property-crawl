@@ -97,7 +97,6 @@ jobs:
   extended-suite:
     runs-on: ubuntu-latest
     timeout-minutes: 35
-    continue-on-error: true
     needs: unit-gate
     steps:
       - name: Checkout repository
@@ -166,3 +165,8 @@ jobs:
         env:
           DATABASE_URL: postgres://property:property-local-dev@127.0.0.1:55432/property_crawl
         run: node test/db.test.js
+      - name: Discovery suites against live PostGIS
+        env:
+          DATABASE_URL: postgres://property:property-local-dev@127.0.0.1:55432/property_crawl
+          DISCOVERY_TEST_DATABASE_URL: postgres://property:property-local-dev@127.0.0.1:55432/property_crawl
+        run: npm run test:discovery && npm run test:discovery:operations

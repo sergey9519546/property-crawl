@@ -1381,9 +1381,9 @@ async function queryArcgisParcel(params = {}, init = {}) {
     queryParams.set('returnGeometry', 'true');
   } else if (apn) {
     // APN attribute search
-    const clean = normalizeApn(apn);
+    const clean = isUsableApnForQuery(apn, config.apnField);
     if (!clean) return null;
-    if (config.apnField === 'PAMS_PIN' && /(?:TAXLOT|BLOCK|BLK|LOT)/i.test(clean)) return null;
+    if (!clean) return null;
     let whereClause = `UPPER(${config.apnField}) LIKE '%${clean}%'`;
     if (config.apnNumericField && /^\d+$/.test(clean)) whereClause = `(${whereClause} OR ${config.apnNumericField} = ${clean})`;
     if (config.apnSeparatorRetry) {
@@ -1594,6 +1594,27 @@ async function resolveCadastralParcelIdentity(rawListing = {}, options = {}) {
   };
 }
 
+function isUsableApnForQuery(apn, apnField = null) {
+  const clean = normalizeApn(apn);
+  if (!clean) return null;
+  if (apnField === 'PAMS_PIN' && /(?:TAXLOT|BLOCK|BLK|LOT)/i.test(clean)) return null;
+  if (/^(?:TAXLOT|BLOCK|BLK|LOT|PARCEL|UNKNOWN|NONE|NA)$/i.test(clean)) return null;
+  return clean;
+}
+
+function buildCountyLikeFilter(countyFilterField, county) {
+  if (!countyFilterField || !county) return null;
+  const cleanCounty = String(county)
+    .trim()
+    .toUpperCase()
+    .replace(/\s+(COUNTY|PARISH|BOROUGH|MUNICIPALITY|CITY AND COUNTY)$/i, '')
+    .replace(/['’]/g, '')
+    .replace(/--+/g, '')
+    .replace(/[^A-Z0-9 .]/g, '')
+    .trim();
+  return cleanCounty ? `UPPER(${countyFilterField}) LIKE '%${cleanCounty}%'` : null;
+}
+
 module.exports = {
   COUNTY_ARCGIS_REGISTRY,
   COUNTY_ARCGIS_ENDPOINTS,
@@ -1601,6 +1622,8 @@ module.exports = {
   resolveCountyKey,
   resolveCountyEndpoint,
   normalizeApn,
+  isUsableApnForQuery,
+  buildCountyLikeFilter,
   normalizeArcgisAttributes,
   normalizeParcelAttributes,
   selectBestFeature,

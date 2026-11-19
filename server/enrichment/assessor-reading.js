@@ -185,14 +185,6 @@ const MARKET_CONVERSION = Object.freeze({
     mode: 'market-figure',
     citation: 'Montgomery County Auditor total market value, compared 1:1 with the published opening amount pursuant to Ohio Rev. Code § 5715.01.',
   }),
-  'OH-LUCAS': Object.freeze({
-    mode: 'market-figure',
-    citation: 'Lucas County Auditor total market value, compared 1:1 with the published opening amount pursuant to Ohio Rev. Code § 5715.01.',
-  }),
-  'OH-BUTLER': Object.freeze({
-    mode: 'market-figure',
-    citation: 'Butler County Auditor total market value, compared 1:1 with the published opening amount pursuant to Ohio Rev. Code § 5715.01.',
-  }),
 });
 
 const WITHHOLD = Object.freeze({

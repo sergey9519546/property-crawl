@@ -1,7 +1,8 @@
 import type { MetadataRoute } from 'next';
+import { getCanonicalOrigin } from '@/lib/app-origin';
 
 export default function robots(): MetadataRoute.Robots {
-  const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.PUBLIC_APP_ORIGIN || 'https://property-crawl.onrender.com').replace(/\/+$/, '');
+  const baseUrl = getCanonicalOrigin();
   return {
     rules: [
       {

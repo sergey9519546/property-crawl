@@ -264,3 +264,70 @@ test('Phase 1: cross-source dedupe keeps distinct apartment units separate and q
     db.inMemoryData.listings = prev;
   }
 });
+
+test('Phase 2.3 regressions: PROP_TYPE_ALIAS_SQL normalization, deadlineAt slice propagation, NJ cadastral boundary lookup, computeCountyStats, and 25-source policy parity', async () => {
+  const { queryFromUrl, pgWhere } = require('../../server/discovery/query');
+  const { normalizePropType: canonicalPropType } = require('../../server/scrapers/normalization');
+  assert.equal(canonicalPropType('Mobile Home'), 'Manufactured');
+  assert.equal(canonicalPropType('Modular'), 'Manufactured');
+  assert.equal(canonicalPropType('Vacant Lot'), 'Land');
+  assert.equal(canonicalPropType('Condominium'), 'Condo');
+  assert.equal(canonicalPropType('Single Family Home'), 'Single Family');
+  const manufacturedSql = pgWhere(queryFromUrl(new URL('http://localhost/api/listings?type=manufactured')));
+  const sfhSql = pgWhere(queryFromUrl(new URL('http://localhost/api/listings?type=single%20family')));
+  assert.match(manufacturedSql.sql, /'mobile home'/);
+  assert.match(sfhSql.sql, /'single family home'/);
+
+  const { IngestionScheduler } = require('../../server/scrapers/scheduler');
+  let capturedOpts = null;
+  const fakeScraper = {
+    sourceKey: 'sheriff',
+    name: 'FakeSheriff',
+    isEnabled: () => true,
+    getCollectionScope: () => ({}),
+    circuitBreaker: null,
+    getRawPublisherRecord: () => null,
+    async scrapeFeed(opts) {
+      capturedOpts = opts;
+      return { listings: [], partialSweep: true, nextContinuationToken: null };
+    },
+  };
+  const sched = new IngestionScheduler({ networkEnabled: true, database: null, discoveryStore: null, skipCircuitBreaker: true });
+  sched.telemetry = { recordRun() {}, flush() {} };
+  sched.realScrapers = [fakeScraper];
+  sched.scrapers = [fakeScraper];
+  await sched.runAll({ sourceIds: ['sheriff'], allowNetwork: true, slice: true, scraperTimeoutMs: 15_000, enableAssessorHarvest: false, enableAssessorBackfill: false });
+  assert.equal(capturedOpts?.slice, true);
+  assert.ok(Number.isFinite(capturedOpts?.deadlineAt) && capturedOpts.deadlineAt > Date.now());
+
+  const { resolveBoundaryEndpoints, queryArcGisRest } = require('../../server/routes/parcel-boundary');
+  const njEndpoints = resolveBoundaryEndpoints('NJ', 'Hudson');
+  assert.ok(njEndpoints.some((e) => e.endpoint.includes('Framework/Cadastral') && e.countyFilterField === 'COUNTY'));
+  // Junk APN must be rejected before making external fetch calls
+  const prevFetch = globalThis.fetch;
+  let fetchCalls = 0;
+  globalThis.fetch = async () => { fetchCalls += 1; return new Response(JSON.stringify({ features: [] }), { status: 200 }); };
+  try {
+    await assert.rejects(() => queryArcGisRest(null, null, 'NJ', 'TAXLOT 12 BLK 4', 'Hudson'), /PARCEL_GEOMETRY_NOT_FOUND|could not|polygon/i);
+    assert.equal(fetchCalls, 0, 'junk TAXLOT/BLOCK/LOT APN must not hit external ArcGIS endpoint');
+  } finally {
+    globalThis.fetch = prevFetch;
+  }
+
+  const { computeCountyStats } = require('../../server/intelligence/neighborhood-stats');
+  const countyBucket = computeCountyStats('NJ-Hudson', [
+    { state: 'NJ', county: 'Hudson County', openingBid: 100_000, sqft: 1200, dealScore: 50, source: 'civilview', sourceObservedAt: new Date().toISOString() },
+    { state: 'NJ', county: 'Hudson', openingBid: 200_000, sqft: 1600, dealScore: 60, source: 'hud', sourceObservedAt: new Date().toISOString() },
+  ]);
+  assert.equal(countyBucket?.count, 2);
+  assert.equal(countyBucket?.medianOpeningBid, 150_000);
+
+  const { SOURCE_CATALOG } = require('../../server/sources/catalog');
+  const { SOURCE_HOSTS } = require('../../server/scrapers/source-policy');
+  for (const entry of SOURCE_CATALOG) {
+    const key = entry.adapterKey || entry.id;
+    if (entry.serves === 'LISTINGS') {
+      assert.ok(Array.isArray(SOURCE_HOSTS[key]) && SOURCE_HOSTS[key].length > 0, `SOURCE_HOSTS must include listing source ${key}`);
+    }
+  }
+});

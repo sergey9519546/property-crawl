@@ -5,10 +5,11 @@
  * Handles county slug normalization, metadata generation, statutory schedules, cadastral GIS links, and schema.org structured data.
  */
 
+const { DEFAULT_CANONICAL_ORIGIN } = require('../../server/app-origin.js');
 const { STATE_REDEMPTION_RULES } = require('../../server/ai/legal-rules.js');
 const { JURISDICTION_FEE_SCHEDULES } = require('../../server/intelligence/cash-to-close.js');
 
-const DEFAULT_BASE_URL = 'https://perfectproperty.org';
+const DEFAULT_BASE_URL = DEFAULT_CANONICAL_ORIGIN;
 
 const HYPHENATED_COUNTIES = new Set(['miami-dade', 'jo-daviess', 'matanuska-susitna', 'isle-of-wight']);
 

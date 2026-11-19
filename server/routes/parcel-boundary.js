@@ -1,16 +1,21 @@
 'use strict';
 
 const db = require('../db/client');
-const { resolveCountyEndpoint, normalizeApn, STATEWIDE_ARCGIS_REGISTRY } = require('../enrichment/arcgis-parcels');
+const {
+  resolveCountyEndpoint,
+  isUsableApnForQuery,
+  buildCountyLikeFilter,
+  STATEWIDE_ARCGIS_REGISTRY,
+} = require('../enrichment/arcgis-parcels');
 
 // Public cadastral reference layers. Their polygons are assessor/GIS records,
 // not boundary surveys, and are returned only when the upstream service supplies
 // an actual feature intersecting the requested point.
-// FL and NJ keep dedicated parcel polygon layers here because the FL entry in
+// FL keeps a dedicated parcel polygon layer here because the FL entry in
 // STATEWIDE_ARCGIS_REGISTRY is a centroid-only service (Points, not Polygons).
 const STATEWIDE_POLYGON_REGISTRIES = Object.fromEntries(
   Object.entries(STATEWIDE_ARCGIS_REGISTRY)
-    .filter(([state]) => state !== 'FL' && state !== 'NJ')
+    .filter(([state]) => state !== 'FL')
     .map(([state, config]) => [
       state,
       {
@@ -39,11 +44,6 @@ const ARCGIS_REGISTRY = Object.freeze({
     endpoint: 'https://feature.geographic.texas.gov/arcgis/rest/services/Parcels/stratmap_land_parcels_48_most_recent/MapServer/identify',
     operation: 'identify',
     apnField: 'PROP_ID'
-  },
-  NJ: {
-    name: 'New Jersey Office of GIS (NJGIN) Parcel Data',
-    endpoint: 'https://maps.nj.gov/arcgis/rest/services/Framework/Cadastral/MapServer/0/query',
-    apnField: 'PAMS_PIN'
   }
 });
 
@@ -327,14 +327,11 @@ async function querySingleArcGisEndpoint(serviceInfo, lat, lng, apn, county, has
 
     // If point query yielded no polygon but APN is available, try searching by APN
     if (!feature && apn && !isIdentifyService) {
-      const cleanApn = normalizeApn(apn);
+      const cleanApn = isUsableApnForQuery(apn, apnField);
       const exactApn = String(apn).trim().toUpperCase().replace(/[^A-Z0-9.\- ]/g, '');
       if (cleanApn) {
-        const countyPrefix = (() => {
-          if (!countyFilterField || !county) return '';
-          const cleanCounty = String(county).trim().toUpperCase().replace(/\s+(COUNTY|PARISH)$/i, '').replace(/[^A-Z0-9 .]/g, '').trim();
-          return cleanCounty ? `UPPER(${countyFilterField}) LIKE '%${cleanCounty}%' AND ` : '';
-        })();
+        const countyLike = buildCountyLikeFilter(countyFilterField, county);
+        const countyPrefix = countyLike ? `${countyLike} AND ` : '';
         const runApnWhere = (predicate) => runQuery({
           where: `${countyPrefix}(${predicate})`,
           outFields: '*',

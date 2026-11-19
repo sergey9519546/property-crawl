@@ -1,7 +1,8 @@
 import { serializeJsonLd } from "@/lib/json-ld";
+import { getCanonicalOrigin } from "@/lib/app-origin";
 
 export function SeoSchema({ nonce, locale = "en" }: { nonce?: string | null; locale?: string }) {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.PUBLIC_APP_ORIGIN || "https://property-crawl.onrender.com";
+  const baseUrl = getCanonicalOrigin();
   const structuredData = {
     "@context": "https://schema.org",
     "@graph": [

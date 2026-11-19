@@ -1,5 +1,30 @@
 const { isUsStateOrTerritoryCode } = require('../state-codes');
 
+const GENERIC_QUERY_KEYS = new Set([
+  'county',
+  'countyid',
+  'filter',
+  'limit',
+  'page',
+  'pagesize',
+  'q',
+  'query',
+  'search',
+  'sort',
+  'state',
+]);
+
+const GENERIC_PATHS = new Set([
+  '/asset-sales/real-estate-and-property-sales',
+  '/auctions',
+  '/closedrealestate',
+  '/listings',
+  '/properties',
+  '/property-search',
+  '/sales/salessearch',
+  '/search',
+]);
+
 const RECORD_QUERY_KEYS = new Set([
   'aid',
   'auctionid',
@@ -82,6 +107,7 @@ const SOURCE_HOSTS = Object.freeze({
     'fortbendcountytx.gov',
     'mctx.org',
     'wilco.org',
+    'publicnoticesohio.com',
     'lgbs.com',
     'mvbalaw.com',
     'pbfcm.com',
@@ -142,6 +168,18 @@ function hasRecordQuery(url) {
 function hasStablePathToken(url) {
   const segment = url.pathname.split('/').filter(Boolean).at(-1) || '';
   return /\d{3,}/.test(segment) || /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(segment);
+}
+
+function hasRecordIdentity(url) {
+  if (hasRecordQuery(url)) return true;
+
+  const segments = url.pathname.split('/').filter(Boolean);
+  const lastSegment = (segments.at(-1) || '').toLowerCase();
+  const recordPath = segments.some((segment) =>
+    /^(ad|auction|asset|detail|details|listing|parcel|property|sale)/i.test(segment)
+  );
+  const uniqueSlug = /\d{3,}/.test(lastSegment) || lastSegment.split('-').length >= 4;
+  return recordPath && uniqueSlug;
 }
 
 function hasSourceRecordShape(source, url) {
@@ -281,6 +319,9 @@ function hasSourceRecordShape(source, url) {
       return path.endsWith('/sfhpropertydetail') && url.searchParams.has('id');
     case 'email-notices':
     case 'public-notices-email':
+      return path !== '/' && path !== '/search';
+    case 'government-land':
+    case 'local-surplus':
     case 'socrata-code-enforcement':
       return true;
     default:
@@ -327,8 +368,16 @@ function inspectSourceRecordUrl(sourceValue, sourceUrl) {
 }
 
 module.exports = {
+  GENERIC_PATHS,
+  GENERIC_QUERY_KEYS,
+  RECORD_QUERY_KEYS,
   SOURCE_HOSTS,
+  TEXAS_TAX_SALE_ROOT_HOSTS,
+  hasRecordIdentity,
+  hasRecordQuery,
   hasSourceRecordShape,
+  hasStablePathToken,
   hostnameMatches,
   inspectSourceRecordUrl,
+  normalizedHostname,
 };

@@ -435,6 +435,32 @@ test('computeStatutoryDeadlinesAndCarry models post-sale statutory windows and I
 });
 
 
+test('computeStatutoryDeadlinesAndCarry sizes property tax carry against assessed/market value when available and matches server fee schedule', async () => {
+  const lowBidTaxCarry = computeStatutoryDeadlinesAndCarry({
+    saleDate: '2026-10-01',
+    state: 'NJ',
+    purchasePrice: 10_000,
+    marketValue: 300_000,
+    taxAssessedValue: 280_000,
+    hasIrsLien: true,
+  });
+  const bidOnlyTaxCarry = computeStatutoryDeadlinesAndCarry({
+    saleDate: '2026-10-01',
+    state: 'NJ',
+    purchasePrice: 10_000,
+    hasIrsLien: true,
+  });
+  assert.ok(lowBidTaxCarry.estimatedPropertyTaxCarry > bidOnlyTaxCarry.estimatedPropertyTaxCarry * 10);
+
+  const { calculateCompleteCashToClose } = await import('../server/intelligence/cash-to-close.js');
+  for (const state of ['NJ', 'OH', 'FL', 'PA']) {
+    const ui = computeStatutoryFeePreset({ purchasePrice: 200_000, state });
+    const srv = calculateCompleteCashToClose({ winningBid: 200_000, state });
+    assert.equal(srv.sheriffPoundage, ui.sheriffPoundage, `${state} sheriffPoundage parity`);
+    assert.equal(srv.transferTax, ui.transferTax, `${state} transferTax parity`);
+  }
+});
+
 test('computeConstitutionalSurplus enforces Tyler v. Hennepin and Pung doctrine', () => {
   const incomplete = computeConstitutionalSurplus({ openingBid: 150_000 });
   assert.equal(incomplete.status, 'indeterminate_inputs');

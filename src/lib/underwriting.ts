@@ -4,6 +4,8 @@
 // scenarios. A missing fact is never converted into an actionable deal term or
 // a favorable legal conclusion.
 
+import statutoryFees from "../../server/intelligence/statutory-fees.js";
+
 function sourceDisplayText(value: string): string {
   return value.replace(/servicelink(?:\s+auction)?/gi, "Public Auction Network");
 }
@@ -669,257 +671,46 @@ export function computeStatutoryFeePreset(params: {
 }): StatutoryFeePreset | null {
   const price = positiveNumber(params.purchasePrice);
   if (price === null) return null;
-  const st = (params.state || "").trim().toUpperCase();
-  const src = (params.source || "").trim().toLowerCase();
-  const citations: string[] = [];
-  const isSupported = ["NJ", "OH", "FL", "PA", "NC", "TX", "CA", "GA", "IL", "NY", "MI", "NV", "TN", "WA", "MD", "SC", "VA", "IN", "MO", "AZ", "AL"].includes(st);
-  const supportedNotice = isSupported ? null : `Statutory fee preset unavailable for state ${st || "unknown"}. Showing generic baseline estimates.`;
-
-  let buyersPremium = 0;
-  if (src === "bid4assets" || src === "servicelink") {
-    buyersPremium = Math.max(2500, Math.round(price * 0.05));
-    citations.push("Marketplace schedule assumption: 5% ($2,500 min) buyer's premium on portal auctions.");
-  } else {
-    citations.push("Direct government / court auction assumption: $0 marketplace buyer's premium.");
-  }
-
-  let sheriffPoundage = 0;
-  let transferTax = 0;
-  let defaultDepositPct = 0.10;
-  let scheduleLabel = `${st || "State"} Statutory Baseline Schedule`;
-
-  if (st === "NJ") {
-    scheduleLabel = "New Jersey Sheriff Statutory Schedule (N.J.S.A. 22A:4-8 & 46:15-7)";
-    const tier1 = Math.min(price, 5000) * 0.06;
-    const tier2 = Math.max(0, Math.min(price - 5000, 15000)) * 0.04;
-    const tier3 = Math.max(0, price - 20000) * 0.02;
-    sheriffPoundage = Math.max(150, Math.round(tier1 + tier2 + tier3));
-    transferTax = Math.round(price * 0.01);
-    defaultDepositPct = 0.20;
-    citations.push(
-      "N.J.S.A. 22A:4-8: Sheriff commission 6% on first $5k, 4% on next $15k, 2% above $20k ($150 min).",
-      "N.J.S.A. 46:15-7: NJ Realty Transfer Fee baseline (~1.0% tiered statutory schedule).",
-      "N.J.S.A. 2A:50-64: 20% statutory sheriff sale deposit at knockdown."
-    );
-  } else if (st === "OH") {
-    scheduleLabel = "Ohio Sheriff Statutory Schedule (ORC § 311.17 & § 319.54)";
-    sheriffPoundage = Math.round(price * 0.015);
-    transferTax = Math.round((price / 1000) * 4);
-    defaultDepositPct = 0.10;
-    citations.push(
-      "ORC § 311.17(B)(1): Sheriff poundage 1.5% of foreclosure sale proceeds.",
-      "ORC § 319.54(G)(3): County auditor conveyance fee baseline ($4.00 per $1,000)."
-    );
-  } else if (st === "FL") {
-    scheduleLabel = "Florida Clerk Judicial Schedule (Fla. Stat. § 28.24 & § 201.02)";
-    sheriffPoundage = Math.round(Math.min(price, 500) * 0.03 + Math.max(0, price - 500) * 0.015);
-    transferTax = Math.round(Math.ceil(price / 100) * 0.70);
-    defaultDepositPct = 0.05;
-    citations.push(
-      "Fla. Stat. § 28.24(10): Clerk registry fee 3% on first $500 + 1.5% on balance.",
-      "Fla. Stat. § 201.02: Documentary stamp tax $0.70 per $100 of consideration.",
-      "Fla. Stat. § 45.031(3): 5% statutory judicial auction deposit at sale."
-    );
-  } else if (st === "PA") {
-    scheduleLabel = "Pennsylvania Sheriff Statutory Schedule (42 Pa.C.S. § 21107 & 72 P.S. § 8102-C)";
-    sheriffPoundage = Math.round(Math.min(price, 250000) * 0.02 + Math.max(0, price - 250000) * 0.005);
-    transferTax = Math.round(price * 0.02);
-    defaultDepositPct = 0.10;
-    citations.push(
-      "42 Pa.C.S. § 21107: Sheriff poundage 2% up to $250k + 0.5% on excess.",
-      "72 P.S. § 8102-C: PA Realty Transfer Tax (1% state + 1% typical local municipal/school)."
-    );
-  } else if (st === "NC") {
-    scheduleLabel = "North Carolina Judicial / Trustee Schedule (N.C.G.S. § 45-21.15 & § 105-228.30)";
-    sheriffPoundage = Math.min(Math.round(price * 0.05), 25000);
-    transferTax = Math.round(price / 500);
-    defaultDepositPct = 0.05;
-    citations.push(
-      "N.C.G.S. § 45-21.15: Trustee/commissioner statutory commission cap (up to 5%).",
-      "N.C.G.S. § 105-228.30: NC Excise Tax $1.00 per $500 ($2.00 per $1,000).",
-      "N.C.G.S. § 45-21.27: 5% minimum deposit ($750 floor) for judicial/upset bids."
-    );
-  } else if (st === "TX") {
-    scheduleLabel = "Texas Constable / Trustee Schedule (Tex. Civ. Prac. & Rem. Code)";
-    sheriffPoundage = 0;
-    transferTax = 0;
-    defaultDepositPct = 0.10;
-    citations.push(
-      "Texas Const. art. VIII § 29: $0 state real estate transfer tax.",
-      "Tex. Local Gov't Code § 118.011: County clerk recording fee ($34 typical baseline).",
-      "Tex. Tax Code § 34.015: Purchaser tax certificate required before deed execution."
-    );
-  } else if (st === "CA") {
-    scheduleLabel = "California Non-Judicial Trustee Schedule (Cal. Civ. Code § 2924h & § 2924m; Rev. & Tax Code § 11911)";
-    sheriffPoundage = Math.min(Math.round(price * 0.01), 1500);
-    transferTax = Math.round((price / 1000) * 1.10);
-    defaultDepositPct = 0.10;
-    citations.push(
-      "Cal. Civ. Code § 2924h: 100% cashier's check / certified funds requirement at trustee sale.",
-      "Cal. Rev. & Tax Code § 11911: County documentary transfer tax ($1.10 per $1,000 baseline).",
-      "Cal. Civ. Code § 2924m (SB 1079): 45-day post-sale eligible bidder window on 1-4 unit residential."
-    );
-  } else if (st === "GA") {
-    const isTax = Boolean(
-      params.isTaxSale ||
-      params.distressType === "tax_sale" ||
-      src.includes("tax")
-    );
-    if (isTax) {
-      scheduleLabel = "Georgia First Tuesday Tax Deed Schedule (O.C.G.A. § 48-4-1 et seq. & § 48-4-40)";
-      sheriffPoundage = 0;
-      transferTax = Math.round(price / 1000);
-      defaultDepositPct = 0.20;
-      citations.push(
-        "O.C.G.A. § 48-4-1: County tax commissioner / sheriff first Tuesday tax execution sale.",
-        "O.C.G.A. § 48-4-40: 12-month (365 days) statutory right of redemption with 20% statutory penalty in Year 1.",
-        "O.C.G.A. § 48-4-45: Mandatory barment of redemption notice after 12 months to ripen fee simple title.",
-        "O.C.G.A. § 48-6-1: Georgia Real Estate Transfer Tax ($1.00 per $1,000 of consideration)."
-      );
-    } else {
-      scheduleLabel = "Georgia Non-Judicial Foreclosure Schedule (O.C.G.A. § 44-14-162 & § 48-6-1)";
-      sheriffPoundage = 0;
-      transferTax = Math.round(price / 1000);
-      defaultDepositPct = 0.10;
-      citations.push(
-        "O.C.G.A. § 44-14-162: Non-judicial foreclosure under power of sale (first Tuesday auction; 0-day post-sale redemption).",
-        "O.C.G.A. § 48-6-1: Georgia Real Estate Transfer Tax ($1.00 per $1,000 of consideration)."
-      );
-    }
-  } else if (st === "IL") {
-    scheduleLabel = "Illinois Judicial Mortgage Foreclosure Schedule (735 ILCS 5/15-1507 & 35 ILCS 200/31-10)";
-    sheriffPoundage = Math.min(Math.round(price * 0.01), 1000);
-    transferTax = Math.round((price / 1000) * 1.50);
-    defaultDepositPct = 0.10;
-    citations.push(
-      "735 ILCS 5/15-1507(e): Sheriff or designated selling officer statutory fee schedule.",
-      "35 ILCS 200/31-10: Combined state ($1.00/k) and county ($0.50/k) real estate transfer stamps.",
-      "735 ILCS 5/15-1508: Mandatory judicial confirmation of sale before deed delivery."
-    );
-  } else if (st === "NY") {
-    scheduleLabel = "New York Judicial Referee Schedule (RPAPL § 1354 & CPLR § 8003(b))";
-    sheriffPoundage = Math.min(Math.round(price * 0.01), 1100);
-    transferTax = Math.round((price / 500) * 2.00);
-    defaultDepositPct = 0.10;
-    citations.push(
-      "RPAPL § 1354: Distribution of mortgage foreclosure sale proceeds and referee deed.",
-      "CPLR § 8003(b): Statutory referee compensation cap on mortgage foreclosure sales ($750–$1,100).",
-      "NY Tax Law § 1402: NY State Real Estate Transfer Tax ($2.00 per $500 / $4.00 per $1,000)."
-    );
-  } else if (st === "MI") {
-    scheduleLabel = "Michigan Sheriff Foreclosure Schedule (MCL § 600.2558 & § 207.525)";
-    sheriffPoundage = Math.min(Math.round(price * 0.005), 500);
-    transferTax = Math.round((price / 1000) * 4.30);
-    defaultDepositPct = 0.10;
-    citations.push(
-      "MCL § 600.2558: Sheriff statutory foreclosure sale fee schedule.",
-      "MCL § 207.505 & § 207.525: Combined state ($3.75/k) and county ($0.55/k) transfer tax ($4.30/k).",
-      "MCL § 600.3240: Statutory post-sale redemption period (6 months standard, 1 month if abandoned)."
-    );
-  } else if (st === "NV") {
-    scheduleLabel = "Nevada Non-Judicial Trustee Schedule (NRS 107.080 & NRS 375.020)";
-    sheriffPoundage = 0;
-    transferTax = Math.round((price / 500) * 1.95);
-    defaultDepositPct = 0.10;
-    citations.push(
-      "NRS 107.080: Non-judicial trustee power of sale (0 days post-sale redemption).",
-      "NRS 375.020: Real Property Transfer Tax ($1.95 per $500 / $3.90 per $1,000 baseline).",
-      "NRS 116.3116: 9-month HOA super-priority assessment primes first deed of trust."
-    );
-  } else if (st === "TN") {
-    const isTax = Boolean(
-      params.isTaxSale ||
-      params.distressType === "tax_sale" ||
-      src.includes("tax")
-    );
-    if (isTax) {
-      scheduleLabel = "Tennessee Chancery / County Tax Sale Schedule (T.C.A. § 67-5-2701 & § 67-4-409)";
-      sheriffPoundage = 0;
-      transferTax = Math.round((price / 1000) * 3.70);
-      defaultDepositPct = 0.10;
-      citations.push(
-        "T.C.A. § 67-5-2701: 365-day (1 year) statutory tax sale right of redemption with 12% per annum interest.",
-        "T.C.A. § 67-4-409: Tennessee state recordation/transfer tax ($0.37 per $100 / $3.70 per $1,000)."
-      );
-    } else {
-      scheduleLabel = "Tennessee Deed of Trust Foreclosure Schedule (T.C.A. § 35-5-101 & § 67-4-409)";
-      sheriffPoundage = 0;
-      transferTax = Math.round((price / 1000) * 3.70);
-      defaultDepositPct = 0.10;
-      citations.push(
-        "T.C.A. § 35-5-101: Non-judicial deed of trust sale under power (0-day post-sale redemption when waived in deed of trust).",
-        "T.C.A. § 67-4-409: Tennessee state recordation/transfer tax ($0.37 per $100 / $3.70 per $1,000)."
-      );
-    }
-  } else if (st === "WA") {
-    scheduleLabel = "Washington State Non-Judicial & Tax Foreclosure Schedule (RCW 61.24 & RCW 82.45)";
-    sheriffPoundage = 0;
-    transferTax = Math.round((price / 1000) * 16.00); // 1.6% combined state & local REET baseline
-    defaultDepositPct = 0.10;
-    citations.push(
-      "RCW 61.24.040: Non-judicial trustee sale under deed of trust (0-day post-sale redemption).",
-      "RCW 84.64.080: County tax foreclosure deed sale (immediate deed execution; 30-day appeal window under RCW 84.64.120).",
-      "RCW 82.45.060: Washington Real Estate Excise Tax (REET) (1.10% state baseline + 0.50% local typical)."
-    );
-  } else if (st === "MD") {
-    const isTax = Boolean(
-      params.isTaxSale ||
-      params.distressType === "tax_sale" ||
-      src.includes("tax")
-    );
-    if (isTax) {
-      scheduleLabel = "Maryland Tax Sale Certificate Auction Schedule (Md. Code Tax-Prop. § 14-827 & § 13-203)";
-      sheriffPoundage = 0;
-      transferTax = Math.round((price / 1000) * 5.00);
-      defaultDepositPct = 0.10;
-      citations.push(
-        "Md. Code Tax-Prop. § 14-827: 180-day (6-month) statutory redemption period before bill to foreclose right of redemption.",
-        "Md. Code Tax-Prop. § 14-820: County statutory interest rate on tax certificate redemption (12% to 20% typical).",
-        "Md. Code Tax-Prop. § 13-203: Maryland state transfer tax (0.5% / $5.00 per $1,000)."
-      );
-    } else {
-      scheduleLabel = "Maryland Judicial Foreclosure Schedule (Md. Rule 14-207 & § 13-203)";
-      sheriffPoundage = 0;
-      transferTax = Math.round((price / 1000) * 5.00);
-      defaultDepositPct = 0.10;
-      citations.push(
-        "Md. Rule 14-215: Mandatory court ratification of foreclosure sale before deed delivery.",
-        "Md. Code Tax-Prop. § 13-203: Maryland state transfer tax (0.5% / $5.00 per $1,000)."
-      );
-    }
-  } else if (st === "AL") {
-    scheduleLabel = "Alabama Sheriff Statutory Schedule (Ala. Code § 12-19-90 & § 40-22-1)";
-    sheriffPoundage = Math.round(price * 0.015);
-    transferTax = Math.round((price / 1000) * 1.0);
-    defaultDepositPct = 0.10;
-    citations.push(
-      "Ala. Code § 12-19-90: Sheriff execution fee baseline (approx 1.5% poundage).",
-      "Ala. Code § 40-22-1: Alabama deed recording tax ($0.50 per $500 / $1.00 per $1,000 of purchase consideration).",
-      "Ala. Code § 6-5-248: 180-day post-sale statutory redemption for residential homestead property (1-year otherwise)."
-    );
-  } else {
-    transferTax = Math.round(price * 0.005);
-    scheduleLabel = `${st || "State"} Statutory Baseline (Not Yet Modeled)`;
-    citations.push(`Statutory fee preset unavailable for state ${st || "unknown"}. Baseline state recording/transfer assumption (0.5% of price); verify county fee schedule.`);
-  }
-
+  const shared = (statutoryFees.computeStatutoryStateFees as (args: {
+    purchasePrice: number;
+    state?: string | null;
+    source?: string | null;
+    distressType?: string | null;
+    isTaxSale?: boolean | null;
+  }) => {
+    state: string;
+    scheduleLabel: string;
+    buyersPremium: number;
+    sheriffPoundage: number;
+    transferTax: number;
+    defaultDepositPct: number;
+    citations: string[];
+    supported: boolean;
+    notice: string | null;
+  })({
+    purchasePrice: price,
+    state: params.state,
+    source: params.source,
+    distressType: params.distressType,
+    isTaxSale: params.isTaxSale,
+  });
+  const citations = [...shared.citations];
   const parsedDeposit = parsePublishedDepositAmount(params.depositText, price);
-  const creditedDeposit = parsedDeposit !== null ? parsedDeposit : Math.round(price * defaultDepositPct);
+  const creditedDeposit = parsedDeposit !== null ? parsedDeposit : Math.round(price * shared.defaultDepositPct);
   if (parsedDeposit !== null) {
     citations.push(`Credited deposit parsed from published deposit terms (${params.depositText}).`);
   }
-
   return {
-    state: st || "US",
-    scheduleLabel,
-    buyersPremium,
-    sheriffPoundage,
-    transferTax,
+    state: shared.state,
+    scheduleLabel: shared.scheduleLabel,
+    buyersPremium: shared.buyersPremium,
+    sheriffPoundage: shared.sheriffPoundage,
+    transferTax: shared.transferTax,
     creditedDeposit,
     registrationFunds: creditedDeposit,
     citations,
-    supported: isSupported,
-    notice: supportedNotice,
+    supported: shared.supported,
+    notice: shared.notice,
   };
 }
 
@@ -1017,6 +808,8 @@ export function computeStatutoryDeadlinesAndCarry(params: {
   purchasePrice?: number | string | null;
   redemptionDays?: number | null;
   hasIrsLien?: boolean;
+  marketValue?: number | string | null;
+  taxAssessedValue?: number | string | null;
   annualCostOfCapitalPct?: number;
   effectiveTaxRatePct?: number;
   insuranceBaseRatePer1000?: number;
@@ -1184,8 +977,9 @@ export function computeStatutoryDeadlinesAndCarry(params: {
     ? (nonNegativeNumber(params.insuranceBaseRatePer1000) ?? 0)
     : (INSURANCE_BASE_RATE_PER_1000[st] ?? DEFAULT_NATIONAL_INSURANCE_RATE_PER_1000);
 
-  const estimatedPropertyTaxCarry = price !== null && effectiveLockupDays > 0
-    ? Math.round(price * effTaxRate * (effectiveLockupDays / 365))
+  const taxBasis = positiveNumber(params.taxAssessedValue) ?? positiveNumber(params.marketValue) ?? price;
+  const estimatedPropertyTaxCarry = taxBasis !== null && effectiveLockupDays > 0
+    ? Math.round(taxBasis * effTaxRate * (effectiveLockupDays / 365))
     : null;
   const estimatedInsuranceCarry = price !== null && effectiveLockupDays > 0
     ? Math.round(price * (insRatePer1000 / 1000) * (effectiveLockupDays / 365))
@@ -1193,7 +987,7 @@ export function computeStatutoryDeadlinesAndCarry(params: {
   const totalHoldingCostCarry = estimatedCarryCost !== null
     ? estimatedCarryCost + (estimatedPropertyTaxCarry ?? 0) + (estimatedInsuranceCarry ?? 0)
     : null;
-  const monthlyHoldingCost = price !== null ? Math.round(price * (annualCostOfCapitalPct / 100 / 12) + price * (effTaxRate / 12) + price * (insRatePer1000 / 1000 / 12)) : null;
+  const monthlyHoldingCost = price !== null ? Math.round(price * (annualCostOfCapitalPct / 100 / 12) + ((taxBasis ?? price) * (effTaxRate / 12)) + price * (insRatePer1000 / 1000 / 12)) : null;
 
   return {
     saleDateIso,

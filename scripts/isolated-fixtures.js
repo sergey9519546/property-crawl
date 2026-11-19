@@ -26,6 +26,7 @@ const MARKETS = [
   { source: 'usda',        state: 'IA', county: 'Polk',      city: 'Des Moines',  lat: 41.5868, lng: -93.6250 },
   { source: 'gsa',         state: 'TX', county: 'Harris',    city: 'Houston',     lat: 29.7604, lng: -95.3698 },
   { source: 'courtlistener', state: 'FL', county: 'Orange',  city: 'Orlando',     lat: 28.5383, lng: -81.3792 },
+  { source: 'sheriff',       state: 'OH', county: 'Franklin', city: 'Columbus',  lat: 39.9612, lng: -82.9988 },
 ];
 
 // openingBid / (mid) -> deal score, so the sorts have a real spread.
@@ -38,6 +39,7 @@ const BANDS = [
   { openingBid: 18500, estLow: 55000, estHigh: 72000 },
   { openingBid: 71000, estLow: 88000, estHigh: 96000 },
   { openingBid: 33000, estLow: 120000, estHigh: 185000 },
+  { openingBid: 29500, estLow: null, estHigh: null },
 ];
 
 function buildFixtures() {

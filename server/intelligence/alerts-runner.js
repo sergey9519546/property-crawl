@@ -73,7 +73,7 @@ async function runAlertsForUser({ userId, listings, database, mailOptions, webho
     const notify = isEmail(search?.filters?.notifyEmail) || isEmail(search?.filters?.email) || isEmail(search?.notifyEmail);
     if (newCount > 0 && notify) {
       try {
-        const baseUrl = process.env.PUBLIC_APP_ORIGIN || process.env.NEXT_PUBLIC_APP_URL || 'https://property-crawl.onrender.com';
+        const baseUrl = require('../app-origin').getCanonicalOrigin();
         const formattedItems = fresh.slice(0, 15).map((l) => {
           const addr = l.address || 'Address unlisted';
           const location = [l.city, l.state].filter(Boolean).join(', ');

@@ -11,207 +11,10 @@
  * Net Cash Due at Settlement = max(0, Total Acquisition Cost - Credited Deposit)
  */
 
-const JURISDICTION_FEE_SCHEDULES = Object.freeze({
-  FL: {
-    state: 'FL',
-    name: 'Florida',
-    docStampRatePerThousand: 7.00, // $0.70 per $100
-    defaultSheriffPoundagePercent: 0.00, // FL clerk sales use statutory clerk auction fee (approx $70 + 3% on first $500, 1.5% balance)
-    defaultRecordingFee: 100.00,
-    settlementWindowHours: 24,
-    notes: 'Fla. Stat. § 201.02 doc stamps + clerk electronic auction fee. Certified funds due within 24 hours.',
-  },
-  PA: {
-    state: 'PA',
-    name: 'Pennsylvania',
-    docStampRatePerThousand: 20.00, // 1% state + 1% local standard (Philadelphia is higher at 42.78 per $1k)
-    defaultSheriffPoundagePercent: 0.02, // 2% statutory sheriff poundage
-    defaultRecordingFee: 150.00,
-    settlementWindowHours: 720, // 30 days to settle balance with sheriff
-    notes: '2% standard transfer tax + 2% sheriff poundage. Balance due within 30 days of sale gavel.',
-  },
-  NJ: {
-    state: 'NJ',
-    name: 'New Jersey',
-    docStampRatePerThousand: 8.50, // NJ Realty Transfer Fee graduated tiers average ~$8.50 per $1k
-    defaultSheriffPoundagePercent: 0.025, // 2.5% statutory sheriff execution fee (N.J.S.A. 22A:4-8)
-    defaultRecordingFee: 120.00,
-    settlementWindowHours: 720, // 30 days to pay balance in full
-    notes: 'N.J.S.A. 22A:4-8 statutory poundage + Realty Transfer Fee. 20% deposit at sale; balance in 30 days.',
-  },
-  OH: {
-    state: 'OH',
-    name: 'Ohio',
-    docStampRatePerThousand: 4.00, // $1 mandatory state + up to $3 county conveyance fee ($4 total per $1k)
-    defaultSheriffPoundagePercent: 0.02, // Statutory county sheriff execution fee
-    defaultRecordingFee: 80.00,
-    settlementWindowHours: 720, // Balance due within 30 days of sale confirmation
-    notes: 'R.C. 319.54 conveyance fees + county poundage. Balance due upon judicial confirmation of sale.',
-  },
-  CA: {
-    state: 'CA',
-    name: 'California',
-    docStampRatePerThousand: 1.10, // $1.10 per $1,000 standard documentary transfer tax
-    defaultSheriffPoundagePercent: 0.00, // Non-judicial trustee sales do not assess county poundage
-    defaultRecordingFee: 95.00,
-    settlementWindowHours: 0, // 100% cashier checks tendered immediately at auction gavel
-    notes: 'Cal. Rev. & Tax. Code § 11911 documentary transfer tax. 100% certified funds required at gavel.',
-  },
-  NC: {
-    state: 'NC',
-    name: 'North Carolina',
-    docStampRatePerThousand: 2.00, // $1.00 per $500 ($2 per $1k) excise tax (N.C.G.S. § 105-228.30)
-    defaultSheriffPoundagePercent: 0.05, // 5% statutory commissioner/trustee cap (N.C.G.S. § 45-21.15)
-    defaultRecordingFee: 64.00,
-    settlementWindowHours: 240, // 10 days rolling upset bid window (N.C.G.S. § 45-21.27)
-    notes: 'N.C.G.S. § 45-21.27 10-day upset-bid period. 5% deposit floor ($750 min).',
-  },
-  TX: {
-    state: 'TX',
-    name: 'Texas',
-    docStampRatePerThousand: 0.00, // $0 transfer tax (Texas Const. art. VIII § 29)
-    defaultSheriffPoundagePercent: 0.00,
-    defaultRecordingFee: 50.00,
-    settlementWindowHours: 4, // Immediate cashier checks at first Tuesday sale
-    notes: 'Texas Const. art. VIII § 29 $0 state transfer tax. 100% certified funds due at sale.',
-  },
-  GA: {
-    state: 'GA',
-    name: 'Georgia',
-    docStampRatePerThousand: 1.00, // $1.00 per $1k transfer tax (O.C.G.A. § 48-6-1)
-    defaultSheriffPoundagePercent: 0.00,
-    defaultRecordingFee: 25.00,
-    settlementWindowHours: 4, // Immediate cashier checks at first Tuesday non-judicial auction
-    notes: 'O.C.G.A. § 44-14-162 non-judicial foreclosure under power of sale. First Tuesday auction; immediate payment.',
-  },
-  IL: {
-    state: 'IL',
-    name: 'Illinois',
-    docStampRatePerThousand: 1.50, // $1 state + $0.50 county transfer stamps (35 ILCS 200/31-10)
-    defaultSheriffPoundagePercent: 0.01, // 1% sheriff fee
-    defaultRecordingFee: 100.00,
-    settlementWindowHours: 720, // 30 days; balance due upon judicial confirmation
-    notes: '735 ILCS 5/15-1507 judicial foreclosure. Balance due upon judicial confirmation of sale.',
-  },
-  NY: {
-    state: 'NY',
-    name: 'New York',
-    docStampRatePerThousand: 4.00, // $2.00 per $500 ($4 per $1k) NY State Real Estate Transfer Tax
-    defaultSheriffPoundagePercent: 0.01, // Referee compensation cap
-    defaultRecordingFee: 150.00,
-    settlementWindowHours: 720, // 30 days to close with referee
-    notes: 'RPAPL § 1354 referee deed sale. 10% deposit at auction; 30 days to close with referee.',
-  },
-  MI: {
-    state: 'MI',
-    name: 'Michigan',
-    docStampRatePerThousand: 4.30,
-    defaultSheriffPoundagePercent: 0.005,
-    defaultRecordingFee: 30.00,
-    settlementWindowHours: 0,
-    notes: 'MCL § 600.3201 foreclosure by advertisement. $4.30/k transfer tax; 6-month statutory redemption applies.',
-  },
-  NV: {
-    state: 'NV',
-    name: 'Nevada',
-    docStampRatePerThousand: 3.90,
-    defaultSheriffPoundagePercent: 0.00,
-    defaultRecordingFee: 75.00,
-    settlementWindowHours: 0,
-    notes: 'NRS 107.080 non-judicial trustee sale. NRS 375.020 transfer tax. 0-day post-sale redemption.',
-  },
-  TN: {
-    state: 'TN',
-    name: 'Tennessee',
-    docStampRatePerThousand: 3.70, // $0.37 per $100 ($3.70/k) state transfer/recordation tax (T.C.A. § 67-4-409)
-    defaultSheriffPoundagePercent: 0.00,
-    defaultRecordingFee: 50.00,
-    settlementWindowHours: 4, // Immediate certified funds at county courthouse auction
-    notes: 'T.C.A. § 35-5-101 deed of trust sale (0-day redemption if waived) vs. T.C.A. § 67-5-2701 tax sale (1-year statutory redemption with 12% interest).',
-  },
-  WA: {
-    state: 'WA',
-    name: 'Washington',
-    docStampRatePerThousand: 16.00, // 1.6% combined state & local REET baseline (RCW 82.45.060)
-    defaultSheriffPoundagePercent: 0.00,
-    defaultRecordingFee: 200.00, // RCW 36.18.010 recording fees
-    settlementWindowHours: 0, // Cashier check tendered at auction gavel
-    notes: 'RCW 61.24.040 non-judicial trustee sale (0-day redemption). RCW 84.64.080 tax foreclosure (30-day confirmation appeal window).',
-  },
-  SC: {
-    state: 'SC',
-    name: 'South Carolina',
-    docStampRatePerThousand: 3.70, // S.C. Code Ann. § 12-24-10 deed recording fee ($1.85 state + $1.85 county = $3.70/k)
-    defaultSheriffPoundagePercent: 0.00,
-    defaultRecordingFee: 50.00,
-    settlementWindowHours: 48,
-    notes: 'S.C. Code Ann. § 12-51-90 tax sale (1-year statutory redemption with 3-12% penalty). S.C. Code Ann. § 15-39-720 30-day upset bid period.',
-  },
-  VA: {
-    state: 'VA',
-    name: 'Virginia',
-    docStampRatePerThousand: 3.33, // Va. Code Ann. § 58.1-801 ($2.50/k state + $0.833/k local)
-    defaultSheriffPoundagePercent: 0.00,
-    defaultRecordingFee: 65.00,
-    settlementWindowHours: 0,
-    notes: 'Va. Code Ann. § 55.1-320 deed of trust non-judicial foreclosure (0-day post-sale redemption).',
-  },
-  IN: {
-    state: 'IN',
-    name: 'Indiana',
-    docStampRatePerThousand: 0.00, // $0 state transfer tax
-    defaultSheriffPoundagePercent: 0.00,
-    defaultRecordingFee: 35.00,
-    settlementWindowHours: 24,
-    notes: 'Ind. Code § 6-1.1-25-1 tax sale certificate (1-year statutory redemption with 10-15% penalty). Ind. Code § 32-29-7-3 judicial mortgage foreclosure.',
-  },
-  MO: {
-    state: 'MO',
-    name: 'Missouri',
-    docStampRatePerThousand: 0.00, // $0 state transfer tax
-    defaultSheriffPoundagePercent: 0.00,
-    defaultRecordingFee: 24.00,
-    settlementWindowHours: 0,
-    notes: 'Mo. Rev. Stat. § 140.340 tax sale (1-year statutory redemption with 10% interest). Mo. Rev. Stat. § 443.410 non-judicial trustee foreclosure.',
-  },
-  AZ: {
-    state: 'AZ',
-    name: 'Arizona',
-    docStampRatePerThousand: 0.00, // $0 transfer tax
-    defaultSheriffPoundagePercent: 0.00,
-    defaultRecordingFee: 30.00,
-    settlementWindowHours: 0,
-    notes: 'A.R.S. § 42-18153 tax certificate auction (3-year redemption with 16% interest). A.R.S. § 33-807 non-judicial trustee sale (0-day post-sale redemption).',
-  },
-  MD: {
-    state: 'MD',
-    name: 'Maryland',
-    docStampRatePerThousand: 5.00, // 0.5% state transfer tax (Md. Code Tax-Prop. § 13-203)
-    defaultSheriffPoundagePercent: 0.00,
-    defaultRecordingFee: 60.00,
-    settlementWindowHours: 24,
-    notes: 'Md. Code Tax-Prop. § 14-827 tax sale certificate auction (6-month statutory redemption). 0.5% state transfer tax.',
-  },
-  AL: {
-    state: 'AL',
-    name: 'Alabama',
-    docStampRatePerThousand: 1.00, // $0.50 per $500 ($1.00/k) deed tax (Ala. Code § 40-22-1)
-    defaultSheriffPoundagePercent: 0.015, // 1.5% statutory sheriff execution fee (Ala. Code § 12-19-90)
-    defaultRecordingFee: 40.00,
-    settlementWindowHours: 24,
-    notes: 'Ala. Code § 40-22-1 deed tax ($1/k). Ala. Code § 6-5-248 180-day post-foreclosure statutory redemption for residential homestead (or 1 year otherwise).',
-  },
-});
-
-const DEFAULT_SCHEDULE = Object.freeze({
-  state: 'US',
-  name: 'Standard US Default',
-  docStampRatePerThousand: 5.00,
-  defaultSheriffPoundagePercent: 0.015,
-  defaultRecordingFee: 100.00,
-  settlementWindowHours: 48,
-  notes: 'Standard statutory baseline estimates.',
-});
+const {
+  JURISDICTION_FEE_SCHEDULES,
+  computeStatutoryStateFees,
+} = require('./statutory-fees');
 
 /**
  * Calculates complete itemized cash-to-close fee schedule
@@ -219,34 +22,30 @@ const DEFAULT_SCHEDULE = Object.freeze({
 function calculateCompleteCashToClose(params = {}) {
   const winningBid = Math.max(0, Number(params.winningBid || params.purchasePrice || params.openingBid || 0));
   const state = String(params.state || 'OH').toUpperCase();
-  const isSupported = Boolean(JURISDICTION_FEE_SCHEDULES[state]);
-  const schedule = JURISDICTION_FEE_SCHEDULES[state] || DEFAULT_SCHEDULE;
-
-  const isMarketplace = Boolean(params.isMarketplace || params.source === 'bid4assets' || params.source === 'servicelink');
+  const baseFees = computeStatutoryStateFees({
+    purchasePrice: winningBid,
+    state,
+    source: params.source,
+    distressType: params.distressType,
+    isTaxSale: params.isTaxSale,
+    isMarketplace: params.isMarketplace,
+  });
 
   // 1. Buyer's Premium: 5% on marketplace auctions ($2,500 min); 0% on direct county sales
-  let buyersPremium = 0;
-  if (isMarketplace) {
-    buyersPremium = Math.max(2500, Math.round(winningBid * 0.05));
-  } else if (params.buyersPremium != null) {
+  let buyersPremium = baseFees.buyersPremium;
+  if (!baseFees.isMarketplace && params.buyersPremium != null) {
     buyersPremium = Math.max(0, Number(params.buyersPremium));
   }
 
-  // 2. Sheriff Poundage
-  let sheriffPoundage = 0;
-  if (params.sheriffPoundage != null) {
-    sheriffPoundage = Math.max(0, Number(params.sheriffPoundage));
-  } else {
-    sheriffPoundage = Math.round(winningBid * schedule.defaultSheriffPoundagePercent);
-  }
+  // 2. Sheriff Poundage (uses exact statutory tiered/marginal formula unless overridden)
+  const sheriffPoundage = params.sheriffPoundage != null
+    ? Math.max(0, Number(params.sheriffPoundage))
+    : baseFees.sheriffPoundage;
 
   // 3. State & County Transfer Taxes (Documentary Stamps)
-  let transferTax = 0;
-  if (params.transferTax != null) {
-    transferTax = Math.max(0, Number(params.transferTax));
-  } else {
-    transferTax = Math.round((winningBid / 1000) * schedule.docStampRatePerThousand);
-  }
+  const transferTax = params.transferTax != null
+    ? Math.max(0, Number(params.transferTax))
+    : baseFees.transferTax;
 
   // 4. Delinquent Property Taxes
   const delinquentTaxes = Math.max(0, Number(params.delinquentTaxes || 0));
@@ -254,7 +53,7 @@ function calculateCompleteCashToClose(params = {}) {
   // 5. Recording Fees
   const recordingFees = params.recordingFees != null
     ? Math.max(0, Number(params.recordingFees))
-    : schedule.defaultRecordingFee;
+    : baseFees.defaultRecordingFee;
 
   // Total Acquisition Cost
   const totalAcquisitionCost = winningBid + buyersPremium + sheriffPoundage + transferTax + delinquentTaxes + recordingFees;
@@ -267,9 +66,9 @@ function calculateCompleteCashToClose(params = {}) {
 
   return {
     state,
-    jurisdictionName: schedule.name,
-    supported: isSupported,
-    notice: isSupported ? null : `Statutory fee preset unavailable for state ${state}`,
+    jurisdictionName: baseFees.schedule.name,
+    supported: baseFees.supported,
+    notice: baseFees.supported ? null : `Statutory fee preset unavailable for state ${state}`,
     winningBid,
     buyersPremium,
     sheriffPoundage,
@@ -279,9 +78,9 @@ function calculateCompleteCashToClose(params = {}) {
     totalAcquisitionCost,
     creditedDeposit,
     netCashDueAtSettlement,
-    settlementWindowHours: schedule.settlementWindowHours,
-    statutoryNotes: schedule.notes,
-    isMarketplace,
+    settlementWindowHours: baseFees.settlementWindowHours,
+    statutoryNotes: baseFees.statutoryNotes,
+    isMarketplace: baseFees.isMarketplace,
     computedAt: typeof params.computedAt === 'string' && params.computedAt.trim()
       ? params.computedAt.trim()
       : new Date().toISOString(),

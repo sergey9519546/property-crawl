@@ -92,7 +92,7 @@ function buildGeographyPages(
 }
 
 async function buildSitemapEntries(): Promise<MetadataRoute.Sitemap> {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.PUBLIC_APP_ORIGIN || 'https://perfectproperty.org';
+  const baseUrl = require('@/lib/app-origin').getCanonicalOrigin();
   const now = new Date();
 
   const staticPages: MetadataRoute.Sitemap = [

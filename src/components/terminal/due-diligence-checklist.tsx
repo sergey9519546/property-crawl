@@ -95,6 +95,8 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
     saleDate: listing.saleDate,
     state: stateCode,
     purchasePrice: openingBid,
+    marketValue: typeof listing.estLow === "number" && typeof listing.estHigh === "number" ? Math.round((listing.estLow + listing.estHigh) / 2) : null,
+    taxAssessedValue: listing.assessed ?? null,
     redemptionDays: typeof listing.redemptionDays === "number" ? listing.redemptionDays : null,
     hasIrsLien: hasIrsNoticeFlag,
   });

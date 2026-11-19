@@ -65,8 +65,10 @@ function evaluatePriceDrop(listing, baselineRecord) {
 /**
  * Generates an investor alert digest in both Markdown and HTML formats.
  */
+const { getCanonicalOrigin } = require('../app-origin');
+
 function generateInvestorDigestReport({ hunt, evaluation, listings = [], options = {} }) {
-  const appUrl = (options.appUrl || process.env.NEXT_PUBLIC_APP_URL || 'https://perfectproperty.org').replace(/\/+$/, '');
+  const appUrl = getCanonicalOrigin(options.appUrl);
   const evaluatedAt = evaluation?.evaluatedAt || new Date().toISOString();
   const huntName = hunt?.name || 'Institutional Watchlist';
   const huntId = hunt?.id || 'HUNT-DEFAULT';

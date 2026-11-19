@@ -16,7 +16,7 @@
 const db = require('../db/client');
 const { scanAllListings } = require('../db/listings-scan');
 const neighborhoodStats = require('../intelligence/neighborhood-stats');
-const { computeNeighborhoodStats, getNeighborhoodStats } = neighborhoodStats;
+const { computeNeighborhoodStats, getNeighborhoodStats, normalizeCountyToken } = neighborhoodStats;
 
 function boundedInt(raw, fallback, min, max) {
   if (raw === null || raw === undefined || raw === '') return fallback;
@@ -24,14 +24,6 @@ function boundedInt(raw, fallback, min, max) {
   if (!Number.isFinite(n) || !Number.isInteger(n)) return fallback;
   if (n < min || n > max) return fallback;
   return n;
-}
-
-function normalizeCountyToken(value) {
-  return String(value || '')
-    .toLowerCase()
-    .replace(/\b(county|parish|borough|census area|municipality)\b/g, ' ')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
 }
 
 function parseStatePrefixSlug(raw) {

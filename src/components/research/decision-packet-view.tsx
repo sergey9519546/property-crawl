@@ -77,6 +77,8 @@ function applyOperatorScenario(packet: any): { packet: any; diverged: boolean; o
         auctionProgram: packet?.property?.auctionProgram,
         isTaxSale: typeof packet?.property?.isTaxSale === 'boolean' ? packet.property.isTaxSale : undefined,
         purchasePrice: scenarioPrice,
+        marketValue: typeof packet?.property?.estHigh === 'number' && typeof packet?.property?.estLow === 'number' ? Math.round((packet.property.estLow + packet.property.estHigh) / 2) : null,
+        taxAssessedValue: typeof packet?.property?.assessed === 'number' ? packet.property.assessed : null,
         redemptionDays: nextPacket.underwriting?.titleRisk?.statutoryRedemptionDays,
         hasIrsLien: Boolean(nextPacket.underwriting?.titleRisk?.hasIrsTaxLien),
         isHomestead: typeof scenario.isHomestead === 'boolean' ? scenario.isHomestead : undefined,

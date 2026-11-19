@@ -19,12 +19,12 @@ test('calculates complete Florida foreclosure cash-to-close schedule', () => {
   assert.equal(result.state, 'FL');
   assert.equal(result.winningBid, 100000);
   assert.equal(result.transferTax, 700); // $7 per $1,000 (Fla. Stat. § 201.02)
-  assert.equal(result.sheriffPoundage, 0); // Direct clerk electronic auction
+  assert.equal(result.sheriffPoundage, 1508); // Fla. Stat. § 28.24(10) clerk fee: 3% first $500 + 1.5% balance
   assert.equal(result.recordingFees, 100);
   assert.equal(result.buyersPremium, 0); // Direct county auction
-  assert.equal(result.totalAcquisitionCost, 100800);
+  assert.equal(result.totalAcquisitionCost, 102308);
   assert.equal(result.creditedDeposit, 5000);
-  assert.equal(result.netCashDueAtSettlement, 95800);
+  assert.equal(result.netCashDueAtSettlement, 97308);
   assert.equal(result.settlementWindowHours, 24);
 });
 
@@ -53,11 +53,11 @@ test('calculates complete New Jersey sheriff sale cash-to-close schedule', () =>
   });
 
   assert.equal(result.state, 'NJ');
-  assert.equal(result.sheriffPoundage, 5000); // 2.5% statutory poundage under N.J.S.A. 22A:4-8
-  assert.equal(result.transferTax, 1700); // $8.50 per $1,000
+  assert.equal(result.sheriffPoundage, 4500); // Tiered poundage under N.J.S.A. 22A:4-8 (6%/$5k + 4%/$15k + 2%/balance)
+  assert.equal(result.transferTax, 2000); // ~1.0% N.J.S.A. 46:15-7 baseline
   assert.equal(result.recordingFees, 120);
-  assert.equal(result.totalAcquisitionCost, 206820);
-  assert.equal(result.netCashDueAtSettlement, 166820);
+  assert.equal(result.totalAcquisitionCost, 206620);
+  assert.equal(result.netCashDueAtSettlement, 166620);
 });
 
 test('calculates complete Ohio sheriff sale cash-to-close schedule', () => {
@@ -69,10 +69,10 @@ test('calculates complete Ohio sheriff sale cash-to-close schedule', () => {
 
   assert.equal(result.state, 'OH');
   assert.equal(result.transferTax, 320); // $4.00 per $1,000
-  assert.equal(result.sheriffPoundage, 1600); // 2% sheriff execution fee
+  assert.equal(result.sheriffPoundage, 1200); // 1.5% ORC § 311.17 sheriff poundage
   assert.equal(result.recordingFees, 80);
-  assert.equal(result.totalAcquisitionCost, 82000);
-  assert.equal(result.netCashDueAtSettlement, 77000);
+  assert.equal(result.totalAcquisitionCost, 81600);
+  assert.equal(result.netCashDueAtSettlement, 76600);
 });
 
 test('adds 5% buyer premium on online marketplace auctions (Bid4Assets / ServiceLink)', () => {
@@ -84,7 +84,7 @@ test('adds 5% buyer premium on online marketplace auctions (Bid4Assets / Service
 
   assert.equal(marketplaceResult.buyersPremium, 5000); // 5% of $100k
   assert.equal(marketplaceResult.isMarketplace, true);
-  assert.equal(marketplaceResult.totalAcquisitionCost, 105800);
+  assert.equal(marketplaceResult.totalAcquisitionCost, 107308);
 
   // Minimum $2,500 buyer premium on smaller bids
   const smallBidResult = calculateCompleteCashToClose({
@@ -136,10 +136,10 @@ test('calculates complete New York referee sale cash-to-close schedule', () => {
 
   assert.equal(result.state, 'NY');
   assert.equal(result.transferTax, 1000); // $4.00 per $1,000
-  assert.equal(result.sheriffPoundage, 2500); // 1% referee compensation
+  assert.equal(result.sheriffPoundage, 1100); // CPLR § 8003(b) referee compensation ($1,100 cap)
   assert.equal(result.recordingFees, 150);
-  assert.equal(result.totalAcquisitionCost, 253650);
-  assert.equal(result.netCashDueAtSettlement, 228650);
+  assert.equal(result.totalAcquisitionCost, 252250);
+  assert.equal(result.netCashDueAtSettlement, 227250);
 });
 
 test('calculates complete Michigan sheriff foreclosure cash-to-close schedule', () => {
