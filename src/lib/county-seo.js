@@ -950,6 +950,7 @@ function buildCountyItemList({ state, county, listings = [], baseUrl = DEFAULT_B
 function buildCountyFaqSchema({ state, county, baseUrl = DEFAULT_BASE_URL }) {
   const st = String(state || '').trim().toUpperCase();
   const countyFormatted = formatCountyDisplayName(county);
+  const jurisdictionUnit = st === 'LA' ? 'parish' : st === 'AK' ? 'borough' : 'county';
   const redemption = getStatutoryRedemption(st);
   const feeSchedule = getStatutoryFeeSchedule(st);
 
@@ -988,7 +989,7 @@ function buildCountyFaqSchema({ state, county, baseUrl = DEFAULT_BASE_URL }) {
     },
     {
       question: `How do I participate in ${countyFormatted}, ${st} foreclosure auctions?`,
-      answer: `Foreclosure auctions in ${countyFormatted} are conducted either on courthouse steps, at designated county administrative facilities, or through approved online electronic auction portals. Bidders must bring certified funds (cashier's checks payable per county specifications) meeting the statutory deposit requirement (${feeSchedule.depositRequirement}). Personal checks and credit cards are strictly refused. Review the published notice of sale in the county civil docket or newspaper of record for exact sale hour, legal parcel description, and deposit instructions.`,
+      answer: `Foreclosure auctions in ${countyFormatted} are conducted either on courthouse steps, at designated ${jurisdictionUnit} administrative facilities, or through approved online electronic auction portals. Bidders must bring certified funds (cashier's checks payable per ${jurisdictionUnit} specifications) meeting the statutory deposit requirement (${feeSchedule.depositRequirement}). Personal checks and credit cards are strictly refused. Review the published notice of sale in the ${jurisdictionUnit} civil docket or newspaper of record for exact sale hour, legal parcel description, and deposit instructions.`,
     },
   ];
 

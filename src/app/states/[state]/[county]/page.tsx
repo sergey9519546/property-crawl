@@ -23,6 +23,8 @@ import {
 import { CountyAlertSubscribe } from "@/components/alerts/county-alert-subscribe";
 import { SiteHeader } from "@/components/site/site-header";
 import { SiteFooter } from "@/components/site/site-footer";
+import { sourceDisplayText } from "@/lib/source-display";
+import { SOURCES } from "@/data/listings";
 import { getRequestLocale } from "@/lib/i18n/server";
 import { getMessages } from "@/lib/i18n/messages";
 import { interpolate } from "@/lib/i18n/translator";
@@ -447,7 +449,7 @@ export default async function CountyDocketPage({ params }: PageProps) {
                   key={srcKey}
                   className="inline-flex items-center gap-1.5 rounded-control border border-line bg-paper px-3 py-1.5 text-xs font-medium text-ink-2"
                 >
-                  <span className="font-semibold uppercase tracking-wider">{srcKey}</span>
+                  <span className="font-semibold tracking-wider">{sourceDisplayText(SOURCES[srcKey]?.label ?? srcKey)}</span>
                   <span className="rounded-full bg-line px-1.5 py-0.2 text-label font-bold tabular-nums text-ink-2">
                     {count}
                   </span>

@@ -13,6 +13,7 @@ export async function generateMetadata(): Promise<Metadata> {
       locale === "en"
         ? "Track saved foreclosure deals, monitor opening bid price drops, review upcoming auction dates, and analyze portfolio allocation."
         : m.meta.portfolioDescription,
+    robots: { index: false, follow: false },
   };
 }
 

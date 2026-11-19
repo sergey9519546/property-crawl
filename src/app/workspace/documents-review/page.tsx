@@ -11,6 +11,7 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     title: t.docReviewTitle || "Document Review Queue | PerfectProperty",
     description: t.docReviewDesc,
+    robots: { index: false, follow: false },
   };
 }
 

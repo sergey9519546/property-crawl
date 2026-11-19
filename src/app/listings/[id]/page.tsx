@@ -454,9 +454,10 @@ export default async function ListingPage({ params, searchParams }: Props) {
     "@type": "RealEstateListing",
     name: listing.address,
     description: `Auction-source record for ${listing.address}${listing.county ? `, ${formatCountyDisplayName(listing.county)}` : ""}, ${listing.state}${listing.zip ? ` ${listing.zip}` : ""}.`,
+    datePosted: publishedText(provenance.observedAt ?? listing.saleDate, "") || undefined,
     image: publisherPhoto,
     offers: openingBid !== null ? {
-      "@type": "AggregateOffer",
+      "@type": "Offer",
       price: openingBid,
       priceCurrency: "USD",
       availability: listingOfferAvailability(statusTone),

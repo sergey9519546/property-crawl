@@ -19,7 +19,21 @@ const SITEMAP_BATCH_CONCURRENCY = 4;
 
 export const revalidate = 300;
 
-type ListingRecord = { id: string; saleDate?: string | null };
+type ListingRecord = { id: string; saleDate?: string | null; status?: string | null; lifecycleStatus?: string | null };
+
+const CONCLUDED_SITEMAP_STATUSES = new Set(['sold', 'cancelled', 'canceled', 'withdrawn', 'removed', 'closed', 'archived', 'concluded']);
+
+function isPastOrConcludedListing(record: ListingRecord, nowMs: number): boolean {
+  const status = String(record.lifecycleStatus ?? record.status ?? '').trim().toLowerCase();
+  if (status && CONCLUDED_SITEMAP_STATUSES.has(status)) return true;
+  if (record.saleDate && /^\d{4}-\d{2}-\d{2}/.test(record.saleDate)) {
+    const parsed = Date.parse(record.saleDate.slice(0, 10) + 'T23:59:59Z');
+    if (Number.isFinite(parsed) && parsed < nowMs - 24 * 60 * 60 * 1000) {
+      return true;
+    }
+  }
+  return false;
+}
 type CoveragePayload = {
   liveByState?: {
     readError?: unknown;
@@ -116,9 +130,11 @@ async function buildSitemapEntries(): Promise<MetadataRoute.Sitemap> {
   // that do not exist.
   const listingPages: MetadataRoute.Sitemap = [];
   const seenListingIds = new Set<string>();
+  const nowMs = now.getTime();
   const appendRecords = (records: ListingRecord[]) => {
     for (const typed of records) {
       if (seenListingIds.has(typed.id)) continue;
+      if (isPastOrConcludedListing(typed, nowMs)) continue;
       seenListingIds.add(typed.id);
       listingPages.push({
         url: `${baseUrl}/listings/${encodeURIComponent(typed.id)}`,

@@ -17,6 +17,8 @@ import { SiteFooter } from "@/components/site/site-footer";
 import { getRequestLocale } from "@/lib/i18n/server";
 import { getMessages } from "@/lib/i18n/messages";
 import { interpolate, selectPlural } from "@/lib/i18n/translator";
+import { sourceDisplayText } from "@/lib/source-display";
+import { SOURCES } from "@/data/listings";
 
 const VALID_STATE_CODES = new Set(Object.keys(STATE_NAMES));
 
@@ -316,7 +318,7 @@ export default async function StateCountiesPage({ params }: { params: Promise<{ 
                       <span className="tabular-nums text-ink-3">{row.count} {selectPlural(locale, row.count, m.states.listingWord)}</span>
                     </span>
                     {row.sources.length > 0 ? (
-                      <span className="mt-1 block text-xs text-ink-3">{row.sources.join(", ")}</span>
+                      <span className="mt-1 block text-xs text-ink-3">{row.sources.map((s) => sourceDisplayText(SOURCES[s]?.label ?? s)).join(", ")}</span>
                     ) : null}
                   </Link>
                 </li>
