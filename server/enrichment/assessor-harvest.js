@@ -20,10 +20,12 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { queryArcgisParcel, queryWparcelsParcel, resolveCountyKey, COUNTY_ARCGIS_REGISTRY } = require('./arcgis-parcels');
+const { queryArcgisParcel, queryWparcelsParcel, resolveCountyKey, resolveCountyEndpoint, COUNTY_ARCGIS_REGISTRY } = require('./arcgis-parcels');
 const { extractRawApn, normalizeApn } = require('../scrapers/normalization');
 
-const DEFAULT_CACHE_PATH = path.resolve(__dirname, '../../.cache/assessor-roll.json');
+const DEFAULT_CACHE_PATH = (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.SERVERLESS)
+  ? path.join(require('node:os').tmpdir(), 'property-crawl-cache', 'assessor-roll.json')
+  : path.resolve(__dirname, '../../.cache/assessor-roll.json');
 const DEFAULT_CACHE_LIMIT = 5000;
 const DEFAULT_CACHE_TTL_MS = 30 * 24 * 3600 * 1000;
 // Misses are retried on a much shorter clock than hits: long enough to stop a
@@ -126,9 +128,10 @@ function candidateListing(listing, now = Date.now()) {
 
   if (!hasCoords && !cleanApn) return null;
 
-  const countyKey = resolveCountyKey(listing.state, listing.county);
-  if (!countyKey) return null;
-  if (!hasCoords && COUNTY_ARCGIS_REGISTRY[countyKey]?.apnField === 'PAMS_PIN' && /(?:TAXLOT|BLOCK|BLK|LOT)/i.test(cleanApn)) {
+  const endpoint = resolveCountyEndpoint(listing.state, listing.county);
+  if (!endpoint) return null;
+  const countyKey = endpoint.key;
+  if (!hasCoords && endpoint.apnField === 'PAMS_PIN' && /(?:TAXLOT|BLOCK|BLK|LOT)/i.test(cleanApn)) {
     return null;
   }
 

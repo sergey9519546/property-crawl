@@ -13,7 +13,7 @@
 const { harvestAssessorRolls, loadCache, saveCache, cacheKeyFor, DEFAULT_CACHE_PATH, DEFAULT_CACHE_TTL_MS, DEFAULT_MISS_TTL_MS } = require('./assessor-harvest');
 const { extractRawApn, normalizeApn, buildParcelKey } = require('../scrapers/normalization');
 const { MARKET_CONVERSION } = require('./assessor-reading');
-const { resolveCountyKey, COUNTY_ARCGIS_REGISTRY } = require('./arcgis-parcels');
+const { resolveCountyKey, resolveCountyEndpoint, COUNTY_ARCGIS_REGISTRY } = require('./arcgis-parcels');
 const { enrichNjListing, extractNjGeocodeQuery, applyNjCadastralData } = require('./nj-cadastral');
 
 // States whose counties carry verified market conversions in this registry.
@@ -24,12 +24,10 @@ const CONVERTED_STATES = Object.freeze(
 );
 
 function countyEnrolled(state, county) {
-  if (!state || !county) return false;
-  const key = resolveCountyKey(state, county);
-  if (!key) return false;
-  // Florida conversions resolve through the statewide fallback registry, not
-  // a per-county entry, so every Florida listing is a valid candidate.
-  return Boolean(COUNTY_ARCGIS_REGISTRY[key]) || String(state).toUpperCase() === 'FL';
+  if (!state) return false;
+  const endpoint = resolveCountyEndpoint(state, county);
+  if (endpoint) return true;
+  return Boolean(resolveCountyKey(state, county)) && String(state).toUpperCase() === 'FL';
 }
 
 function candidateReady(listing) {

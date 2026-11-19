@@ -7,7 +7,7 @@ const { sourceObservedAddress, resolveCensusCoordinates } = require('../routes/p
 
 const DEFAULT_NJ_LIMIT = 40;
 const DEFAULT_GEOCODE_LIMIT = 60;
-const DEFAULT_MAX_DURATION_MS = 25_000;
+const DEFAULT_MAX_DURATION_MS = 20_000;
 const DEFAULT_CONCURRENCY = 5;
 
 function cloneJson(value) {
@@ -300,11 +300,15 @@ async function repairLiveEnrichment(options = {}) {
               prop_type AS "propType", provenance,
               source_observed_at::text AS "sourceObservedAt"
          FROM listings
-        WHERE (latitude IS NULL OR longitude IS NULL)
+        WHERE (latitude IS NULL OR longitude IS NULL OR (latitude = 0 AND longitude = 0))
           AND address IS NOT NULL
           AND state IS NOT NULL
+          AND (
+            provenance->'derivedFields'->>'geocodeAttemptedAt' IS NULL
+            OR NOT (provenance->'derivedFields'->>'geocodeAttemptedAt' ~ '^20[0-9]{2}-')
+            OR (provenance->'derivedFields'->>'geocodeAttemptedAt')::timestamptz < NOW() - INTERVAL '7 days'
+          )
         ORDER BY CASE
-          WHEN id = 'CIV-NJ-10-2249533993' THEN 0
           WHEN source_key = 'civilview' THEN 1
           WHEN source_key = 'gsa' THEN 2
           WHEN source_key = 'usda' THEN 3
@@ -325,6 +329,8 @@ async function repairLiveEnrichment(options = {}) {
       }
       const candidateListing = {
         ...row,
+        lat: (row.lat === 0 && row.lng === 0) ? null : row.lat,
+        lng: (row.lat === 0 && row.lng === 0) ? null : row.lng,
         provenance: cloneJson(row.provenance),
       };
 
@@ -343,7 +349,9 @@ async function repairLiveEnrichment(options = {}) {
             attachCensusCoordinates(candidateListing, censusCoords, observedAt);
           }
         }
-        if (Number.isFinite(Number(candidateListing.lat)) && Number.isFinite(Number(candidateListing.lng))) {
+        const resolvedLat = Number(candidateListing.lat);
+        const resolvedLng = Number(candidateListing.lng);
+        if (Number.isFinite(resolvedLat) && Number.isFinite(resolvedLng) && !(resolvedLat === 0 && resolvedLng === 0)) {
           if (!dryRun) {
             await pool.query(
               `UPDATE listings
@@ -357,8 +365,8 @@ async function repairLiveEnrichment(options = {}) {
                 WHERE id = $1`,
               [
                 row.id,
-                Number(candidateListing.lat),
-                Number(candidateListing.lng),
+                resolvedLat,
+                resolvedLng,
                 candidateListing.assessed ?? null,
                 candidateListing.year ?? null,
                 candidateListing.propType || 'Unknown',
@@ -367,6 +375,20 @@ async function repairLiveEnrichment(options = {}) {
             );
           }
           report.geocodedCount += 1;
+        } else if (!dryRun) {
+          candidateListing.provenance.derivedFields = candidateListing.provenance.derivedFields && typeof candidateListing.provenance.derivedFields === 'object'
+            ? candidateListing.provenance.derivedFields
+            : {};
+          candidateListing.provenance.derivedFields.geocodeAttemptedAt = observedAt;
+          await pool.query(
+            `UPDATE listings
+                SET latitude = NULL,
+                    longitude = NULL,
+                    geog = NULL,
+                    provenance = $2::jsonb
+              WHERE id = $1`,
+            [row.id, JSON.stringify(candidateListing.provenance)],
+          );
         }
       } catch (err) {
         report.errors.push(`geocode(${row.id}): ${err?.message || err}`);
@@ -374,6 +396,23 @@ async function repairLiveEnrichment(options = {}) {
     });
   } else {
     report.timedOut = true;
+  }
+
+  // Pass 4: Bounded Enrolled County & Statewide ArcGIS Assessor Backfill
+  if (!dryRun && options.includeAssessorBackfill !== false && !budgetExpired()
+      && typeof database?.getListings === 'function' && typeof database?.createListing === 'function') {
+    try {
+      const { backfillAssessorRolls } = require('./assessor-backfill');
+      const assessorLimit = Math.min(25, Math.max(1, Number(options.assessorLimit) || 25));
+      report.assessorBackfill = await backfillAssessorRolls({
+        db: database,
+        limit: assessorLimit,
+        fetchFn,
+        now: nowMs,
+      });
+    } catch (err) {
+      report.errors.push(`assessorBackfill: ${err?.message || err}`);
+    }
   }
 
   return report;

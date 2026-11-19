@@ -1827,6 +1827,13 @@
     },
     {
       "table": "listings",
+      "column": "parcel_key",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "listings",
       "column": "photo_url",
       "type": "text",
       "nullable": true,

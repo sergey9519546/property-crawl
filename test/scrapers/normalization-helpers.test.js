@@ -136,8 +136,11 @@ test('mapDistressStage: source comparison is case-insensitive', () => {
 test('normalizePropType and standardizeListingRecord preserve Single Family, clear Unknown, and populate images', () => {
   const { standardizeListingRecord, normalizePropType } = require('../../server/scrapers/normalization');
   assert.equal(normalizePropType('Single Family'), 'Single Family');
-  assert.equal(normalizePropType('Single Family Home'), 'Single Family Home');
+  assert.equal(normalizePropType('Single Family Home'), 'Single Family');
   assert.equal(normalizePropType('single-family residential'), 'Single Family');
+  assert.equal(normalizePropType('Mobile Home'), 'Manufactured');
+  assert.equal(normalizePropType('Vacant Lot'), 'Land');
+  assert.equal(normalizePropType('Condominium'), 'Condo');
   assert.equal(normalizePropType('Unknown'), null);
   assert.equal(normalizePropType('N/A'), null);
 

@@ -240,7 +240,7 @@ async function handleRequest(req, res) {
   res.setHeader('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  res.setHeader('Vary', 'Origin');
+  if (req.headers.origin) res.setHeader('Vary', 'Origin');
 
   const requestOrigin = req.headers.origin;
   const corsAllowed = isCorsOriginAllowed(requestOrigin, req);

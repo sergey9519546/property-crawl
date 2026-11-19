@@ -250,7 +250,7 @@ test('Schema Conformance: Normalizes all required property-crawl listing fields'
   assert.equal(listing.zip, '10987');
   assert.equal(listing.county, 'Orange');
   assert.equal(listing.apn, '25046756');
-  assert.equal(listing.propType, 'Single Family Home');
+  assert.equal(listing.propType, 'Single Family');
   assert.equal(listing.openingBid, 150000);
   assert.equal(listing.saleDate, '2026-09-10');
   assert.equal(listing.beds, 6);

@@ -122,6 +122,7 @@ CREATE TABLE IF NOT EXISTS listings (
     -- a NOT NULL here made any such upsert fail on a schema.sql-only bootstrap
     -- (docker-compose.yml mounts this file into docker-entrypoint-initdb.d).
     has_documents BOOLEAN,
+    parcel_key TEXT,
     status VARCHAR(32) NOT NULL DEFAULT 'unknown' CHECK (status IN ('unknown', 'active', 'pending', 'sold', 'closed', 'cancelled', 'scheduled', 'STAYED_BANKRUPTCY', 'ADJOURNED', 'ACTIVE_SCHEDULED', 'POSTPONED', 'STAYED', 'WITHDRAWN', 'postponed', 'stayed', 'adjourned')),
     discovery_terminal BOOLEAN NOT NULL DEFAULT FALSE,
     discovery_action_tier SMALLINT NOT NULL DEFAULT 0,
@@ -443,7 +444,8 @@ WITH base AS (
     coalesce(prop_type, 'Unknown') AS prop_type,
     source_observed_at
   FROM listings
-  WHERE (status = 'active' OR status IS NULL)
+  WHERE (status IN ('active', 'scheduled', 'pending', 'unknown') OR status IS NULL)
+    AND NOT COALESCE(discovery_terminal, FALSE)
     AND source_observed_at IS NOT NULL
     AND source_observed_at >= (NOW() - INTERVAL '365 days')
 ),
@@ -508,3 +510,4 @@ SELECT * FROM city_counts;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_mv_neighborhood_stats_key ON mv_neighborhood_stats(kind, key);
 CREATE INDEX IF NOT EXISTS idx_mv_neighborhood_stats_state ON mv_neighborhood_stats(state);
 CREATE INDEX IF NOT EXISTS idx_mv_neighborhood_stats_count_label ON mv_neighborhood_stats(count DESC, label ASC);
+CREATE INDEX IF NOT EXISTS idx_listings_state_parcel_key ON listings(state, parcel_key) WHERE parcel_key IS NOT NULL;

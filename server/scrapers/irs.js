@@ -368,6 +368,7 @@ class IrsSeizedScraper extends BaseScraper {
       estHigh: null,
       assessed: null,
       saleDate: resolvedSaleDate,
+      status: 'active',
       plaintiff: null,
       defendant,
       judgment: null,

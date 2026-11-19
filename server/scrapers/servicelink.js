@@ -339,6 +339,11 @@ class ServiceLinkScraper extends BaseScraper {
     const sourceStatus = cleanText(status.statusText, 240)
       || cleanText(record?.foreclosureSaleStatusWebsite, 240)
       || cleanText(record?.foreclosureSaleStatus, 240);
+    const flagStatus = (status.isAuctionClosed === true || status.isInPostAuction === true)
+      ? 'closed'
+      : (status.isInAuction === true
+        ? 'active'
+        : ((status.isInPreAuction === true || status.isComingSoon === true) ? 'scheduled' : null));
     const raw = compactRawRecord(record, sourceUrl);
     const gallery = publisherGallery(record, sourceUrl, observedAt);
     const documents = publisherDocuments(record, sourceUrl, observedAt);
@@ -427,7 +432,8 @@ class ServiceLinkScraper extends BaseScraper {
       raw,
       price: null,
       listingDate: cleanText(record?.createdDate, 80),
-      status: sourceStatus,
+      status: sourceStatus || flagStatus,
+      lifecycleStatus: sourceStatus || flagStatus,
       sourceObservedAt: observedAt,
       provenance,
       sourceFacts: provenance.sourceFacts,

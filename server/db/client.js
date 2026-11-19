@@ -204,7 +204,8 @@ function normalizeGeocode(latValue, lngValue) {
   const lng = optionalFiniteNumber(lngValue);
   const valid = lat !== null && lng !== null
     && lat >= -90 && lat <= 90
-    && lng >= -180 && lng <= 180;
+    && lng >= -180 && lng <= 180
+    && !(lat === 0 && lng === 0);
   return valid ? { lat, lng } : { lat: null, lng: null };
 }
 
@@ -271,10 +272,10 @@ function canonicalStatus(value) {
   if (/stay|bankruptc/.test(normalized)) return 'stayed';
   if (/reverted\s+to\s+(?:plaintiff|beneficiary)|(?:purchased|sold)\s*(?:-|to|:)\s*(?:plaintiff|beneficiary)/.test(normalized)) return 'closed';
   if (/\bsold\b|purchased\s*[-:]\s*(?:3rd|third)[-\s]*party/.test(normalized)) return 'sold';
-  if (/\bclosed\b|\bauctioned\b|\bpost[-\s]?auction\b/.test(normalized)) return 'closed';
-  if (/scheduled|coming soon|pre.?auction/.test(normalized)) return 'scheduled';
+  if (/\bclosed\b|\bauctioned\b|\bpost[-\s]?auction\b|\boutbid\b|\bended\b/.test(normalized)) return 'closed';
+  if (/scheduled|coming\s*soon|pre[-.\s]?auction/.test(normalized)) return 'scheduled';
   if (/pending/.test(normalized)) return 'pending';
-  if (normalized === 'active') return 'active';
+  if (/^(?:active|live|open|bidding|available|re-?listed)$|\bauction\s*event\b/.test(normalized)) return 'active';
   return 'unknown';
 }
 
@@ -1165,7 +1166,7 @@ class DatabaseClient {
                    OR (city IS NOT NULL AND TRIM(city) != '' AND state IS NOT NULL AND TRIM(state) != '')
               )::int AS buckets_total
             FROM listings
-            WHERE (status = 'active' OR status IS NULL)
+            WHERE (status IN ('active', 'scheduled', 'pending', 'unknown') OR status IS NULL)
               AND source_observed_at IS NOT NULL
               AND source_observed_at >= $1::timestamptz
           `, [cutoffDate]);
@@ -1263,7 +1264,7 @@ class DatabaseClient {
             ELSE NULL
           END AS label
         FROM listings
-        WHERE (status = 'active' OR status IS NULL)
+        WHERE (status IN ('active', 'scheduled', 'pending', 'unknown') OR status IS NULL)
           AND source_observed_at IS NOT NULL
           AND source_observed_at >= $1::timestamptz
           AND ($2::text IS NULL OR state = $2)
@@ -1717,7 +1718,7 @@ class DatabaseClient {
                THEN ST_Distance(geog, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography)
                ELSE NULL END AS "distanceMeters"
         FROM listings
-        WHERE (status = 'active' OR status IS NULL)
+        WHERE (status IN ('active', 'scheduled', 'pending', 'unknown') OR status IS NULL)
           AND (
             (geog IS NOT NULL AND ST_DWithin(geog, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, $3))
             OR
@@ -1755,7 +1756,7 @@ class DatabaseClient {
       const stateSql = `
         SELECT ${SUMMARY_LISTING_SELECT}
         FROM listings
-        WHERE (status = 'active' OR status IS NULL)
+        WHERE (status IN ('active', 'scheduled', 'pending', 'unknown') OR status IS NULL)
           AND state = $1
           ${idCondition}
         ORDER BY id ASC
@@ -2411,13 +2412,13 @@ class DatabaseClient {
         provenance, source_observed_at, fetched_at,
         price, listing_date, redemption_days, redemption_warning, senior_lien_risk,
         senior_lien_warning, cash_to_close, cash_to_close_details, status,
-        auction_program, lifecycle_status, transaction_outcome, has_documents
+        auction_program, lifecycle_status, transaction_outcome, has_documents, parcel_key
       ) VALUES (
         $1,$2,$3,$4,$5,$6,$7,$8,$9,
         CASE WHEN $8::float8 IS NOT NULL AND $9::float8 IS NOT NULL
           THEN ST_SetSRID(ST_MakePoint($9,$8), 4326)::geography ELSE NULL END,
         $10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,
-        $43, $44, $45, $46
+        $43, $44, $45, $46, $47
       )
       ON CONFLICT (id) DO UPDATE SET
         source_key = EXCLUDED.source_key,
@@ -2474,6 +2475,7 @@ class DatabaseClient {
         lifecycle_status = COALESCE(EXCLUDED.lifecycle_status, listings.lifecycle_status),
         transaction_outcome = COALESCE(EXCLUDED.transaction_outcome, listings.transaction_outcome),
         has_documents = COALESCE(EXCLUDED.has_documents, listings.has_documents),
+        parcel_key = COALESCE(EXCLUDED.parcel_key, listings.parcel_key),
         updated_at = NOW()
       WHERE EXCLUDED.source_observed_at IS NULL
          OR listings.source_observed_at IS NULL
@@ -2494,6 +2496,7 @@ class DatabaseClient {
         enriched.cashToClose ?? null, enriched.cashToCloseDetails, enriched.status || 'unknown',
         enriched.auctionProgram ?? null, enriched.lifecycleStatus ?? null, enriched.transactionOutcome ?? null,
         typeof enriched.hasDocuments === 'boolean' ? enriched.hasDocuments : null,
+        enriched.parcelKey ?? null,
       ];
       const queryClient = options.client || this.pool;
       const result = await queryClient.query(sql, params);
@@ -2551,7 +2554,7 @@ class DatabaseClient {
 
     for (let i = 0; i < listings.length; i += CHUNK) {
       const chunk = listings.slice(i, i + CHUNK);
-      // Build parameterized VALUES list.  Each listing maps to 46 params ($N..$N+45).
+      // Build parameterized VALUES list.  Each listing maps to 47 params ($N..$N+46).
       const valueParts = [];
       const params = [];
       let pIdx = 1;
@@ -2567,7 +2570,7 @@ class DatabaseClient {
           `${p(17)},${p(18)},${p(19)},${p(20)},${p(21)},${p(22)},${p(23)},${p(24)},` +
           `${p(25)},${p(26)},${p(27)},${p(28)},${p(29)},${p(30)},${p(31)},${p(32)},` +
           `${p(33)},${p(34)},${p(35)},${p(36)},${p(37)},${p(38)},${p(39)},${p(40)},` +
-          `${p(41)},${p(42)},${p(43)},${p(44)},${p(45)})`
+          `${p(41)},${p(42)},${p(43)},${p(44)},${p(45)},${p(46)})`
         );
         params.push(
           e.id, e.source, e.state, e.county, e.city, e.zip, e.address, e.lat, e.lng,
@@ -2583,8 +2586,9 @@ class DatabaseClient {
           e.cashToClose ?? null, e.cashToCloseDetails, e.status || 'unknown',
           e.auctionProgram ?? null, e.lifecycleStatus ?? null, e.transactionOutcome ?? null,
           typeof e.hasDocuments === 'boolean' ? e.hasDocuments : null,
+          e.parcelKey ?? null,
         );
-        pIdx += 46;
+        pIdx += 47;
       }
 
       const resolvedOpeningBidSql = 'COALESCE(EXCLUDED.opening_bid, listings.opening_bid)';
@@ -2598,7 +2602,7 @@ class DatabaseClient {
         provenance, source_observed_at, fetched_at,
         price, listing_date, redemption_days, redemption_warning, senior_lien_risk,
         senior_lien_warning, cash_to_close, cash_to_close_details, status,
-        auction_program, lifecycle_status, transaction_outcome, has_documents
+        auction_program, lifecycle_status, transaction_outcome, has_documents, parcel_key
       ) VALUES ${valueParts.join(',')}
       ON CONFLICT (id) DO UPDATE SET
         source_key = EXCLUDED.source_key,
@@ -2655,6 +2659,7 @@ class DatabaseClient {
         lifecycle_status = COALESCE(EXCLUDED.lifecycle_status, listings.lifecycle_status),
         transaction_outcome = COALESCE(EXCLUDED.transaction_outcome, listings.transaction_outcome),
         has_documents = COALESCE(EXCLUDED.has_documents, listings.has_documents),
+        parcel_key = COALESCE(EXCLUDED.parcel_key, listings.parcel_key),
         updated_at = NOW()
       WHERE EXCLUDED.source_observed_at IS NULL
          OR listings.source_observed_at IS NULL
@@ -2971,6 +2976,148 @@ class DatabaseClient {
       if (supersedeMap.has(rec.id)) {
         const provenance = { ...(rec.provenance || {}), supersededBy: supersedeMap.get(rec.id) };
         this.inMemoryData.listings[i] = { ...rec, provenance };
+        superseded += 1;
+      } else if (clearSet.has(rec.id) && rec.provenance?.supersededBy) {
+        const provenance = { ...rec.provenance };
+        delete provenance.supersededBy;
+        this.inMemoryData.listings[i] = { ...rec, provenance };
+        cleared += 1;
+      }
+    }
+      return { superseded, cleared };
+    }
+
+  /**
+   * Reconcile cross-source duplicate listings sharing (state, parcel_key, unit)
+   * or normalized (state, zip5, street_core, unit). Distinct units at one address
+   * keep separate keys so multi-unit / condo records never collapse together.
+   */
+  async reconcileCrossSourceDuplicates(options = {}) {
+    const at = typeof options.at === 'string' && isFiniteTime(options.at)
+      ? new Date(Date.parse(options.at)).toISOString()
+      : new Date().toISOString();
+
+    const extractUnitToken = (address) => {
+      const m = String(address || '').match(/\b(?:apt|apartment|unit|ste|suite|lot|bldg|fl|floor|#)\s*([a-z0-9-]+)\b/i);
+      return m ? m[1].toLowerCase() : '';
+    };
+    const normalizeStreetKey = (address) => String(address || '')
+      .split(',')[0]
+      .toLowerCase()
+      .replace(/\b(?:apt|apartment|unit|ste|suite|lot|bldg|fl|floor|#)\s*[a-z0-9-]+\b/gi, ' ')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim();
+
+    const groupKeyFor = (row) => {
+      if (!row || typeof row !== 'object') return null;
+      const st = String(row.state || '').trim().toUpperCase();
+      if (!st) return null;
+      const unit = extractUnitToken(row.address);
+      const pk = String(row.parcelKey || row.provenance?.parcelKey || '').trim();
+      if (pk) return `PK|${st}|${pk}|${unit}`;
+      const zip5 = String(row.zip || '').trim().slice(0, 5);
+      const street = normalizeStreetKey(row.address);
+      if (zip5.length === 5 && street.length >= 6) {
+        return `ADDR|${st}|${zip5}|${street}|${unit}`;
+      }
+      return null;
+    };
+
+    const scoreWinner = (a, b) => {
+      const aActive = a.status && a.status !== 'unknown' && !['sold', 'closed', 'cancelled'].includes(a.status) ? 1 : 0;
+      const bActive = b.status && b.status !== 'unknown' && !['sold', 'closed', 'cancelled'].includes(b.status) ? 1 : 0;
+      if (aActive !== bActive) return bActive - aActive;
+      const aEst = a.estLow != null && a.estHigh != null ? 1 : 0;
+      const bEst = b.estLow != null && b.estHigh != null ? 1 : 0;
+      if (aEst !== bEst) return bEst - aEst;
+      const aBid = Number(a.openingBid) > 0 ? 1 : 0;
+      const bBid = Number(b.openingBid) > 0 ? 1 : 0;
+      if (aBid !== bBid) return bBid - aBid;
+      const aGeo = a.lat != null && a.lng != null ? 1 : 0;
+      const bGeo = b.lat != null && b.lng != null ? 1 : 0;
+      if (aGeo !== bGeo) return bGeo - aGeo;
+      const aObs = a.sourceObservedAt ? Date.parse(a.sourceObservedAt) : 0;
+      const bObs = b.sourceObservedAt ? Date.parse(b.sourceObservedAt) : 0;
+      if (Number.isFinite(aObs) && Number.isFinite(bObs) && aObs !== bObs) return bObs - aObs;
+      return String(a.id || '').localeCompare(String(b.id || ''));
+    };
+
+    let rows = [];
+    if (this.isPg && this.pool) {
+      const res = await this.pool.query(
+        `SELECT id, source_key AS "source", state, zip, address, parcel_key AS "parcelKey",
+                status, opening_bid::float8 AS "openingBid", est_low::float8 AS "estLow",
+                est_high::float8 AS "estHigh", latitude::float8 AS "lat", longitude::float8 AS "lng",
+                source_observed_at::text AS "sourceObservedAt", provenance
+           FROM listings
+          WHERE NOT COALESCE(discovery_terminal, FALSE)`
+      );
+      rows = (res.rows || []).map(mapPgListingRow);
+    } else if (this.memoryInventoryRequested()) {
+      rows = this.inMemoryData.listings.filter((r) => r && !['sold', 'closed', 'cancelled'].includes(String(r.status || '').toLowerCase()));
+    } else {
+      return { superseded: 0, cleared: 0 };
+    }
+
+    const groups = new Map();
+    for (const row of rows) {
+      const k = groupKeyFor(row);
+      if (!k) continue;
+      if (!groups.has(k)) groups.set(k, []);
+      groups.get(k).push(row);
+    }
+
+    const toSupersede = [];
+    const toClearIds = [];
+    for (const [k, entries] of groups.entries()) {
+      if (entries.length < 2) continue;
+      entries.sort(scoreWinner);
+      const winner = entries[0];
+      if (winner.provenance?.supersededBy) toClearIds.push(winner.id);
+      for (let i = 1; i < entries.length; i += 1) {
+        const loser = entries[i];
+        if (loser.provenance?.supersededBy?.byId === winner.id) continue;
+        toSupersede.push({
+          id: loser.id,
+          marker: { byId: winner.id, at, reason: 'cross_source_duplicate', key: k },
+        });
+      }
+    }
+
+    if (this.isPg && this.pool) {
+      for (let i = 0; i < toSupersede.length; i += 500) {
+        const chunk = toSupersede.slice(i, i + 500);
+        await this.pool.query(
+          `UPDATE listings
+              SET provenance = jsonb_set(COALESCE(listings.provenance, '{}'::jsonb), '{supersededBy}', u.marker::jsonb, true),
+                  updated_at = NOW()
+             FROM UNNEST($1::text[], $2::text[]) AS u(id, marker)
+            WHERE listings.id = u.id`,
+          [chunk.map((item) => item.id), chunk.map((item) => JSON.stringify(item.marker))],
+        );
+      }
+      if (toClearIds.length > 0) {
+        await this.pool.query(
+          `UPDATE listings
+              SET provenance = provenance - 'supersededBy',
+                  updated_at = NOW()
+            WHERE id = ANY($1::text[])
+              AND provenance ? 'supersededBy'`,
+          [toClearIds],
+        );
+      }
+      return { superseded: toSupersede.length, cleared: toClearIds.length };
+    }
+
+    const supersedeMap = new Map(toSupersede.map((x) => [x.id, x.marker]));
+    const clearSet = new Set(toClearIds);
+    let superseded = 0;
+    let cleared = 0;
+    for (let i = 0; i < this.inMemoryData.listings.length; i += 1) {
+      const rec = this.inMemoryData.listings[i];
+      if (!rec) continue;
+      if (supersedeMap.has(rec.id)) {
+        this.inMemoryData.listings[i] = { ...rec, provenance: { ...(rec.provenance || {}), supersededBy: supersedeMap.get(rec.id) } };
         superseded += 1;
       } else if (clearSet.has(rec.id) && rec.provenance?.supersededBy) {
         const provenance = { ...rec.provenance };
@@ -3507,7 +3654,7 @@ class DatabaseClient {
     const serviceLinkStaleDays = Math.max(1, Math.trunc(Number(options.serviceLinkStaleDays) || 5));
     const serviceLinkFreshWindowDays = Math.max(1, Math.trunc(Number(options.serviceLinkFreshWindowDays) || 3));
     const serviceLinkHardStaleDays = Math.max(serviceLinkStaleDays, Math.trunc(Number(options.serviceLinkHardStaleDays) || 7));
-    const concludedGraceDays = Math.max(1, Math.trunc(Number(options.concludedGraceDays) || 14));
+    const concludedGraceDays = Math.max(1, Math.trunc(Number(options.concludedGraceDays) || 1));
     const observationRetentionDays = Math.max(7, Math.trunc(Number(options.observationRetentionDays) || 30));
     const purgeQuery = (sql, params = [], timeoutMs = 12_000) => queryWithStatementTimeout(this.pool, sql, params, timeoutMs);
 
@@ -3602,13 +3749,6 @@ class DatabaseClient {
                   OR (
                     sale_date IS NOT NULL
                     AND sale_date < CURRENT_DATE - ($1::int * INTERVAL '1 day')
-                    AND LOWER(COALESCE(status, '')) NOT IN ('postponed', 'adjourned', 'stayed')
-                    AND LOWER(COALESCE(lifecycle_status, '')) NOT IN ('postponed', 'adjourned', 'stayed')
-                  )
-                  OR (
-                    sale_date IS NOT NULL
-                    AND sale_date < CURRENT_DATE
-                    AND COALESCE(source_observed_at, updated_at) < NOW() - INTERVAL '24 hours'
                     AND LOWER(COALESCE(status, '')) NOT IN ('postponed', 'adjourned', 'stayed')
                     AND LOWER(COALESCE(lifecycle_status, '')) NOT IN ('postponed', 'adjourned', 'stayed')
                   )

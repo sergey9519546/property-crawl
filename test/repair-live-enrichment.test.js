@@ -33,10 +33,21 @@ function makeFakePool(initialRows) {
         const limit = Number(params[0]) || 60;
         return {
           rows: rows
-            .filter((r) => (r.lat == null || r.lng == null) && r.address && r.state)
+            .filter((r) => (r.lat == null || r.lng == null || (r.lat === 0 && r.lng === 0)) && r.address && r.state)
             .slice(0, limit)
             .map((r) => ({ ...r })),
         };
+      }
+      if (normalizedSql.startsWith('UPDATE listings SET latitude = NULL, longitude = NULL')) {
+        const [id, provenanceJson] = params;
+        const target = rows.find((r) => r.id === id);
+        if (target) {
+          target.lat = null;
+          target.lng = null;
+          target.provenance = JSON.parse(provenanceJson);
+          updates.push({ kind: 'geocode_backoff', id });
+        }
+        return { rowCount: target ? 1 : 0, rows: [] };
       }
       if (normalizedSql.startsWith('UPDATE listings SET latitude = $2, longitude = $3')) {
         const [id, lat, lng, assessed, year, propType, provenanceJson] = params;

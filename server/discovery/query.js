@@ -19,21 +19,39 @@ const text = (v) =>
     .trim()
     .toLowerCase();
 const PROP_TYPE_SYNONYMS = Object.freeze({
-  'single family': 'Single Family Home',
-  'single-family': 'Single Family Home',
-  'single family home': 'Single Family Home',
-  'single family residence': 'Single Family Home',
-  'single family residential': 'Single Family Home',
-  'sfr': 'Single Family Home',
+  'single family': 'Single Family',
+  'single-family': 'Single Family',
+  'single family home': 'Single Family',
+  'single family residence': 'Single Family',
+  'single-family residence': 'Single Family',
+  'single family residential': 'Single Family',
+  'single-family residential': 'Single Family',
+  'sfr': 'Single Family',
+  'manufactured': 'Manufactured',
+  'manufactured home': 'Manufactured',
+  'mobile': 'Manufactured',
+  'mobile home': 'Manufactured',
+  'modular': 'Manufactured',
+  'modular home': 'Manufactured',
+  'land': 'Land',
+  'vacant land': 'Land',
+  'vacant lot': 'Land',
+  'lot': 'Land',
+  'acreage': 'Land',
+  'raw land': 'Land',
+  'condo': 'Condo',
+  'condominium': 'Condo',
+  'condo/townhouse': 'Condo',
   'multi family': 'Multi Family',
   'multi-family': 'Multi Family',
   'multi family dwelling': 'Multi Family',
   'multi-family dwelling': 'Multi Family',
+  'town house': 'Town House',
   'townhouse': 'Town House',
   'town home': 'Town House',
   'townhome': 'Town House',
 });
-const PROP_TYPE_UNKNOWN_LITERALS = new Set(['', 'unknown', 'n/a', 'none', '-']);
+const PROP_TYPE_UNKNOWN_LITERALS = new Set(['', 'unknown', 'n/a', 'none', 'unspecified', '-']);
 const normalizeTypeValue = (v) => {
   const cleaned = String(v ?? '').trim();
   const lowered = cleaned.toLowerCase();
@@ -41,8 +59,10 @@ const normalizeTypeValue = (v) => {
   return PROP_TYPE_SYNONYMS[lowered] || cleaned;
 };
 const PROP_TYPE_ALIAS_SQL = Object.freeze({
-  'single family home': "('single family','single-family','single family home','single family residence','single-family residence','single family residential','single-family residential','sfr')",
   'single family': "('single family','single-family','single family home','single family residence','single-family residence','single family residential','single-family residential','sfr')",
+  'manufactured': "('manufactured','manufactured home','mobile','mobile home','modular','modular home')",
+  'land': "('land','vacant land','vacant lot','lot','acreage','raw land')",
+  'condo': "('condo','condominium','condo/townhouse')",
   'multi family': "('multi family','multi-family','multi family dwelling','multi-family dwelling')",
   'town house': "('town house','townhouse','town home','townhome')",
 });
@@ -257,6 +277,7 @@ function queryFromUrl(url) {
     zoom,
     mode: rawMode || "default",
     ...(get("summary") === "1" || get("summary") === "true" ? { summary: true } : {}),
+    ...(get("includeSuperseded") === "1" || get("includeSuperseded") === "true" ? { includeSuperseded: true } : {}),
     facets: (get("facets") || "").split(",").filter(Boolean),
   };
 }
@@ -316,6 +337,7 @@ function matches(row, f) {
   // alone; the store-level gates exclude source-less rows from the feed.
   if (row && typeof row.source === 'string' && row.source !== ''
       && !servesListings(row.source)) return false;
+  if (!f.includeSuperseded && row?.provenance?.supersededBy) return false;
   const d = derived(row);
   if (
     f.q &&
@@ -743,6 +765,7 @@ function pgWhere(f, start = 1, options = {}) {
       w.push(`(longitude>=$${first} OR longitude<=$${first + 1})`);
     }
   }
+  if (!f.includeSuperseded) w.push("provenance #> '{supersededBy}' IS NULL");
   if (f.lat != null && f.lng != null) {
     const first = start + p.length;
     w.push(`ST_DWithin(geog, ST_SetSRID(ST_MakePoint($${first},$${first + 1}),4326)::geography,$${first + 2})`);
@@ -1031,7 +1054,7 @@ async function pgSearch(database, f, options = {}) {
       // a facet that leaves '' as its own bucket advertises a chip the sentinel
       // can never select. Real Postgres exposed this - the embedded engine
       // never ran these {skip: !databaseUrl} parity tests.
-      type: "CASE WHEN lower(btrim(coalesce(prop_type,''))) IN ('', 'unknown', 'n/a', 'none', '-') THEN NULL WHEN lower(btrim(prop_type)) IN ('single family', 'single-family', 'single family residence', 'single family residential', 'sfr') THEN 'Single Family Home' WHEN lower(btrim(prop_type)) IN ('multi-family', 'multi family dwelling', 'multi-family dwelling') THEN 'Multi Family' WHEN lower(btrim(prop_type)) IN ('townhouse', 'town home', 'townhome') THEN 'Town House' ELSE btrim(prop_type) END",
+      type: "CASE WHEN lower(btrim(coalesce(prop_type,''))) IN ('', 'unknown', 'n/a', 'none', 'unspecified', '-') THEN NULL WHEN lower(btrim(prop_type)) IN ('single family', 'single-family', 'single family home', 'single family residence', 'single-family residence', 'single family residential', 'single-family residential', 'sfr') THEN 'Single Family' WHEN lower(btrim(prop_type)) IN ('manufactured', 'manufactured home', 'mobile', 'mobile home', 'modular', 'modular home') THEN 'Manufactured' WHEN lower(btrim(prop_type)) IN ('land', 'vacant land', 'vacant lot', 'lot', 'acreage', 'raw land') THEN 'Land' WHEN lower(btrim(prop_type)) IN ('condo', 'condominium', 'condo/townhouse') THEN 'Condo' WHEN lower(btrim(prop_type)) IN ('multi family', 'multi-family', 'multi family dwelling', 'multi-family dwelling') THEN 'Multi Family' WHEN lower(btrim(prop_type)) IN ('town house', 'townhouse', 'town home', 'townhome') THEN 'Town House' ELSE btrim(prop_type) END",
       // Program is derived too - auction_program falling back to
       // provenance.sourceFacts.auctionProgram, exactly as matches() reads it and
       // exactly as pgWhere filters it. Grouping by the bare column put any

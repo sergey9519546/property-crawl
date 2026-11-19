@@ -370,6 +370,7 @@ class UsdaResalesScraper extends BaseScraper {
       estHigh: null,
       assessed: null,
       saleDate: null,
+      status: 'active',
       plaintiff: null,
       defendant: null,
       judgment: null,

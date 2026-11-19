@@ -126,6 +126,7 @@ function parseAcceleratedDisposition(html) {
       estLow: null,
       estHigh: null,
       saleDate: null,
+      status: 'active',
       sourceUrl: directRealEstateUrl || DISPOSITION_URL,
       raw: `${title}. ${address}. Identified for accelerated disposition on the GSA public list. ${listed}`.trim(),
       provenance: {
@@ -480,6 +481,7 @@ class GsaSurplusScraper extends BaseScraper {
       estHigh: null,
       assessed: null,
       saleDate: null,
+      status: /\b(?:auction\s*closed|awarded|sold)\b/i.test(desc) ? 'closed' : 'active',
       plaintiff: null,
       defendant: null,
       judgment: null,

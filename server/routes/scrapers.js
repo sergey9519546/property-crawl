@@ -84,46 +84,35 @@ function createScrapersHandler(dependencies = {}) {
           return res.status(503).json({ error: 'Prune requires an active PostgreSQL database connection' });
         }
         try {
-          const { classifyListing } = require('../db/listing-lifecycle');
           const limit = Math.min(5000, Math.max(1, Number(body.limit ?? url.searchParams.get('limit')) || 5000));
-          const { rows } = await database.pool.query(
-            `SELECT id, source_key, lifecycle_status, status, sale_date, source_observed_at, raw_notice FROM listings`
-          );
-          const now = Date.now();
-          const concludedIds = [];
-          for (const row of rows) {
-            if (classifyListing(row, now).concluded) {
-              concludedIds.push(row.id);
-              if (concludedIds.length >= limit) break;
-            }
-          }
           let concludedDeleted = 0;
-          if (concludedIds.length > 0) {
-            const client = await database.pool.connect();
-            try {
-              await client.query('BEGIN');
-              for (let i = 0; i < concludedIds.length; i += 500) {
-                const batch = concludedIds.slice(i, i + 500);
-                const delRes = await client.query('DELETE FROM listings WHERE id = ANY($1::text[])', [batch]);
-                concludedDeleted += delRes.rowCount || 0;
-              }
-              await client.query('COMMIT');
-            } catch (txErr) {
-              try { await client.query('ROLLBACK'); } catch (_) {}
-              throw txErr;
-            } finally {
-              client.release();
-            }
-          }
+          const delRes = await database.pool.query(
+            `DELETE FROM listings
+              WHERE id IN (
+                SELECT id FROM listings
+                 WHERE discovery_terminal IS TRUE
+                    OR LOWER(COALESCE(lifecycle_status, '')) IN ('sold', 'closed', 'ended', 'completed', 'cancelled', 'retired', 'withdrawn')
+                    OR LOWER(COALESCE(status, '')) IN ('sold', 'closed', 'ended', 'completed', 'cancelled', 'retired', 'withdrawn')
+                 LIMIT $1
+              )`,
+            [limit],
+          );
+          concludedDeleted = delRes.rowCount || 0;
           const stalePurged = typeof database.purgeStaleListings === 'function'
             ? await database.purgeStaleListings()
             : { deleted: 0, observationsDeleted: 0 };
+          const crossDedupe = typeof database.reconcileCrossSourceDuplicates === 'function'
+            ? await database.reconcileCrossSourceDuplicates().catch(() => ({ superseded: 0, cleared: 0 }))
+            : null;
+          const mvRefreshed = typeof database.refreshNeighborhoodStatsMaterializedView === 'function'
+            ? await database.refreshNeighborhoodStatsMaterializedView({ concurrent: true }).catch(() => false)
+            : false;
           const countRes = await database.pool.query('SELECT count(*)::int AS n FROM listings');
           const remainingTotal = Number(countRes.rows[0]?.n || 0);
           return res.json({
             status: 'completed',
             action: 'prune',
-            report: { scanned: rows.length, concludedDeleted, stalePurged, remainingTotal },
+            report: { concludedDeleted, stalePurged, crossDedupe, mvRefreshed, remainingTotal },
           });
         } catch (err) {
           return res.status(err?.status || 500).json({ error: err?.message || 'Prune operation failed' });

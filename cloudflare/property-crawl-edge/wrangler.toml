@@ -2,5 +2,13 @@ name = "property-crawl-edge"
 main = "worker.js"
 compatibility_date = "2026-01-01"
 
+[vars]
+ORIGIN_URL = "https://property-crawl-api.vercel.app"
+API_ORIGIN = "https://property-crawl-api.vercel.app"
+
+[[r2_buckets]]
+binding = "VAULT"
+bucket_name = "property-crawl-vault"
+
 [triggers]
-crons = ["*/5 * * * *", "17 */6 * * *"]
+crons = ["*/5 * * * *", "29 * * * *", "17 */6 * * *"]

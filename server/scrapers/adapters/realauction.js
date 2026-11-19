@@ -100,6 +100,90 @@ function parseAdTabTable(tableHtml = '') {
   return fields;
 }
 
+function titleCaseCity(raw) {
+  const clean = String(raw || '').replace(/\s+/g, ' ').trim();
+  if (!clean) return null;
+  if (clean === clean.toUpperCase() || clean === clean.toLowerCase()) {
+    return clean.toLowerCase().replace(/\b([a-z])/g, (m) => m.toUpperCase());
+  }
+  return clean;
+}
+
+function splitRealAuctionAddress(rawAddr = '', fallbackState = '') {
+  const normalized = normalizeOcrText(String(rawAddr || ''))
+    .replace(/\b([A-Za-z]{2})\s*[-:]\s*(\d{5}(?:-\d{4})?)\b/g, '$1 $2')
+    .replace(/\s+,/g, ',')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!normalized) return { address: '', streetAddress: '', city: null, state: fallbackState ? String(fallbackState).toUpperCase() : null, zip: null };
+
+  const expectedSt = fallbackState ? String(fallbackState).trim().toUpperCase() : '';
+  const fullMatch = normalized.match(/^(.+?),\s*([A-Za-z][A-Za-z .'-]{1,40}),\s*([A-Za-z]{2})\s+(\d{5})(?:-\d{4})?\s*$/);
+  if (fullMatch) {
+    const st = fullMatch[3].toUpperCase();
+    if (!expectedSt || st === expectedSt) {
+      return {
+        address: normalized,
+        streetAddress: fullMatch[1].replace(/[,\s]+$/, '').trim(),
+        city: titleCaseCity(fullMatch[2]),
+        state: st,
+        zip: fullMatch[4],
+      };
+    }
+  }
+
+  const zipOnlyMatch = normalized.match(/^(.+?),\s*(?:([A-Za-z]{2})\s+)?(\d{5})(?:-\d{4})?\s*$/);
+  if (zipOnlyMatch) {
+    return {
+      address: normalized,
+      streetAddress: zipOnlyMatch[1].replace(/[,\s]+$/, '').trim(),
+      city: null,
+      state: (zipOnlyMatch[2] ? zipOnlyMatch[2].toUpperCase() : expectedSt) || null,
+      zip: zipOnlyMatch[3],
+    };
+  }
+
+  const trailingZip = normalized.match(/\b(\d{5})(?:-\d{4})?\s*$/);
+  return {
+    address: normalized,
+    streetAddress: normalized,
+    city: null,
+    state: expectedSt || null,
+    zip: trailingZip ? trailingZip[1] : null,
+  };
+}
+
+function deriveRealAuctionStatusFields(rawStatus = '', area = null) {
+  const statusText = String(rawStatus || '').trim();
+  const isAreaC = String(area || '').toUpperCase() === 'C';
+  const effective = statusText || (isAreaC ? 'Canceled' : '');
+  if (!effective) return null;
+  if (/bankruptcy|automatic\s*stay/i.test(effective)) {
+    return { status: 'stayed', lifecycleStatus: 'stayed', transactionOutcome: null, cancellationReason: 'Bankruptcy Stay' };
+  }
+  if (/\bstay(?:ed)?\b/i.test(effective)) {
+    return { status: 'stayed', lifecycleStatus: 'stayed', transactionOutcome: null, cancellationReason: 'Court Stay' };
+  }
+  if (/cancel|dismiss|withdrawn|vacated|redeem|removed/i.test(effective) || isAreaC) {
+    return { status: 'cancelled', lifecycleStatus: 'cancelled', transactionOutcome: 'cancelled', cancellationReason: 'Canceled' };
+  }
+  if (/postpone|adjourn|continue|reschedul/i.test(effective)) {
+    return { status: 'postponed', lifecycleStatus: 'postponed', transactionOutcome: null, cancellationReason: 'Postponed' };
+  }
+  if (/sold|third\s*party|plaintiff\s*bid|reverted/i.test(effective)) {
+    return {
+      status: 'sold',
+      lifecycleStatus: 'sold',
+      transactionOutcome: /reverted|plaintiff/i.test(effective) ? 'reverted_to_plaintiff' : 'sold',
+      cancellationReason: null,
+    };
+  }
+  if (/active|upcoming|scheduled|running|open|re-?list/i.test(effective)) {
+    return { status: 'scheduled', lifecycleStatus: 'scheduled', transactionOutcome: null, cancellationReason: null };
+  }
+  return null;
+}
+
 function parseCurrency(str) {
   if (!str) return null;
   const match = String(str).match(/([0-9,]+(?:\.[0-9]{2})?)/);
@@ -289,7 +373,7 @@ function parseRealAuctionCard(cardHtml = '', county = 'cuyahoga', state = 'OH', 
     return null;
   }
 
-  const zipMatch = cleanAddress ? cleanAddress.match(/\b(\d{5})(?:-\d{4})?\s*$/) : null;
+  const addrParts = cleanAddress ? splitRealAuctionAddress(cleanAddress, state) : { address: null, city: null, zip: null };
   const countyCapitalized = county.charAt(0).toUpperCase() + county.slice(1).toLowerCase();
   const cleanState = state.toUpperCase();
 
@@ -303,8 +387,10 @@ function parseRealAuctionCard(cardHtml = '', county = 'cuyahoga', state = 'OH', 
     certificateNumber,
     homestead,
     parcelId,
-    address: cleanAddress,
-    zip: zipMatch ? zipMatch[1] : null,
+    address: addrParts.address || cleanAddress,
+    streetAddress: addrParts.streetAddress || addrParts.address || cleanAddress,
+    city: addrParts.city || null,
+    zip: addrParts.zip || null,
     openingBid,
     judgment,
     assessed,
@@ -390,4 +476,6 @@ module.exports = {
   getRealAuctionUrl,
   parseRealAuctionCard,
   parseRealAuctionDocketHtml,
+  splitRealAuctionAddress,
+  deriveRealAuctionStatusFields,
 };

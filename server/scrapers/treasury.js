@@ -290,6 +290,7 @@ class TreasuryForfeitureScraper extends BaseScraper {
       estHigh: null,
       assessed: null,
       saleDate,
+      status: 'active',
       plaintiff: null,
       defendant: null,
       judgment: null,

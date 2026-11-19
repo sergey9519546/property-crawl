@@ -14,6 +14,8 @@ const {
   REALAUCTION_FLORIDA_TAXDEED_COUNTIES, REALAUCTION_MULTI_STATE_PORTALS,
   decodeRealAuctionMacros,
   parseRealAuctionDocketHtml,
+  splitRealAuctionAddress,
+  deriveRealAuctionStatusFields,
 } = require('./adapters/realauction');
 const { standardizeListingRecord } = require('./normalization');
 const {
@@ -738,7 +740,10 @@ class SheriffSaleScraper extends BaseScraper {
       const linkMatch = row.match(/href=["']([^"']+)["']/i);
 
       if (addressMatch && caseMatch && linkMatch) {
-        const address = addressMatch[1].trim();
+        const addrParts = splitRealAuctionAddress(addressMatch[1].trim(), county.state);
+        const address = addrParts.address || addressMatch[1].trim();
+        const explicitStatusMatch = row.match(/(?:Auction\s*Status|Status)\s*:?\s*([^<\n\r]{3,60})/i);
+        const rowStatus = deriveRealAuctionStatusFields(explicitStatusMatch?.[1] || '', options.area);
         const openingBid = bidMatch ? parseInt(bidMatch[1].replace(/,/g, ''), 10) : null;
         const appraisal = appraisalMatch ? parseInt(appraisalMatch[1].replace(/,/g, ''), 10) : null;
         const saleDate = saleDateMatch ? this.normalizeSaleDate(saleDateMatch[1]) : null;
@@ -752,9 +757,15 @@ class SheriffSaleScraper extends BaseScraper {
           id,
           state: county.state,
           county: county.name,
-          city: null,
-          zip: null,
+          city: addrParts.city || null,
+          zip: addrParts.zip || null,
           address,
+          ...(options.area ? { area: options.area } : {}),
+          ...(rowStatus ? {
+            status: rowStatus.status,
+            lifecycleStatus: rowStatus.lifecycleStatus,
+            ...(rowStatus.transactionOutcome ? { transactionOutcome: rowStatus.transactionOutcome } : {}),
+          } : {}),
           openingBid,
           estLow: null,
           estHigh: null,
@@ -835,13 +846,20 @@ class SheriffSaleScraper extends BaseScraper {
           }
         }
 
+        const statusFields = deriveRealAuctionStatusFields(parsed.status || parsed.cancellationReason || '', options.area);
         listings.push({
           id,
           state: county.state,
           county: county.name,
-          city: null,
+          city: parsed.city || null,
           zip: parsed.zip || null,
           address: parsed.address,
+          ...(options.area ? { area: options.area } : {}),
+          ...(statusFields ? {
+            status: statusFields.status,
+            lifecycleStatus: statusFields.lifecycleStatus,
+            ...(statusFields.transactionOutcome ? { transactionOutcome: statusFields.transactionOutcome } : {}),
+          } : {}),
           apn: parsed.parcelId || null,
           openingBid: openingBid != null ? Math.round(openingBid) : null,
           estLow: null,
@@ -901,7 +919,8 @@ class SheriffSaleScraper extends BaseScraper {
       const appraisalMatch = line.match(/Apprais(?:al|ed(?:\s*Value)?)\s*:?\s*\$?\s*([0-9,]+)/i);
       const saleDateMatch = line.match(/\b(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}|\d{4}-\d{2}-\d{2})\b/);
       const caseNum = caseMatch[1] || caseMatch[0];
-      const address = addressMatch[1].trim();
+      const addrParts = splitRealAuctionAddress(addressMatch[1].trim(), county.state);
+      const address = addrParts.address || addressMatch[1].trim();
       const openingBid = bidMatch ? parseInt(bidMatch[1].replace(/,/g, ''), 10) : null;
       const appraisal = appraisalMatch ? parseInt(appraisalMatch[1].replace(/,/g, ''), 10) : null;
       const saleDate = saleDateMatch ? this.normalizeSaleDate(saleDateMatch[1]) : null;
@@ -917,8 +936,8 @@ class SheriffSaleScraper extends BaseScraper {
         id,
         state: county.state,
         county: county.name,
-        city: null,
-        zip: null,
+        city: addrParts.city || null,
+        zip: addrParts.zip || null,
         address,
         openingBid,
         estLow: null,
@@ -970,7 +989,8 @@ class SheriffSaleScraper extends BaseScraper {
       const linkMatch = block.match(/href=["']([^"']+)["']/i);
 
       if (addressMatch && caseMatch && linkMatch) {
-        const address = addressMatch[1].trim();
+        const addrParts = splitRealAuctionAddress(addressMatch[1].trim(), county.state);
+        const address = addrParts.address || addressMatch[1].trim();
         const openingBid = bidMatch ? parseInt(bidMatch[1].replace(/,/g, ''), 10) : null;
         const caseNum = caseMatch[1];
         const id = `SHERIFF-${county.state}-${county.name.slice(0, 3).toUpperCase()}-${caseNum.replace(/[^a-zA-Z0-9-]/g, '')}`;
@@ -982,8 +1002,8 @@ class SheriffSaleScraper extends BaseScraper {
           id,
           state: county.state,
           county: county.name,
-          city: null,
-          zip: null,
+          city: addrParts.city || null,
+          zip: addrParts.zip || null,
           address,
           openingBid,
           estLow: null,

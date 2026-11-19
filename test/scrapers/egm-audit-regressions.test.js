@@ -37,7 +37,7 @@ test('scrapers route supports action=next-slice and action=prune', async () => {
     pool: {
       async query(sql) {
         if (sql.includes('FROM discovery_checkpoints')) return { rows: [{ source_key: 'hud', cursor: { continuationToken: 'TX' } }] };
-        if (sql.includes('raw_notice')) return { rows: [{ id: 'OLD-1', source_key: 'hud', lifecycle_status: 'sold', status: 'sold', raw_notice: null }] };
+        if (sql.includes('DELETE FROM listings')) return { rowCount: 1, rows: [] };
         if (sql.includes('count(*)')) return { rows: [{ n: 5 }] };
         return { rows: [] };
       },
@@ -175,4 +175,92 @@ test('scheduler deletes discovery_checkpoints row when tail slice completes with
     pgQueries.some((q) => q.sql.includes('DELETE FROM discovery_checkpoints WHERE source_key = $1') && q.params?.[0] === 'treasury'),
     'expected tail slice completion with null continuationToken to delete discovery_checkpoints row',
   );
+});
+
+test('RealAuction FL address splitting strips hyphenated FL-ZIP while keeping unit numbers and AREA=C sets cancelled status', () => {
+  const { parseRealAuctionCard, splitRealAuctionAddress } = require('../../server/scrapers/adapters/realauction');
+  const { SheriffSaleScraper } = require('../../server/scrapers/sheriff');
+
+  const split = splitRealAuctionAddress('5120 OAKDALE AVE, UNIT 4B, TAMPA, FL- 33610', 'FL');
+  assert.equal(split.streetAddress, '5120 OAKDALE AVE, UNIT 4B');
+  assert.equal(split.address, '5120 OAKDALE AVE, UNIT 4B, TAMPA, FL 33610');
+  assert.equal(split.city, 'Tampa');
+  assert.equal(split.state, 'FL');
+  assert.equal(split.zip, '33610');
+
+  const flHtml = `
+    <div class="AUCTION_ITEM">
+      <table class="ad_tab">
+        <tr><th class="AD_LBL">Case #:</th><td class="AD_DTA">25-CA-001122</td></tr>
+        <tr><th class="AD_LBL">Property Address:</th><td class="AD_DTA">5120 OAKDALE AVE, UNIT 4B</td></tr>
+        <tr><th class="AD_LBL"></th><td class="AD_DTA">TAMPA, FL- 33610</td></tr>
+        <tr><th class="AD_LBL">Auction Date:</th><td class="AD_DTA">12/10/2026</td></tr>
+      </table>
+    </div>
+  `;
+  const parsed = parseRealAuctionCard(flHtml, 'hillsborough', 'FL');
+  assert.equal(parsed.streetAddress, '5120 OAKDALE AVE, UNIT 4B');
+  assert.equal(parsed.address, '5120 OAKDALE AVE, UNIT 4B, TAMPA, FL 33610');
+  assert.equal(parsed.city, 'Tampa');
+  assert.equal(parsed.zip, '33610');
+
+  const scraper = new SheriffSaleScraper();
+  const areaC = scraper.parseRealauctionHtml(flHtml, { name: 'Hillsborough', state: 'FL', domain: 'hillsborough.realforeclose.com' }, { area: 'C' });
+  assert.equal(areaC.length, 1);
+  assert.equal(areaC[0].area, 'C');
+  assert.equal(areaC[0].city, 'Tampa');
+  assert.equal(areaC[0].zip, '33610');
+  assert.equal(areaC[0].status, 'cancelled');
+  assert.equal(areaC[0].lifecycleStatus, 'cancelled');
+  assert.equal(areaC[0].transactionOutcome, 'cancelled');
+});
+
+test('Phase 1: federal active status, ServiceLink structured flags, Null Island guard, and conditional Vary header', () => {
+  const { prepareListingForPersistence } = require('../../server/db/client');
+  const servicelink = require('../../server/scrapers/servicelink');
+
+  assert.equal(prepareListingForPersistence({ status: 'live' }).status, 'active');
+  assert.equal(prepareListingForPersistence({ status: 'outbid' }).status, 'closed');
+  assert.equal(prepareListingForPersistence({ lat: 0, lng: 0 }).lat, null);
+  assert.equal(prepareListingForPersistence({ lat: 0, lng: 0 }).lng, null);
+  assert.equal(prepareListingForPersistence({ propType: 'Single Family Home' }).propType, 'Single Family');
+
+  const closedByFlag = servicelink.toListing({
+    listingId: 'a1cVO000004XjDoYAK',
+    propertyInfo: { websiteUrl: 'https://www.servicelinkauction.com/property-details/10-oak-st-tampa-33602-fl-united-states-tps', address: '10 Oak St', city: 'Tampa', state: 'FL', postalCode: '33602', propertyType: 'Single Family Home' },
+    listingStatus: { isAuctionClosed: true },
+  }, '2026-11-18T00:00:00.000Z');
+  assert.equal(closedByFlag.status, 'closed');
+  assert.equal(closedByFlag.propType, 'Single Family');
+
+  const serverSrc = fs.readFileSync(path.resolve(__dirname, '../../server/server.js'), 'utf8');
+  assert.match(serverSrc, /if\s*\(req\.headers\.origin\)\s*res\.setHeader\('Vary',\s*'Origin'\)/);
+});
+
+test('Phase 1: cross-source dedupe keeps distinct apartment units separate and query.js excludes supersededBy unless includeSuperseded=true', async () => {
+  process.env.PROPERTY_INVENTORY_BACKEND = 'memory';
+  const db = require('../../server/db/client');
+  const { queryFromUrl, matches } = require('../../server/discovery/query');
+
+  const prev = [...db.inMemoryData.listings];
+  try {
+    db.inMemoryData.listings = [
+      { id: 'A-1', source: 'hud', state: 'OH', zip: '44109', address: '100 Main St, Unit 1A, Cleveland, OH 44109', parcelKey: '39035:100-01', status: 'active', openingBid: 50000, lat: 41.4, lng: -81.7, sourceObservedAt: '2026-11-18T00:00:00.000Z' },
+      { id: 'B-1', source: 'sheriff', state: 'OH', zip: '44109', address: '100 Main St, Unit 1A, Cleveland, OH 44109', parcelKey: '39035:100-01', status: 'active', openingBid: null, lat: null, lng: null, sourceObservedAt: '2026-11-17T00:00:00.000Z' },
+      { id: 'C-2', source: 'hud', state: 'OH', zip: '44109', address: '100 Main St, Unit 2B, Cleveland, OH 44109', parcelKey: '39035:100-01', status: 'active', openingBid: 60000, lat: 41.4, lng: -81.7, sourceObservedAt: '2026-11-18T00:00:00.000Z' },
+    ];
+    const res = await db.reconcileCrossSourceDuplicates();
+    assert.equal(res.superseded, 1);
+    const b1 = db.inMemoryData.listings.find((x) => x.id === 'B-1');
+    const c2 = db.inMemoryData.listings.find((x) => x.id === 'C-2');
+    assert.equal(b1.provenance?.supersededBy?.byId, 'A-1');
+    assert.equal(c2.provenance?.supersededBy, undefined, 'distinct unit must not be superseded');
+
+    const defaultFilter = queryFromUrl(new URL('http://localhost/api/listings'));
+    const includeFilter = queryFromUrl(new URL('http://localhost/api/listings?includeSuperseded=true'));
+    assert.equal(matches(b1, defaultFilter), false);
+    assert.equal(matches(b1, includeFilter), true);
+  } finally {
+    db.inMemoryData.listings = prev;
+  }
 });

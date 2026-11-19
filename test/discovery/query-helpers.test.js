@@ -356,11 +356,11 @@ test('propType facet and filter unify Unknown literals and Single Family aliases
   ];
   const res = await search({ isPg: false, getListings: async () => ({ total: 4, listings: typeRows }) }, queryFromUrl(url('facets=type')));
   assert.deepEqual(res.facets.type, [
-    { value: 'Single Family Home', count: 2 },
+    { value: 'Single Family', count: 2 },
     { value: 'unknown', count: 2 },
   ]);
 
-  const sfFilter = queryFromUrl(url('type=Single%20Family%20Home'));
+  const sfFilter = queryFromUrl(url('type=Single%20Family'));
   assert.equal(matches(typeRows[0], sfFilter), true);
   assert.equal(matches(typeRows[1], sfFilter), true);
   const sfWhere = pgWhere(sfFilter);

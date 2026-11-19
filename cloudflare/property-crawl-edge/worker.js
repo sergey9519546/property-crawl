@@ -351,22 +351,59 @@ export default {
       return;
     }
     const apiOrigin = String(env?.API_ORIGIN || 'https://property-crawl-api.vercel.app').replace(/\/+$/, '');
-    const action = controller?.cron === '17 */6 * * *' ? 'prune' : 'next-slice';
+    const action = controller?.cron === '17 */6 * * *'
+      ? 'prune'
+      : (controller?.cron === '29 * * * *' ? 'repair-enrichment' : 'next-slice');
+    const edgeSecret = String(env?.EDGE_SHARED_SECRET || '').trim();
+    const notifyFailure = async (details) => {
+      try {
+        if (env?.ALERT_WEBHOOK_URL) {
+          await fetch(env.ALERT_WEBHOOK_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ event: 'edge_cron_failure', action, ...details }),
+            signal: AbortSignal.timeout(8_000),
+          }).catch(() => {});
+        } else if (env?.RESEND_API_KEY && env?.OPERATOR_EMAIL) {
+          await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${env.RESEND_API_KEY}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              from: env.RESEND_FROM || 'alerts@perfectproperty.bid',
+              to: [env.OPERATOR_EMAIL],
+              subject: `[PropertyCrawl Cron Alert] ${action} failed`,
+              text: JSON.stringify(details, null, 2),
+            }),
+            signal: AbortSignal.timeout(8_000),
+          }).catch(() => {});
+        }
+      } catch {}
+    };
     const task = fetch(`${apiOrigin}/api/scrapers/run`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
+        ...(edgeSecret ? { 'x-edge-secret': edgeSecret } : {}),
         'Content-Type': 'application/json',
         Accept: 'application/json',
       },
       body: JSON.stringify({ action }),
+      signal: typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(55_000) : undefined,
     })
       .then(async (res) => {
         const text = await res.text().catch(() => '');
         console.log(JSON.stringify({ event: 'edge_cron_complete', action, status: res.status, ok: res.ok, body: text.slice(0, 300) }));
+        if (!res.ok) {
+          await notifyFailure({ status: res.status, body: text.slice(0, 500) });
+        }
       })
-      .catch((err) => {
-        console.error(JSON.stringify({ event: 'edge_cron_error', action, error: err instanceof Error ? err.message : String(err) }));
+      .catch(async (err) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(JSON.stringify({ event: 'edge_cron_error', action, error: msg }));
+        await notifyFailure({ error: msg });
       });
     if (ctx && typeof ctx.waitUntil === 'function') {
       ctx.waitUntil(task);
