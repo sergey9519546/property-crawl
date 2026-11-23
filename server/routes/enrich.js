@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const db = require('../db/client');
 const SecuritySanitizer = require('../security/sanitizer');
 const ModelRouter = require('../ai/model_router');
@@ -196,7 +197,62 @@ async function generateAiNarrative(listing, options = {}) {
   };
 }
 
+async function readCachedNarrative(analysis) {
+  if (typeof db.getAiCache !== 'function') return { narrative: null, model: null };
+  const prompt = [
+    'Write a concise operator briefing summarizing ONLY the observed facts and explicitly stating all verification-required gaps below.',
+    'Zero-Fabrication Rule: Never invent ARV, repair cost, title status, lien clearance, occupancy, or bidding advice not present in the evidence summary.',
+    '',
+    analysis,
+  ].join('\n');
+  for (const model of ['gemini-2.0-flash-lite', 'gpt-4o-mini', SUMMARY_MODEL]) {
+    try {
+      const hash = crypto.createHash('sha256').update(`${model}:${prompt.trim()}`).digest('hex');
+      const row = await db.getAiCache(hash);
+      const narrative = row?.response_text || row?.responseText || null;
+      if (narrative) return { narrative, model: row?.model_used || row?.model || model };
+    } catch (_) {
+      // Cache lookup errors are non-fatal; return deterministic summary only.
+    }
+  }
+  return { narrative: null, model: null };
+}
+
+async function handleCachedEnrichGet(req, res) {
+  let listingId = req.query?.listingId || '';
+  if (!listingId && req.url) {
+    try {
+      listingId = new URL(req.url, 'http://localhost').searchParams.get('listingId') || '';
+    } catch (_) {
+      listingId = '';
+    }
+  }
+  if (!String(listingId).trim()) {
+    return res.status(400).json({ error: 'listingId is required' });
+  }
+  const listing = await db.getListingById(String(listingId).trim());
+  if (!listing) {
+    return res.status(404).json({ error: 'Listing not found' });
+  }
+  const analysis = buildEvidenceSummary(listing);
+  const cached = await readCachedNarrative(analysis);
+  const fallbackPrewarmed = listing.provenance?.aiCatch?.narrative || null;
+  const aiNarrative = cached.narrative || fallbackPrewarmed;
+  return res.json({
+    analysis,
+    catchSummary: listing.catchSummary || null,
+    aiNarrative,
+    cached: Boolean(aiNarrative),
+    model: cached.model || (fallbackPrewarmed ? (listing.provenance?.aiCatch?.model || SUMMARY_MODEL) : SUMMARY_MODEL),
+    costUsd: 0,
+    verified: false,
+  });
+}
+
 async function handleEnrich(req, res, deps = {}) {
+  if (req.method === 'GET') {
+    return handleCachedEnrichGet(req, res);
+  }
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }

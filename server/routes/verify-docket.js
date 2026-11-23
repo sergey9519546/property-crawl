@@ -1,6 +1,6 @@
 const db = require('../db/client');
 const Validator = require('../security/validation');
-const { requireWorkspaceIdentity } = require('../security/workspace-identity');
+// workspace-identity is required lazily inside handleVerifyDocket to avoid a circular require cycle.
 const { CourtListenerScraper } = require('../scrapers/courtlistener');
 
 function cleanText(value, maxLength = 240) {
@@ -345,8 +345,14 @@ async function handleVerifyDocket(req, res, options = {}) {
 
   // Gate personal-name / PII fields behind workspace authorization
   const env = options.env || process.env;
-  const authorized = typeof requireWorkspaceIdentity.isAuthorized === 'function'
-    ? requireWorkspaceIdentity.isAuthorized(req, env)
+  const workspaceIdentity = require('../security/workspace-identity');
+  const authFn = typeof workspaceIdentity.isWorkspaceAuthorized === 'function'
+    ? workspaceIdentity.isWorkspaceAuthorized
+    : (workspaceIdentity.requireWorkspaceIdentity && typeof workspaceIdentity.requireWorkspaceIdentity.isAuthorized === 'function'
+        ? workspaceIdentity.requireWorkspaceIdentity.isAuthorized
+        : null);
+  const authorized = typeof authFn === 'function'
+    ? authFn(req, env)
     : false;
 
   return res.status(200).json({

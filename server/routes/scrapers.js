@@ -124,8 +124,8 @@ function createScrapersHandler(dependencies = {}) {
               WHERE id IN (
                 SELECT id FROM listings
                  WHERE discovery_terminal IS TRUE
-                    OR LOWER(COALESCE(lifecycle_status, '')) IN ('sold', 'closed', 'ended', 'completed', 'cancelled', 'retired', 'withdrawn')
-                    OR LOWER(COALESCE(status, '')) IN ('sold', 'closed', 'ended', 'completed', 'cancelled', 'retired', 'withdrawn')
+                    OR LOWER(COALESCE(lifecycle_status, '')) IN ('sold', 'closed', 'ended', 'completed', 'cancelled', 'retired', 'withdrawn', 'redeemed')
+                    OR LOWER(COALESCE(status, '')) IN ('sold', 'closed', 'ended', 'completed', 'cancelled', 'retired', 'withdrawn', 'redeemed')
                  LIMIT $1
               )`,
             [limit],
@@ -149,6 +149,63 @@ function createScrapersHandler(dependencies = {}) {
           });
         } catch (err) {
           return res.status(err?.status || 500).json({ error: err?.message || 'Prune operation failed' });
+        }
+      }
+
+      if (action === 'second-look') {
+        const database = resolveDatabase();
+        try {
+          const { listCases, getCase } = require('../intelligence/research-cases');
+          const { applySecondLookReconsideration } = require('../intelligence/second-look');
+          const targetId = body.caseId ? String(body.caseId).trim() : null;
+          const allCases = targetId ? [getCase(targetId)?.case || getCase(targetId)].filter(Boolean) : listCases({ limit: 200 });
+          const results = [];
+          let triggered = 0;
+          let errors = 0;
+          for (const c of allCases) {
+            try {
+              const freshListing = c.listingId && database && typeof database.getListingById === 'function'
+                ? await database.getListingById(c.listingId)
+                : (body.listing || null);
+              if (!freshListing) continue;
+              const outcome = applySecondLookReconsideration(c.id, freshListing);
+              if (outcome?.triggered) triggered++;
+              results.push({ caseId: c.id, triggered: Boolean(outcome?.triggered) });
+            } catch (err) {
+              errors++;
+              results.push({ caseId: c.id, error: err?.message || 'reconsideration_failed' });
+            }
+          }
+          return res.json({
+            status: 'completed',
+            action: 'second-look',
+            report: { scanned: allCases.length, triggered, errors, results },
+          });
+        } catch (err) {
+          return res.status(err?.status || 500).json({ error: err?.message || 'Second-look reconsideration failed' });
+        }
+      }
+
+      if (action === 'dispatch-digests') {
+        const database = resolveDatabase();
+        try {
+          const { runAllHuntDigests } = require('../delivery/alert-digest');
+          let listings = [];
+          if (database && typeof database.getListings === 'function') {
+            const fetched = await database.getListings({ limit: Math.min(2000, Number(body.limit) || 1000) });
+            listings = Array.isArray(fetched?.listings) ? fetched.listings : (Array.isArray(fetched) ? fetched : []);
+          }
+          const report = await runAllHuntDigests({
+            listings,
+            options: {
+              env,
+              recipientEmail: body.recipientEmail || env.OPERATOR_EMAIL || null,
+              forceDispatch: Boolean(body.forceDispatch),
+            },
+          });
+          return res.json({ status: 'completed', action: 'dispatch-digests', report });
+        } catch (err) {
+          return res.status(err?.status || 500).json({ error: err?.message || 'Digest dispatch failed' });
         }
       }
 

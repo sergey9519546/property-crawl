@@ -222,6 +222,7 @@ function partitionUnreached(files = unreachedFiles()) {
 
 function main() {
   const { runnable, other } = partitionUnreached();
+  const reportOnly = process.argv.includes('--report-only') || process.env.VERIFY_TEST_COVERAGE_ACTIVE === '1';
 
   console.log('[test-coverage] test files verify.js does not list directly or via npm run:');
   if (runnable.length === 0) {
@@ -230,9 +231,11 @@ function main() {
     for (const f of runnable) console.log(`[test-coverage]   + ${f}`);
     process.env.PROPERTY_INVENTORY_BACKEND = process.env.PROPERTY_INVENTORY_BACKEND || 'memory';
     process.env.NODE_ENV = process.env.NODE_ENV || 'test';
-    console.log(`[test-coverage] running ${runnable.length} file(s) so CI actually covers them...`);
-    execFileSync(process.execPath, ['--test', '--test-concurrency=1', ...runnable], {
-      cwd: ROOT, stdio: 'inherit', timeout: 15 * 60 * 1000,
+    if (!reportOnly) {
+      console.log(`[test-coverage] running ${runnable.length} file(s) so CI actually covers them...`);
+    }
+    if (!reportOnly) for (let i = 0; i < runnable.length; i += 25) execFileSync(process.execPath, ['--test', '--test-concurrency=1', ...runnable.slice(i, i + 25)], {
+      cwd: ROOT, stdio: 'inherit', timeout: 15 * 60 * 1000, env: { ...process.env, VERIFY_TEST_COVERAGE_ACTIVE: '1' },
     });
   }
 

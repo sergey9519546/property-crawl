@@ -395,3 +395,27 @@ test('statewide endpoint resolution resolves Florida listings with null or unmap
   assert.equal(reading.dealScore, 78);
   assert.match(reading.citation, /Fla\. Stat\. § 193\.011/);
 });
+
+test('assessor reading converts enrolled CO, NC, NY, WI, AR, NJ 1:1 and CT at 70 percent', () => {
+  for (const [countyKey, snippet] of [
+    ['CO-DENVER', /39-1-104/],
+    ['NC-WAKE', /105-283/],
+    ['NY-ERIE', /R\.P\.T\.L\. § 305/],
+    ['WI-MILWAUKEE', /70\.32/],
+    ['AR-PULASKI', /26-26-401/],
+    ['NJ-BERGEN', /54:4-23/],
+  ]) {
+    const reading = interpretAssessorParcel({ countyKey, parcel: parcel(200000), openingBid: 100000 });
+    assert.equal(reading.enrolled, true, `${countyKey} enrolled`);
+    assert.equal(reading.marketComparison, 200000, `${countyKey} marketComparison`);
+    assert.equal(reading.dealScore, 65, `${countyKey} dealScore`);
+    assert.match(reading.citation, snippet, `${countyKey} citation`);
+  }
+
+  const ct = interpretAssessorParcel({ countyKey: 'CT-HARTFORD', parcel: parcel(140000), openingBid: 100000 });
+  assert.equal(ct.enrolled, true);
+  assert.equal(ct.marketComparison, 200000);
+  assert.equal(ct.dealScore, 65);
+  assert.match(ct.citation, /12-62a/);
+  assert.match(ct.citation, /0\.70/);
+});

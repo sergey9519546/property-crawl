@@ -10,187 +10,97 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 <!-- END:nextjs-agent-rules -->
 
-# Base44 dev environment
+# AGENTS.md — property-crawl (PerfectProperty) Agent Reference
+> Authoritative repository guide. Generated totals, catalog counts, route tables, and npm scripts live in `CONTEXT.md` (auto-generated, do not hand-edit; regenerate with `npm run context:gen`).
 
-Two-process app. The canonical UI is Next.js 16 (App Router) in `src/`; the
-listing API is a plain Node `http` server in `server/`. They share one
-`package.json` / `node_modules`.
+## 1. What this project is
+Evidence-first discovery and underwriting triage layer for distressed and government-sold real estate — sheriff sales, trustee sales, HUD/REO, IRS/Treasury/GSA dispositions. *"Zillow for distressed property, with an AI that reads the fine print and tells you if each one is actually a deal — and what the catch is."* (`docs/STRATEGY.md`, `PRODUCT.md`)
 
-- `npm run dev` → `next dev -p 3001` (canonical UI, port 3001 locally).
-- `npm run dev:api` → `node server/server.js` (listing API, port 3000).
-- The Next UI reaches the API via `PROPERTY_API_URL` (default
-  `http://localhost:3000`). In the Base44 compose the UI runs on port 3000
-  and proxies API calls server-side to the internal `api` service.
+## 2. Architecture & Production Topology
+Three production runtimes plus one legacy reference:
 
-No database is required to boot, and there is no silent demo fallback. With no
-reachable database configured, `server/db/client.js` reports `dataMode()`
-`unavailable` and listing routes refuse rather than implying an inventory. The
-in-memory provider is reachable only by explicit opt-in
-(`PROPERTY_INVENTORY_BACKEND=memory`) or under `NODE_ENV=test`; it is seeded from
-`data.js` (read the current totals from CONTEXT.md, which is generated and
-digest-checked; live scrapers and `.cache/live-listings.json` can raise the
-served total further). Configure a Postgres+PostGIS `DATABASE_URL` (or the
-embedded engine via `PROPERTY_DB=embedded` + `PROPERTY_PG_DATA_DIR`) for a
-durable inventory. On Render (`RENDER=true`, platform-injected), a configured
-`DATABASE_URL` wins even when `PROPERTY_DB=embedded` is also set, so a
-deployment cannot silently serve an empty embedded engine over its real
-database (`server/db/database-target.js`). The repo's own `docker-compose.yml` wires PostGIS, but the
-Base44 dev compose intentionally omits it for a lighter dev loop.
+| Component | Entry / Path | Role | Local Dev | Production Surface |
+|---|---|---|---|---|
+| Canonical Web UI | `src/` (`src/proxy.ts` + `middleware.ts`) | Next.js 16 App Router UI, SSR/RSC pages, per-request nonce CSP, trilingual i18n (`en`, `hy`, `ru`) | `npm run dev` (port 3001) | Vercel (`https://perfectproperty.bid`) |
+| Listing API & Engine | `server/` (`server/server.js`, `server/vercel-handler.js`) | Node `http` API, scrapers, enrichment, intelligence engines, PostGIS persistence | `npm run dev:api` (port 3000) | Vercel Serverless (`https://property-crawl-api.vercel.app`) |
+| Edge Proxy, Vault & Cron | `cloudflare/property-crawl-edge/worker.js` | Edge caching, public R2 `/vault/public/*` delivery, scheduled crons (`next-slice`, `repair-enrichment`, `prune`), Cloudflare Email Routing (`email()` -> `action=email-ingest`) | `node --test test/cloudflare/worker.test.mjs` | Cloudflare Worker (`https://edge.perfectproperty.bid`) |
+| v0 Legacy PWA | `index.html`, `app.js` | Legacy static reference only (not launched by `npm run dev`) | Static file | Retired reference |
 
-No external secrets are required to **boot** public listing pages. Optional
-`SCRAPER_ADMIN_TOKEN` (or `PROPERTY_OPERATOR_SECRET`) is required for operator
-workspace surfaces (unlock, document-review, hunts, scrapers run) — without it
-those routes fail closed with 503. `OPENAI_API_KEY` is optional and fails
-closed when unset; IMAP/Sentry vars are post-launch only.
+- **Next.js <-> Server Coupling**: `next.config.mjs` maps `@server/*` to `./server/*`; UI routes proxy API calls through `PROPERTY_API_URL`, while 18 `src/` files directly import `@server/*` modules (including `@server/db/client`, `@server/export/decision-packet`, `@server/intelligence/title-risk-engine`, and `@server/billing/stripe-checkout`).
+- **Database Policy (No Silent Demo Fallback)**: When no reachable database is configured, `server/db/client.js` reports `dataMode()` `'unavailable'` and listing routes refuse with `503` rather than silently serving demo data. In-memory storage is strictly opt-in (`PROPERTY_INVENTORY_BACKEND=memory`) or `NODE_ENV=test`, seeded from `data.js`. Production uses Supabase PostgreSQL + PostGIS (`42` migrations through `042_catch_summary.sql`, byte-mirrored under `src/lib/db/migrations/`). Embedded PGlite (`PROPERTY_DB=embedded` + `PROPERTY_PG_DATA_DIR`) supports local/isolated execution; `server/db/database-target.js` ensures a configured `DATABASE_URL` wins on cloud runtimes.
 
-## Verifying it works
+## 3. Domain Model & Data Contracts
+- **Authoritative Source Catalog**: `server/sources/catalog.js` tracks `288` federal, state, and county catalog entries across collector, evidence, and discovery roles. Live scheduled collection currently serves 8 primary active sources (`servicelink`, `hud`, `sheriff`, `civilview`, `gsa`, `usda`, `treasury`, `irs`) alongside gated/canary-staged `trustee` and `email-notices`. Read current counts and route tables from `CONTEXT.md` (do not hand-edit `CONTEXT.md` or copy seed totals into prose).
+- **Seed Snapshot (`data.js`)**: Seed snapshot for v0 and test-double memory initialization; never treat `data.js` as live inventory truth (`CONTEXT.md`).
+- **API Data Contract & Default Sort**: API payloads expose camelCase (`dealScore`, `openingBid`, `estLow`, `estHigh`, `propType`, `saleDate`, `catchSummary`, `triage`). Postgres stores `snake_case` columns and `server/db/client.js` aliases/prepares both `LISTING_SELECT` and `SUMMARY_LISTING_SELECT`. Default discovery grid sort in `server/discovery/query.js` and `src/components/listings/discovery-workbench.tsx` is `triage` (`triagePriority` + upcoming sale deadline), since publisher valuation ranges are absent on unappraised auction listings.
+
+## 4. Verified Key Commands
+All commands below are verified against `package.json`:
 
 ```bash
-docker compose -f docker-compose.base44.yml up -d
-# UI on http://localhost:3000, API proxied through /api/listings
-# Default list cap is typically 50 per page; total inventory is larger
-# (seed listings per CONTEXT.md, plus live-store overlays). Source label comes from the API.
-curl -sf http://localhost:3000/api/health   # dataMode + documentReviewStore
-curl -sf http://localhost:3000/api/listings # paginated listings payload
+# Development & Build
+npm run dev                        # Next.js 16 canonical UI (port 3001)
+npm run dev:api                    # Node listing API (port 3000)
+npm run lint                       # tsc --noEmit -p tsconfig.json
+npm run build                      # next build + NFT/edge manifest checks
+
+# Context & Schema Mirror Sync
+npm run context:gen                # Regenerate CONTEXT.md
+npm run schema:check               # Verify server/db <-> src/lib/db mirror parity
+npm run schema:sync                # Sync schema & migration mirrors
+
+# Release & Verification Gates
+npm run release:gate:quick         # Fast pre-flight (typecheck, context, mirrors, test-wiring, ops, regressions, scrapling, smoke)
+npm run release:gate               # Full release gate including Next build + production e2e
+npm run test:ci-coverage           # Runs all unreached JS test files in test/
+npm run test:canonical             # Runtime contract, production boot, i18n, vercel handler & CF worker
+npm run test:db                    # DB contract & PGlite migration parity suite (set DISCOVERY_TEST_DATABASE_URL for live PG)
+npm run test:discovery             # Discovery backend, worker & PostGIS spatial soak
+npm run test:ops                   # Operational infrastructure & release-gate suites
+npm run test:intelligence          # Dossier, title-risk, second-look, hunts & microstructure suites
+npm run test:enrichment-intelligence # Assessor reading, HPI series, SAFMR & macro benchmarks
+npm run test:evidence-truth        # Underwriting honesty, CORS, rate-limits, SSRF, CSP & route contracts
+npm run test:underwriting-resilience # Statutory carry, lien waterfall, escrow, DSCR & tax-deed math
+npm run test:meta-guards           # Structural anti-drift, no-vacuous-tests & A11y guards
+npm run test:seo                   # County SEO pages, metadata & sitemap contracts
+npm run test:email-ingest          # Email-as-API notice parsing & ingestion
+npm run test:ai                    # Notice parser, AI cache, cost tracker & bidding math
+npm run test:hunts                 # Saved hunts, alerts & digest evaluation
+
+# Scrapers, Canaries & Crawlers
+npm run canary:list                # List canary sources
+npm run canary:live                # Run live canary probe
+npm run canary:promote             # Promote verified canary source
+npm run promotion:gate             # Enforce canary promotion thresholds
+npm run crawler:doctor             # Check crawler/Scrapling toolchain
+npm run crawler:spider             # Spider collector workflow
+npm run crawler:unbrowse           # Unbrowse collector workflow
+npm run discovery:migrate          # Apply server/db/migrations to Postgres
 ```
 
-The preview is served through an external proxy hostname, so `next.config.mjs`
-sets `allowedDevOrigins` from `BASE44_PUBLIC_HOST_SUFFIX` and the dev server
-binds `0.0.0.0`. Both are required or the preview origin is blocked.
+## 5. Verified Engineering Patterns (`docs/STRATEGY.md`, `docs/FOOLPROOF_SCRAPE_RESEARCH.md`)
+- **Hack #1 — Email-as-API (`server/sources/email-notices.js`, `server/scrapers/email-ingest.js`)**: Statutory public-notice alert feeds routed via Cloudflare Email Routing (`email()` in `cloudflare/property-crawl-edge/worker.js` -> `POST /api/scrapers/run?action=email-ingest`) avoid scraping ToS/liquidated-damages portals and serverless IMAP socket constraints. Low-confidence parses escalate to the `document_reviews` queue.
+- **Hack #2 — Platform-Level Adapters (`server/scrapers/`)**: One shared adapter covers dozens of counties sharing a vendor platform (`civilview.js` for NJ/PA sheriff portals, `sheriff.js` for RealAuction/Ohio/Florida, `trustee.js` with cursor checkpointing, `servicelink.js` auction network).
+- **Hack #3 — Citation-Locked Notice Parsing (`server/ai/notice-parser.js`)**: Strict JSON extraction backed by character-offset `verifyVerbatimSpan` verification and SHA-256 cached outputs in `ai_cache`; public `GET /api/enrich?listingId=...` serves cached/deterministic evidence summaries only with zero live LLM spend on user traffic.
+- **Hack #4 — Free Public-Record Enrichment Stack**: US Census Geocoder, County & Statewide ArcGIS REST layers (`server/enrichment/arcgis-parcels.js`), NJGIN MOD-IV cadastral + deed price capture (`server/enrichment/nj-cadastral.js`), Florida DOR statewide parcels (`server/public-records/florida.js`), enrolled state/county ratio rules (`server/enrichment/assessor-reading.js`), FHFA HPI quarterly series (`server/enrichment/public-benchmark-consensus.js`, using explicitly labeled `annual_roll_midyear_q2` convention when assessment quarter is omitted), and HUD SAFMR rent benchmarks.
+- **Hack #5 — Honest Scarcity, Triage & Deterministic Catch (`server/intelligence/catch-summary.js`, `src/lib/score-bands.ts`)**: `SCORE_BANDS` stays the single source of truth for Deal Score bands when publisher valuations exist; every card also receives a `$0` deterministic `catchSummary` computed at ingest from publisher fields and title-risk warnings, and UI values distinguish Printed, Yours, and Unknown states cleanly (`PRODUCT.md`).
 
-# AGENTS.md — property-crawl agent reference (best version)
-> Auto-generated reference for AI agents working on this repo. Regenerate after major structural changes. Source of truth: `CONTEXT.md` (generated by `node scripts/gen-context.js`), `docs/STRATEGY.md`, `docs/ULTRAPLAN.md`, audit artifacts (`audit/01-05`), and `docs/FOOLPROOF_SCRAPE_RESEARCH.md`.
+## 6. Security & Environment Configuration
+- Public listing pages require **zero** external secrets to boot cleanly.
+- Operator routes (`/api/scrapers/run`, `/api/document-review`, `/api/workspace/*` operator mutations, `POST /api/enrich` with `includeAiNarrative`) fail closed (`503`/`401`) without `SCRAPER_ADMIN_TOKEN` (or `PROPERTY_OPERATOR_SECRET`).
+- Production infrastructure variables: `DATABASE_URL` / `DATABASE_DIRECT_URL`, `EDGE_SHARED_SECRET`, `TRUSTED_PROXY_COUNT`, `REQUIRE_DURABLE_VAULT=1` + R2 (`R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_ENDPOINT`), split GCP Maps keys (`GOOGLE_MAPS_API_KEY` server-side vs `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` browser-referrer-restricted), `RESEND_API_KEY` / `RESEND_FROM` / `OPERATOR_EMAIL`, and `STRIPE_*`.
+- `OPENAI_API_KEY` and `GEMINI_API_KEY` are optional and fail closed when unset.
+- Strict security boundaries: timing-safe SHA-256 token comparison, SSRF validation on outbound fetches (`validatePublicHttpsUrl`), no `Host` / `X-Forwarded-Host` trust, and per-request nonce CSP enforced in `src/proxy.ts` + `middleware.ts`.
 
-## 1. What this project is (one sentence)
-Evidence-first discovery + triage layer for distressed and government-sold property — sheriff sales, trustee sales, HUD/REO, IRS/Treasury/GSA dispositions. "Zillow for distressed property, with an AI that reads the fine print and tells you if each one is actually a deal — and what the catch is." (`docs/STRATEGY.md`)
-
-## 2. Three-layer architecture (do not mix them)
-| Layer | Path | Role | Port (local) |
-|---|---|---|---|
-| v0 — static PWA | `index.html` + `app.js` | Legacy reference only. Not launched by `npm run dev`. | not a dev server |
-| v1 — listing API | `server/` (plain Node `http`) | Listing API, scrapers, DB client | `npm run dev:api` (3000) |
-| v2 — Next.js 16 App Router | `src/` | Canonical marketing / workspace UI | `npm run dev` (3001) |
-
-Shared: one `package.json` / `node_modules`. The Next UI reaches the API via `PROPERTY_API_URL` (default `http://localhost:3000`). In the Base44 compose the UI runs on port 3000 and proxies API calls server-side to the internal `api` service. (`CLAUDE.md`)
-
-## 3. Domain model (from `CONTEXT.md` — auto-generated, do not hand-edit)
-- **SOURCES**: 16 source types (key:label:tier). Tier A (high-trust): `fannie`, `fdic`, `freddie`, `gsa`, `hud`, `irs`, `marshals`, `treasury`, `usda`, `va`. Tier B: `bid4assets`, `civilview`, `landbank`, `servicelink`, `sheriff`, `trustee`.
-- **LISTINGS**: seed records in `data.js` — see the generated `LISTINGS` count in
-`CONTEXT.md`; do not hand-copy it here. States: AK, AL, AR, AZ, CA, CO, CT, DE, FL, GA, HI, IA, ID, IL, IN, KS, KY, LA, MA, MD, ME, MI, MN, MO, MS, MT, NC, ND, NE, NH, NJ, NM, NV, NY, OH, OK, OR, PA, PR, RI, SC, SD, TN, TX, UT, VA, VT, WA, WI, WV, WY.
-- **Property types**: Commercial, Condo, Courthouse, Duplex, Lab, Land, Office, PUD, Parking, Service, Single Family, Single Family Home, Town House, Triplex, Warehouse, Unknown (read the current list from `CONTEXT.md`).
-- **Data contract**: camelCase (`dealScore`, `openingBid`, `propType`, ...). Postgres stores `snake_case`; `server/db/client.js` aliases back — production-only breakage risk (`CONTEXT.md` invariants).
-
-## 4. Key commands (from `CONTEXT.md` — verified live)
-```bash
-# Dev
-npm run dev          # Next.js 16 UI, port 3001
-npm run dev:api      # listing API, port 3000
-npm run build        # production build
-
-# Context / schema
-npm run context:gen  # regenerate CONTEXT.md
-npm run schema:check # schema mirror check
-npm run schema:sync  # sync schema mirror
-
-# Discovery / canary / quality (evidence-gated)
-npm run canary:list  # list canary sources
-npm run canary:live  # run live canary
-npm run canary:promote
-npm run discovery:benchmark
-npm run discovery:ready
-npm run quality:report
-npm run promotion:gate
-
-# Scrapers / sources
-npm run sources:collect
-npm run sources:intake
-npm run sources:email
-npm run sources:public-records
-npm run sources:setup
-npm run sources:taxonomy
-npm run crawl         # crawler spider / unbrowse
-
-# Skills / swarm / workspace
-npm run skills:doctor
-npm run skills:graph
-npm run skills:index
-npm run skills:route
-npm run swarm         # swarm executor
-npm run workspace:ready
-npm run workspace:walkthrough
-
-# Tests (evidence-first — every claim needs a passing test)
-npm run test:canonical    # canonical runtime + production boot
-npm run test:discovery    # discovery backend / worker / coverage / promotion
-npm run test:e2e          # end-to-end
-npm run test:production-e2e  # production e2e (with DB)
-npm run test:agent-system
-npm run test:swarm
-npm run test:commands
-npm run test:ai
-npm run test:canary
-npm run test:document-review-ui
-npm run test:property-image
-npm run test:scraper-reliability
-npm run test:source-integrity
-npm run verify:gate      # gate verification
-
-# Database / persistence (optional Postgres; in-memory demo fallback by default)
-npm run test:db          # DB contract suite; with DATABASE_URL set it also runs
-                         # a live PG round-trip (verify-first, self-cleaning)
-npm run db:seed          # seed listings into Postgres via createListing
-npm run discovery:migrate  # apply server/db/migrations to a Postgres DB
-npm run discovery:local  # local Postgres + migration stack for discovery
-```
-
-## 5. Verified design patterns (`docs/STRATEGY.md`, `docs/FOOLPROOF_SCRAPE_RESEARCH.md`)
-- **Hack #1 — Email-as-API**: Foreclosure/sheriff notices are statutorily required publications. Don't scrape (ToS bans bots with $10,000/incident liquidated damages — e.g. Illinois). Subscribe to free statewide alert feeds (`floridapublicnotices.com`, `publicnoticeillinois.com`, `texaspublicnotices.com`, `publicnoticesohio.com`, `publicnoticepa.com`, `georgiapublicnotice.com`) → IMAP inbox → LLM parses unstructured legal prose into structured JSON. Zero cost, zero scraping-ToS exposure.
-- **Hack #2 — Platform-level parsers**: Counties buy the same vendors (`salesweb.civilview.com` for NJ sheriff sales; `Realauction` for OH; `AcclaimWeb` for NV). One parser per platform = dozens of counties.
-- **Hack #3 — LLM-as-parser, self-healing ingestion**: Fetch → raw HTML/text → cheap model (Gemini Flash / Claude Haiku) with strict JSON schema → Pydantic validate → insert. When a site changes layout, the model reads the new layout — maintain ~40 prompts + schemas, not 40 brittle XPath scrapers. Failures route to a review queue.
-- **Hack #4 — Free enrichment stack** (replaces $1,000/mo APIs): US Census Geocoder (free, no key); County ArcGIS REST endpoints (free JSON parcel queries); FHFA House Price Index (free CSVs); no paid geocoding required.
-- **Hack #5 — Deal Score (`SCORE_BANDS`)**: Single source of truth for color/label/alpha. XSS: the v0 PWA (`app.js`) escapes every dynamic/AI/user string through `esc()` / `mdToHtml()`; the v2 Next UI (`src/`) relies on React JSX auto-escaping (JSON-LD goes through `serializeJsonLd`). (`CONTEXT.md` invariants)
-
-## 6. Audit / evidence trail (do not claim without evidence)
-Every durability/coverage claim must match code + `/api/health` + Source Radar. Audit artifacts (`audit/`):
-- `01-audit.md` — initial audit findings
-- `02-plan.md` — remediation plan
-- `03-adversary.md` — adversary analysis
-- `04-revised-plan.md` — revised plan
-- `05-implementation-report.md` — implementation evidence
-- `COHERENCE.md` — contradiction register (F01–F04 resolved: saved-deals merge, Deal Score math drift, PWA metadata truncation, countdown jitter)
-- `DECISIONS.md`, `QUESTIONS.md`, `SYSTEM_MODEL.md`, `WALKTHROUGH.md`
-
-Reports (`reports/`): canary promotions (`canary-promotion-*.md`), gap analysis (`agent-swarm-gap-analysis-*.md`), production smoke (`production-smoke.md`).
-
-## 7. Security / operator rules (`docs/FOOLPROOF_SCRAPE_RESEARCH.md`, `docs/RELEASE_RUNBOOK_ZERO_COST.md`)
-- `SCRAPER_ADMIN_TOKEN` (or `PROPERTY_OPERATOR_SECRET`) required for operator workspace surfaces (unlock, document-review, hunts, scrapers run) — without it routes fail closed with 503.
-- `OPENAI_API_KEY` optional; fails closed when unset.
-- No external secrets required to boot public listing pages.
-- CORS: no `Host` trust; SSRF on scrapling HTTP; CSRF `XFH` untrusted; tokens hashed.
-- CSP: either fully closed or tracked as an explicit residual with a concrete close-out path (`docs/ULTRAPLAN.md` §5).
-
-## 8. Residuals / open work (`docs/ULTRAPLAN.md`, `docs/GAP_CLOSEOUT_2026-09-20.md`, `docs/OPEN_RESIDUALS.md`)
-- Session fixes (workbench restore, page-scoped result copy, CSP boot-test drift, postgres verify-before-listen wiring) were committed on 2026-09-27. Live Postgres listing round-trip is closed with evidence (`docs/OPEN_RESIDUALS.md`, `docs/PRODUCT_GAPS.md`): `dataMode=postgres`, `total=2093` (the count observed on that date — for the
-current total read `CONTEXT.md`), UI proxy matches API. The full verify gate has since been run green WITH a real server (2026-10-10: 50/50 suites, 17 of the 18 DB-gated tests executing; the 18th is optional-live-endpoint) — reproduce with `npm run discovery:local -- up` plus `DISCOVERY_TEST_DATABASE_URL` on `127.0.0.1:55432`. Do not claim the full verify gate is green without `DISCOVERY_TEST_DATABASE_URL`.
-- Nationwide HUD unpromoted; treasury, usda, hud@OH,NJ, irs, civilview@NJ,25 promoted under Migration 014 canary gate.
-- Quality gate: 14/14; e2e demo: 25/25; e2e `--with-db`: 24/24; `tsc` clean (`docs/ULTRAPLAN.md` §0).
-- Budget target: $0 at MVP, under $150/month in production (`docs/STRATEGY.md` §0).
-
-## 9. Agent behavior rules (for this file)
-- When asked to "read and figure out if this is the best it can be" — compare against `CONTEXT.md`, `docs/STRATEGY.md`, `docs/ULTRAPLAN.md`, audit artifacts, and the verified build blueprint. If anything is missing (domain identity, architecture, commands, audit trail, security rules, verified design patterns), say so explicitly and offer to rewrite.
-- Never invent sources, scores, or listings. Every claim must point to a file, a test, or a verified URL.
-- When editing, prefer `replace_string_in_file` with 3–5 lines of unchanged context; never print code blocks unless asked.
-- After any edit, verify with the relevant `npm run test:*` or `npm run verify:gate` command.
-
-## 10. Blueprint Decision Principles, 10x Underwriting Architecture & Working-Method Guards (2026-10-22)
-- **Derived Blueprint Decision Principles (`docs/STRATEGY.md`, `docs/COMPLETION_CHECKLIST.md`)**:
-  - **Zero-Fabrication Underwriting**: Never impute `estLow`, `estHigh`, or ARV from `openingBid` or assessed value; when publisher valuations are absent, require an explicit buyer-supplied assumption (`src/lib/underwriting.ts`). Never equate `closed` with `sold` or `bidsPlaced=10` with real bid competition.
-  - **Legal/ToS/Robots Non-Negotiables ($0 Liability Moat)**: Discovery + triage layer only (zero cold homeowner outreach -> avoids TCPA & CA Civil Code § 1695). Never bypass CAPTCHAs (`landbank`, `ca-controller-tax-sale`), never violate `robots.txt` (`gsa` `/our-listing`), never bot-scrape press portals that impose liquidated damages (use `server/scrapers/email-intake.js`), and never feed Google Maps Street View imagery to AI models.
-  - **Control-Tested Verification**: Never promote a source or certify a fix from index-only or structural checks; run a runtime control test covering both positive and negative paths (`npm run test:meta-guards`, `node scripts/verify-test-coverage.js`, `npm run release:gate`).
+## 7. Blueprint Decision Principles, 10x Underwriting Architecture & Working-Method Guards
+- **Blueprint Decision Principles (`docs/STRATEGY.md`, `docs/COMPLETION_CHECKLIST.md`)**:
+  - **Zero-Fabrication Underwriting**: Never impute `estLow`, `estHigh`, or ARV from `openingBid` or assessed value; when publisher valuations are absent, require an explicit buyer-supplied assumption (`src/lib/underwriting.ts`). Never equate `closed` with `sold` or synthetic counters with bid competition.
+  - **Legal/ToS/Robots Non-Negotiables ($0 Liability Moat)**: Discovery + triage layer only (zero cold homeowner outreach -> avoids TCPA & CA Civil Code § 1695). Never bypass CAPTCHAs (`landbank`, `ca-controller-tax-sale`, `bid4assets`), never violate `robots.txt` (`gsa` `/our-listing`), never bot-scrape press portals with liquidated damages, and never feed Google Maps Street View imagery to AI models.
+  - **Control-Tested Verification**: Never promote a source or certify a fix from structural/quick checks alone; run `npm run test:meta-guards`, `npm run test:ci-coverage`, and `npm run release:gate`.
 - **10x Product Intelligence Capabilities**:
   - **Statutory Cash-to-Close, Redemption Carry & Instrument Priority**: `computeStatutoryFeePreset` and `computeStatutoryDeadlinesAndCarry` in `src/lib/underwriting.ts` (wired into `src/components/terminal/bidding-simulator.tsx`), plus `extractInstrumentPrioritySignals` in `server/intelligence/title-risk-engine.js`.
   - **Adjournment-Exhaustion Trajectory & VoI Gap Ranking**: `trajectory` (`priorPostponements`, `statutoryStayExhausted`, `cumulativeBidDropPct`) in `server/intelligence/signals.js` and Value-of-Information (`potentialPointsGain`, `priorityTier`) in `server/intelligence/dossier.js` and `src/components/listings/property-intelligence.tsx`.
-  - **Relative Second-Look Reconsideration Triggers**: `openingBid` `dropped_by_pct`, `openingBid` `bid_to_assessed_lte`, and `saleDate` `within_days` in `server/intelligence/research-cases.js` and `src/components/research/research-case.tsx`.
+  - **Relative Second-Look Reconsideration & Digest Actions**: `openingBid` `dropped_by_pct`, `bid_to_assessed_lte`, and `saleDate` `within_days` in `server/intelligence/research-cases.js`, wired via `applySecondLookReconsideration` (`action=second-look`) and `runAllHuntDigests` (`action=dispatch-digests`) in `server/routes/scrapers.js`.
   - **Deterministic APN + County FIPS + Cadastral Parcel Bridge**: `extractRawApn` and `extractCountyFips` in `server/scrapers/normalization.js` & `server/routes/listings.js`, plus `resolveCadastralParcelIdentity` in `server/enrichment/arcgis-parcels.js`.
   - **Verbatim Character-Span Citations**: `verifyVerbatimSpan`, `evidenceSpans`, and `confidence_score` in `server/ai/notice-parser.js` with interactive click-to-highlight badges in `src/components/workspace/review-split-pane.tsx`.
 - **Working-Method Guards**:

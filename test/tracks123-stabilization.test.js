@@ -41,8 +41,12 @@ test('unknown assessment year or unobserved state HPI never yields a trajectory'
   assert.equal(result.assessedTrajectory,null);assert.equal(result.assessorRoll.landValue,null);assert.equal(result.assessorRoll.improvementValue,null);
   assert.ok(result.unobservedReasons.some(r=>/assessment year/i.test(r)));
   result=computePublicBenchmarkConsensus({...input,assessmentYear:2020});
-  assert.equal(result.assessedTrajectory,null);assert.ok(!result.sourcesAvailable.includes('fhfa_hpi'));
+  assert.ok(result.assessedTrajectory);
+  assert.equal(result.assessedTrajectory.baselinePeriod,'2020Q2');
+  assert.equal(result.assessedTrajectory.periodConvention,'annual_roll_midyear_q2');
   assert.equal(result.estLow,null);assert.equal(result.dealScore,null);
+  const unobservedState=computePublicBenchmarkConsensus({...input,state:'ZZ',assessmentYear:2020});
+  assert.equal(unobservedState.assessedTrajectory,null);assert.ok(!unobservedState.sourcesAvailable.includes('fhfa_hpi'));
   assert.equal(computePublicBenchmarkConsensus({...input,parcel:{...input.parcel,status:'candidate'}}).assessorRoll,null);
 });
 

@@ -156,3 +156,64 @@ test('enrichment AI narrative is opt-in, routes to configured provider, and fall
   assert.match(aiPayload.aiNarrative, /\$55,000/);
   assert.match(aiPayload.analysis, /Evidence summary — unverified/);
 });
+
+test('GET /api/enrich returns deterministic summary and cached aiNarrative without live LLM calls', async () => {
+  const crypto = require('node:crypto');
+  const listing = await db.createListing({
+    id: `ENRICH-GET-${Date.now().toString(36)}`,
+    source: 'civilview',
+    state: 'NJ',
+    county: 'Bergen',
+    address: '100 Main St',
+    openingBid: 75000,
+    status: 'scheduled',
+  });
+
+  // Missing listingId -> 400
+  let badStatus = null;
+  await handleEnrich(
+    { method: 'GET', url: 'http://localhost/api/enrich' },
+    { status(c) { badStatus = c; return this; }, json() {} }
+  );
+  assert.equal(badStatus, 400);
+
+  // Uncached GET -> deterministic summary + catchSummary, costUsd 0, no LLM call
+  let uncachedPayload = null;
+  await handleEnrich(
+    { method: 'GET', url: `http://localhost/api/enrich?listingId=${encodeURIComponent(listing.id)}` },
+    { status() { return this; }, json(p) { uncachedPayload = p; } },
+    { fetchFn: async () => { throw new Error('GET /api/enrich must never call external LLM APIs'); } }
+  );
+  assert.equal(uncachedPayload.costUsd, 0);
+  assert.equal(uncachedPayload.cached, false);
+  assert.equal(uncachedPayload.aiNarrative, null);
+  assert.match(uncachedPayload.analysis, /100 Main St/);
+
+  // Seed ai_cache for gemini-2.0-flash-lite and confirm GET returns cached narrative
+  const prompt = [
+    'Write a concise operator briefing summarizing ONLY the observed facts and explicitly stating all verification-required gaps below.',
+    'Zero-Fabrication Rule: Never invent ARV, repair cost, title status, lien clearance, occupancy, or bidding advice not present in the evidence summary.',
+    '',
+    uncachedPayload.analysis,
+  ].join('\n');
+  const hash = crypto.createHash('sha256').update(`gemini-2.0-flash-lite:${prompt.trim()}`).digest('hex');
+  await db.setAiCache({
+    contentHash: hash,
+    promptType: 'evidence-brief',
+    model: 'gemini-2.0-flash-lite',
+    inputTokens: 50,
+    outputTokens: 20,
+    costUsd: 0,
+    responseText: 'Cached fine-print summary for 100 Main St.',
+  });
+
+  let cachedPayload = null;
+  await handleEnrich(
+    { method: 'GET', url: `http://localhost/api/enrich?listingId=${encodeURIComponent(listing.id)}` },
+    { status() { return this; }, json(p) { cachedPayload = p; } }
+  );
+  assert.equal(cachedPayload.cached, true);
+  assert.equal(cachedPayload.model, 'gemini-2.0-flash-lite');
+  assert.equal(cachedPayload.aiNarrative, 'Cached fine-print summary for 100 Main St.');
+  assert.equal(cachedPayload.costUsd, 0);
+});

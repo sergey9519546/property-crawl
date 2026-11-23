@@ -10,7 +10,7 @@
 - **v2 Canonical Web App (`src/`)**: Next.js 16 App Router (`next dev -p 3001`), server-side API proxy (`PROPERTY_API_URL`), full-site trilingual localization (`en` English, `hy` Armenian / Հայերեն, `ru` Russian / Русский via `src/proxy.ts` + `src/lib/i18n/`), strict nonce CSP, and Evidence Ink design tokens.
 - **v1 Listing API & Scraper Runtime (`server/`)**: Node `http` daemon (`server/server.js`, port `3000`), pre-compressed revision-keyed listing responses, discovery query engine (`server/discovery/query.js`), enrichment/intelligence adapters (`server/enrichment/`, `server/intelligence/`), and fail-closed circuit-broken source collectors (`server/scrapers/`).
 - **v0 Legacy Reference (`index.html`, `app.js`)**: Retained static PWA reference only (not launched by `npm run dev`).
-- **Persistence Layer (`server/db/`)**: PostgreSQL + PostGIS (through Migration `039` with byte-identical mirror under `src/lib/db/`), embedded PGlite test/runtime mode, and opt-in in-memory test backend (`PROPERTY_INVENTORY_BACKEND=memory`).
+- **Persistence Layer (`server/db/`)**: PostgreSQL + PostGIS (through Migration `042` with byte-identical mirror under `src/lib/db/`), embedded PGlite test/runtime mode, and opt-in in-memory test backend (`PROPERTY_INVENTORY_BACKEND=memory`).
 - **Triage & Underwriting Standard**: Zero-Fabrication Underwriting (`estLow`/`estHigh` never invented from `openingBid` or assessed value; `SCORE_BANDS` frozen across `elite`, `strong`, `fair`, `thin`; statutory carry & cash-to-close modeled cleanly in `src/lib/underwriting.ts` and `server/export/decision-packet.js`).
 
 ## Standard Engineering Workflow

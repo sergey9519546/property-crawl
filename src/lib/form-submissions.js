@@ -38,8 +38,10 @@ function shouldUsePostgres(env = process.env, options = {}) {
 }
 
 function allowLocalFallback(env = process.env) {
+  const isServerless = Boolean(env.VERCEL || env.AWS_LAMBDA_FUNCTION_NAME || env.SERVERLESS);
   return env.NODE_ENV === 'test'
     || env.PROPERTY_INVENTORY_BACKEND === 'memory'
+    || (!isServerless && (env.PROPERTY_DB === 'embedded' || Boolean(String(env.PROPERTY_FORM_SUBMISSIONS_DIR || '').trim())))
     || (env.NODE_ENV !== 'production' && !String(env.DATABASE_URL || '').trim());
 }
 
@@ -69,9 +71,9 @@ const DEFAULT_DIR = (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME 
   ? path.join(require('node:os').tmpdir(), 'property-crawl-cache', 'form-submissions')
   : path.resolve(process.cwd(), '.cache/form-submissions');
 
-function submissionDir() {
-  return process.env.PROPERTY_FORM_SUBMISSIONS_DIR
-    ? path.resolve(process.env.PROPERTY_FORM_SUBMISSIONS_DIR)
+function submissionDir(env = process.env) {
+  return env.PROPERTY_FORM_SUBMISSIONS_DIR
+    ? path.resolve(env.PROPERTY_FORM_SUBMISSIONS_DIR)
     : DEFAULT_DIR;
 }
 
@@ -111,8 +113,8 @@ function formatContactNotificationHtml(fields, receivedAt) {
   `;
 }
 
-function appendJsonl(kind, payload) {
-  const dir = submissionDir();
+function appendJsonl(kind, payload, env = process.env) {
+  const dir = submissionDir(env);
   fs.mkdirSync(dir, { recursive: true });
   const file = path.join(dir, `${kind}.jsonl`);
   fs.appendFileSync(file, `${JSON.stringify(payload)}\n`, 'utf8');
@@ -159,7 +161,7 @@ async function persistFormSubmission(kind, fields, options = {}) {
     }
   } else if (allowLocalFallback(env)) {
     try {
-      storedPath = appendJsonl(kind, record);
+      storedPath = appendJsonl(kind, record, env);
     } catch (error) {
       // Containers without a writable cache must not 500 marketing forms.
       storeError = String(error?.message || error || 'store-failed');
@@ -222,7 +224,7 @@ function removeNewsletterEmail(email, options = {}) {
     return pool.query('DELETE FROM newsletter_subscribers WHERE email = $1', [normalized])
       .then((res) => ({ removed: res?.rowCount || 0 }));
   }
-  const file = path.join(submissionDir(), 'newsletter.jsonl');
+  const file = path.join(submissionDir(env), 'newsletter.jsonl');
   if (!fs.existsSync(file)) return { removed: 0 };
   const lockPath = `${file}.lock`;
   const acquireLock = () => fs.openSync(lockPath, 'wx', 0o600);
@@ -276,8 +278,8 @@ function removeNewsletterEmail(email, options = {}) {
   }
 }
 
-function resetFormSubmissionsForTests(kind) {
-  const dir = submissionDir();
+function resetFormSubmissionsForTests(kind, env = process.env) {
+  const dir = submissionDir(env);
   const file = path.join(dir, `${kind}.jsonl`);
   if (fs.existsSync(file)) fs.unlinkSync(file);
 }

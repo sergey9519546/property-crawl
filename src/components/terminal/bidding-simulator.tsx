@@ -1102,7 +1102,7 @@ export function BiddingSimulator({ listing, publishedUpsetEstimate }: BiddingSim
 
       <div className="space-y-2.5 rounded-xl border border-line bg-paper p-4 shadow-sm">
         <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-ink"><Sparkles className="h-3.5 w-3.5 fill-ink-3 text-ink-3" /><span>Explain this scenario</span></div>
+          <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-ink"><Sparkles className="h-3.5 w-3.5 fill-ink-3 text-ink-3" /><span>Deterministic Scenario Breakdown</span></div>
           <button disabled={openingBid === null || loadingStrategy} onClick={handleRunAiStrategy} className="rounded-lg bg-ink px-2.5 py-1 text-xs font-bold text-white shadow-sm transition hover:bg-ink-2 disabled:cursor-not-allowed disabled:opacity-40">{aiStrategy ? "Re-run explanation" : "Explain scenario & risks"}</button>
         </div>
         {loadingStrategy && <p className="animate-pulse text-xs text-ink-3">Checking the entered scenario...</p>}

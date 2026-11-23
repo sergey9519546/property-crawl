@@ -163,6 +163,7 @@ async function main() {
     // Isolate e2e writes from the operator's shared .cache store.
     PROPERTY_DOCUMENT_REVIEW_STORE_PATH: reviewStorePath,
     PROPERTY_LIVE_CACHE_PATH: liveCachePath,
+    PROPERTY_FORM_SUBMISSIONS_DIR: path.join(stateDir, 'form-submissions'),
   };
   // Force the production orchestrator to load secrets from .env.local.
   delete env.SCRAPER_ADMIN_TOKEN;

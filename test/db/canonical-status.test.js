@@ -27,4 +27,14 @@ test('persistence keeps a recorded sale and a finished auction apart', () => {
   assert.equal(storedStatus('Dismissed'), 'cancelled');
   assert.equal(storedStatus('Settled'), 'cancelled');
   assert.equal(storedStatus('Bankruptcy'), 'stayed');
+  assert.equal(storedStatus('Auction Begins: Nov 23, 2026'), 'scheduled');
+  assert.equal(storedStatus('Redeemed'), 'cancelled');
+  assert.equal(
+    prepareListingForPersistence({ id: 'status-probe-2', status: 'scheduled', lifecycleStatus: 'Redeemed' }).status,
+    'cancelled',
+  );
+  assert.equal(
+    prepareListingForPersistence({ id: 'status-probe-3', status: 'unknown', lifecycleStatus: 'Auction Begins: Nov 23, 2026' }).status,
+    'scheduled',
+  );
 });

@@ -7,6 +7,53 @@ const FL_JUST_VALUE = Object.freeze({
   citation: 'Florida Property Appraiser Just Value (Fla. Stat. § 193.011 Just Valuation), compared 1:1 with the published opening amount.',
 });
 
+const CO_ACTUAL_VAL = Object.freeze({
+  mode: 'market-figure',
+  citation: 'Colorado County Assessor total actual value (apprValTot pursuant to Colo. Rev. Stat. § 39-1-104), compared 1:1 with the published opening amount.',
+});
+
+const NC_TRUE_VALUE = Object.freeze({
+  mode: 'market-figure',
+  citation: 'North Carolina County Assessor appraised total value (parval pursuant to N.C. Gen. Stat. § 105-283 true value in money), compared 1:1 with the published opening amount.',
+});
+
+const NY_FULL_MARKET_VAL = Object.freeze({
+  mode: 'market-figure',
+  citation: 'New York State / County Assessor full market value (FULL_MARKET_VAL pursuant to N.Y. R.P.T.L. § 305), compared 1:1 with the published opening amount.',
+});
+
+const WI_FAIR_MARKET_VAL = Object.freeze({
+  mode: 'market-figure',
+  citation: 'Wisconsin County Assessor estimated fair market value (ESTFMKVALUE pursuant to Wis. Stat. § 70.32), compared 1:1 with the published opening amount.',
+});
+
+const AR_APPRAISED_VAL = Object.freeze({
+  mode: 'market-figure',
+  citation: 'Arkansas County Assessor total market value (totalvalue pursuant to Ark. Const. amend. 59 and A.C.A. § 26-26-401), compared 1:1 with the published opening amount.',
+});
+
+const CT_ASSESSED_VAL = Object.freeze({
+  mode: 'taxable-fraction',
+  taxableFraction: 0.70,
+  citation: 'Connecticut General Statutes § 12-62a assesses real property at 70 percent of present true and actual value. Market comparison = Assessed_Total / 0.70.',
+});
+
+const NJ_MODIV_NET_VAL = Object.freeze({
+  mode: 'market-figure',
+  citation: 'New Jersey MOD-IV net taxable value (NET_VALUE pursuant to N.J.S.A. 54:4-23), compared 1:1 with the published opening amount.',
+});
+
+const STATEWIDE_PREFIX_RULES = Object.freeze({
+  'FL-': { rule: FL_JUST_VALUE, label: 'Property Appraiser', field: 'JV', stateKey: 'FL' },
+  'CO-': { rule: CO_ACTUAL_VAL, label: 'County Assessor', field: 'apprValTot', stateKey: 'CO' },
+  'NC-': { rule: NC_TRUE_VALUE, label: 'County Assessor', field: 'parval', stateKey: 'NC' },
+  'NY-': { rule: NY_FULL_MARKET_VAL, label: 'County Assessor', field: 'FULL_MARKET_VAL', stateKey: 'NY' },
+  'WI-': { rule: WI_FAIR_MARKET_VAL, label: 'County Assessor', field: 'ESTFMKVALUE', stateKey: 'WI' },
+  'AR-': { rule: AR_APPRAISED_VAL, label: 'County Assessor', field: 'totalvalue', stateKey: 'AR' },
+  'CT-': { rule: CT_ASSESSED_VAL, label: 'Municipal Assessor', field: 'Assessed_Total', stateKey: 'CT' },
+  'NJ-': { rule: NJ_MODIV_NET_VAL, label: 'Board of Taxation', field: 'NET_VALUE', stateKey: 'NJ' },
+});
+
 // Market comparison is allowed only where the registry field is the county's
 // market figure, or a statutory fraction the assessor itself applies.
 // Cook CERTIFIED_TOTAL is class-dependent. Clark TAX_VAL is taxable value.
@@ -202,12 +249,17 @@ function dealScoreFromRatio(ratio) {
 }
 
 function interpretAssessorParcel({ countyKey, parcel, openingBid } = {}) {
-  const isFlorida = Boolean(countyKey && countyKey.startsWith('FL-'));
+  const prefixEntry = countyKey
+    ? Object.entries(STATEWIDE_PREFIX_RULES).find(([prefix]) => countyKey.startsWith(prefix))?.[1] || null
+    : null;
+  const statewideConfig = prefixEntry && countyKey === `${prefixEntry.stateKey}-STATEWIDE`
+    ? STATEWIDE_ARCGIS_REGISTRY?.[prefixEntry.stateKey]
+    : null;
   const config = countyKey ? (
     COUNTY_ARCGIS_REGISTRY[countyKey] ||
-    (countyKey === 'FL-STATEWIDE' ? STATEWIDE_ARCGIS_REGISTRY?.FL : null) ||
+    statewideConfig ||
     (MARKET_CONVERSION[countyKey] ? { name: countyKey, endpoint: null, assessedTotalField: 'JV' } : null) ||
-    (isFlorida ? { name: `${countyKey} Property Appraiser`, endpoint: null, assessedTotalField: 'JV' } : null)
+    (prefixEntry ? { name: `${countyKey} ${prefixEntry.label}`, endpoint: null, assessedTotalField: prefixEntry.field } : null)
   ) : null;
 
   if (!config) {
@@ -229,7 +281,7 @@ function interpretAssessorParcel({ countyKey, parcel, openingBid } = {}) {
 
   const total = Number(parcel?.assessedValue?.total);
   const rawFigure = Number.isFinite(total) && total > 0 ? total : null;
-  const rule = MARKET_CONVERSION[countyKey] || (isFlorida ? FL_JUST_VALUE : null);
+  const rule = MARKET_CONVERSION[countyKey] || (WITHHOLD[countyKey] ? null : prefixEntry?.rule || null);
   let marketComparison = null;
   let citation = null;
   if (rawFigure !== null && rule?.mode === 'market-figure') {

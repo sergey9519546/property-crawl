@@ -605,6 +605,8 @@ function applyNjCadastralData(listing, { candidate = null, feature = null, obser
     yearBuilt: Number.isInteger(yrConstr) && yrConstr >= 1650 && yrConstr <= 2100 ? yrConstr : null,
     calcAcre: positiveFinite(attrs.CALC_ACRE),
     lastYearTax: positiveFinite(attrs.LAST_YR_TX),
+    deedDate: attrs.DEED_DATE ? String(attrs.DEED_DATE).trim() : null,
+    recordedSalePrice: positiveFinite(attrs.SALE_PRICE),
   };
 
   listing.assessorParcel = durableParcel;

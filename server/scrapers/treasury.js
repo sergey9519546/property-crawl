@@ -39,7 +39,7 @@ class TreasuryForfeitureScraper extends BaseScraper {
     this.baseUrl = 'https://www.treasury.gov/auctions/treasury/rp';
     this.detailConcurrency = Math.min(4, Math.max(1, Math.floor(Number(options.detailConcurrency) || 2)));
     this.maxRetries = Math.min(3, Math.max(1, Number(options.maxRetries || ((process.env.VERCEL === '1' || process.env.NOW_REGION) ? 1 : 2))));
-    this.maxItems = Math.max(1, Number(options.maxItems || process.env.TREASURY_MAX_ITEMS || ((process.env.VERCEL === '1' || process.env.NOW_REGION) ? 15 : 100)));
+    this.maxItems = Math.max(1, Number(options.maxItems || process.env.TREASURY_MAX_ITEMS || ((process.env.VERCEL === '1' || process.env.NOW_REGION) ? 3 : 100)));
     const initialOffset = Number.parseInt(options.slugOffset ?? options.checkpoint ?? options.cursor ?? 0, 10);
     this.slugOffset = Number.isInteger(initialOffset) && initialOffset >= 0 ? initialOffset : 0;
     this.lastRunReport = null;

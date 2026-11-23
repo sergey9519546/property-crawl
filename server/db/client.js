@@ -276,14 +276,14 @@ function canonicalStatus(value) {
   const raw = optionalText(value);
   if (!raw) return 'unknown';
   const normalized = raw.toLowerCase();
-  if (/cancel|withdraw|dismiss|settl|discontinu/.test(normalized)) return 'cancelled';
+  if (/cancel|withdraw|dismiss|settl|discontinu|\bredeem(?:ed)?\b/.test(normalized)) return 'cancelled';
   if (/postpon/.test(normalized)) return 'postponed';
   if (/adjourn/.test(normalized)) return 'adjourned';
   if (/stay|bankruptc/.test(normalized)) return 'stayed';
   if (/reverted\s+to\s+(?:plaintiff|beneficiary)|(?:purchased|sold)\s*(?:-|to|:)\s*(?:plaintiff|beneficiary)/.test(normalized)) return 'closed';
   if (/\bsold\b|purchased\s*[-:]\s*(?:3rd|third)[-\s]*party/.test(normalized)) return 'sold';
   if (/\bclosed\b|\bauctioned\b|\bpost[-\s]?auction\b|\boutbid\b|\bended\b/.test(normalized)) return 'closed';
-  if (/scheduled|coming\s*soon|pre[-.\s]?auction/.test(normalized)) return 'scheduled';
+  if (/scheduled|coming\s*soon|pre[-.\s]?auction|\bauction\s*(?:begins|starts|date)\b/.test(normalized)) return 'scheduled';
   if (/pending/.test(normalized)) return 'pending';
   if (/^(?:active|live|open|bidding|available|re-?listed)$|\bauction\s*event\b/.test(normalized)) return 'active';
   return 'unknown';
@@ -326,6 +326,11 @@ function prepareListingForPersistence(listing = {}) {
     ? Math.max(1, Math.min(99, Math.round((1 - ratio) * 130)))
     : null;
   const geocode = normalizeGeocode(listing.lat, listing.lng);
+  const primaryStatus = canonicalStatus(listing.status);
+  const lifecycleCanonical = canonicalStatus(listing.lifecycleStatus);
+  const resolvedStatus = ['cancelled', 'closed', 'sold'].includes(lifecycleCanonical)
+    ? lifecycleCanonical
+    : (primaryStatus !== 'unknown' ? primaryStatus : lifecycleCanonical);
   const seniorLienRisk = typeof listing.seniorLienRisk === 'string' && listing.seniorLienRisk.trim()
     ? listing.seniorLienRisk.trim().toLowerCase()
     : null;
@@ -378,7 +383,7 @@ function prepareListingForPersistence(listing = {}) {
     hasDocuments: typeof listing.hasDocuments === 'boolean' ? listing.hasDocuments
       : Array.isArray(listing.documents ?? listing.provenance?.sourceFacts?.documents)
         ? (listing.documents ?? listing.provenance.sourceFacts.documents).length > 0 : null,
-    status: canonicalStatus(listing.status),
+    status: resolvedStatus,
     provenance: normalizeProvenance(listing.provenance),
     sourceObservedAt: normalizeTimestamp(listing.sourceObservedAt ?? listing.observedAt),
     // This is deliberately assigned at the trusted persistence boundary rather
