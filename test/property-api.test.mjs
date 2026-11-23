@@ -115,3 +115,41 @@ test('property-image providers route is proxied cleanly to canonical backend', a
   assert.equal(calledUrl, 'http://127.0.0.1:3102/api/property-image/providers');
   assert.equal(response.status, 200);
 });
+
+test('proxyPropertyApi caches public-domain USGS/USDA aerial tiles and keeps no-store for Street View images', async () => {
+  const usgsAerial = await proxyPropertyApi(
+    new Request('https://app.example/api/property-image?listingId=NJ-1&mode=aerial'),
+    {
+      apiUrl: 'http://127.0.0.1:3102',
+      fetchImpl: async () => new Response(Buffer.from([0xff, 0xd8, 0xff, 0xe0]), {
+        status: 200,
+        headers: {
+          'content-type': 'image/jpeg',
+          'cache-control': 'public, max-age=604800, stale-while-revalidate=2592000',
+          'x-property-image-provider': 'USGS National Map',
+          'x-property-image-coordinate-basis': 'source_coordinates',
+          'x-property-image-coordinate-precision': 'source_observed',
+        },
+      }),
+    },
+  );
+  assert.equal(usgsAerial.headers.get('cache-control'), 'public, max-age=604800, stale-while-revalidate=2592000');
+  assert.equal(usgsAerial.headers.get('x-property-image-coordinate-basis'), 'source_coordinates');
+  assert.equal(usgsAerial.headers.get('x-property-image-coordinate-precision'), 'source_observed');
+
+  const streetViewImage = await proxyPropertyApi(
+    new Request('https://app.example/api/property-image?listingId=NJ-1&mode=image'),
+    {
+      apiUrl: 'http://127.0.0.1:3102',
+      fetchImpl: async () => new Response(Buffer.from([0xff, 0xd8, 0xff, 0xe0]), {
+        status: 200,
+        headers: {
+          'content-type': 'image/jpeg',
+          'cache-control': 'public, max-age=86400',
+          'x-property-image-provider': 'Google Maps',
+        },
+      }),
+    },
+  );
+  assert.equal(streetViewImage.headers.get('cache-control'), 'no-store');
+});

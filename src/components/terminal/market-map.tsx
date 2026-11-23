@@ -3,7 +3,9 @@
 import Link from "next/link";
 import * as React from "react";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { OPENFREEMAP_POSITRON_STYLE, RASTER_STREET_STYLE } from "@/lib/map-style";
+import { AERIAL_IMAGERY_STYLE, OPENFREEMAP_POSITRON_STYLE, RASTER_STREET_STYLE } from "@/lib/map-style";
+import { attachBasemapFallback, isBasemapErrorEvent, switchBasemapStyle } from "@/lib/map-controller";
+import { fetchParcelBoundaryCached } from "@/lib/parcel-boundary-cache";
 import { ArrowRight, LocateFixed, MapPin, Minus, Plus, X } from "lucide-react";
 import type { LngLatBoundsLike, Map as MapLibreMap, Marker as MapLibreMarker } from "maplibre-gl";
 import type { Feature as GeoJsonFeature } from "geojson";
@@ -72,10 +74,15 @@ export function MarketMap({ listings, onUnderwrite, returnTo = "/listings?view=m
   const [mapReady, setMapReady] = React.useState(false);
   const [mapCreated, setMapCreated] = React.useState(false);
   const [mapUnavailable, setMapUnavailable] = React.useState(false);
+  const [mapLayer, setMapLayer] = React.useState<"street" | "aerial">("street");
   const [mapView, setMapView] = React.useState<MapView>(DEFAULT_VIEW);
   const [announcement, setAnnouncement] = React.useState("");
   const [parcelBoundary, setParcelBoundary] = React.useState<any>(null);
+  const parcelBoundaryRef = React.useRef<any>(null);
+  const fallbackUsedRef = React.useRef(false);
+  const initializedLayerRef = React.useRef<"street" | "aerial" | null>(null);
   const shouldReduceMotion = usePrefersReducedMotion();
+  parcelBoundaryRef.current = parcelBoundary;
 
   const mappable = React.useMemo(() => listings.filter(isGeocoded), [listings]);
   const locationGroups: GeocodedListing[][] = React.useMemo(() => groupMapLocations(mappable), [mappable]);
@@ -118,6 +125,62 @@ export function MarketMap({ listings, onUnderwrite, returnTo = "/listings?view=m
     });
   }, [selectedId, selected, mappable]);
 
+  const applyParcelLayers = React.useCallback((map: MapLibreMap, data: any) => {
+    if (!data || data.__error || !map.isStyleLoaded()) return;
+    try {
+      const parcelSource = map.getSource("selected-parcel-source") as any;
+      if (parcelSource) {
+        parcelSource.setData(data);
+      } else {
+        map.addSource("selected-parcel-source", { type: "geojson", data });
+        map.addLayer({
+          id: "selected-parcel-fill",
+          type: "fill",
+          source: "selected-parcel-source",
+          paint: {
+            "fill-color": "#181529",
+            "fill-opacity": 0.22,
+          },
+        });
+        map.addLayer({
+          id: "selected-parcel-line",
+          type: "line",
+          source: "selected-parcel-source",
+          paint: {
+            "line-color": "#181529",
+            "line-width": 2.5,
+          },
+        });
+      }
+
+      if (data.properties?.setbackGeometry) {
+        const setbackFeature: GeoJsonFeature = {
+          type: "Feature",
+          geometry: data.properties.setbackGeometry,
+          properties: {},
+        };
+        const setbackSource = map.getSource("selected-setback-source") as any;
+        if (setbackSource) {
+          setbackSource.setData(setbackFeature);
+        } else {
+          map.addSource("selected-setback-source", { type: "geojson", data: setbackFeature });
+          map.addLayer({
+            id: "selected-setback-line",
+            type: "line",
+            source: "selected-setback-source",
+            paint: {
+              "line-color": "#3d3a4f",
+              "line-width": 1.5,
+              "line-dasharray": [2, 2],
+            },
+          });
+        }
+      }
+    } catch (_) {
+      // Gracefully continue if layer creation encounters style race condition.
+    }
+  }, []);
+
   React.useEffect(() => {
     const parcelPreflight = selected ? inspectParcelBoundaryInputs(selected) : null;
     if (!selectedId || !parcelPreflight?.eligible) {
@@ -141,79 +204,26 @@ export function MarketMap({ listings, onUnderwrite, returnTo = "/listings?view=m
     if (parcelPreflight.lat !== null) query.set("lat", String(parcelPreflight.lat));
     if (parcelPreflight.lng !== null) query.set("lng", String(parcelPreflight.lng));
 
-    void fetch(`/api/parcel-boundary?${query.toString()}`)
-      .then((res) => (res.ok ? res.json() : null))
+    void fetchParcelBoundaryCached(`/api/parcel-boundary?${query.toString()}`, selectedId)
       .then((data) => {
-        if (!active || !data) return;
+        if (!active || !data || (data as { __error?: string }).__error) return;
         setParcelBoundary(data);
         const map = mapRef.current;
-        if (!map || !map.isStyleLoaded()) return;
-
-        try {
-          const parcelSource = map.getSource("selected-parcel-source") as any;
-          if (parcelSource) {
-            parcelSource.setData(data);
-          } else {
-            map.addSource("selected-parcel-source", { type: "geojson", data });
-            map.addLayer({
-              id: "selected-parcel-fill",
-              type: "fill",
-              source: "selected-parcel-source",
-              paint: {
-                "fill-color": "#181529",
-                "fill-opacity": 0.22,
-              },
-            });
-            map.addLayer({
-              id: "selected-parcel-line",
-              type: "line",
-              source: "selected-parcel-source",
-              paint: {
-                "line-color": "#181529",
-                "line-width": 2.5,
-              },
-            });
-          }
-
-          if (data.properties?.setbackGeometry) {
-            const setbackFeature: GeoJsonFeature = {
-              type: "Feature",
-              geometry: data.properties.setbackGeometry,
-              properties: {},
-            };
-            const setbackSource = map.getSource("selected-setback-source") as any;
-            if (setbackSource) {
-              setbackSource.setData(setbackFeature);
-            } else {
-              map.addSource("selected-setback-source", { type: "geojson", data: setbackFeature });
-              map.addLayer({
-                id: "selected-setback-line",
-                type: "line",
-                source: "selected-setback-source",
-                paint: {
-                  "line-color": "#3d3a4f",
-                  "line-width": 1.5,
-                  "line-dasharray": [2, 2],
-                },
-              });
-            }
-          }
-        } catch (_) {
-          // Gracefully continue if layer creation encounters race condition
-        }
+        if (map) applyParcelLayers(map, data);
       })
       .catch(() => undefined);
 
     return () => {
       active = false;
     };
-  }, [selectedId, selected, mappable]);
+  }, [applyParcelLayers, selectedId, selected, mappable]);
 
   React.useEffect(() => {
     const container = mapContainerRef.current;
     if (!container) return;
     let disposed = false;
     let loadTimeout: number | null = null;
+    let detachFallback: (() => void) | null = null;
 
     void import("maplibre-gl")
       .then((maplibre) => {
@@ -227,28 +237,51 @@ export function MarketMap({ listings, onUnderwrite, returnTo = "/listings?view=m
           maxZoom: 18,
           attributionControl: false,
         });
+        initializedLayerRef.current = "street";
+        fallbackUsedRef.current = false;
         maplibreRef.current = maplibre;
         mapRef.current = map;
         setMapCreated(true);
-        map.addControl(new maplibre.AttributionControl({ compact: true, customAttribution: "OpenFreeMap · OpenStreetMap · CARTO" }), "bottom-left");
+        map.addControl(
+          new maplibre.AttributionControl({
+            compact: true,
+            customAttribution: "OpenFreeMap · OpenStreetMap · U.S. Geological Survey",
+          }),
+          "bottom-left",
+        );
 
-        let fallbackApplied = false; let tileErrorAfterFallback = false;
+        let fallbackApplied = false;
+        let tileErrorAfterFallback = false;
+        const rehydrateSelectedParcel = () => {
+          if (!disposed && parcelBoundaryRef.current) {
+            applyParcelLayers(map, parcelBoundaryRef.current);
+          }
+        };
         const switchToRasterFallback = () => {
           if (disposed || fallbackApplied) return false;
           fallbackApplied = true;
+          fallbackUsedRef.current = true;
           try {
-            map.setStyle(RASTER_STREET_STYLE);
+            switchBasemapStyle(map, RASTER_STREET_STYLE, rehydrateSelectedParcel);
             return true;
           } catch {
             return false;
           }
         };
+        detachFallback = attachBasemapFallback(map, RASTER_STREET_STYLE, {
+          onFallback: () => {
+            fallbackApplied = true;
+            fallbackUsedRef.current = true;
+          },
+          onRehydrate: rehydrateSelectedParcel,
+        });
         const updateView = () => syncView(map);
         const markReady = () => {
           if (disposed || tileErrorAfterFallback) return;
           setMapReady(true);
           setMapUnavailable(false);
           syncView(map);
+          rehydrateSelectedParcel();
         };
         map.on("moveend", updateView);
         map.on("zoomend", updateView);
@@ -264,18 +297,19 @@ export function MarketMap({ listings, onUnderwrite, returnTo = "/listings?view=m
         map.on("styledata", checkReady);
         map.on("idle", checkReady);
         map.once("load", markReady);
-        map.on("error", () => {
+        map.on("error", (event: unknown) => {
           if (disposed || map.loaded()) return;
-          if (fallbackApplied) {
-            tileErrorAfterFallback = true; setMapUnavailable(true);
-            return;
+          if (!isBasemapErrorEvent(event, map)) return;
+          if (fallbackApplied && !map.isStyleLoaded()) {
+            tileErrorAfterFallback = true;
+            setMapUnavailable(true);
           }
-          if (!switchToRasterFallback()) setMapUnavailable(true);
         });
         loadTimeout = window.setTimeout(() => {
           if (disposed || map.loaded() || map.isStyleLoaded()) return;
           if (!switchToRasterFallback()) {
-            tileErrorAfterFallback = true; setMapUnavailable(true);
+            tileErrorAfterFallback = true;
+            setMapUnavailable(true);
           } else {
             fallbackTimeoutId = window.setTimeout(() => {
               if (!map.loaded() && !map.isStyleLoaded() && !disposed) setMapUnavailable(true);
@@ -284,6 +318,7 @@ export function MarketMap({ listings, onUnderwrite, returnTo = "/listings?view=m
         }, 3_500);
         const origRemove = map.remove.bind(map);
         map.remove = () => {
+          detachFallback?.();
           if (fallbackTimeoutId !== null) window.clearTimeout(fallbackTimeoutId);
           map.off("styledata", checkReady);
           map.off("idle", checkReady);
@@ -296,14 +331,28 @@ export function MarketMap({ listings, onUnderwrite, returnTo = "/listings?view=m
 
     return () => {
       disposed = true;
+      detachFallback?.();
       if (loadTimeout !== null) window.clearTimeout(loadTimeout);
       markersRef.current.forEach(({ marker }) => marker.remove());
       markersRef.current = [];
       mapRef.current?.remove();
       mapRef.current = null;
       maplibreRef.current = null;
+      initializedLayerRef.current = null;
     };
-  }, [syncView]);
+  }, [applyParcelLayers, syncView]);
+
+  React.useEffect(() => {
+    const map = mapRef.current;
+    if (!map || initializedLayerRef.current === mapLayer) return;
+    initializedLayerRef.current = mapLayer;
+    const nextStyle = mapLayer === "aerial"
+      ? AERIAL_IMAGERY_STYLE
+      : (fallbackUsedRef.current ? RASTER_STREET_STYLE : OPENFREEMAP_POSITRON_STYLE);
+    switchBasemapStyle(map, nextStyle, () => {
+      if (parcelBoundaryRef.current) applyParcelLayers(map, parcelBoundaryRef.current);
+    });
+  }, [applyParcelLayers, mapLayer]);
 
   React.useEffect(() => {
     const map = mapRef.current;
@@ -447,10 +496,34 @@ export function MarketMap({ listings, onUnderwrite, returnTo = "/listings?view=m
             </p>
           )}
         </div>
-        <div className="flex items-center gap-1 rounded-control border border-line bg-card p-1 shadow-sm">
-          <MapControl label={t.mmZoomOutAria} onClick={() => changeZoom(-1)}><Minus className="h-4 w-4" aria-hidden /></MapControl>
-          <MapControl label={t.mmResetAria} onClick={resetView}><LocateFixed className="h-4 w-4" aria-hidden /></MapControl>
-          <MapControl label={t.mmZoomInAria} onClick={() => changeZoom(1)}><Plus className="h-4 w-4" aria-hidden /></MapControl>
+        <div className="flex flex-wrap items-center gap-2">
+          <div role="group" aria-label="Map layer" className="inline-flex rounded-control border border-line bg-card p-1 shadow-sm">
+            <button
+              type="button"
+              aria-pressed={mapLayer === "street"}
+              onClick={() => setMapLayer("street")}
+              className={`min-h-9 rounded-control px-2.5 py-1 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink ${
+                mapLayer === "street" ? "bg-ink text-white" : "text-ink-2 hover:bg-paper hover:text-ink"
+              }`}
+            >
+              Street
+            </button>
+            <button
+              type="button"
+              aria-pressed={mapLayer === "aerial"}
+              onClick={() => setMapLayer("aerial")}
+              className={`min-h-9 rounded-control px-2.5 py-1 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink ${
+                mapLayer === "aerial" ? "bg-ink text-white" : "text-ink-2 hover:bg-paper hover:text-ink"
+              }`}
+            >
+              Aerial
+            </button>
+          </div>
+          <div className="flex items-center gap-1 rounded-control border border-line bg-card p-1 shadow-sm">
+            <MapControl label={t.mmZoomOutAria} onClick={() => changeZoom(-1)}><Minus className="h-4 w-4" aria-hidden /></MapControl>
+            <MapControl label={t.mmResetAria} onClick={resetView}><LocateFixed className="h-4 w-4" aria-hidden /></MapControl>
+            <MapControl label={t.mmZoomInAria} onClick={() => changeZoom(1)}><Plus className="h-4 w-4" aria-hidden /></MapControl>
+          </div>
         </div>
       </div>
 

@@ -7,7 +7,7 @@ export type PanoramaxCandidate = {
   distanceMeters: number;
   targetHeading?: number | null;
   viewerUrl: string;
-  thumbUrl: string | null;
+  thumbUrl?: string | null;
   license: { id: string | null; url: string | null; displayApproved: boolean };
   attribution: { provider: string; producer: string | null };
 };
@@ -89,9 +89,9 @@ export function parsePanoramaxCandidate(raw: unknown): PanoramaxCandidate | null
     mediaType: item.mediaType as PanoramaxCandidate['mediaType'],
     capturedAt: typeof item.capturedAt === 'string' && Number.isFinite(Date.parse(item.capturedAt)) ? item.capturedAt : null,
     distanceMeters: item.distanceMeters,
-    targetHeading,
+    ...(targetHeading !== null ? { targetHeading } : {}),
     viewerUrl,
-    thumbUrl,
+    ...(thumbUrl ? { thumbUrl } : {}),
     license: {
       id: typeof license.id === 'string' ? license.id : null,
       url: licenseUrl,
@@ -144,7 +144,7 @@ export function parseMapillaryCandidate(raw: unknown): MapillaryCandidate | null
     mediaType: item.mediaType as MapillaryCandidate['mediaType'],
     capturedAt: typeof item.capturedAt === 'string' && Number.isFinite(Date.parse(item.capturedAt)) ? item.capturedAt : null,
     distanceMeters: item.distanceMeters,
-    targetHeading,
+    ...(targetHeading !== null ? { targetHeading } : {}),
     viewerUrl,
     thumbUrl,
     license: {

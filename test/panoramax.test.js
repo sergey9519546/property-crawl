@@ -50,3 +50,18 @@ test('preserves producer attribution from the live federated STAC schema',async(
   const result=await lookupPanoramax({lat:40.7,lng:-74},{fetchImpl:async()=>response([liveShape])});
   assert.equal(result.directionalSequences[0].attribution.producer,'motocultrice');
 });
+
+test('attaches UUID-pinned thumbUrl only for valid UUIDs and filters off-axis directional shots',async()=>{
+  const validUuid='123e4567-e89b-12d3-a456-426614174000';
+  // Target is (40.7, -74), camera at (-74.0001, 40.7001) -> property is ~145° SE from camera.
+  const alignedDir=item({id:validUuid,properties:{license:'CC-BY-SA-4.0',field_of_view:90,'view:azimuth':140}});
+  const awayDir=item({id:'223e4567-e89b-12d3-a456-426614174000',properties:{license:'CC-BY-SA-4.0',field_of_view:90,'view:azimuth':320}});
+  const nonUuidPano=item({id:'short-id',properties:{license:'CC-BY-SA-4.0',field_of_view:360}});
+
+  const resDir=await lookupPanoramax({lat:40.7,lng:-74},{fetchImpl:async()=>response([awayDir,alignedDir,nonUuidPano])});
+  assert.equal(resDir.directionalSequences.length,1);
+  assert.equal(resDir.directionalSequences[0].pictureId,validUuid);
+  assert.equal(resDir.directionalSequences[0].thumbUrl,`https://api.panoramax.xyz/api/pictures/${validUuid}/thumb.jpg`);
+  assert.equal(resDir.bestDirectional?.pictureId,validUuid);
+  assert.equal(resDir.candidate?.thumbUrl,null);
+});

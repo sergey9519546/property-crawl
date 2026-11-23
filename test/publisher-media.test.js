@@ -198,6 +198,7 @@ test('detail page gallery hydration keeps strict record proof, host-gates images
   const fs = require('node:fs');
   const path = require('node:path');
   const pageSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'app', 'listings', '[id]', 'page.tsx'), 'utf8');
+  const enMessagesSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'lib', 'i18n', 'messages', 'en.ts'), 'utf8');
 
   assert.match(pageSrc, /function resolveVerifiedPublisherGallery\(/);
   assert.match(pageSrc, /if \(record !== exactSourceUrl\)\s*\{\s*rejectedGalleryUrls\.add\(url\);\s*continue;\s*\}/);
@@ -205,5 +206,6 @@ test('detail page gallery hydration keeps strict record proof, host-gates images
   assert.match(pageSrc, /hostnameMatches\(candidateHost, pageHost\)/);
   assert.match(pageSrc, /sourceKey === "gsa" && hostnameMatches\(candidateHost, "cloudfront\.net"\)/);
   assert.match(pageSrc, /data-testid="benchmark-context-summary"/);
-  assert.match(pageSrc, /Public benchmarks below \(not an appraisal\):/);
+  assert.match(pageSrc, /dUi\.publicBenchmarksLabel/);
+  assert.match(enMessagesSrc, /publicBenchmarksLabel:\s*"Public benchmarks below \(not an appraisal\):"/);
 });

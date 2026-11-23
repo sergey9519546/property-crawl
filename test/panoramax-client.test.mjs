@@ -58,3 +58,30 @@ test('eligible Mapillary capture and combined alternatives payload parse safely 
  assert.equal(combined.mapillary?.pictureId, 'mly-1');
  assert.equal(combined.primary?.provider, 'mapillary');
 });
+
+test('parsePanoramaxCandidate allows UUID-pinned thumbUrl and strips unsafe thumbUrl or javascript license links', () => {
+ const validUuid = '123e4567-e89b-12d3-a456-426614174000';
+ const uuidViewer = `https://api.panoramax.xyz/?focus=pic&pic=${validUuid}`;
+ const goodThumb = `https://api.panoramax.xyz/api/pictures/${validUuid}/thumb.jpg`;
+ const parsedGood = parsePanoramaxCandidate({
+  ...fixture,
+  pictureId: validUuid,
+  viewerUrl: uuidViewer,
+  thumbUrl: goodThumb,
+  targetHeading: 142,
+  license: { id: 'CC-BY-SA-4.0', url: 'https://spdx.org/licenses/CC-BY-SA-4.0.html', displayApproved: true },
+ });
+ assert.equal(parsedGood?.thumbUrl, goodThumb);
+ assert.equal(parsedGood?.targetHeading, 142);
+ assert.equal(parsedGood?.license.url, 'https://spdx.org/licenses/CC-BY-SA-4.0.html');
+
+ const parsedBadThumb = parsePanoramaxCandidate({
+  ...fixture,
+  pictureId: validUuid,
+  viewerUrl: uuidViewer,
+  thumbUrl: 'https://evil-federated.example/thumb.jpg',
+  license: { id: 'CC-BY-SA-4.0', url: 'javascript:alert(1)', displayApproved: true },
+ });
+ assert.equal(parsedBadThumb?.thumbUrl, undefined);
+ assert.equal(parsedBadThumb?.license.url, null);
+});

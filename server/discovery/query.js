@@ -6,6 +6,7 @@ const { hash } = require("./store");
 const { servesListings, listingServingSourceSqlList } = require("../sources/catalog");
 const { resolveStateQuery } = require("../db/us-state-query");
 const { mapDistressStage } = require("../scrapers/normalization");
+const { isCoordInStateBounds } = require("../geo/state-bounds");
 const MAX_SCAN = Math.max(50000, Number(process.env.DISCOVERY_MAX_SCAN) || 50000),
   MAX_LIMIT = 1000;
 class DiscoveryQueryError extends Error {
@@ -1333,14 +1334,15 @@ async function search(database, f, options = {}) {
 }
 async function map(database, f) {
   if (database.isPg) return pgMap(database, f);
-  const all = (await load(database)).filter(
-    (r) =>
-      matches(r, f) &&
-      r.lat !== null &&
-      r.lng !== null &&
-      Number.isFinite(Number(r.lat)) &&
-      Number.isFinite(Number(r.lng)),
-  );
+  const all = (await load(database)).filter((r) => {
+    if (!matches(r, f) || r.lat === null || r.lng === null) return false;
+    const lat = Number(r.lat);
+    const lng = Number(r.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || (lat === 0 && lng === 0)) return false;
+    const state = typeof r.state === "string" ? r.state.trim().toUpperCase() : "";
+    if (state && !isCoordInStateBounds(lat, lng, state).ok) return false;
+    return true;
+  });
   const cap = Math.min(f.limit, 2000),
     shown = all.slice(0, cap),
     revision = revisionOf(all);

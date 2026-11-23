@@ -892,3 +892,95 @@ test('walkthrough falls back to Panoramax on Google denial or miss only when opt
   assert.equal(res.body.primaryUnavailableReason, 'upstream_denied');
   assert.equal(res.body.candidate?.pictureId, 'pnx-walk-1');
 });
+
+function largeJpegResponse() {
+  const bytes = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(4096, 7)]);
+  return new Response(bytes, {
+    status: 200,
+    headers: { 'content-type': 'image/jpeg', 'content-length': String(bytes.length) },
+  });
+}
+
+function tinyBlankPngResponse() {
+  const bytes = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(128, 0)]);
+  return new Response(bytes, {
+    status: 200,
+    headers: { 'content-type': 'image/png', 'content-length': String(bytes.length) },
+  });
+}
+
+test('aerial mode serves 100% public-domain USGS primary with EPSG:3857 bbox, precision headers, and USDA NAIP CONUS fallback', async () => {
+  const requestedUrls = [];
+  const primarySvc = serviceFor({
+    fetchImpl: async (url) => {
+      requestedUrls.push(String(url));
+      assert.doesNotMatch(String(url), /arcgisonline\.com|geocode\.arcgis\.com/i);
+      if (String(url).includes('basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly')) {
+        return largeJpegResponse();
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+
+  const primaryRes = await primarySvc.resolve(request('listingId=CIV-NJ-7-53&mode=aerial'));
+  assert.equal(primaryRes.status, 200);
+  assert.equal(primaryRes.headers['X-Property-Image-Provider'], 'USGS National Map');
+  assert.equal(primaryRes.headers['X-Property-Image-Coordinate-Basis'], 'source_coordinates');
+  assert.equal(primaryRes.headers['X-Property-Image-Coordinate-Precision'], 'source_observed');
+  assert.match(primaryRes.headers['Cache-Control'], /public, max-age=604800/);
+  const parsedPrimaryUrl = new URL(requestedUrls[0]);
+  assert.equal(parsedPrimaryUrl.searchParams.get('bboxSR'), '3857');
+  assert.equal(parsedPrimaryUrl.searchParams.get('imageSR'), '3857');
+  assert.equal(parsedPrimaryUrl.searchParams.get('size'), '640,480');
+
+  // When USGS returns a tiny < 2048 blank tile in CONUS, fall back cleanly to USDA NAIP
+  const cascadeUrls = [];
+  const fallbackSvc = serviceFor({
+    fetchImpl: async (url) => {
+      cascadeUrls.push(String(url));
+      if (String(url).includes('basemap.nationalmap.gov')) return tinyBlankPngResponse();
+      if (String(url).includes('gis.apfo.usda.gov/arcgis/rest/services/NAIP/USDA_CONUS_PRIME')) return largeJpegResponse();
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+  const naipRes = await fallbackSvc.resolve(request('listingId=CIV-NJ-7-53&mode=aerial'));
+  assert.equal(naipRes.status, 200);
+  assert.equal(naipRes.headers['X-Property-Image-Provider'], 'USDA NAIP');
+  assert.equal(cascadeUrls.length, 2);
+});
+
+test('aerial mode skips USDA NAIP outside CONUS, rejects unverified/out-of-state listings, and authenticates x-pp-client-ip', async () => {
+  const hiListing = liveListing({ id: 'HI-1', state: 'HI', lat: 21.3069, lng: -157.8583 });
+  const hiUrls = [];
+  const hiSvc = serviceFor({
+    listing: hiListing,
+    fetchImpl: async (url) => {
+      hiUrls.push(String(url));
+      return tinyBlankPngResponse();
+    },
+  });
+  const hiRes = await hiSvc.resolve(request('listingId=HI-1&mode=aerial'));
+  assert.equal(hiRes.status, 502);
+  assert.equal(hiRes.body.error, 'upstream_non_image');
+  assert.equal(hiUrls.some((u) => u.includes('usda.gov')), false);
+
+  // Snapshot and out-of-state coordinates are rejected with 422 before hitting external providers
+  let netCalls = 0;
+  const badCoordSvc = serviceFor({
+    listing: liveListing({ id: 'GA-SCOT', state: 'GA', lat: 55.953252, lng: -3.188267, address: 'P.O. Box 99', city: '', zip: '' }),
+    fetchImpl: async () => { netCalls += 1; return largeJpegResponse(); },
+  });
+  const badRes = await badCoordSvc.resolve(request('listingId=GA-SCOT&mode=aerial'));
+  assert.equal(badRes.status, 422);
+  assert.equal(badRes.body.error, 'exact_location_unavailable');
+  assert.equal(netCalls, 0);
+
+  // Timing-safe x-edge-secret required to honor x-pp-client-ip
+  const { FixedWindowRateLimiter } = require('../server/routes/property-image');
+  const forged = { headers: { 'x-pp-client-ip': '203.0.113.9' }, socket: { remoteAddress: '10.0.0.2' } };
+  const wrongSecret = { headers: { 'x-pp-client-ip': '203.0.113.9', 'x-edge-secret': 'wrong' }, socket: { remoteAddress: '10.0.0.2' } };
+  const validSecret = { headers: { 'x-pp-client-ip': '203.0.113.9', 'x-edge-secret': 'shared-secret-123' }, socket: { remoteAddress: '10.0.0.2' } };
+  assert.equal(FixedWindowRateLimiter.clientIp(forged, 0, 'shared-secret-123'), '10.0.0.2');
+  assert.equal(FixedWindowRateLimiter.clientIp(wrongSecret, 0, 'shared-secret-123'), '10.0.0.2');
+  assert.equal(FixedWindowRateLimiter.clientIp(validSecret, 0, 'shared-secret-123'), '203.0.113.9');
+});

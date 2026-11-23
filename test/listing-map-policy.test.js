@@ -151,3 +151,30 @@ test('parcel-boundary coverage manifest stays in sync with server GIS registries
   assert.equal(hasParcelBoundaryCoverage('TX', ''), true);
   assert.equal(hasParcelBoundaryCoverage('MO', 'Dallas'), false);
 });
+
+test('inspectMapLocation rejects coordinates outside the declared US state bounds', () => {
+  const sourceUrl = 'https://salesweb.civilview.com/Sales/SaleDetails?PropertyId=1234';
+  const observedAt = new Date().toISOString();
+  const bad = inspectMapLocation({
+    id: 'OUT-OF-STATE-1',
+    source: 'civilview',
+    sourceUrl,
+    address: '101 Peachtree St',
+    city: 'Atlanta',
+    state: 'GA',
+    zip: '30303',
+    lat: 55.953252,
+    lng: -3.188267,
+    provenance: {
+      origin: 'live',
+      observed: true,
+      recordKind: 'source_record',
+      publisher: 'CivilView',
+      recordId: '1234',
+      observedAt,
+      coordinates: { origin: 'publisher_record', verification: 'source_extracted', sourceRecordUrl: sourceUrl, observedAt, lat: 55.953252, lng: -3.188267 },
+    },
+  });
+  assert.equal(bad.accepted, false);
+  assert.match(bad.reason, /state/i);
+});

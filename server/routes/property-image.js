@@ -628,7 +628,6 @@ async function resolveEphemeralCoordinates({ fetchImpl, config, listing, circuit
     resolution: {
       origin: 'google_geocoding_ephemeral',
       locationType: 'ROOFTOP',
-      precision: 'rooftop',
       partialMatch: false,
       persisted: false,
     },
@@ -651,7 +650,6 @@ async function resolveCensusCoordinates({ fetchImpl, observedAddress, timeoutMs 
     resolution: {
       origin: 'us_census_geocoder_ephemeral',
       locationType: 'RANGE_INTERPOLATED',
-      precision: hit.precision || 'street_interpolated',
       partialMatch: false,
       persisted: false,
     },

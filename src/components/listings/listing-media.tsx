@@ -11,7 +11,7 @@ import { AlternativeStreetView } from "@/components/listings/alternative-street-
 import { InteractiveStreetView } from "@/components/listings/interactive-street-view";
 import { useLocale } from "@/components/i18n/locale-provider";
 import { AERIAL_IMAGERY_STYLE, OPENFREEMAP_POSITRON_STYLE, RASTER_STREET_STYLE } from "@/lib/map-style";
-import { attachBasemapFallback, switchBasemapStyle, toggleFemaFloodOverlay } from "@/lib/map-controller";
+import { attachBasemapFallback, isBasemapErrorEvent, switchBasemapStyle, toggleFemaFloodOverlay } from "@/lib/map-controller";
 import { inspectParcelBoundaryInputs } from "@/lib/listing-map-policy";
 import { fetchParcelBoundaryCached } from "@/lib/parcel-boundary-cache";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -171,8 +171,13 @@ export function ListingMedia({ listingId, address, state, county, apn, propType,
     let timeoutId: number | null = null;
     let fallbackTimeoutId: number | null = null;
     let onCheckReady: (() => void) | null = null;
+    let detachFallback: (() => void) | null = null;
+    let parcelFeature: GeoJsonFeature | null = null;
     const parcelAbortController = new AbortController();
-    const isAerial = mapLayer === "aerial";
+    const initialLayer = mapLayerRef.current;
+    const isAerial = initialLayer === "aerial";
+    initializedLayerRef.current = initialLayer;
+    fallbackUsedRef.current = false;
     setMapReady(false);
     setMapUnavailable(false);
 
@@ -194,28 +199,81 @@ export function ListingMedia({ listingId, address, state, county, apn, propType,
         map.addControl(
           new maplibre.AttributionControl({
             compact: true,
-            customAttribution: isAerial
-              ? "Esri, USGS, USDA NAIP"
-              : "OpenFreeMap · OpenStreetMap · CARTO",
+            customAttribution: "U.S. Geological Survey (The National Map) · OpenFreeMap · OpenStreetMap · FEMA NFHL",
           }),
           "bottom-left",
         );
-        markerRef.current = new maplibre.Marker({ color: isAerial ? "#ff5533" : "#181529" })
+        markerRef.current = new maplibre.Marker({ color: "#ff5533" })
           .setLngLat(center)
           .setPopup(new maplibre.Popup({ offset: 28 }).setText(address))
           .addTo(map);
-        let fallbackApplied = false; let tileErrorAfterFallback = false;
+        let fallbackApplied = false;
+        let tileErrorAfterFallback = false;
         let parcelFetched = false;
-        const switchToRasterFallback = () => {
-          if (disposed || isAerial || fallbackApplied) return false;
-          fallbackApplied = true;
+
+        const applyOverlays = (fitToFeature = false) => {
+          if (disposed || mapRef.current !== map) return;
           try {
-            map.setStyle(RASTER_STREET_STYLE);
+            if (parcelFeature && map.isStyleLoaded()) {
+              if (!map.getSource("parcel-boundary")) {
+                map.addSource("parcel-boundary", { type: "geojson", data: parcelFeature });
+              }
+              if (!map.getLayer("parcel-boundary-fill")) {
+                map.addLayer({
+                  id: "parcel-boundary-fill",
+                  type: "fill",
+                  source: "parcel-boundary",
+                  paint: { "fill-color": "#ff5533", "fill-opacity": 0.18 },
+                });
+              }
+              if (!map.getLayer("parcel-boundary-line")) {
+                map.addLayer({
+                  id: "parcel-boundary-line",
+                  type: "line",
+                  source: "parcel-boundary",
+                  paint: { "line-color": "#ff5533", "line-width": 2.5 },
+                });
+              }
+              if (fitToFeature) {
+                const bounds = computeGeometryBounds(parcelFeature.geometry);
+                if (bounds) {
+                  const reduceMotion = typeof window !== "undefined"
+                    && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+                  map.fitBounds(bounds, {
+                    padding: 48,
+                    maxZoom: 18,
+                    duration: reduceMotion ? 0 : 400,
+                  });
+                }
+              }
+            }
+            toggleFemaFloodOverlay(map, floodOverlayRef.current);
+          } catch {
+            // Style still transitioning; next style.load will rehydrate overlays.
+          }
+        };
+        rehydrateOverlaysRef.current = () => applyOverlays(false);
+
+        const switchToRasterFallback = () => {
+          if (disposed || mapLayerRef.current === "aerial" || fallbackApplied) return false;
+          fallbackApplied = true;
+          fallbackUsedRef.current = true;
+          try {
+            switchBasemapStyle(map, RASTER_STREET_STYLE, () => applyOverlays(false));
             return true;
           } catch {
             return false;
           }
         };
+
+        detachFallback = attachBasemapFallback(map, RASTER_STREET_STYLE, {
+          onFallback: () => {
+            fallbackApplied = true;
+            fallbackUsedRef.current = true;
+          },
+          onRehydrate: () => applyOverlays(false),
+        });
+
         const fetchParcelBoundary = () => {
           if (disposed || parcelFetched) return;
           parcelFetched = true;
@@ -252,46 +310,12 @@ export function ListingMedia({ listingId, address, state, county, apn, propType,
               ) {
                 return;
               }
-              const feature: GeoJsonFeature = {
+              parcelFeature = {
                 type: "Feature",
                 geometry: data!.geometry as GeoJsonFeature["geometry"],
                 properties: data?.properties ?? {},
               };
-              if (!map.getSource("parcel-boundary")) {
-                map.addSource("parcel-boundary", { type: "geojson", data: feature });
-              }
-              if (!map.getLayer("parcel-boundary-fill")) {
-                map.addLayer({
-                  id: "parcel-boundary-fill",
-                  type: "fill",
-                  source: "parcel-boundary",
-                  paint: {
-                    "fill-color": "#ff5533",
-                    "fill-opacity": 0.18,
-                  },
-                });
-              }
-              if (!map.getLayer("parcel-boundary-line")) {
-                map.addLayer({
-                  id: "parcel-boundary-line",
-                  type: "line",
-                  source: "parcel-boundary",
-                  paint: {
-                    "line-color": "#ff5533",
-                    "line-width": 2.5,
-                  },
-                });
-              }
-              const bounds = computeGeometryBounds(data?.geometry);
-              if (bounds) {
-                const reduceMotion = typeof window !== "undefined"
-                  && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-                map.fitBounds(bounds, {
-                  padding: 48,
-                  maxZoom: 18,
-                  duration: reduceMotion ? 0 : 400,
-                });
-              }
+              applyOverlays(true);
             } catch {
               // Some states do not publish GIS parcel boundaries; fail silently.
             }
@@ -302,6 +326,7 @@ export function ListingMedia({ listingId, address, state, county, apn, propType,
           setMapReady(true);
           setMapUnavailable(false);
           fetchParcelBoundary();
+          applyOverlays(false);
         };
         const checkReady = () => {
           if (disposed) return;
@@ -315,13 +340,13 @@ export function ListingMedia({ listingId, address, state, county, apn, propType,
         map.on("styledata", checkReady);
         map.on("idle", checkReady);
         map.once("load", markReady);
-        map.on("error", () => {
+        map.on("error", (event: unknown) => {
           if (disposed || map.loaded()) return;
-          if (fallbackApplied) {
-            tileErrorAfterFallback = true; setMapUnavailable(true);
-            return;
+          if (!isBasemapErrorEvent(event, map)) return;
+          if (fallbackApplied && !map.isStyleLoaded()) {
+            tileErrorAfterFallback = true;
+            setMapUnavailable(true);
           }
-          if (!switchToRasterFallback()) setMapUnavailable(true);
         });
         timeoutId = window.setTimeout(() => {
           if (disposed || map.loaded() || map.isStyleLoaded()) return;
@@ -340,6 +365,9 @@ export function ListingMedia({ listingId, address, state, county, apn, propType,
 
     return () => {
       disposed = true;
+      detachFallback?.();
+      rehydrateOverlaysRef.current = null;
+      initializedLayerRef.current = null;
       parcelAbortController.abort();
       if (timeoutId !== null) window.clearTimeout(timeoutId);
       if (fallbackTimeoutId !== null) window.clearTimeout(fallbackTimeoutId);
@@ -352,7 +380,26 @@ export function ListingMedia({ listingId, address, state, county, apn, propType,
       mapRef.current?.remove();
       mapRef.current = null;
     };
-  }, [address, canMap, lat, lng, mapLayer, mode, normalizedListingId]);
+  }, [address, apn, canMap, county, lat, lng, mode, normalizedListingId, state]);
+
+  React.useEffect(() => {
+    const map = mapRef.current;
+    if (mode !== "map" || !canMap || !map) return;
+    if (initializedLayerRef.current === mapLayer) return;
+    initializedLayerRef.current = mapLayer;
+    const nextStyle = mapLayer === "aerial"
+      ? AERIAL_STYLE
+      : (fallbackUsedRef.current ? RASTER_STREET_STYLE : OPENFREEMAP_POSITRON_STYLE);
+    switchBasemapStyle(map, nextStyle, () => {
+      rehydrateOverlaysRef.current?.();
+    });
+  }, [canMap, mapLayer, mode]);
+
+  React.useEffect(() => {
+    const map = mapRef.current;
+    if (mode !== "map" || !mapReady || !map) return;
+    toggleFemaFloodOverlay(map, floodOverlay);
+  }, [floodOverlay, mapReady, mode]);
 
   const availableModes: MediaMode[] = [
     "photo",
@@ -625,34 +672,48 @@ export function ListingMedia({ listingId, address, state, county, apn, propType,
               <div><MapPin className="mx-auto h-7 w-7 text-ink-3" aria-hidden /><p className="mt-3 text-sm font-bold text-ink-2">{m.detailUi.mediaMapUnavailable}</p><p className="mt-1 text-xs text-ink-3">The stored coordinates remain attached to this record.</p></div>
             </div>
           ) : null}
-          <div
-            role="group"
-            aria-label="Map layer"
-            className="absolute left-4 top-4 z-10 inline-flex rounded-control border border-line bg-card/95 p-1 shadow-md backdrop-blur"
-          >
+          <div className="absolute left-4 top-4 z-10 flex flex-wrap items-center gap-2">
+            <div
+              role="group"
+              aria-label="Map layer"
+              className="inline-flex rounded-control border border-line bg-card/95 p-1 shadow-md backdrop-blur"
+            >
+              <button
+                type="button"
+                aria-pressed={mapLayer === "vector"}
+                onClick={() => setMapLayer("vector")}
+                className={`min-h-9 rounded-control px-2.5 py-1 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink ${
+                  mapLayer === "vector"
+                    ? "bg-ink text-white"
+                    : "text-ink-2 hover:bg-paper hover:text-ink"
+                }`}
+              >
+                Street
+              </button>
+              <button
+                type="button"
+                aria-pressed={mapLayer === "aerial"}
+                onClick={() => setMapLayer("aerial")}
+                className={`min-h-9 rounded-control px-2.5 py-1 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink ${
+                  mapLayer === "aerial"
+                    ? "bg-ink text-white"
+                    : "text-ink-2 hover:bg-paper hover:text-ink"
+                }`}
+              >
+                Aerial
+              </button>
+            </div>
             <button
               type="button"
-              aria-pressed={mapLayer === "vector"}
-              onClick={() => setMapLayer("vector")}
-              className={`min-h-9 rounded-control px-2.5 py-1 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink ${
-                mapLayer === "vector"
-                  ? "bg-ink text-white"
-                  : "text-ink-2 hover:bg-paper hover:text-ink"
+              aria-pressed={floodOverlay}
+              onClick={() => setFloodOverlay((prev) => !prev)}
+              className={`min-h-11 rounded-control border px-3 py-1.5 text-xs font-semibold shadow-md backdrop-blur transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink ${
+                floodOverlay
+                  ? "border-ink bg-ink text-white"
+                  : "border-line bg-card/95 text-ink-2 hover:bg-paper hover:text-ink"
               }`}
             >
-              Vector
-            </button>
-            <button
-              type="button"
-              aria-pressed={mapLayer === "aerial"}
-              onClick={() => setMapLayer("aerial")}
-              className={`min-h-9 rounded-control px-2.5 py-1 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink ${
-                mapLayer === "aerial"
-                  ? "bg-ink text-white"
-                  : "text-ink-2 hover:bg-paper hover:text-ink"
-              }`}
-            >
-              Aerial
+              Flood zones
             </button>
           </div>
           {!canShowPhoto && normalizedListingId ? (

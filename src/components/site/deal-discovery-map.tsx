@@ -3,7 +3,8 @@
 import * as React from "react";
 import Link from "next/link";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { OPENFREEMAP_POSITRON_STYLE } from "@/lib/map-style";
+import { OPENFREEMAP_POSITRON_STYLE, RASTER_STREET_STYLE } from "@/lib/map-style";
+import { attachBasemapFallback, isBasemapErrorEvent } from "@/lib/map-controller";
 import {
   ArrowRight,
   Crosshair,
@@ -514,6 +515,8 @@ export function DealDiscoveryMap() {
         });
 
         let styleFailed = false;
+        let detachFallback: (() => void) | null = null;
+        let fallbackApplied = false;
         const markReadyIfStyleLoaded = () => {
           if (disposed || styleFailed) return;
           if (map.isStyleLoaded()) {
@@ -521,10 +524,96 @@ export function DealDiscoveryMap() {
             setMapUnavailable(false);
           }
         };
-        const handleMapError = () => {
+        const applyHeatLayer = () => {
+          const geojson = {
+            type: "FeatureCollection" as const,
+            features: deals.map((deal) => ({
+              type: "Feature" as const,
+              geometry: {
+                type: "Point" as const,
+                coordinates: [deal.lng, deal.lat],
+              },
+              properties: { score: deal.score, source: deal.sourceKey },
+            })),
+          };
+          try {
+            if (!map.getSource("opportunity-signals")) {
+              map.addSource("opportunity-signals", {
+                type: "geojson",
+                data: geojson,
+              });
+            }
+            if (!map.getLayer("opportunity-heat")) {
+              map.addLayer({
+                id: "opportunity-heat",
+                type: "heatmap",
+                source: "opportunity-signals",
+                maxzoom: 14,
+                paint: {
+                  "heatmap-weight": [
+                    "interpolate",
+                    ["linear"],
+                    ["get", "score"],
+                    70,
+                    0.45,
+                    95,
+                    1,
+                  ],
+                  "heatmap-intensity": 0.72,
+                  "heatmap-radius": [
+                    "interpolate",
+                    ["linear"],
+                    ["zoom"],
+                    8,
+                    28,
+                    14,
+                    70,
+                  ],
+                  "heatmap-opacity": [
+                    "interpolate",
+                    ["linear"],
+                    ["zoom"],
+                    8,
+                    0.22,
+                    14,
+                    0.08,
+                  ],
+                  "heatmap-color": [
+                    "interpolate",
+                    ["linear"],
+                    ["heatmap-density"],
+                    0,
+                    "rgba(37,99,235,0)",
+                    0.35,
+                    "rgba(96,165,250,0.22)",
+                    0.7,
+                    "rgba(37,99,235,0.38)",
+                    1,
+                    "rgba(15,23,42,0.44)",
+                  ],
+                },
+              });
+            }
+          } catch {
+            // The geographic map and accessible HTML markers remain usable.
+          }
+        };
+        detachFallback = attachBasemapFallback(map, RASTER_STREET_STYLE, {
+          onFallback: () => {
+            fallbackApplied = true;
+          },
+          onRehydrate: () => {
+            if (disposed) return;
+            applyHeatLayer();
+            setMapReady(true);
+            setMapUnavailable(false);
+          },
+        });
+        const handleMapError = (event: unknown) => {
           if (disposed) return;
+          if (!isBasemapErrorEvent(event, map)) return;
           const styleCold = !map.isStyleLoaded();
-          if (!styleCold) return;
+          if (!styleCold || !fallbackApplied) return;
           styleFailed = true;
           if (loadTimeout !== null) {
             window.clearTimeout(loadTimeout);
@@ -557,74 +646,7 @@ export function DealDiscoveryMap() {
               // Keep initial center if bounds fit fails on single point.
             }
           }
-          const geojson = {
-            type: "FeatureCollection" as const,
-            features: deals.map((deal) => ({
-              type: "Feature" as const,
-              geometry: {
-                type: "Point" as const,
-                coordinates: [deal.lng, deal.lat],
-              },
-              properties: { score: deal.score, source: deal.sourceKey },
-            })),
-          };
-          try {
-            map.addSource("opportunity-signals", {
-              type: "geojson",
-              data: geojson,
-            });
-            map.addLayer({
-              id: "opportunity-heat",
-              type: "heatmap",
-              source: "opportunity-signals",
-              maxzoom: 14,
-              paint: {
-                "heatmap-weight": [
-                  "interpolate",
-                  ["linear"],
-                  ["get", "score"],
-                  70,
-                  0.45,
-                  95,
-                  1,
-                ],
-                "heatmap-intensity": 0.72,
-                "heatmap-radius": [
-                  "interpolate",
-                  ["linear"],
-                  ["zoom"],
-                  8,
-                  28,
-                  14,
-                  70,
-                ],
-                "heatmap-opacity": [
-                  "interpolate",
-                  ["linear"],
-                  ["zoom"],
-                  8,
-                  0.22,
-                  14,
-                  0.08,
-                ],
-                "heatmap-color": [
-                  "interpolate",
-                  ["linear"],
-                  ["heatmap-density"],
-                  0,
-                  "rgba(37,99,235,0)",
-                  0.35,
-                  "rgba(96,165,250,0.22)",
-                  0.7,
-                  "rgba(37,99,235,0.38)",
-                  1,
-                  "rgba(15,23,42,0.44)",
-                ],
-              },
-            });
-          } catch {
-            // The geographic map and accessible HTML markers remain usable.
-          }
+          applyHeatLayer();
           setMapReady(true);
         });
 
@@ -632,8 +654,24 @@ export function DealDiscoveryMap() {
         map.on("zoomstart", () => setScanState("complete"));
 
         loadTimeout = window.setTimeout(() => {
-          if (!map.loaded()) setMapUnavailable(true);
+          if (!map.loaded() && !map.isStyleLoaded()) {
+            if (!fallbackApplied) {
+              fallbackApplied = true;
+              try {
+                map.setStyle(RASTER_STREET_STYLE, { diff: false });
+              } catch {
+                setMapUnavailable(true);
+              }
+            } else {
+              setMapUnavailable(true);
+            }
+          }
         }, 8_000);
+        const origRemove = map.remove.bind(map);
+        map.remove = () => {
+          detachFallback?.();
+          return origRemove();
+        };
       })
       .catch(() => {
         if (disposed) return;
