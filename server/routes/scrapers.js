@@ -172,7 +172,7 @@ function createScrapersHandler(dependencies = {}) {
           ).catch(() => ({ rowCount: 0 }));
           const propTypesCleaned = Number(gsaTypeCleanup?.rowCount || 0) + Number(hudTypeFill?.rowCount || 0);
           const stalePurged = typeof database.purgeStaleListings === 'function'
-            ? await database.purgeStaleListings()
+            ? await database.purgeStaleListings({ batchSize: 50, maxDurationMs: 30_000 })
             : { deleted: 0, observationsDeleted: 0 };
           const crossDedupe = typeof database.reconcileCrossSourceDuplicates === 'function'
             ? await database.reconcileCrossSourceDuplicates().catch(() => ({ superseded: 0, cleared: 0 }))
@@ -198,13 +198,24 @@ function createScrapersHandler(dependencies = {}) {
           return res.status(503).json({ error: 'Observation compaction requires an active PostgreSQL database connection' });
         }
         try {
+          const pruneExpired = body.pruneExpired === true
+            || url.searchParams.get('pruneExpired') === 'true'
+            || url.searchParams.get('pruneExpired') === '1';
+          let expiredPurged = null;
+          if (pruneExpired && typeof database.purgeStaleListings === 'function') {
+            expiredPurged = await database.purgeStaleListings({ batchSize: 50, maxBatches: 40, maxDurationMs: 25_000 });
+          }
           const { compactPgObservations } = require('../db/observations-persistence');
           const report = await compactPgObservations(database.pool, {
             apply: body.dryRun !== true && url.searchParams.get('dryRun') !== 'true',
             vacuum: true,
             source: body.source || url.searchParams.get('source') || null,
           });
-          return res.json({ status: 'completed', action: 'compact-observations', report });
+          return res.json({
+            status: 'completed',
+            action: 'compact-observations',
+            report: expiredPurged ? { ...report, expiredPurged } : report,
+          });
         } catch (err) {
           return res.status(err?.status || 500).json({ error: err?.message || 'Observation compaction failed' });
         }
@@ -336,22 +347,90 @@ function createScrapersHandler(dependencies = {}) {
               'SELECT source_key, MAX(source_observed_at) AS latest_at FROM listings WHERE source_key = ANY($1::text[]) GROUP BY source_key',
               [SLICE_PRIORITY]
             );
-            const latestBySource = new Map((obsRes.rows || []).map((r) => [r.source_key, r.latest_at ? Date.parse(r.latest_at) : 0]));
+            const latestBySource = new Map(
+              (obsRes.rows || [])
+                .filter((r) => r && r.source_key)
+                .map((r) => [r.source_key, r.latest_at ? Date.parse(r.latest_at) || 0 : 0])
+            );
+            let runRows = [];
+            try {
+              const runsRes = await database.pool.query(
+                'SELECT source_key, last_run_at, accepted_count FROM source_observation_runs WHERE source_key = ANY($1::text[])',
+                [SLICE_PRIORITY]
+              );
+              runRows = runsRes?.rows || [];
+            } catch (_) {
+              runRows = [];
+            }
+            const runAtBySource = new Map();
+            const acceptedBySource = new Map();
+            for (const row of runRows) {
+              if (!row || !row.source_key) continue;
+              runAtBySource.set(row.source_key, row.last_run_at ? Date.parse(row.last_run_at) || 0 : 0);
+              acceptedBySource.set(row.source_key, Number(row.accepted_count) || 0);
+            }
+            const { SOURCE_CATALOG } = require('../sources/catalog');
+            const cadenceHoursByKey = new Map();
+            for (const entry of SOURCE_CATALOG || []) {
+              const key = entry?.adapterKey || entry?.id;
+              const hours = Number(entry?.workflow?.cadenceHours);
+              if (key && !cadenceHoursByKey.has(key) && Number.isFinite(hours) && hours > 0) {
+                cadenceHoursByKey.set(key, hours);
+              }
+            }
+            const cadenceHours = (key) => cadenceHoursByKey.get(key) || (key === 'servicelink' ? 6 : 12);
+            const nowMs = Date.now();
+            const activityMs = (key) => Math.max(
+              latestBySource.get(key) || 0,
+              runAtBySource.get(key) || 0,
+              cpUpdatedBySource.get(key) || 0,
+              sliceLastRunAt.get(key) || 0
+            );
+            const isRecentZeroYieldTrustee = (key) => {
+              if (latestBySource.has(key)) return false;
+              const lastRun = runAtBySource.get(key) || sliceLastRunAt.get(key) || 0;
+              if (lastRun <= 0) return false;
+              const accepted = acceptedBySource.get(key) || 0;
+              return accepted === 0 && (nowMs - lastRun) < cadenceHours(key) * 3_600_000;
+            };
+            const stalenessRatio = (key) => {
+              const last = activityMs(key);
+              if (last <= 0) return Number.POSITIVE_INFINITY;
+              return (nowMs - last) / (cadenceHours(key) * 3_600_000);
+            };
+            const pickMostOverdue = () => {
+              const hasActiveWithRows = Array.from(latestBySource.keys()).some((k) => {
+                const ageMs = nowMs - activityMs(k);
+                return ageMs >= 3_600_000;
+              });
+              const eligible = hasActiveWithRows
+                ? SLICE_PRIORITY.filter((key) => !isRecentZeroYieldTrustee(key))
+                : SLICE_PRIORITY;
+              const poolKeys = eligible.length > 0 ? eligible : SLICE_PRIORITY;
+              return poolKeys.reduce((best, key) => {
+                const bestRatio = stalenessRatio(best);
+                const keyRatio = stalenessRatio(key);
+                if (keyRatio !== bestRatio) return keyRatio > bestRatio ? key : best;
+                return activityMs(key) < activityMs(best) ? key : best;
+              }, poolKeys[0]);
+            };
             const resumed = SLICE_PRIORITY.find((key) => activeCheckpoints.has(key));
-            const activityMs = (key) => Math.max(latestBySource.get(key) || 0, cpUpdatedBySource.get(key) || 0, sliceLastRunAt.get(key) || 0);
             const starving = latestBySource.size > 0
-              ? SLICE_PRIORITY.reduce((oldest, key) => (activityMs(key) < activityMs(oldest) ? key : oldest), SLICE_PRIORITY[0])
+              ? SLICE_PRIORITY
+                  .filter((key) => !isRecentZeroYieldTrustee(key))
+                  .reduce((oldest, key) => (!oldest || activityMs(key) < activityMs(oldest) ? key : oldest), null)
               : null;
-            if (resumed && (!starving || (activityMs(resumed) - activityMs(starving)) <= 15 * 60_000)) {
+            const starvingOverdue = Boolean(starving && (activityMs(starving) === 0 || (stalenessRatio(starving) >= 0.75 && (activityMs(resumed) - activityMs(starving)) > 15 * 60_000)));
+            if (resumed && !starvingOverdue) {
               chosenSource = resumed;
               reason = 'active_continuation_cursor';
             } else {
-              const missing = SLICE_PRIORITY.find((key) => !latestBySource.has(key) && !activeCheckpoints.has(key));
+              const missing = SLICE_PRIORITY.find((key) => !latestBySource.has(key) && !activeCheckpoints.has(key) && activityMs(key) === 0);
               if (missing && latestBySource.size > 0) {
                 chosenSource = missing;
                 reason = 'missing_from_inventory';
               } else {
-                chosenSource = starving || SLICE_PRIORITY.reduce((oldest, key) => (activityMs(key) < activityMs(oldest) ? key : oldest), SLICE_PRIORITY[0]);
+                chosenSource = pickMostOverdue();
                 reason = 'oldest_observation';
               }
             }
@@ -365,7 +444,7 @@ function createScrapersHandler(dependencies = {}) {
           const sliceTimeoutRaw = Number(body.timeoutMs ?? url.searchParams.get('timeoutMs'));
           const scraperTimeoutMs = Number.isFinite(sliceTimeoutRaw) && sliceTimeoutRaw > 0
             ? Math.min(Math.floor(sliceTimeoutRaw), 120_000)
-            : 15_000;
+            : 25_000;
           const result = await activeScheduler.runAll({
             sourceIds: [chosenSource],
             slice: true,

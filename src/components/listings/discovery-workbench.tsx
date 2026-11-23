@@ -369,13 +369,16 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
   const pendingSaves = React.useRef(new Set<string>());
   const [savingIds, setSavingIds] = React.useState<Set<string>>(new Set());
   const [watchlistError, setWatchlistError] = React.useState("");
-  const [triageFilters, setTriageFilters] = React.useState({
-    isNew: false,
-    priceDropped: false,
-    hasDocs: false,
-    stale: false,
-    occupancyKnown: false,
-  });
+  const triageFilters = React.useMemo(
+    () => ({
+      isNew: filters.isNew === "true",
+      priceDropped: filters.priceDropped === "true",
+      hasDocs: filters.hasDocuments === "true",
+      stale: filters.stale === "true",
+      occupancyKnown: filters.occupancyKnown === "true",
+    }),
+    [filters.isNew, filters.priceDropped, filters.hasDocuments, filters.stale, filters.occupancyKnown],
+  );
   React.useEffect(() => setCursorStack([]), [queryKey]);
 
   const setFilters = React.useCallback(
@@ -394,7 +397,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
     setError("");
     try {
       const params = discoverySearchParams(filters, {
-        limit: filters.view === "calendar" ? 1000 : 48,
+        limit: filters.view === "calendar" ? 1000 : 24,
         facets: "state,county,source,type,program,lifecycle,occupancy,freshness",
         cursor,
       });
@@ -568,24 +571,12 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
     }
   }, [session]);
   const facets = payload?.facets || {};
-  const anyTriageActive = Object.values(triageFilters).some(Boolean);
   const filteredListings = React.useMemo(() => {
     if (!showSavedOnly && !payload?.listings) return [];
     const sourceListings = showSavedOnly && watchlistListings !== null ? watchlistListings : (payload?.listings || []);
-    return sourceListings.filter((listing) => {
-      if (showSavedOnly && !saved.has(listing.id)) return false;
-      if (!anyTriageActive) return true;
-      const t = listing.triage;
-      if (!t) return false;
-      if (triageFilters.isNew && !t.isNew) return false;
-      if (triageFilters.priceDropped && !t.priceDropped) return false;
-      if (triageFilters.hasDocs && !t.hasDocs) return false;
-      const isStale = listing.sourceFreshness?.status ? listing.sourceFreshness.status === "stale" : Boolean(t.staleDays > 30);
-      if (triageFilters.stale && !isStale) return false;
-      if (triageFilters.occupancyKnown && !t.occupancyKnown) return false;
-      return true;
-    });
-  }, [payload?.listings, watchlistListings, triageFilters, anyTriageActive, showSavedOnly, saved]);
+    if (!showSavedOnly) return sourceListings;
+    return sourceListings.filter((listing) => saved.has(listing.id));
+  }, [payload?.listings, watchlistListings, showSavedOnly, saved]);
   const normalizeFacetKey = (field: keyof DiscoveryFilters, value: string) => {
     const trimmed = String(value || "").trim().toLowerCase();
     if (!trimmed || trimmed === "unknown" || (field === "type" && ["n/a", "none", "-"].includes(trimmed))) return "unknown";
@@ -659,9 +650,10 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
     ([key, value]) => key !== "view" && key !== "sort" && value,
   );
   const pageLength = payload?.listings?.length ?? 0;
-  // The triage chips are applied by this page only, never by the search;
-  // distressStage is filtered server-side across the full catalog.
-  const localFilterActive = anyTriageActive;
+  // Triage chips (isNew, priceDropped, hasDocuments, stale, occupancyKnown)
+  // and distressStage filter server-side across the full catalog; only
+  // Saved-watchlist narrowing happens locally on the loaded page.
+  const localFilterActive = showSavedOnly;
   // A minimum on a DERIVED field (deal score, bid spread) excludes every record
   // that lacks one. When the inventory carries none, the filter can only ever
   // return nothing, and the empty state has to say so.
@@ -690,15 +682,15 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
   const evaluated =
     payload?.intelligence?.pageScope?.evaluated ?? pageLength;
   const clearLocalFilters = React.useCallback(() => {
-    setTriageFilters({
-      isNew: false,
-      priceDropped: false,
-      hasDocs: false,
-      stale: false,
-      occupancyKnown: false,
-    });
     setShowSavedOnly(false);
-    setFilters({ distressStage: undefined });
+    setFilters({
+      isNew: undefined,
+      priceDropped: undefined,
+      hasDocuments: undefined,
+      stale: undefined,
+      occupancyKnown: undefined,
+      distressStage: undefined,
+    });
   }, [setFilters]);
   const next = () => {
     const n = payload?.page?.nextCursor;
@@ -864,7 +856,13 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
             key={key}
             type="button"
             aria-pressed={triageFilters[key]}
-            onClick={() => setTriageFilters((prev) => ({ ...prev, [key]: !prev[key] }))}
+            onClick={() => {
+              if (key === "hasDocs") {
+                setFilters({ hasDocuments: filters.hasDocuments === "true" ? undefined : "true" });
+              } else {
+                setFilters({ [key]: filters[key] === "true" ? undefined : "true" } as Partial<DiscoveryFilters>);
+              }
+            }}
             className={`inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
               triageFilters[key]
                 ? "border-ink bg-ink text-white"

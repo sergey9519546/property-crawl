@@ -95,10 +95,11 @@ test("the page-scoped empty state offers the way out, not a location the search 
     /const clearLocalFilters = React\.useCallback/,
     "the clear action must reset the client-side chips, not just the server query",
   );
-  assert.match(workbench, /setTriageFilters\(\{[\s\S]{0,240}stale: false/, "every triage chip is reset");
+  assert.match(workbench, /isNew:\s*undefined[\s\S]{0,180}stale:\s*undefined/, "every server triage chip is reset");
+  assert.match(workbench, /setFilters\(\s*\{\s*hasDocuments:/, "hasDocs routes through server hasDocuments filter");
   assert.match(
     workbench,
-    /setFilters\(\{ distressStage: undefined \}\)/,
+    /setFilters\(\{[\s\S]{0,240}distressStage: undefined/,
     "distressStage is applied locally as well and must be cleared too",
   );
 });

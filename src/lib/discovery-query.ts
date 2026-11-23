@@ -5,10 +5,11 @@ export type DiscoveryFilters = {
   minScore?: string; minEquity?: string; seniorLien?: string; redemption?: string;
   hasPhoto?: string;
   distressStage?: string; minQuality?: string;
+  excludeTerminal?: string; isNew?: string; priceDropped?: string; stale?: string; occupancyKnown?: string;
   sort?: string; view?: string;
 };
 
-const keys = ["q", "state", "county", "source", "type", "program", "lifecycle", "saleFrom", "saleTo", "maxBid", "minScore", "minEquity", "occupancy", "freshness", "hasDocuments", "hasPhoto", "seniorLien", "redemption", "distressStage", "minQuality", "sort", "view"] as const;
+const keys = ["q", "state", "county", "source", "type", "program", "lifecycle", "saleFrom", "saleTo", "maxBid", "minScore", "minEquity", "occupancy", "freshness", "hasDocuments", "hasPhoto", "seniorLien", "redemption", "distressStage", "minQuality", "excludeTerminal", "isNew", "priceDropped", "stale", "occupancyKnown", "sort", "view"] as const;
 
 // The server is the authority for this vocabulary; this mirrors it and must not
 // invent values. server/discovery/query.js raises a 400 for an unrecognised
@@ -32,6 +33,11 @@ export const DISCOVERY_FILTER_VALUES = Object.freeze({
   seniorLien: Object.freeze(["all", "clean", "risk"]),
   redemption: Object.freeze(["all", "immediate", "redemption_active"]),
   distressStage: Object.freeze(["all", "reo", "pre_foreclosure", "scheduled", "tax_sale", "unknown"]),
+  excludeTerminal: Object.freeze(["true", "false"]),
+  isNew: Object.freeze(["true", "false"]),
+  priceDropped: Object.freeze(["true", "false"]),
+  stale: Object.freeze(["true", "false"]),
+  occupancyKnown: Object.freeze(["true", "false"]),
 });
 
 const acceptedValues: Readonly<Record<string, readonly string[]>> = DISCOVERY_FILTER_VALUES;

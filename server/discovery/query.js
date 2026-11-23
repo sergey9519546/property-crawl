@@ -6,7 +6,7 @@ const { hash } = require("./store");
 const { servesListings, listingServingSourceSqlList } = require("../sources/catalog");
 const { resolveStateQuery } = require("../db/us-state-query");
 const { mapDistressStage } = require("../scrapers/normalization");
-const { isCoordInStateBounds } = require("../geo/state-bounds");
+
 const MAX_SCAN = Math.max(50000, Number(process.env.DISCOVERY_MAX_SCAN) || 50000),
   MAX_LIMIT = 1000;
 class DiscoveryQueryError extends Error {
@@ -267,6 +267,11 @@ function queryFromUrl(url) {
     hasDocuments: parseTristateBool(get("hasDocuments"), "hasDocuments"),
     hasPhoto: parseBool(get("hasPhoto"), "hasPhoto"),
     distressStage: parseDistressStage(get("distressStage")),
+    excludeTerminal: parseBool(get("excludeTerminal"), "excludeTerminal"),
+    isNew: parseBool(get("isNew"), "isNew"),
+    priceDropped: parseBool(get("priceDropped"), "priceDropped"),
+    stale: parseBool(get("stale"), "stale"),
+    occupancyKnown: parseBool(get("occupancyKnown"), "occupancyKnown"),
     bbox: parseBbox(get("bbox")),
     sort,
     cursor,
@@ -423,6 +428,12 @@ function matches(row, f) {
   } else if (f.hasDocuments != null && d.hasDocuments !== f.hasDocuments)
     return false;
   if (f.hasPhoto !== null && hasPhotoEvidence(row) !== f.hasPhoto) return false;
+  if (typeof f.excludeTerminal === 'boolean' && isTerminalForRanking(row) === f.excludeTerminal) return false;
+
+  if (typeof f.isNew === 'boolean' && isNewObservationRow(row) !== f.isNew) return false;
+  if (typeof f.priceDropped === 'boolean' && isPriceDroppedRow(row) !== f.priceDropped) return false;
+  if (typeof f.stale === 'boolean' && isStaleObservationRow(row) !== f.stale) return false;
+  if (typeof f.occupancyKnown === 'boolean' && isOccupancyKnownRow(row) !== f.occupancyKnown) return false;
   if (f.bbox) {
     const [w, s, e, n] = f.bbox,
       lat = Number(row.lat),
@@ -445,11 +456,24 @@ function matches(row, f) {
   }
   return true;
 }
+const TERMINAL_STATUSES = new Set([
+  'sold', 'closed', 'cancelled', 'canceled', 'ended', 'completed',
+  'retired', 'withdrawn', 'redeemed', 'dismissed', 'settled',
+  'discontinued', 'vacated', 'writ expired', 'expired',
+]);
 const TERMINAL_LIFECYCLE_RE = /(?:reverted\s+to\s+(?:plaintiff|beneficiary)|(?:purchased|sold)\s*[-:]\s*(?:3rd|third)[-\s]*party|(?:purchased|sold)\s*[-:]\s*(?:plaintiff|beneficiary)|(?:^|[^a-z0-9])(?:closed|sold)(?:$|[^a-z0-9])|dismiss|settl|cancel|writ\s+expired|\bexpired\b|withdraw|discontinu|redeem|vacat)/i;
+const NON_ACCEL_TERMINAL_SQL =
+  "("
+  + "lower(coalesce(status, '')) IN ('sold', 'closed', 'cancelled', 'canceled', 'ended', 'completed', 'retired', 'withdrawn', 'redeemed', 'dismissed', 'settled', 'discontinued', 'vacated', 'writ expired', 'expired') "
+  + "OR lower(coalesce(lifecycle_status, '')) ~ '(reverted[[:space:]]+to[[:space:]]+(plaintiff|beneficiary)|(purchased|sold)[[:space:]]*[-:][[:space:]]*(3rd|third)[- [:space:]]*party|(purchased|sold)[[:space:]]*[-:][[:space:]]*(plaintiff|beneficiary)|(^|[^a-z0-9])(closed|sold)($|[^a-z0-9])|dismiss|settl|cancel|writ[[:space:]]+expired|(^|[^a-z0-9])expired($|[^a-z0-9])|withdraw|discontinu|redeem|vacat)' "
+  + "OR nullif(coalesce(nullif(transaction_outcome, ''), provenance->'sourceFacts'->>'transactionOutcome', ''), '') IS NOT NULL "
+  + "OR (provenance ? 'publisherAbsence') "
+  + "OR (provenance ? 'supersededBy')"
+  + ")";
 function isTerminalForRanking(row) {
   if (!row || typeof row !== "object") return false;
   const st = String(row.status || "").trim().toLowerCase();
-  if (st === "sold" || st === "closed" || st === "cancelled") return true;
+  if (TERMINAL_STATUSES.has(st)) return true;
   const lc = String(row.lifecycleStatus ?? row.lifecycle_status ?? "").trim();
   if (lc && TERMINAL_LIFECYCLE_RE.test(lc)) return true;
   const prov = row.provenance && typeof row.provenance === "object" ? row.provenance : null;
@@ -457,6 +481,32 @@ function isTerminalForRanking(row) {
   if (tx && String(tx).trim()) return true;
   if (prov?.publisherAbsence || prov?.supersededBy) return true;
   return false;
+}
+function isNewObservationRow(row, now = Date.now()) {
+  if (row?.triage?.isNew === true) return true;
+  const ts = row?.sourceObservedAt || row?.provenance?.observedAt || row?.fetchedAt || "";
+  const ms = Date.parse(ts);
+  return Number.isFinite(ms) && (now - ms) <= 48 * 3_600_000;
+}
+function isStaleObservationRow(row, now = Date.now()) {
+  if (row?.sourceFreshness?.status === 'stale') return true;
+  if (Number(row?.triage?.staleDays) > 30) return true;
+  const ts = row?.sourceObservedAt || "";
+  const ms = Date.parse(ts);
+  return Number.isFinite(ms) && (now - ms) > 72 * 3_600_000;
+}
+function isOccupancyKnownRow(row) {
+  const occ = text(row?.occupancy);
+  return Boolean(occ && !PROP_TYPE_UNKNOWN_LITERALS.has(occ));
+}
+function isPriceDroppedRow(row) {
+  if (row?.triage?.priceDropped === true || row?.priceDropped === true) return true;
+  if (row?.provenance?.derivedFields?.priceDropped === true) return true;
+  const dropCount = Number(row?.provenance?.sourceFacts?.priceDropCount);
+  if (Number.isFinite(dropCount) && dropCount > 0) return true;
+  const prior = Number(row?.priorOpeningBid ?? row?.provenance?.sourceFacts?.priorOpeningBid);
+  const curr = Number(row?.openingBid);
+  return Number.isFinite(prior) && Number.isFinite(curr) && curr > 0 && prior > curr;
 }
 function positiveNum(value) {
   if (value === null || value === undefined || value === "") return null;
@@ -793,6 +843,18 @@ function pgWhere(f, start = 1, options = {}) {
     }
   }
   if (!f.includeSuperseded) w.push("provenance #> '{supersededBy}' IS NULL");
+  const terminalCond = accel ? "discovery_terminal" : NON_ACCEL_TERMINAL_SQL;
+  if (f.excludeTerminal === true) w.push(`NOT ${terminalCond}`);
+  else if (f.excludeTerminal === false) w.push(terminalCond);
+  if (f.isNew === true) w.push("(source_observed_at IS NOT NULL AND source_observed_at >= NOW() - INTERVAL '48 hours')");
+  else if (f.isNew === false) w.push("(source_observed_at IS NULL OR source_observed_at < NOW() - INTERVAL '48 hours')");
+  if (f.occupancyKnown === true) w.push("(nullif(btrim(coalesce(occupancy,'')),'') IS NOT NULL AND lower(btrim(occupancy)) NOT IN ('unknown','n/a','none','unspecified','-'))");
+  else if (f.occupancyKnown === false) w.push("(nullif(btrim(coalesce(occupancy,'')),'') IS NULL OR lower(btrim(occupancy)) IN ('unknown','n/a','none','unspecified','-'))");
+  const priceDropSql = "((provenance->'derivedFields'->>'priceDropped') = 'true' OR ((provenance->'sourceFacts'->>'priceDropCount') ~ '^[0-9]+$' AND (provenance->'sourceFacts'->>'priceDropCount')::int > 0) OR (opening_bid > 0 AND (provenance->'sourceFacts'->>'priorOpeningBid') ~ '^[0-9]+([.][0-9]+)?$' AND (provenance->'sourceFacts'->>'priorOpeningBid')::numeric > opening_bid))";
+  if (f.priceDropped === true) w.push(priceDropSql);
+  else if (f.priceDropped === false) w.push(`NOT ${priceDropSql}`);
+  if (f.stale === true) w.push("(source_observed_at IS NOT NULL AND source_observed_at < NOW() - INTERVAL '72 hours')");
+  else if (f.stale === false) w.push("(source_observed_at IS NULL OR source_observed_at >= NOW() - INTERVAL '72 hours')");
   if (f.lat != null && f.lng != null) {
     const first = start + p.length;
     w.push(`ST_DWithin(geog, ST_SetSRID(ST_MakePoint($${first},$${first + 1}),4326)::geography,$${first + 2})`);
@@ -855,13 +917,7 @@ function pgSort(f, options = {}) {
     return { expr: `coalesce(${derivedEquity},-1)`, dir: sortDirection("equity") };
   const terminalSql = accel
     ? "discovery_terminal"
-    : "("
-    + "lower(coalesce(status, '')) IN ('sold', 'closed', 'cancelled') "
-    + "OR lower(coalesce(lifecycle_status, '')) ~ '(reverted[[:space:]]+to[[:space:]]+(plaintiff|beneficiary)|(purchased|sold)[[:space:]]*[-:][[:space:]]*(3rd|third)[- [:space:]]*party|(purchased|sold)[[:space:]]*[-:][[:space:]]*(plaintiff|beneficiary)|(^|[^a-z0-9])(closed|sold)($|[^a-z0-9])|dismiss|settl|cancel|writ[[:space:]]+expired|\\mexpired\\M|withdraw|discontinu|redeem|vacat)' "
-    + "OR nullif(coalesce(nullif(transaction_outcome, ''), provenance->'sourceFacts'->>'transactionOutcome', ''), '') IS NOT NULL "
-    + "OR (provenance ? 'publisherAbsence') "
-    + "OR (provenance ? 'supersededBy')"
-    + ")";
+    : NON_ACCEL_TERMINAL_SQL;
   if (f.sort === "triage")
     return {
       expr: `((CASE `
@@ -1339,8 +1395,8 @@ async function map(database, f) {
     const lat = Number(r.lat);
     const lng = Number(r.lng);
     if (!Number.isFinite(lat) || !Number.isFinite(lng) || (lat === 0 && lng === 0)) return false;
-    const state = typeof r.state === "string" ? r.state.trim().toUpperCase() : "";
-    if (state && !isCoordInStateBounds(lat, lng, state).ok) return false;
+
+
     return true;
   });
   const cap = Math.min(f.limit, 2000),

@@ -279,3 +279,174 @@ test('POST /api/scrapers/run?action=repair-enrichment enforces SCRAPER_ADMIN_TOK
   assert.deepEqual(calledWith, { njLimit: 15, geocodeLimit: 25, dryRun: true });
   assert.equal(authRes.body.report.civilviewUpdated, 10);
 });
+
+test('purgeStaleListings purges vanished rows for fresh single-page federal sources and uses >=1000 observation batch size', async () => {
+  const { DatabaseClient } = require('../server/db/client');
+  const queries = [];
+  const pool = {
+    async query(sql, params = []) {
+      const norm = sql.replace(/\s+/g, ' ').trim();
+      queries.push({ sql: norm, params });
+      if (norm.includes('SELECT DISTINCT source_key FROM listings')) {
+        return { rows: [{ source_key: 'treasury' }] };
+      }
+      if (norm.includes('SELECT 1 FROM listings WHERE source_key =')) {
+        return { rows: [{ '?column?': 1 }] };
+      }
+      if (norm.includes('SELECT 1 FROM pg_indexes')) {
+        return { rows: [] };
+      }
+      return { rowCount: 0, rows: [] };
+    },
+  };
+  const client = new DatabaseClient({ pool, liveCachePath: null, workspaceStorePath: null });
+  client.isPg = true;
+  await client.purgeStaleListings({ batchPauseMs: 0 });
+
+  const fedCheck = queries.find((q) => q.sql.includes('SELECT DISTINCT source_key FROM listings'));
+  assert.ok(fedCheck, 'expected fresh federal source lookup');
+  assert.deepEqual(fedCheck.params[0], ['treasury', 'irs', 'gsa', 'usda']);
+
+  const passB = queries.find((q) => q.sql.includes('DELETE FROM listings') && q.sql.includes('source_key = ANY($6::text[])'));
+  assert.ok(passB, 'expected Pass B SQL to purge stale rows from fresh federal sources');
+  assert.deepEqual(passB.params[5], ['treasury']);
+
+  const obsDel = queries.find((q) => q.sql.includes('DELETE FROM source_observations') && q.sql.includes('observed_at < NOW()'));
+  assert.ok(obsDel, 'expected source_observations retention delete query');
+  assert.ok(Number(obsDel.params[2]) >= 1000, `expected obsBatchSize >= 1000, got ${obsDel.params[2]}`);
+});
+
+test('POST /api/scrapers/run?action=next-slice does not starve active sources by looping on recently-run zero-yield trustee', async () => {
+  const now = Date.now();
+  const isoAgo = (ms) => new Date(now - ms).toISOString();
+  let capturedRun = null;
+  const mockDb = {
+    isPg: true,
+    pool: {
+      async query(sql) {
+        const norm = sql.replace(/\s+/g, ' ').trim();
+        if (norm.includes('FROM discovery_checkpoints')) return { rows: [] };
+        if (norm.includes('FROM listings')) {
+          return {
+            rows: [
+              { source_key: 'servicelink', latest_at: isoAgo(3.5 * 3600_000) },
+              { source_key: 'hud', latest_at: isoAgo(30 * 60_000) },
+              { source_key: 'sheriff', latest_at: isoAgo(3.5 * 3600_000) },
+              { source_key: 'civilview', latest_at: isoAgo(30 * 60_000) },
+              { source_key: 'gsa', latest_at: isoAgo(30 * 60_000) },
+              { source_key: 'usda', latest_at: isoAgo(30 * 60_000) },
+              { source_key: 'treasury', latest_at: isoAgo(3.5 * 3600_000) },
+              { source_key: 'irs', latest_at: isoAgo(30 * 60_000) },
+            ],
+          };
+        }
+        if (norm.includes('FROM source_observation_runs')) {
+          return {
+            rows: [
+              { source_key: 'trustee', last_run_at: isoAgo(5 * 60_000), accepted_count: 0 },
+              { source_key: 'servicelink', last_run_at: isoAgo(3.5 * 3600_000), accepted_count: 1400 },
+              { source_key: 'sheriff', last_run_at: isoAgo(3.5 * 3600_000), accepted_count: 280 },
+              { source_key: 'treasury', last_run_at: isoAgo(3.5 * 3600_000), accepted_count: 8 },
+            ],
+          };
+        }
+        return { rows: [] };
+      },
+    },
+  };
+  const handler = createScrapersHandler({
+    env: { SCRAPER_ADMIN_TOKEN: 'slice-guard-token' },
+    database: mockDb,
+    scheduler: {
+      database: mockDb,
+      async runAll(opts) {
+        capturedRun = opts;
+        return { totalIngested: 12 };
+      },
+    },
+  });
+  const res = {
+    statusCode: 200,
+    body: null,
+    status(c) { this.statusCode = c; return this; },
+    json(b) { this.body = b; return this; },
+  };
+  await handler({
+    method: 'POST',
+    url: '/api/scrapers/run',
+    headers: { 'x-scraper-token': 'slice-guard-token' },
+    body: { action: 'next-slice' },
+  }, res);
+  assert.equal(res.statusCode, 200);
+  assert.notEqual(res.body.source, 'trustee', 'recently-run zero-yield trustee must not loop and starve active sources');
+  assert.equal(res.body.source, 'servicelink', 'highest cadence-staleness ratio (3.5h/6h) must be selected next');
+  assert.equal(capturedRun.scraperTimeoutMs, 25_000);
+});
+
+test('POST /api/scrapers/run?action=next-slice resumes active continuation cursor unless another source is genuinely overdue', async () => {
+  const now = Date.now();
+  const isoAgo = (ms) => new Date(now - ms).toISOString();
+  const runNextSlice = async ({ gsaAgeMs, sheriffAgeMs }) => {
+    const mockDb = {
+      isPg: true,
+      pool: {
+        async query(sql) {
+          const norm = sql.replace(/\s+/g, ' ').trim();
+          if (norm.includes('FROM discovery_checkpoints')) {
+            return { rows: [{ source_key: 'servicelink', cursor: '2', updated_at: isoAgo(5 * 60_000) }] };
+          }
+          if (norm.includes('FROM listings')) {
+            return {
+              rows: [
+                { source_key: 'servicelink', latest_at: isoAgo(5 * 60_000) },
+                { source_key: 'hud', latest_at: isoAgo(60 * 60_000) },
+                { source_key: 'sheriff', latest_at: isoAgo(sheriffAgeMs) },
+                { source_key: 'civilview', latest_at: isoAgo(60 * 60_000) },
+                { source_key: 'gsa', latest_at: isoAgo(gsaAgeMs) },
+                { source_key: 'usda', latest_at: isoAgo(60 * 60_000) },
+                { source_key: 'treasury', latest_at: isoAgo(60 * 60_000) },
+                { source_key: 'irs', latest_at: isoAgo(60 * 60_000) },
+              ],
+            };
+          }
+          if (norm.includes('FROM source_observation_runs')) {
+            return {
+              rows: [
+                { source_key: 'trustee', last_run_at: isoAgo(10 * 60_000), accepted_count: 0 },
+              ],
+            };
+          }
+          return { rows: [] };
+        },
+      },
+    };
+    const handler = createScrapersHandler({
+      env: { SCRAPER_ADMIN_TOKEN: 'cursor-guard-token' },
+      database: mockDb,
+      scheduler: { database: mockDb, async runAll() { return { totalIngested: 5 }; } },
+    });
+    const res = {
+      statusCode: 200,
+      body: null,
+      status(c) { this.statusCode = c; return this; },
+      json(b) { this.body = b; return this; },
+    };
+    await handler({
+      method: 'POST',
+      url: '/api/scrapers/run',
+      headers: { 'x-scraper-token': 'cursor-guard-token' },
+      body: { action: 'next-slice' },
+    }, res);
+    return res.body;
+  };
+
+  // Non-overdue 24h GSA (2h old) must NOT preempt ServiceLink's active multi-page sweep
+  const resumedBody = await runNextSlice({ gsaAgeMs: 2 * 3600_000, sheriffAgeMs: 2 * 3600_000 });
+  assert.equal(resumedBody.source, 'servicelink');
+  assert.equal(resumedBody.reason, 'active_continuation_cursor');
+
+  // Overdue 12h Sheriff (10h old -> 0.83 >= 0.75) MUST preempt so Sheriff does not go stale
+  const preemptedBody = await runNextSlice({ gsaAgeMs: 2 * 3600_000, sheriffAgeMs: 10 * 3600_000 });
+  assert.equal(preemptedBody.source, 'sheriff');
+  assert.equal(preemptedBody.reason, 'oldest_observation');
+});

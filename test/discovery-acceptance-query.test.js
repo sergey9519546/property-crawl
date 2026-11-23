@@ -102,3 +102,37 @@ test('triage sort demotes terminal and past-sale rows below upcoming rows', asyn
   const res = await discovery.search(database(rows), discovery.queryFromUrl(new URL('http://localhost/api/listings?sort=triage&limit=10')));
   assert.deepEqual(res.listings.map((x) => x.id), ['live-low', 'past-high', 'term-high']);
 });
+
+test('excludeTerminal and server triage filters align matches() and pgWhere()', () => {
+  const recent = new Date(Date.now() - 2 * 3600_000).toISOString();
+  const oldTs = new Date(Date.now() - 96 * 3600_000).toISOString();
+  const terminalRow = { ...row('term-1'), status: 'redeemed', sourceObservedAt: recent, occupancy: 'Vacant' };
+  const activeFresh = {
+    ...row('fresh-1'),
+    status: 'active',
+    sourceObservedAt: recent,
+    occupancy: 'Tenant Occupied',
+    openingBid: 90000,
+    priorOpeningBid: 120000,
+  };
+  const staleUnknownOcc = { ...row('stale-1'), status: 'scheduled', sourceObservedAt: oldTs, occupancy: 'unknown' };
+
+  const qExcl = discovery.queryFromUrl(new URL('http://localhost/api/listings?excludeTerminal=true'));
+  assert.equal(discovery.matches(terminalRow, qExcl), false);
+  assert.equal(discovery.matches(activeFresh, qExcl), true);
+  assert.match(discovery.pgWhere(qExcl, 1, { accelerated: true }).sql, /NOT discovery_terminal/);
+  assert.match(discovery.pgWhere(qExcl, 1, { accelerated: false }).sql, /writ\[\[:space:\]\]\+expired/);
+
+  const qNew = discovery.queryFromUrl(new URL('http://localhost/api/listings?isNew=true&occupancyKnown=true&priceDropped=true'));
+  assert.equal(discovery.matches(activeFresh, qNew), true);
+  assert.equal(discovery.matches(staleUnknownOcc, qNew), false);
+  const sqlNew = discovery.pgWhere(qNew, 1, { accelerated: true }).sql;
+  assert.match(sqlNew, /INTERVAL '48 hours'/);
+  assert.match(sqlNew, /lower\(btrim\(occupancy\)\) NOT IN/);
+  assert.match(sqlNew, /priorOpeningBid/);
+
+  const qStale = discovery.queryFromUrl(new URL('http://localhost/api/listings?stale=true'));
+  assert.equal(discovery.matches(staleUnknownOcc, qStale), true);
+  assert.equal(discovery.matches(activeFresh, qStale), false);
+  assert.match(discovery.pgWhere(qStale, 1, { accelerated: true }).sql, /INTERVAL '72 hours'/);
+});

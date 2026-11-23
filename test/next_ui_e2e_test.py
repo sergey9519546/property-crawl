@@ -1244,6 +1244,10 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
             "https://tiles.openfreemap.org/**",
             lambda route: route.abort(),
         )
+        offline_page.route(
+            "https://basemap.nationalmap.gov/**",
+            lambda route: route.abort(),
+        )
         try:
             offline_page.goto(BASE_URL, wait_until="domcontentloaded")
             deal_map = self.reveal_deferred_atlas(offline_page)

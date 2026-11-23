@@ -154,8 +154,9 @@ export function InteractiveTerminal() {
   const [serverQueryTotal, setServerQueryTotal] = useState(0);
   const [summaryFacets, setSummaryFacets] = useState<Record<string, Record<string, number>>>({});
   const summaryFacetsRef = React.useRef<Record<string, Record<string, number>>>({});
+  const summaryFreshnessRef = React.useRef<Record<string, number>>({});
   const syncTotalRef = React.useRef(0);
-  const initialFilterSkip = React.useRef(true);
+  const lastFetchedKeyRef = React.useRef<string>('');
   const [observedCount, setObservedCount] = useState(0);
   const [inventoryNotice, setInventoryNotice] = useState("");
   const [workspaceRecords, setWorkspaceRecords] = useState<PropertyListing[]>([]);
@@ -206,23 +207,56 @@ export function InteractiveTerminal() {
     setUrlReady(true);
   }, []);
 
+  const currentRequestKey = useMemo(() => JSON.stringify({
+    searchQuery,
+    selectedState,
+    selectedSource,
+    observedOnly,
+    propertyType,
+    occupancy,
+    maxOpeningBid,
+    minDealScore,
+    minEquity,
+    sortBy,
+    activeView,
+  }), [searchQuery, selectedState, selectedSource, observedOnly, propertyType, occupancy, maxOpeningBid, minDealScore, minEquity, sortBy, activeView]);
+
   const loadListings = useCallback(async (refresh = false, targetOffset = 0, append = false) => {
     const generation = ++refreshGeneration.current;
+    lastFetchedKeyRef.current = currentRequestKey;
     setSyncStatus(refresh ? "refreshing" : "loading");
     try {
       const qs = new URLSearchParams();
       if (searchQuery.trim()) qs.set("q", searchQuery.trim());
       if (selectedState !== "all") qs.set("state", selectedState);
       if (selectedSource !== "all") qs.set("source", selectedSource);
+      if (observedOnly) qs.set("freshness", "observed");
       if (propertyType !== "all") qs.set("type", propertyType);
       if (occupancy !== "all") qs.set("occupancy", occupancy);
+      if (maxOpeningBid !== null) qs.set("maxBid", String(maxOpeningBid));
+      if (minDealScore > 0) qs.set("minScore", String(minDealScore));
+      if (minEquity > 0) qs.set("minEquity", String(minEquity));
       if (sortBy === "date") qs.set("sort", "date");
       else if (sortBy === "bid") qs.set("sort", "bid-asc");
       else if (sortBy === "score") qs.set("sort", "score");
+      else if (sortBy === "equity") qs.set("sort", "equity");
+      else if (sortBy === "images") qs.set("sort", "images");
 
+      const hasServerFilters = Boolean(
+        searchQuery.trim()
+        || selectedState !== "all"
+        || selectedSource !== "all"
+        || observedOnly
+        || propertyType !== "all"
+        || occupancy !== "all"
+        || maxOpeningBid !== null
+        || minDealScore > 0
+        || minEquity > 0
+      );
       const needsSummary = refresh || (!append && Object.keys(summaryFacetsRef.current).length === 0);
+      const pageLimit = activeView === "map" ? 200 : 12;
       const [page, summary] = await Promise.all([
-        loadServerListingPage<PropertyListing>(fetch, { limit: 12, offset: targetOffset, queryParams: qs, forceRefresh: refresh }),
+        loadServerListingPage<PropertyListing>(fetch, { limit: pageLimit, offset: targetOffset, queryParams: qs, forceRefresh: refresh }),
         needsSummary ? loadListingSummary(fetch).catch(() => null) : Promise.resolve(null),
       ]);
       if (generation !== refreshGeneration.current) return;
@@ -240,15 +274,21 @@ export function InteractiveTerminal() {
       setServerQueryTotal(page.total);
       if (summary?.facets) {
         summaryFacetsRef.current = summary.facets;
+        if (summary.facets.freshness && typeof summary.facets.freshness === "object") {
+          summaryFreshnessRef.current = summary.facets.freshness;
+        }
         setSummaryFacets(summary.facets);
       } else if (page.facets && Object.keys(summaryFacetsRef.current).length === 0) {
         summaryFacetsRef.current = page.facets;
+        if (page.facets.freshness && typeof page.facets.freshness === "object") {
+          summaryFreshnessRef.current = page.facets.freshness;
+        }
         setSummaryFacets(page.facets);
       }
 
       const overallTotal = summary?.total && summary.total > 0
         ? summary.total
-        : (syncTotalRef.current > 0 && qs.size > 0 ? syncTotalRef.current : page.total);
+        : (syncTotalRef.current > 0 && hasServerFilters ? syncTotalRef.current : page.total);
       syncTotalRef.current = overallTotal;
       try {
         window.sessionStorage.setItem(
@@ -260,9 +300,18 @@ export function InteractiveTerminal() {
           }),
         );
       } catch {}
-      setSyncCount(computedListings.length);
+      const freshness = summaryFreshnessRef.current;
+      const obsRaw = freshness?.observed;
+      const unvRaw = freshness?.unverified;
+      const obsTotal = Number.isFinite(obsRaw) ? obsRaw : 0;
+      const unvTotal = Number.isFinite(unvRaw) ? unvRaw : 0;
+      const hasValidSummaryFreshness = !hasServerFilters
+        && overallTotal > 0
+        && (obsRaw !== undefined || unvRaw !== undefined)
+        && obsTotal + unvTotal === overallTotal;
+      setSyncCount(hasValidSummaryFreshness ? overallTotal : computedListings.length);
       setSyncTotal(overallTotal);
-      setObservedCount(computedListings.filter(isObservedSourceRecord).length);
+      setObservedCount(hasValidSummaryFreshness ? obsTotal : computedListings.filter(isObservedSourceRecord).length);
       setInventoryNotice("");
       hasLoadedInventory.current = true;
       fullInventorySettled.current = true;
@@ -274,16 +323,13 @@ export function InteractiveTerminal() {
         ? "Refresh failed. Last loaded records remain available; source freshness has not been confirmed."
         : "Inventory could not be loaded, so no records are shown. Unverified records are never substituted for missing ones.");
     }
-  }, [searchQuery, selectedState, selectedSource, propertyType, occupancy, sortBy]);
+  }, [searchQuery, selectedState, selectedSource, observedOnly, propertyType, occupancy, maxOpeningBid, minDealScore, minEquity, sortBy, activeView, currentRequestKey]);
 
   useEffect(() => {
-    if (!urlReady || !hasLoadedInventory.current) return;
-    if (initialFilterSkip.current) {
-      initialFilterSkip.current = false;
-      return;
-    }
+    if (!urlReady || !hasLoadedInventory.current || !fullInventorySettled.current) return;
+    if (lastFetchedKeyRef.current === currentRequestKey) return;
     void loadListings(false, 0, false);
-  }, [urlReady, searchQuery, selectedState, selectedSource, propertyType, occupancy, sortBy, loadListings]);
+  }, [urlReady, currentRequestKey, loadListings]);
 
   useEffect(() => {
     let cancelled = false;
@@ -550,11 +596,15 @@ export function InteractiveTerminal() {
   // A new filter result set should start from the top again rather than inherit
   // however far the previous one had been scrolled through.
   React.useEffect(() => { setVisibleCount(PAGE_SIZE); }, [filters]);
+  const hasClientOnlyFilter = Boolean(seniorLienFilter !== "all" || redemptionFilter !== "all");
+  const displayCount = hasClientOnlyFilter
+    ? filtered.length
+    : (filtered.length < listings.length ? filtered.length : Math.max(filtered.length, serverQueryTotal));
   const visible = React.useMemo(
     () => filtered.slice(0, visibleCount),
     [filtered, visibleCount],
   );
-  const remaining = Math.max(0, Math.max(filtered.length, serverQueryTotal) - visible.length);
+  const remaining = Math.max(0, displayCount - visible.length);
 
   React.useEffect(() => {
     if (!hasLoadedInventory.current) return;
@@ -645,7 +695,7 @@ export function InteractiveTerminal() {
                 type="button"
                 aria-pressed={activeView === "grid"}
                 onClick={() => dispatchFilters({ type: "setView", view: "grid" })}
-                aria-label={locale === "en" ? `Deal Grid (${filtered.length} records)` : format(tUi.dealGridCount, { count: filtered.length })}
+                aria-label={locale === "en" ? `Deal Grid (${displayCount} records)` : format(tUi.dealGridCount, { count: displayCount })}
                 className={cn(
                   "px-3.5 py-1.5 rounded-control text-xs font-bold transition flex items-center gap-1.5",
                   activeView === "grid"
@@ -654,14 +704,14 @@ export function InteractiveTerminal() {
                 )}
               >
                 <LayoutGrid className="w-3.5 h-3.5" />
-                <span>{locale === "en" ? `Deal Grid (${filtered.length} records)` : format(tUi.dealGridCount, { count: filtered.length })}</span>
+                <span>{locale === "en" ? `Deal Grid (${displayCount} records)` : format(tUi.dealGridCount, { count: displayCount })}</span>
               </button>
 
               <button
                 type="button"
                 aria-pressed={activeView === "map"}
                 onClick={() => dispatchFilters({ type: "setView", view: "map" })}
-                aria-label={locale === "en" ? `Map (${filtered.length} records)` : format(tUi.mapCount, { count: filtered.length })}
+                aria-label={locale === "en" ? `Map (${displayCount} records)` : format(tUi.mapCount, { count: displayCount })}
                 className={cn(
                   "px-3.5 py-1.5 rounded-control text-xs font-bold transition flex items-center gap-1.5",
                   activeView === "map"
@@ -670,7 +720,7 @@ export function InteractiveTerminal() {
                 )}
               >
                 <MapIcon className="w-3.5 h-3.5" />
-                <span>{locale === "en" ? `Map (${filtered.length} records)` : format(tUi.mapCount, { count: filtered.length })}</span>
+                <span>{locale === "en" ? `Map (${displayCount} records)` : format(tUi.mapCount, { count: displayCount })}</span>
               </button>
 
               <button
@@ -1112,7 +1162,7 @@ export function InteractiveTerminal() {
                 </div>
                 <div>
                   <p className="text-ink-3 text-label font-bold uppercase tracking-wider">Filtered Pipeline</p>
-                  <p className="text-base font-extrabold text-ink">{filtered.length} Records</p>
+                  <p className="text-base font-extrabold text-ink">{displayCount} Records</p>
                 </div>
               </div>
 
@@ -1179,7 +1229,7 @@ export function InteractiveTerminal() {
             <CompareTray ids={compare.ids} labels={compareLabels} onRemove={compare.remove} onMakeTarget={compare.makeTarget} onClear={compare.clear} />
 
             {activeView === "map" ? (
-              <MarketMap listings={filtered} onUnderwrite={setSelectedListing} returnTo={returnContext} />
+              <MarketMap listings={filtered} onUnderwrite={setSelectedListing} />
             ) : (
             /* Listings Grid */
             filtered.length === 0 ? (

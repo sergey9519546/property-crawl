@@ -612,8 +612,7 @@ export function DealDiscoveryMap() {
         const handleMapError = (event: unknown) => {
           if (disposed) return;
           if (!isBasemapErrorEvent(event, map)) return;
-          const styleCold = !map.isStyleLoaded();
-          if (!styleCold || !fallbackApplied) return;
+          if (!fallbackApplied) return;
           styleFailed = true;
           if (loadTimeout !== null) {
             window.clearTimeout(loadTimeout);
@@ -654,7 +653,7 @@ export function DealDiscoveryMap() {
         map.on("zoomstart", () => setScanState("complete"));
 
         loadTimeout = window.setTimeout(() => {
-          if (!map.loaded() && !map.isStyleLoaded()) {
+          if (!map.loaded()) {
             if (!fallbackApplied) {
               fallbackApplied = true;
               try {

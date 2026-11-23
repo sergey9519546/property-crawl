@@ -45,7 +45,7 @@ function usePrefersReducedMotion() {
   return reduced;
 }
 
-export function MarketMap({ listings, onUnderwrite, returnTo = "/listings?view=map" }: MarketMapProps) {
+export function MarketMap({ listings, onUnderwrite, returnTo }: MarketMapProps) {
   const { locale, messages } = useLocale();
   const t = messages.mapsUi;
   const fmtCount = React.useCallback(
@@ -575,7 +575,7 @@ function MapPreview({
   parcelBoundary?: any;
   relatedListings: GeocodedListing[];
   onSelect: (listing: GeocodedListing) => void;
-  returnTo: string;
+  returnTo?: string;
   money: (value: unknown, fallback?: string) => string;
 }) {
   const { locale, messages } = useLocale();
@@ -594,6 +594,9 @@ function MapPreview({
     ? ` · ${formatLocaleNumber(locale, parcelFrontage)}′ × ${formatLocaleNumber(locale, parcelDepth)}′`
     : t.mmDimsNotReported;
   const score = knownNumber(listing.dealScore);
+  const detailHref = returnTo
+    ? `/listings/${encodeURIComponent(listing.id)}?returnTo=${encodeURIComponent(returnTo)}`
+    : `/listings/${encodeURIComponent(listing.id)}`;
 
   return (
     <article id="live-market-map-preview" data-testid="map-listing-preview" aria-label={interpolate(t.mmSelectedListingAria, { address: listing.address })} className="absolute bottom-4 left-4 right-4 z-30 rounded-card border border-line bg-card/95 p-4 shadow-overlay backdrop-blur-xl sm:left-auto sm:w-[390px]">
@@ -603,7 +606,7 @@ function MapPreview({
           {sourceDisplayText(SOURCES[listing.source]?.label ?? listing.source)} · {score !== null ? interpolate(t.mmModeledScore, { score }) : t.mmUnscored}
         </p>
         <h4 className="mt-1 text-lg font-bold tracking-[-0.02em] text-ink">
-          <Link href={`/listings/${encodeURIComponent(listing.id)}?returnTo=${encodeURIComponent(returnTo)}`} className="hover:underline underline-offset-4">
+          <Link href={detailHref} className="hover:underline underline-offset-4">
             {listing.address}
           </Link>
         </h4>
@@ -644,7 +647,7 @@ function MapPreview({
       </div>
       <div className="mt-2 grid grid-cols-2 gap-2">
         <button type="button" onClick={() => onUnderwrite(listing)} className="inline-flex h-11 items-center justify-center gap-1 rounded-control bg-ink px-3 text-xs font-bold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2">{t.mmUnderwriteBtn} <ArrowRight className="h-3.5 w-3.5" aria-hidden /></button>
-        <Link href={`/listings/${encodeURIComponent(listing.id)}?returnTo=${encodeURIComponent(returnTo)}`} className="inline-flex h-11 items-center justify-center gap-1 rounded-control border border-line-strong px-3 text-xs font-bold text-ink hover:bg-paper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink">{t.mmListingPageLink} <ArrowRight className="h-3.5 w-3.5" aria-hidden /></Link>
+        <Link href={detailHref} className="inline-flex h-11 items-center justify-center gap-1 rounded-control border border-line-strong px-3 text-xs font-bold text-ink hover:bg-paper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink">{t.mmListingPageLink} <ArrowRight className="h-3.5 w-3.5" aria-hidden /></Link>
       </div>
     </article>
   );

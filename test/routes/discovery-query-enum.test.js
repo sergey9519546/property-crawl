@@ -128,3 +128,19 @@ test("valid distressStage values round-trip and invalid distressStage drops on r
   assert.equal(discoverySearchParams({ distressStage: "bogus", state: "OH" }).has("distressStage"), false);
   assert.equal(discoverySearchParams({ distressStage: "foreclosure" }).has("distressStage"), false);
 });
+
+test("triage and excludeTerminal boolean parameters round-trip cleanly and reject garbage", async () => {
+  const { readDiscoveryFilters, discoverySearchParams } = await load();
+  const filters = readDiscoveryFilters(new URLSearchParams("excludeTerminal=true&isNew=true&priceDropped=true&stale=false&occupancyKnown=true"));
+  assert.equal(filters.excludeTerminal, "true");
+  assert.equal(filters.isNew, "true");
+  assert.equal(filters.priceDropped, "true");
+  assert.equal(filters.stale, "false");
+  assert.equal(filters.occupancyKnown, "true");
+  const written = discoverySearchParams(filters);
+  assert.equal(written.get("isNew"), "true");
+  assert.equal(written.get("excludeTerminal"), "true");
+  const dropped = readDiscoveryFilters(new URLSearchParams("isNew=maybe&occupancyKnown=yes"));
+  assert.equal("isNew" in dropped, false);
+  assert.equal("occupancyKnown" in dropped, false);
+});

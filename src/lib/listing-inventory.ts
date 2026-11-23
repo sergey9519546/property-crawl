@@ -118,6 +118,35 @@ export type ListingSummaryPayload = {
   dataMode?: string | null;
 };
 
+function normalizeFacets(raw: unknown): Record<string, Record<string, number>> | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const out: Record<string, Record<string, number>> = {};
+  for (const [key, entry] of Object.entries(raw as Record<string, unknown>)) {
+    const map: Record<string, number> = {};
+    if (Array.isArray(entry)) {
+      for (const bucket of entry) {
+        if (!bucket || typeof bucket !== "object") continue;
+        const val = typeof (bucket as { value?: unknown }).value === "string"
+          ? (bucket as { value: string }).value.trim()
+          : "";
+        const cnt = Number((bucket as { count?: unknown }).count);
+        if (val && val !== "unknown" && Number.isFinite(cnt) && cnt >= 0) {
+          map[val] = cnt;
+        }
+      }
+    } else if (entry && typeof entry === "object") {
+      for (const [val, rawCnt] of Object.entries(entry as Record<string, unknown>)) {
+        const cnt = Number(rawCnt);
+        if (val && val !== "unknown" && Number.isFinite(cnt) && cnt >= 0) {
+          map[val] = cnt;
+        }
+      }
+    }
+    out[key] = map;
+  }
+  return out;
+}
+
 export async function loadServerListingPage<T extends RecordIdentity>(
   fetchImpl: typeof fetch,
   options: {
@@ -128,7 +157,7 @@ export async function loadServerListingPage<T extends RecordIdentity>(
     forceRefresh?: boolean;
   } = {},
 ): Promise<{ listings: T[]; total: number; facets?: Record<string, Record<string, number>> }> {
-  const limit = Math.max(1, Math.min(100, options.limit ?? 12));
+  const limit = Math.max(1, Math.min(200, options.limit ?? 12));
   const offset = Math.max(0, options.offset ?? 0);
   const qs = options.queryParams instanceof URLSearchParams
     ? options.queryParams.toString()
@@ -148,7 +177,7 @@ export async function loadServerListingPage<T extends RecordIdentity>(
   return {
     listings: payload.listings as T[],
     total,
-    facets: payload.facets && typeof payload.facets === "object" ? payload.facets : undefined,
+    facets: normalizeFacets(payload.facets),
   };
 }
 
@@ -156,7 +185,7 @@ export async function loadListingSummary(
   fetchImpl: typeof fetch,
   signal?: AbortSignal,
 ): Promise<ListingSummaryPayload> {
-  const response = await fetchImpl("/api/listings?limit=1&summary=1", {
+  const response = await fetchImpl("/api/listings?limit=1&summary=1&facets=state,source,type,occupancy,freshness", {
     cache: "no-store",
     signal: signal || AbortSignal.timeout(10_000),
   });
@@ -167,7 +196,7 @@ export async function loadListingSummary(
   const total = Number.isSafeInteger(payload.total) && payload.total >= 0 ? payload.total : 0;
   return {
     total,
-    facets: payload.facets && typeof payload.facets === "object" ? payload.facets : undefined,
+    facets: normalizeFacets(payload.facets),
     dataMode: typeof payload.dataMode === "string" ? payload.dataMode : null,
   };
 }

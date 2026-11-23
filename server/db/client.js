@@ -3728,8 +3728,8 @@ class DatabaseClient {
     }
     const batchSize = Math.min(2000, Math.max(1, Math.trunc(Number(options.batchSize) || 25)));
     const maxBatches = Math.min(500, Math.max(1, Math.trunc(Number(options.maxBatches) || 40)));
-    const batchPauseMs = Math.min(1000, Math.max(0, Math.trunc(Number(options.batchPauseMs ?? 200))));
-    const maxDurationMs = options.maxDurationMs === 0 ? 0 : Math.max(1000, Math.trunc(Number(options.maxDurationMs) || 15_000));
+    const batchPauseMs = Math.min(1000, Math.max(0, Math.trunc(Number(options.batchPauseMs ?? 50))));
+    const maxDurationMs = options.maxDurationMs === 0 ? 0 : Math.max(1000, Math.trunc(Number(options.maxDurationMs) || 25_000));
     const startedAt = Date.now();
     const budgetExceeded = () => maxDurationMs > 0 && (Date.now() - startedAt) >= maxDurationMs;
     const serviceLinkStaleDays = Math.max(1, Math.trunc(Number(options.serviceLinkStaleDays) || 5));
@@ -3752,6 +3752,21 @@ class DatabaseClient {
       hasFreshServiceLinkLive = freshCheck.rows.length > 0;
     } catch (freshErr) {
       console.warn('[DB] purgeStaleListings fresh ServiceLink check failed:', freshErr?.message || freshErr);
+    }
+
+    let freshFederalSources = [];
+    try {
+      const fedCheck = await purgeQuery(
+        `SELECT DISTINCT source_key
+           FROM listings
+          WHERE source_key = ANY($1::text[])
+            AND discovery_is_live IS TRUE
+            AND source_observed_at > NOW() - INTERVAL '1 day'`,
+        [['treasury', 'irs', 'gsa', 'usda']],
+      );
+      freshFederalSources = (fedCheck.rows || []).map((r) => r.source_key).filter(Boolean);
+    } catch (fedErr) {
+      console.warn('[DB] purgeStaleListings fresh federal check failed:', fedErr?.message || fedErr);
     }
 
     let deleted = 0;
@@ -3847,6 +3862,10 @@ class DatabaseClient {
                       )
                     )
                   )
+                  OR (
+                    source_key = ANY($6::text[])
+                    AND COALESCE(source_observed_at, updated_at) < NOW() - INTERVAL '3 days'
+                  )
                   OR COALESCE(source_observed_at, updated_at) < NOW() - INTERVAL '30 days'
                LIMIT $5
                FOR UPDATE SKIP LOCKED
@@ -3857,6 +3876,7 @@ class DatabaseClient {
             hasFreshServiceLinkLive,
             serviceLinkHardStaleDays,
             batchSize,
+            freshFederalSources,
           ],
         );
         const batchDeleted = deletedRes.rowCount || 0;
@@ -3871,7 +3891,7 @@ class DatabaseClient {
     }
 
     let observationsDeleted = 0;
-    const obsBatchSize = Math.min(500, Math.max(50, batchSize * 2));
+    const obsBatchSize = Math.min(5000, Math.max(1000, batchSize * 40));
     try {
       for (let batch = 0; batch < maxBatches && !budgetExceeded(); batch += 1) {
         const obsRes = await purgeQuery(

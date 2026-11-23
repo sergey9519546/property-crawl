@@ -368,8 +368,16 @@ async function run() {
       assert.strictEqual(capturedParams.length, 48, 'INSERT retains the 42 source parameters and adds six derived fields including parcel_key and catch_summary');
       assert.strictEqual(capturedParams[10], 2.5, 'fractional baths must occupy the baths parameter');
       assert.deepStrictEqual(capturedParams[40], cashToCloseDetails, 'cash details must occupy the JSONB parameter');
-      assert.strictEqual(capturedParams[41], 'unknown', 'legacy empty status keeps the honest unknown slot');
+      assert.strictEqual(capturedParams[41], 'postponed', 'lifecycleStatus=postponed resolves canonical status slot');
       assert.deepStrictEqual(capturedParams.slice(42), ['TPS', 'postponed', null, false, null, 'Opening bid $50,000 but no sale date is published yet.'], 'program, lifecycle, unknown outcome, explicit document absence, and parcelKey remain separate; catch summary computed from the record');
+
+      await db.createListing({
+        id: 'PG-PROJECTION-UNKNOWN-STATUS',
+        source: 'civilview',
+        state: 'CA',
+        address: '6 Projection Test Ave',
+      });
+      assert.strictEqual(capturedParams[41], 'unknown', 'omitted status and lifecycleStatus keep the honest unknown slot');
     } finally {
       db.isPg = originalIsPg;
       db.pool = originalPool;
