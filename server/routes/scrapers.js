@@ -63,14 +63,17 @@ function createScrapersHandler(dependencies = {}) {
         try {
           const rawNjLimit = body.njLimit ?? url.searchParams.get('njLimit');
           const rawGeocodeLimit = body.geocodeLimit ?? url.searchParams.get('geocodeLimit');
+          const rawCatchLimit = body.catchLimit ?? url.searchParams.get('catchLimit');
           const rawMaxDurationMs = body.maxDurationMs ?? url.searchParams.get('maxDurationMs');
           const njLimit = rawNjLimit != null && rawNjLimit !== '' ? Number(rawNjLimit) : NaN;
           const geocodeLimit = rawGeocodeLimit != null && rawGeocodeLimit !== '' ? Number(rawGeocodeLimit) : NaN;
+          const catchLimit = rawCatchLimit != null && rawCatchLimit !== '' ? Number(rawCatchLimit) : NaN;
           const maxDurationMs = rawMaxDurationMs != null && rawMaxDurationMs !== '' ? Number(rawMaxDurationMs) : NaN;
           const dryRun = body.dryRun === true || url.searchParams.get('dryRun') === 'true';
           const repairReport = await repairFn({
             ...(Number.isFinite(njLimit) && njLimit > 0 ? { njLimit } : {}),
             ...(Number.isFinite(geocodeLimit) && geocodeLimit > 0 ? { geocodeLimit } : {}),
+            ...(Number.isFinite(catchLimit) && catchLimit > 0 ? { catchLimit } : {}),
             ...(Number.isFinite(maxDurationMs) && maxDurationMs >= 0 ? { maxDurationMs } : {}),
             dryRun,
           });
@@ -131,6 +134,13 @@ function createScrapersHandler(dependencies = {}) {
             [limit],
           );
           concludedDeleted = delRes.rowCount || 0;
+          const statusRes = await database.pool.query(
+            `UPDATE listings
+                SET status = 'scheduled'
+              WHERE LOWER(COALESCE(status, 'unknown')) = 'unknown'
+                AND LOWER(COALESCE(lifecycle_status, '')) LIKE 'auction begins%'`,
+          );
+          const statusReconciled = Number(statusRes?.rowCount || 0);
           const stalePurged = typeof database.purgeStaleListings === 'function'
             ? await database.purgeStaleListings()
             : { deleted: 0, observationsDeleted: 0 };
@@ -145,7 +155,7 @@ function createScrapersHandler(dependencies = {}) {
           return res.json({
             status: 'completed',
             action: 'prune',
-            report: { concludedDeleted, stalePurged, crossDedupe, mvRefreshed, remainingTotal },
+            report: { concludedDeleted, statusReconciled, stalePurged, crossDedupe, mvRefreshed, remainingTotal },
           });
         } catch (err) {
           return res.status(err?.status || 500).json({ error: err?.message || 'Prune operation failed' });

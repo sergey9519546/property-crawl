@@ -198,6 +198,16 @@ test('Cloudflare edge worker scheduled() maps cron expressions to actions, abort
     assert.equal(calls[3].url, 'https://hooks.example.test/alert');
     assert.equal(calls[3].body.event, 'edge_cron_failure');
     assert.equal(calls[3].body.action, 'repair-enrichment');
+
+    const ctxSecondLook = createCtx();
+    await worker.scheduled({ cron: '41 */6 * * *' }, env, ctxSecondLook);
+    await ctxSecondLook.flush();
+    assert.equal(calls[4].body.action, 'second-look');
+
+    const ctxDigests = createCtx();
+    await worker.scheduled({ cron: '53 */6 * * *' }, env, ctxDigests);
+    await ctxDigests.flush();
+    assert.equal(calls[5].body.action, 'dispatch-digests');
   } finally {
     globalThis.fetch = prevFetch;
   }

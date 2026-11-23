@@ -38,6 +38,7 @@ test('scrapers route supports action=next-slice and action=prune', async () => {
       async query(sql) {
         if (sql.includes('FROM discovery_checkpoints')) return { rows: [{ source_key: 'hud', cursor: { continuationToken: 'TX' } }] };
         if (sql.includes('DELETE FROM listings')) return { rowCount: 1, rows: [] };
+        if (sql.includes("SET status = 'scheduled'")) return { rowCount: 3, rows: [] };
         if (sql.includes('count(*)')) return { rows: [{ n: 5 }] };
         return { rows: [] };
       },
@@ -65,6 +66,7 @@ test('scrapers route supports action=next-slice and action=prune', async () => {
     const prune = await call({ action: 'prune' });
     assert.equal(prune.statusCode, 200);
     assert.equal(prune.body.report.concludedDeleted, 1);
+    assert.equal(prune.body.report.statusReconciled, 3);
   } finally {
     delete process.env.SCRAPER_ADMIN_TOKEN;
   }

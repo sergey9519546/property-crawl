@@ -81,6 +81,24 @@ function makeFakePool(initialRows) {
         }
         return { rowCount: target ? 1 : 0, rows: [] };
       }
+      if (normalizedSql.startsWith('SELECT') && normalizedSql.includes('catch_summary IS NULL')) {
+        const limit = Number(params[0]) || 250;
+        return {
+          rows: rows
+            .filter((r) => r.catchSummary == null)
+            .slice(0, limit)
+            .map((r) => ({ ...r })), 
+        };
+      }
+      if (normalizedSql.startsWith('UPDATE listings SET catch_summary = $2')) {
+        const [id, summary] = params;
+        const target = rows.find((r) => r.id === id);
+        if (target) {
+          target.catchSummary = summary;
+          updates.push({ kind: 'catch_summary', id, summary });
+        }
+        return { rowCount: target ? 1 : 0, rows: [] };
+      }
       throw new Error(`Unexpected SQL in fake pool: ${normalizedSql}`);
     },
   };
@@ -207,6 +225,7 @@ test('repairLiveEnrichment clears mismatched NJ situs parcel, backfills CivilVie
   assert.equal(report.njReEnriched, 1);
   assert.equal(report.civilviewUpdated, 1);
   assert.equal(report.geocodedCount, 1);
+  assert.equal(report.catchBackfilled, 2);
 
   const njRow = pool.rows.find((r) => r.id === 'CIV-NJ-10-2249533993');
   assert.equal(njRow.lat, 40.779111);
@@ -221,6 +240,8 @@ test('repairLiveEnrichment clears mismatched NJ situs parcel, backfills CivilVie
   assert.equal(gsaRow.lat, 30.2706);
   assert.equal(gsaRow.lng, -97.7458);
   assert.equal(inspectMapLocation(gsaRow).accepted, true, 'Census geocoded coords must pass map policy');
+  assert.ok(typeof njRow.catchSummary === 'string' && njRow.catchSummary.includes('judgment'.toLowerCase()) || njRow.catchSummary.length > 0);
+  assert.ok(typeof gsaRow.catchSummary === 'string' && gsaRow.catchSummary.includes('$50,000'));
 });
 
 test('POST /api/scrapers/run?action=repair-enrichment enforces SCRAPER_ADMIN_TOKEN and dispatches repairLiveEnrichment', async () => {

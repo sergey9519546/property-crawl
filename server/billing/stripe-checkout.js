@@ -1,7 +1,38 @@
 'use strict';
 
-function checkoutConfigured(env = process.env) {
-  return Boolean(String(env.STRIPE_SECRET_KEY || '').trim() && String(env.STRIPE_PRICE_ID || '').trim());
+/**
+ * @param {unknown} [tier]
+ * @returns {'pro' | 'desk' | null}
+ */
+function normalizeBillingTier(tier) {
+  const value = String(tier || '').trim().toLowerCase();
+  if (value === 'desk' || value === 'pro') return value;
+  return null;
+}
+
+/**
+ * @param {Record<string, string | undefined>} [env]
+ * @param {string | null} [tier]
+ * @returns {string}
+ */
+function resolvePriceId(env = process.env, tier = null) {
+  const normalizedTier = normalizeBillingTier(tier);
+  if (normalizedTier === 'desk') {
+    return String(env.STRIPE_PRICE_ID_DESK || env.STRIPE_PRICE_ID || '').trim();
+  }
+  if (normalizedTier === 'pro') {
+    return String(env.STRIPE_PRICE_ID_PRO || env.STRIPE_PRICE_ID || '').trim();
+  }
+  return String(env.STRIPE_PRICE_ID || env.STRIPE_PRICE_ID_PRO || env.STRIPE_PRICE_ID_DESK || '').trim();
+}
+
+/**
+ * @param {Record<string, string | undefined>} [env]
+ * @param {string | null} [tier]
+ * @returns {boolean}
+ */
+function checkoutConfigured(env = process.env, tier = null) {
+  return Boolean(String(env.STRIPE_SECRET_KEY || '').trim() && resolvePriceId(env, tier));
 }
 
 function absoluteHttpUrl(value) {
@@ -39,9 +70,21 @@ async function stripeRequest(path, { method = 'POST', params, env = process.env,
  * id rides along as client_reference_id and subscription metadata so the
  * webhook can attach the subscription to the right account.
  */
-async function createCheckoutSession({ successUrl, cancelUrl, customerId, accountId, env = process.env, fetchImpl = fetch }) {
-  const price = String(env.STRIPE_PRICE_ID || '').trim();
-  if (!checkoutConfigured(env)) return { configured: false, url: null, status: 503 };
+/**
+ * @param {{
+ *   successUrl: string,
+ *   cancelUrl: string,
+ *   customerId?: string | null,
+ *   accountId?: string | null,
+ *   tier?: string | null,
+ *   env?: Record<string, string | undefined>,
+ *   fetchImpl?: typeof fetch,
+ * }} options
+ */
+async function createCheckoutSession({ successUrl, cancelUrl, customerId, accountId, tier = null, env = process.env, fetchImpl = fetch }) {
+  const normalizedTier = normalizeBillingTier(tier);
+  const price = resolvePriceId(env, normalizedTier);
+  if (!String(env.STRIPE_SECRET_KEY || '').trim() || !price) return { configured: false, url: null, status: 503 };
   const success = absoluteHttpUrl(successUrl);
   const cancel = absoluteHttpUrl(cancelUrl);
   if (!success || !cancel) return { configured: true, url: null, status: 400, reason: 'invalid-return-url' };
@@ -56,6 +99,10 @@ async function createCheckoutSession({ successUrl, cancelUrl, customerId, accoun
   if (accountId) {
     params.client_reference_id = accountId;
     params['subscription_data[metadata][account_id]'] = accountId;
+  }
+  if (normalizedTier) {
+    params['metadata[tier]'] = normalizedTier;
+    params['subscription_data[metadata][tier]'] = normalizedTier;
   }
   const result = await stripeRequest('checkout/sessions', { params, env, fetchImpl });
   if (!result.ok) return { configured: true, url: null, status: 502, reason: result.reason };
@@ -78,8 +125,12 @@ async function createPortalSession({ customerId, returnUrl, env = process.env, f
   return result.ok && typeof result.payload?.url === 'string' ? result.payload.url : null;
 }
 
-async function getPrice({ env = process.env, fetchImpl = fetch } = {}) {
-  const price = String(env.STRIPE_PRICE_ID || '').trim();
+/**
+ * @param {{ env?: Record<string, string | undefined>, fetchImpl?: typeof fetch, tier?: string | null }} [options]
+ */
+async function getPrice({ env = process.env, fetchImpl = fetch, tier = null } = {}) {
+  const normalizedTier = normalizeBillingTier(tier);
+  const price = resolvePriceId(env, normalizedTier);
   if (!price) return null;
   const result = await stripeRequest(`prices/${encodeURIComponent(price)}`, { method: 'GET', env, fetchImpl });
   if (!result.ok) return null;
@@ -88,6 +139,7 @@ async function getPrice({ env = process.env, fetchImpl = fetch } = {}) {
     unitAmount: Number.isFinite(p.unit_amount) ? p.unit_amount : null,
     currency: typeof p.currency === 'string' ? p.currency : null,
     interval: p.recurring?.interval || null,
+    ...(normalizedTier ? { tier: normalizedTier } : {}),
   };
 }
 
@@ -200,6 +252,8 @@ function verifyStripeWebhook({
 }
 
 module.exports = {
+  normalizeBillingTier,
+  resolvePriceId,
   checkoutConfigured,
   createCheckoutSession,
   createCustomer,

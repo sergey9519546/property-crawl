@@ -6,7 +6,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const {
+  resolvePriceId,
   checkoutConfigured,
+  getPrice,
   createCheckoutSession,
   verifyStripeWebhook,
   stripeWebhookConfigured,
@@ -135,4 +137,46 @@ test('stripe webhook route does not issue operator tokens or fake paid permissio
   const source = fs.readFileSync(path.resolve(__dirname, '../src/app/api/webhooks/stripe/route.ts'), 'utf8');
   assert.match(source, /verifyStripeWebhook/);
   assert.doesNotMatch(source, /issueWorkspaceSession|SCRAPER_ADMIN_TOKEN|paid:\s*true/);
+});
+
+
+test('multi-tier checkout routes pro and desk price IDs and preserves STRIPE_PRICE_ID fallback', async () => {
+  const multiEnv = {
+    STRIPE_SECRET_KEY: 'sk_test',
+    STRIPE_PRICE_ID: 'price_legacy',
+    STRIPE_PRICE_ID_PRO: 'price_pro',
+    STRIPE_PRICE_ID_DESK: 'price_desk',
+  };
+  assert.equal(resolvePriceId(multiEnv, 'pro'), 'price_pro');
+  assert.equal(resolvePriceId(multiEnv, 'desk'), 'price_desk');
+  assert.equal(resolvePriceId(multiEnv, null), 'price_legacy');
+  assert.equal(resolvePriceId({ STRIPE_PRICE_ID: 'price_only' }, 'desk'), 'price_only');
+  assert.equal(checkoutConfigured({ STRIPE_SECRET_KEY: 'sk_test', STRIPE_PRICE_ID_PRO: 'price_pro' }, 'pro'), true);
+
+  const seenBodies = [];
+  const resDesk = await createCheckoutSession({
+    successUrl: 'https://perfectproperty.bid/account?checkout=success',
+    cancelUrl: 'https://perfectproperty.bid/account?checkout=cancelled',
+    tier: 'desk',
+    env: multiEnv,
+    fetchImpl: async (url, init) => {
+      seenBodies.push({ url, body: new URLSearchParams(String(init.body)) });
+      return { ok: true, status: 200, json: async () => ({ url: 'https://checkout.stripe.com/c/pay/cs_desk' }) };
+    },
+  });
+  assert.equal(resDesk.status, 200);
+  assert.equal(seenBodies[0].body.get('line_items[0][price]'), 'price_desk');
+  assert.equal(seenBodies[0].body.get('metadata[tier]'), 'desk');
+
+  let queriedPriceUrl = null;
+  const priceInfo = await getPrice({
+    tier: 'pro',
+    env: multiEnv,
+    fetchImpl: async (url) => {
+      queriedPriceUrl = url;
+      return { ok: true, status: 200, json: async () => ({ unit_amount: 4900, currency: 'usd', recurring: { interval: 'month' } }) };
+    },
+  });
+  assert.equal(queriedPriceUrl, 'https://api.stripe.com/v1/prices/price_pro');
+  assert.equal(priceInfo.tier, 'pro');
 });

@@ -12,9 +12,17 @@ function accountUrl(origin: string, status: string) {
 }
 
 // Whether checkout is set up, and the plan price from Stripe itself.
-export async function GET() {
-  const configured = checkoutConfigured();
-  return Response.json({ configured, price: configured ? await getPrice() : null }, { headers: responseHeaders });
+export async function GET(request?: Request) {
+  let tier: string | null = null;
+  if (request?.url) {
+    try {
+      tier = new URL(request.url).searchParams.get("tier");
+    } catch {
+      tier = null;
+    }
+  }
+  const configured = checkoutConfigured(process.env, tier);
+  return Response.json({ configured, price: configured ? await getPrice({ tier }) : null }, { headers: responseHeaders });
 }
 
 export async function POST(request: Request) {
@@ -26,7 +34,17 @@ export async function POST(request: Request) {
       { status: 429, headers: { ...responseHeaders, "Retry-After": String(rate.retryAfterSeconds) } },
     );
   }
-  if (!checkoutConfigured()) {
+  let requestedTier: string | null = null;
+  try {
+    const contentType = request.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
+      const parsed = await request.json();
+      if (parsed && typeof parsed.tier === "string") requestedTier = parsed.tier;
+    }
+  } catch {
+    // Empty or malformed JSON body falls back to default tier.
+  }
+  if (!checkoutConfigured(process.env, requestedTier)) {
     return Response.json({ configured: false, error: "Checkout is not configured." }, { status: 503, headers: responseHeaders });
   }
   const member = await currentMember(request);
@@ -48,6 +66,7 @@ export async function POST(request: Request) {
     cancelUrl: accountUrl(origin, "cancelled"),
     customerId,
     accountId: member.id,
+    tier: requestedTier,
   });
   if (!result.url) {
     return Response.json(

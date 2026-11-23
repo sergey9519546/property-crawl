@@ -4,9 +4,11 @@ const defaultDb = require('../db/client');
 const { isCompatibleNjSitusAddress, enrichNjListing } = require('./nj-cadastral');
 const { parseExecutionAmount, parseDescriptionUpsetMatch } = require('../scrapers/civilview');
 const { sourceObservedAddress, resolveCensusCoordinates } = require('../routes/property-image');
+const { computeCatchSummary } = require('../intelligence/catch-summary');
 
 const DEFAULT_NJ_LIMIT = 40;
 const DEFAULT_GEOCODE_LIMIT = 60;
+const DEFAULT_CATCH_LIMIT = 250;
 const DEFAULT_MAX_DURATION_MS = 20_000;
 const DEFAULT_CONCURRENCY = 5;
 
@@ -123,6 +125,9 @@ async function repairLiveEnrichment(options = {}) {
   const geocodeLimit = Number.isInteger(Number(options.geocodeLimit)) && Number(options.geocodeLimit) > 0
     ? Number(options.geocodeLimit)
     : DEFAULT_GEOCODE_LIMIT;
+  const catchLimit = Number.isInteger(Number(options.catchLimit)) && Number(options.catchLimit) > 0
+    ? Math.min(2000, Number(options.catchLimit))
+    : DEFAULT_CATCH_LIMIT;
   const maxDurationMs = Number.isFinite(Number(options.maxDurationMs)) && Number(options.maxDurationMs) >= 0
     ? Number(options.maxDurationMs)
     : DEFAULT_MAX_DURATION_MS;
@@ -144,6 +149,7 @@ async function repairLiveEnrichment(options = {}) {
     civilviewUpdated: 0,
     geocodeCandidates: 0,
     geocodedCount: 0,
+    catchBackfilled: 0,
     timedOut: false,
     mismatchedSample: [],
     errors: [],
@@ -412,6 +418,66 @@ async function repairLiveEnrichment(options = {}) {
       });
     } catch (err) {
       report.errors.push(`assessorBackfill: ${err?.message || err}`);
+    }
+  }
+
+  // Pass 5: Bounded Deterministic Catch Summary Backfill ($0, zero fabrication)
+  if (!dryRun && options.includeCatchBackfill !== false && !budgetExpired()) {
+    try {
+      const catchQuery = await pool.query(
+        `SELECT id,
+                state,
+                opening_bid::float8 AS "openingBid",
+                est_low::float8 AS "estLow",
+                est_high::float8 AS "estHigh",
+                redemption_days AS "redemptionDays",
+                senior_lien_risk AS "seniorLienRisk",
+                occupancy,
+                sale_date AS "saleDate",
+                deposit,
+                judgment_amount::float8 AS "judgment",
+                provenance
+           FROM listings
+          WHERE catch_summary IS NULL
+            AND (
+              est_low IS NULL
+              OR est_high IS NULL
+              OR opening_bid IS NULL OR opening_bid <= 0
+              OR sale_date IS NULL
+              OR occupancy IS NULL
+              OR deposit IS NULL
+              OR COALESCE(redemption_days, 0) > 0
+              OR NULLIF(TRIM(COALESCE(senior_lien_risk, '')), '') IS NOT NULL
+              OR (provenance ? 'titleWarnings')
+            )
+          ORDER BY id ASC
+          LIMIT $1`,
+        [catchLimit],
+      );
+      const catchRows = Array.isArray(catchQuery?.rows) ? catchQuery.rows : [];
+      await runWithConcurrency(catchRows, 10, async (row) => {
+        if (budgetExpired()) {
+          report.timedOut = true;
+          return;
+        }
+        const persistedTitleWarnings = Array.isArray(row?.provenance?.titleWarnings)
+          ? row.provenance.titleWarnings
+          : [];
+        const persistedRiskLevel = row?.provenance?.riskLevel || null;
+        const summary = computeCatchSummary(row, persistedTitleWarnings, persistedRiskLevel);
+        if (!summary) return;
+        await pool.query(
+          `UPDATE listings
+              SET catch_summary = $2
+            WHERE id = $1`,
+          [row.id, summary],
+        );
+        report.catchBackfilled += 1;
+      });
+    } catch (err) {
+      if (err?.code !== '42703') {
+        report.errors.push(`catchBackfill: ${err?.message || err}`);
+      }
     }
   }
 

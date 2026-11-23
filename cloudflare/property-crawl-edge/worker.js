@@ -351,9 +351,14 @@ export default {
       return;
     }
     const apiOrigin = String(env?.API_ORIGIN || 'https://property-crawl-api.vercel.app').replace(/\/+$/, '');
-    const action = controller?.cron === '17 */6 * * *'
+    const cron = controller?.cron;
+    const action = cron === '17 */6 * * *'
       ? 'prune'
-      : (controller?.cron === '29 * * * *' ? 'repair-enrichment' : 'next-slice');
+      : (cron === '29 * * * *'
+          ? 'repair-enrichment'
+          : (cron === '41 */6 * * *'
+              ? 'second-look'
+              : (cron === '53 */6 * * *' ? 'dispatch-digests' : 'next-slice')));
     const edgeSecret = String(env?.EDGE_SHARED_SECRET || '').trim();
     const notifyFailure = async (details) => {
       try {
