@@ -3,7 +3,7 @@
 const defaultDb = require('../db/client');
 const { isCompatibleNjSitusAddress, enrichNjListing } = require('./nj-cadastral');
 const { parseExecutionAmount, parseDescriptionUpsetMatch } = require('../scrapers/civilview');
-const { sourceObservedAddress, resolveCensusCoordinates, resolveArcgisCoordinates } = require('../routes/property-image');
+const { sourceObservedAddress, resolveCensusCoordinates } = require('../routes/property-image');
 const { computeCatchSummary } = require('../intelligence/catch-summary');
 
 const DEFAULT_NJ_LIMIT = 40;
@@ -162,7 +162,7 @@ async function repairLiveEnrichment(options = {}) {
   const fetchFn = options.fetchFn || globalThis.fetch;
   const enrichNjFn = options.enrichNjListing || enrichNjListing;
   const resolveCensusFn = options.resolveCensusCoordinates || resolveCensusCoordinates;
-  const resolveArcgisFn = options.resolveArcgisCoordinates || resolveArcgisCoordinates;
+  const resolveArcgisFn = typeof options.resolveArcgisCoordinates === 'function' ? options.resolveArcgisCoordinates : null;
   const njLimit = Number.isInteger(Number(options.njLimit)) && Number(options.njLimit) > 0
     ? Number(options.njLimit)
     : DEFAULT_NJ_LIMIT;
@@ -405,11 +405,13 @@ async function repairLiveEnrichment(options = {}) {
               observedAddress,
               timeoutMs: 4000,
             });
-            const resolvedCoords = censusCoords || await resolveArcgisFn({
-              fetchImpl: fetchFn,
-              observedAddress,
-              timeoutMs: 4000,
-            });
+            const resolvedCoords = censusCoords || (resolveArcgisFn
+              ? await resolveArcgisFn({
+                  fetchImpl: fetchFn,
+                  observedAddress,
+                  timeoutMs: 4000,
+                })
+              : null);
             attachCensusCoordinates(candidateListing, resolvedCoords, observedAt);
           }
         }

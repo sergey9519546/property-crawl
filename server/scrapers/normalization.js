@@ -19,8 +19,9 @@ function normalizeOccupancy(value) {
   const text = cleanText(value, ['Unknown', 'N/A', 'NA', 'TBD', 'None']);
   if (!text) return null;
   const lowered = text.toLowerCase();
+  if (/^commericial property$/.test(lowered)) return null;
   if (/(?:^|[^a-z])owner[- ]?occupied(?:$|[^a-z])/.test(lowered)) return 'Owner-Occupied';
-  if (/(?:^|[^a-z])(?:tenant[- ]?occupied|renter[- ]?occupied|rental|leased)(?:$|[^a-z])/.test(lowered)) return 'Tenant-Occupied';
+  if (/^(?:tenant|renter)$/.test(lowered) || /(?:^|[^a-z])(?:tenant[- ]?occupied|renter[- ]?occupied|rental|leased)(?:$|[^a-z])/.test(lowered)) return 'Tenant-Occupied';
   if (/(?:^|[^a-z])(?:unoccupied|vacant)(?:$|[^a-z])/.test(lowered)) return 'Vacant';
   if (/(?:^|[^a-z])occupied(?:$|[^a-z])/.test(lowered)) return 'Occupied';
   return text;
@@ -30,19 +31,26 @@ function normalizeLifecycleStatus(value) {
   const text = cleanText(value, ['Unknown', 'N/A', 'NA', 'None']);
   if (!text) return null;
   const lowered = text.toLowerCase();
-  if (/^auction\s+(?:begins|ends)\s*:/i.test(text) || /^(?:scheduled|upcoming|scheduled sale|notice of sale)$/i.test(lowered)) {
+  if (/^(?:status\s*:\s*)?cancel(?:l?ed)\b/i.test(text)) return 'Cancelled';
+  if (
+    /^post\s+bankruptcy\s+sale\s+date$/i.test(text)
+    || /^status\s*:\s*cleared\s+for\s+auction\b/i.test(text)
+    || /^rescheduled\b/i.test(text)
+    || /^scheduled(?:\s*[-:]|\s+for\b|$)/i.test(text)
+    || /^auction\s+(?:begins|ends)\s*:/i.test(text)
+    || /^(?:scheduled|upcoming|scheduled sale|notice of sale)$/i.test(lowered)
+  ) {
     return 'Scheduled';
   }
+  if (/adjourn|(?:^|[^a-z])adj(?:$|[^a-z])/i.test(lowered)) return 'Adjourned';
+  if (/bankr?upt?c/i.test(lowered)) return 'Bankruptcy Stay';
   if (/^status\s*:\s*active\b/i.test(text) || /^active$/i.test(lowered)) {
     return 'Active';
   }
   if (/^coming\s+soon$/i.test(lowered)) return 'Coming Soon';
-  if (/^adjourned\b/i.test(lowered)) return 'Adjourned';
   if (/^sold\b/i.test(lowered)) return 'Sold';
-  if (/^cancel(?:l?ed)\b/i.test(lowered)) return 'Cancelled';
   if (/^withdrawn\b/i.test(lowered)) return 'Withdrawn';
   if (/^dismissed\b/i.test(lowered)) return 'Dismissed';
-  if (/^bankruptcy(?:\s+stay)?\b/i.test(lowered)) return 'Bankruptcy Stay';
   if (/^stayed\b/i.test(lowered)) return 'Stayed';
   if (/^vacated\b/i.test(lowered)) return 'Vacated';
   if (/^redeemed\b/i.test(lowered)) return 'Redeemed';

@@ -322,3 +322,27 @@ test('normalizeOccupancy and normalizeLifecycleStatus canonicalize values while 
   assert.equal(rec.lifecycleStatus, 'Scheduled');
   assert.equal(rec.provenance.sourceFacts.rawLifecycleStatus, 'Auction Begins: 12/01/2026');
 });
+
+
+test('normalizeOccupancy and normalizeLifecycleStatus handle live Wave 3.1 facet edge cases', () => {
+  const {
+    normalizeOccupancy,
+    normalizeLifecycleStatus,
+  } = require('../../server/scrapers/normalization');
+
+  assert.equal(normalizeOccupancy('TENANT'), 'Tenant-Occupied');
+  assert.equal(normalizeOccupancy('Commericial Property'), null);
+
+  assert.equal(normalizeLifecycleStatus('Status: Cancelled'), 'Cancelled');
+  assert.equal(normalizeLifecycleStatus('POST BANKRUPTCY SALE DATE'), 'Scheduled');
+  assert.equal(normalizeLifecycleStatus('Status: Cleared for Auction'), 'Scheduled');
+  assert.equal(normalizeLifecycleStatus('Rescheduled'), 'Scheduled');
+  assert.equal(normalizeLifecycleStatus('Scheduled - Foreclosure'), 'Scheduled');
+  assert.equal(normalizeLifecycleStatus('Scheduled for'), 'Scheduled');
+  assert.equal(normalizeLifecycleStatus('Defendant Adjourned to'), 'Adjourned');
+  assert.equal(normalizeLifecycleStatus('Plaintiff Adjournment'), 'Adjourned');
+  assert.equal(normalizeLifecycleStatus('Court Adjourned to'), 'Adjourned');
+  assert.equal(normalizeLifecycleStatus('DEFENDANT 1ST 4 WEEK ADJ'), 'Adjourned');
+  assert.equal(normalizeLifecycleStatus('Bankruptcy Hold'), 'Bankruptcy Stay');
+  assert.equal(normalizeLifecycleStatus('Bankuptcy'), 'Bankruptcy Stay');
+});

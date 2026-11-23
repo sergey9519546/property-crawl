@@ -228,19 +228,40 @@ async function queryFemaFloodZone({
   queryUrl.searchParams.set('returnGeometry', 'false');
   queryUrl.searchParams.set('f', 'json');
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const shouldRetryTransient = fetchFn === globalThis.fetch;
+  const deadlineAt = Date.now() + timeoutMs;
+  const runFetchAttempt = async (attemptTimeoutMs) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), Math.max(1000, attemptTimeoutMs));
+    try {
+      return await fetchFn(queryUrl.toString(), {
+        signal: controller.signal,
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': 'PropertyCrawl/1.0 (Zero-Cost Federal Hazard GIS)'
+        }
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+  };
 
   try {
-    const res = await fetchFn(queryUrl.toString(), {
-      signal: controller.signal,
-      headers: {
-        'Accept': 'application/json',
-        'User-Agent': 'PropertyCrawl/1.0 (Zero-Cost Federal Hazard GIS)'
+    let res;
+    try {
+      res = await runFetchAttempt(timeoutMs);
+      if (shouldRetryTransient && !res.ok && res.status >= 500 && (deadlineAt - Date.now()) > 1200) {
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        res = await runFetchAttempt(deadlineAt - Date.now());
       }
-    });
-
-    clearTimeout(timer);
+    } catch (firstErr) {
+      if (shouldRetryTransient && firstErr?.name !== 'AbortError' && (deadlineAt - Date.now()) > 1200) {
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        res = await runFetchAttempt(deadlineAt - Date.now());
+      } else {
+        throw firstErr;
+      }
+    }
 
     if (!res.ok) {
       return {
@@ -294,7 +315,6 @@ async function queryFemaFloodZone({
       provenance: 'fema-nfhl-spatial-query'
     };
   } catch (err) {
-    clearTimeout(timer);
     return {
       status: 'unavailable',
       reason: err.name === 'AbortError' ? 'fema_api_timeout' : `fema_api_network_error: ${err.message}`,

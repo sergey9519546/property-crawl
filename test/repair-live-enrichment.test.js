@@ -674,3 +674,46 @@ test('repairLiveEnrichment Pass 3b backfills missing HUD county and countyFips v
   assert.equal(missRow.county, null);
   assert.ok(missRow.provenance.derivedFields.countyLookupAttemptedAt);
 });
+
+
+test('repairLiveEnrichment handles null Census geocode cleanly when resolveArcgisCoordinates is omitted', async () => {
+  const pool = makeFakePool([
+    {
+      id: 'SL-NOCOORD-NULL',
+      source: 'servicelink',
+      state: 'TX',
+      county: 'Harris',
+      city: 'Houston',
+      zip: '77002',
+      address: '999 Missing Rd, Houston, TX 77002',
+      sourceUrl: 'https://www.servicelinkauction.com/listing/SL-NOCOORD-NULL',
+      lat: null,
+      lng: null,
+      propType: 'Single Family',
+      raw: 'REO',
+      sourceObservedAt: '2026-11-22T00:00:00.000Z',
+      provenance: {
+        origin: 'live',
+        observed: true,
+        recordKind: 'source_record',
+        publisher: 'ServiceLink Auction',
+        recordId: 'SL-NOCOORD-NULL',
+        observedAt: '2026-11-22T00:00:00.000Z',
+      },
+    },
+  ]);
+
+  const report = await repairLiveEnrichment({
+    pool,
+    resolveCensusCoordinates: async () => null,
+    includeCountyBackfill: false,
+    includeCatchBackfill: false,
+    includeAssessorBackfill: false,
+  });
+
+  assert.equal(report.geocodeCandidates, 1);
+  assert.equal(report.geocodedCount, 0);
+  assert.deepEqual(report.errors, []);
+  const row = pool.rows.find((r) => r.id === 'SL-NOCOORD-NULL');
+  assert.ok(row.provenance.derivedFields.geocodeAttemptedAt);
+});

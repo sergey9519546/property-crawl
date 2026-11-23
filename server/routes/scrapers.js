@@ -315,6 +315,37 @@ function createScrapersHandler(dependencies = {}) {
         try {
           const pruneStart = Date.now();
           const limit = Math.min(5000, Math.max(1, Number(body.limit ?? url.searchParams.get('limit')) || 5000));
+          const lifecycleRes = await database.pool.query(
+            `UPDATE listings
+                SET lifecycle_status = CASE
+                  WHEN lifecycle_status ~* '^(?:status\\s*:\\s*)?cancel(?:l?ed)(?:$|[^a-z])' THEN 'Cancelled'
+                  WHEN lifecycle_status ~* '^post\\s+bankruptcy\\s+sale\\s+date$'
+                    OR lifecycle_status ~* '^status\\s*:\\s*cleared\\s+for\\s+auction'
+                    OR lifecycle_status ~* '^rescheduled(?:$|[^a-z])'
+                    OR lifecycle_status ~* '^scheduled(?:\\s*[-:]|\\s+for(?:$|[^a-z])|$)'
+                    OR lifecycle_status ~* '^auction\\s+(?:begins|ends)\\s*:'
+                    OR LOWER(BTRIM(COALESCE(lifecycle_status, ''))) IN ('scheduled', 'upcoming', 'scheduled sale', 'notice of sale')
+                    OR (lifecycle_status IS NULL AND LOWER(BTRIM(COALESCE(status, ''))) = 'scheduled') THEN 'Scheduled'
+                  WHEN lifecycle_status ~* 'adjourn|(?:^|[^a-z])adj(?:$|[^a-z])' THEN 'Adjourned'
+                  WHEN lifecycle_status ~* 'bankr?upt?c' THEN 'Bankruptcy Stay'
+                  WHEN lifecycle_status ~* '^status\\s*:\\s*active' OR LOWER(BTRIM(lifecycle_status)) = 'active' THEN 'Active'
+                  WHEN LOWER(BTRIM(lifecycle_status)) = 'coming soon' THEN 'Coming Soon'
+                  ELSE BTRIM(lifecycle_status)
+                END
+              WHERE COALESCE(lifecycle_status, '') NOT IN (
+                'Active', 'Scheduled', 'Coming Soon', 'Adjourned', 'Cancelled', 'Bankruptcy Stay',
+                'Sold', 'Withdrawn', 'Dismissed', 'Vacated', 'Redeemed', 'Postponed', 'Closed', 'Expired', 'Concluded', 'publicly_listed'
+              )
+                AND (
+                  (lifecycle_status IS NOT NULL AND (
+                    lifecycle_status ~* '^(?:status\\s*:\\s*cancel|post\\s+bankruptcy\\s+sale\\s+date$|status\\s*:\\s*cleared\\s+for\\s+auction|rescheduled|scheduled\\s*[-:]|scheduled\\s+for|auction\\s+(?:begins|ends)\\s*:|status\\s*:\\s*active)'
+                    OR lifecycle_status ~* 'adjourn|(?:^|[^a-z])adj(?:$|[^a-z])|bankr?upt?c'
+                    OR LOWER(BTRIM(lifecycle_status)) IN ('scheduled', 'upcoming', 'scheduled sale', 'notice of sale', 'active', 'coming soon', 'cancelled', 'canceled')
+                  ))
+                  OR (lifecycle_status IS NULL AND LOWER(BTRIM(COALESCE(status, ''))) = 'scheduled')
+                )`
+          ).catch(() => ({ rowCount: 0 }));
+          const lifecycleNormalized = Number(lifecycleRes?.rowCount || 0);
           let concludedDeleted = 0;
           const delRes = await database.pool.query(
             `DELETE FROM listings
@@ -368,9 +399,9 @@ function createScrapersHandler(dependencies = {}) {
           const occupancyRes = await database.pool.query(
             `UPDATE listings
                 SET occupancy = CASE
-                  WHEN UPPER(BTRIM(occupancy)) IN ('UNKNOWN', 'N/A', 'NA', 'TBD', 'NONE', '') THEN NULL
+                  WHEN UPPER(BTRIM(occupancy)) IN ('UNKNOWN', 'N/A', 'NA', 'TBD', 'NONE', '') OR LOWER(BTRIM(occupancy)) = 'commericial property' THEN NULL
                   WHEN LOWER(occupancy) ~ '(^|[^a-z])owner[- ]?occupied($|[^a-z])' THEN 'Owner-Occupied'
-                  WHEN LOWER(occupancy) ~ '(^|[^a-z])(tenant[- ]?occupied|renter[- ]?occupied|rental|leased)($|[^a-z])' THEN 'Tenant-Occupied'
+                  WHEN UPPER(BTRIM(occupancy)) IN ('TENANT', 'RENTER') OR LOWER(occupancy) ~ '(^|[^a-z])(tenant[- ]?occupied|renter[- ]?occupied|rental|leased)($|[^a-z])' THEN 'Tenant-Occupied'
                   WHEN LOWER(occupancy) ~ '(^|[^a-z])(unoccupied|vacant)($|[^a-z])' THEN 'Vacant'
                   WHEN LOWER(occupancy) ~ '(^|[^a-z])occupied($|[^a-z])' THEN 'Occupied'
                   ELSE occupancy
@@ -378,27 +409,12 @@ function createScrapersHandler(dependencies = {}) {
               WHERE occupancy IS NOT NULL
                 AND occupancy NOT IN ('Owner-Occupied', 'Tenant-Occupied', 'Vacant', 'Occupied')
                 AND (
-                  UPPER(BTRIM(occupancy)) IN ('UNKNOWN', 'N/A', 'NA', 'TBD', 'NONE', '')
+                  UPPER(BTRIM(occupancy)) IN ('UNKNOWN', 'N/A', 'NA', 'TBD', 'NONE', '', 'TENANT', 'RENTER')
+                  OR LOWER(BTRIM(occupancy)) = 'commericial property'
                   OR LOWER(occupancy) ~ '(^|[^a-z])(owner[- ]?occupied|tenant[- ]?occupied|renter[- ]?occupied|unoccupied|vacant|occupied)($|[^a-z])'
                 )`
           ).catch(() => ({ rowCount: 0 }));
           const occupancyNormalized = Number(occupancyRes?.rowCount || 0);
-          const lifecycleRes = await database.pool.query(
-            `UPDATE listings
-                SET lifecycle_status = CASE
-                  WHEN lifecycle_status ~* '^Auction\\s+(Begins|Ends)\\s*:' OR LOWER(BTRIM(lifecycle_status)) IN ('scheduled', 'upcoming', 'scheduled sale', 'notice of sale') THEN 'Scheduled'
-                  WHEN lifecycle_status ~* '^Status\\s*:\\s*Active' OR LOWER(BTRIM(lifecycle_status)) = 'active' THEN 'Active'
-                  WHEN LOWER(BTRIM(lifecycle_status)) = 'coming soon' THEN 'Coming Soon'
-                  WHEN lifecycle_status ~* '^Adjourned' THEN 'Adjourned'
-                  ELSE BTRIM(lifecycle_status)
-                END
-              WHERE lifecycle_status IS NOT NULL
-                AND (
-                  lifecycle_status ~* '^(Auction\\s+(Begins|Ends)\\s*:|Status\\s*:\\s*Active|Adjourned.+)'
-                  OR lifecycle_status IN ('scheduled', 'upcoming', 'active', 'coming soon', 'COMING SOON', 'SCHEDULED', 'ACTIVE', 'ADJOURNED')
-                )`
-          ).catch(() => ({ rowCount: 0 }));
-          const lifecycleNormalized = Number(lifecycleRes?.rowCount || 0);
           const ohCityRes = await database.pool.query(
             `UPDATE listings
                 SET city = BTRIM((regexp_match(address, '^[^,]+,\\s*([A-Za-z][A-Za-z .''-]+?),\\s*(?:OH\\s+)?\\d{5}'))[1])
