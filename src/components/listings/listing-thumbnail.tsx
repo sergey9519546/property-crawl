@@ -67,7 +67,7 @@ export function ListingThumbnail({ listingId, address, propType, source, photo, 
     setAltImageFailed(false);
     setAlternative(chosen);
     setMetadata(buildAlternativeMetadata(chosen, t));
-    setStatus(chosen.provider === "mapillary" && chosen.thumbUrl ? "image" : "loaded");
+    setStatus((chosen.provider === "mapillary" || chosen.provider === "panoramax") && chosen.thumbUrl ? "image" : "loaded");
   }
 
   async function loadStreetView() {
@@ -89,7 +89,7 @@ export function ListingThumbnail({ listingId, address, propType, source, photo, 
       }
       setAlternative(parsedAlt);
       setMetadata(result.metadata);
-      setStatus(parsedAlt && !(parsedAlt.provider === "mapillary" && parsedAlt.thumbUrl) ? "loaded" : "image");
+      setStatus(parsedAlt && !((parsedAlt.provider === "mapillary" || parsedAlt.provider === "panoramax") && parsedAlt.thumbUrl) ? "loaded" : "image");
     } catch {
       if (request !== generation.current) return;
       setReason(t.coverageCheckError);
@@ -142,7 +142,7 @@ export function ListingThumbnail({ listingId, address, propType, source, photo, 
   }
 
   if ((status === "image" || status === "loaded") && metadata && alternative) {
-    const thumb = alternative.provider === "mapillary" && !altImageFailed ? alternative.thumbUrl : null;
+    const thumb = !altImageFailed ? alternative.thumbUrl : null;
     return (
       <div className="flex h-full flex-col bg-paper" data-testid="listing-thumbnail-streetview">
         <div className={`${frame} bg-paper`}>
@@ -151,6 +151,7 @@ export function ListingThumbnail({ listingId, address, propType, source, photo, 
               <img
                 src={thumb}
                 alt={format(t.streetContextAlt, { provider: alternative.attribution.provider, address })}
+                referrerPolicy="no-referrer"
                 className={`absolute inset-0 h-full w-full object-contain ${status === "loaded" ? "" : "opacity-0"}`}
                 onLoad={() => setStatus("loaded")}
                 onError={() => setAltImageFailed(true)}
@@ -198,7 +199,17 @@ export function ListingThumbnail({ listingId, address, propType, source, photo, 
               })}
             </div>
           ) : null}
-          <p>{metadata.attribution} · {alternative.license.id || t.recordedLicense} · {formatCaptureDate(metadata.captureDate)}</p>
+          <p>
+            {metadata.attribution} ·{" "}
+            {alternative.license.url ? (
+              <a href={alternative.license.url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="underline">
+                {alternative.license.id || t.recordedLicense}
+              </a>
+            ) : (
+              alternative.license.id || t.recordedLicense
+            )}{" "}
+            · {formatCaptureDate(metadata.captureDate)}
+          </p>
           <p>
             {metadata.distanceMeters === null ? t.distanceUnavailable : format(t.distanceMetersFrom, { meters: Math.round(metadata.distanceMeters) })} · {t.streetContextOnly}
             {thumb ? (
@@ -245,7 +256,7 @@ export function ListingThumbnail({ listingId, address, propType, source, photo, 
           {status === "aerial" ? <p role="status" className="absolute inset-0 grid place-items-center text-xs text-ink-3">Loading aerial parcel view…</p> : null}
         </div>
         <div className={caption}>
-          <span>Esri World Imagery · USGS / USDA NAIP</span>
+          <span>USGS National Map / USDA NAIP (Public Domain)</span>
           <span className="text-ink-3">Overhead satellite context · Not a publisher photo</span>
         </div>
       </div>

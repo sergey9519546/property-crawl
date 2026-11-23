@@ -51,11 +51,21 @@ function stageVercelApiBundle({ rootDir = DEFAULT_ROOT, stageDir } = {}) {
     }
   }
 
+  let releaseSha = process.env.VERCEL_GIT_COMMIT_SHA || process.env.PROPERTY_RELEASE_SHA || '';
+  if (!/^[a-f0-9]{40}$/i.test(releaseSha)) {
+    try {
+      const shaOut = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: rootDir, encoding: 'utf8' }).trim();
+      if (/^[a-f0-9]{40}$/i.test(shaOut)) releaseSha = shaOut;
+    } catch {}
+  }
+  const shaBanner = /^[a-f0-9]{40}$/i.test(releaseSha)
+    ? `if (!process.env.PROPERTY_RELEASE_SHA) process.env.PROPERTY_RELEASE_SHA = '${releaseSha}';\n`
+    : '';
   const apiDir = path.join(targetDir, 'api');
   fs.mkdirSync(apiDir, { recursive: true });
   fs.writeFileSync(
     path.join(apiDir, 'index.js'),
-    "module.exports = require('../server/vercel-handler');\n",
+    `${shaBanner}module.exports = require('../server/vercel-handler');\n`,
   );
 
   fs.writeFileSync(

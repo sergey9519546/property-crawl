@@ -1,28 +1,30 @@
-import type { StyleSpecification } from "maplibre-gl";
+import type { RasterSourceSpecification, StyleSpecification } from "maplibre-gl";
 
 export const OPENFREEMAP_POSITRON_STYLE = "https://tiles.openfreemap.org/styles/positron";
+
+export const FEMA_NFHL_SOURCE_ID = "fema-nfhl";
+export const FEMA_NFHL_LAYER_ID = "fema-nfhl-overlay";
 
 export const RASTER_STREET_STYLE: StyleSpecification = {
   version: 8,
   sources: {
-    "carto-positron": {
+    "usgs-topo": {
       type: "raster",
       tiles: [
-        "https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
-        "https://b.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
-        "https://c.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+        "https://basemap.nationalmap.gov/arcgis/rest/services/USGSTopo/MapServer/tile/{z}/{y}/{x}",
       ],
       tileSize: 256,
-      attribution: "OpenStreetMap contributors · CARTO",
+      maxzoom: 16,
+      attribution: "U.S. Geological Survey (The National Map)",
     },
   },
   layers: [
     {
-      id: "carto-positron-tiles",
+      id: "usgs-topo-tiles",
       type: "raster",
-      source: "carto-positron",
+      source: "usgs-topo",
       minzoom: 0,
-      maxzoom: 20,
+      maxzoom: 22,
     },
   ],
 };
@@ -30,20 +32,34 @@ export const RASTER_STREET_STYLE: StyleSpecification = {
 export const AERIAL_IMAGERY_STYLE: StyleSpecification = {
   version: 8,
   sources: {
-    aerial: {
+    "usgs-imagery": {
       type: "raster",
-      tiles: ["https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
+      tiles: [
+        "https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}",
+      ],
       tileSize: 256,
-      attribution: "Esri, USGS, USDA NAIP",
+      maxzoom: 16,
+      attribution: "U.S. Geological Survey (The National Map)",
     },
   },
   layers: [
     {
-      id: "aerial-tiles",
+      id: "usgs-imagery-tiles",
       type: "raster",
-      source: "aerial",
+      source: "usgs-imagery",
       minzoom: 0,
-      maxzoom: 19,
+      maxzoom: 22,
     },
   ],
+};
+
+export const FEMA_NFHL_OVERLAY_SOURCE: RasterSourceSpecification = {
+  type: "raster",
+  tiles: [
+    "https://hazards.fema.gov/arcgis/rest/services/public/NFHL/MapServer/export?bbox={bbox-epsg-3857}&bboxSR=3857&imageSR=3857&size=512,512&format=png32&transparent=true&layers=show:28&f=image",
+  ],
+  tileSize: 512,
+  minzoom: 12,
+  maxzoom: 19,
+  attribution: "FEMA National Flood Hazard Layer (NFHL)",
 };

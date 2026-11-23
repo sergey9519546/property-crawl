@@ -155,6 +155,22 @@ function createScrapersHandler(dependencies = {}) {
                 )`,
           );
           const statusReconciled = Number(statusRes?.rowCount || 0);
+          const gsaTypeCleanup = await database.pool.query(
+            `UPDATE listings
+                SET prop_type = CASE
+                  WHEN LOWER(COALESCE(raw_notice, '') || ' ' || COALESCE(address, '')) ~ 'courthouse|federal building' THEN 'Courthouse'
+                  WHEN LOWER(COALESCE(raw_notice, '') || ' ' || COALESCE(address, '')) ~ 'office|federal center' THEN 'Office'
+                  ELSE NULL
+                END
+              WHERE prop_type IN ('[', ']', '""', 'null', 'Unknown')`
+          ).catch(() => ({ rowCount: 0 }));
+          const hudTypeFill = await database.pool.query(
+            `UPDATE listings
+                SET prop_type = 'Single Family'
+              WHERE source_key = 'hud'
+                AND (prop_type IS NULL OR TRIM(prop_type) = '' OR prop_type = 'Unknown')`
+          ).catch(() => ({ rowCount: 0 }));
+          const propTypesCleaned = Number(gsaTypeCleanup?.rowCount || 0) + Number(hudTypeFill?.rowCount || 0);
           const stalePurged = typeof database.purgeStaleListings === 'function'
             ? await database.purgeStaleListings()
             : { deleted: 0, observationsDeleted: 0 };
@@ -169,10 +185,28 @@ function createScrapersHandler(dependencies = {}) {
           return res.json({
             status: 'completed',
             action: 'prune',
-            report: { concludedDeleted, statusReconciled, stalePurged, crossDedupe, mvRefreshed, remainingTotal },
+            report: { concludedDeleted, statusReconciled, propTypesCleaned, stalePurged, crossDedupe, mvRefreshed, remainingTotal },
           });
         } catch (err) {
           return res.status(err?.status || 500).json({ error: err?.message || 'Prune operation failed' });
+        }
+      }
+
+      if (action === 'compact-observations') {
+        const database = resolveDatabase();
+        if (!database || !database.isPg || !database.pool) {
+          return res.status(503).json({ error: 'Observation compaction requires an active PostgreSQL database connection' });
+        }
+        try {
+          const { compactPgObservations } = require('../db/observations-persistence');
+          const report = await compactPgObservations(database.pool, {
+            apply: body.dryRun !== true && url.searchParams.get('dryRun') !== 'true',
+            vacuum: true,
+            source: body.source || url.searchParams.get('source') || null,
+          });
+          return res.json({ status: 'completed', action: 'compact-observations', report });
+        } catch (err) {
+          return res.status(err?.status || 500).json({ error: err?.message || 'Observation compaction failed' });
         }
       }
 

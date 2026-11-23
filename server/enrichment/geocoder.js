@@ -1,11 +1,40 @@
 'use strict';
 
 const { loadJsonDiskCache, saveJsonDiskCache } = require('./disk-cache');
+const { isCoordInStateBounds } = require('../geo/state-bounds');
+const { isUsStateOrTerritoryCode } = require('../state-codes');
 const path = require('path');
 const crypto = require('crypto');
 
 const DEFAULT_CACHE_PATH = path.resolve(__dirname, '../../.cache/geocoding-cache.json');
 const CENSUS_GEOCODER_ENDPOINT = 'https://geocoding.geo.census.gov/geocoder/locations/onelineaddress';
+const CENSUS_STRUCTURED_GEOCODER_ENDPOINT = 'https://geocoding.geo.census.gov/geocoder/locations/address';
+const MAX_GEOCODER_RESPONSE_BYTES = 256 * 1024;
+
+const ROUTE_TOKEN_ALIASES = Object.freeze({
+  north: 'n', south: 's', east: 'e', west: 'w',
+  northeast: 'ne', northwest: 'nw', southeast: 'se', southwest: 'sw',
+  street: 'st', avenue: 'ave', boulevard: 'blvd', road: 'rd', drive: 'dr',
+  lane: 'ln', court: 'ct', circle: 'cir', terrace: 'ter', place: 'pl',
+  parkway: 'pkwy', highway: 'hwy', trail: 'trl',
+});
+
+function normalizeAddressToken(value) {
+  return String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function normalizeRouteName(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/\b(?:apartment|apt|unit|suite|ste)\b.*$/i, '')
+    .replace(/\s+#\s*\S+.*$/i, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((token) => ROUTE_TOKEN_ALIASES[token] || token)
+    .join(' ');
+}
 
 /**
  * Normalizes an address string for stable deterministic hashing.
@@ -152,13 +181,268 @@ async function geocodeAddress(address, options = {}) {
   return null;
 }
 
+function parseStructuredExpectedAddress(input, { allowMissingZip = false } = {}) {
+  if (!input || typeof input !== 'object') {
+    if (typeof input !== 'string') return null;
+    const raw = input.trim();
+    if (!raw) return null;
+    const m = raw.match(/^(.+?),\s*([^,]+),\s*([A-Za-z]{2})(?:\s*,?\s*(\d{5})(?:-\d{4})?)?\s*$/);
+    if (!m) return null;
+    return parseStructuredExpectedAddress(
+      { address: m[1].trim(), city: m[2].trim(), state: m[3].trim(), zip: m[4] || '' },
+      { allowMissingZip }
+    );
+  }
+  if (input.street && input.streetNumber && input.route && input.state && (input.zip5 || allowMissingZip)) {
+    const state = String(input.state || '').trim().toUpperCase();
+    const zip5 = String(input.zip5 || input.zip || '').trim().slice(0, 5);
+    if (!isUsStateOrTerritoryCode(state)) return null;
+    if (!allowMissingZip && !/^\d{5}$/.test(zip5)) return null;
+    return {
+      street: String(input.street).trim(),
+      city: String(input.city || '').trim(),
+      state,
+      zip5,
+      query: input.query || [input.street, input.city, `${state}${zip5 ? ` ${zip5}` : ''}`].filter(Boolean).join(', '),
+      streetNumber: normalizeAddressToken(input.streetNumber),
+      route: normalizeRouteName(input.route),
+    };
+  }
+  const fullAddress = String(input.address || input.street || '').replace(/\s+/g, ' ').trim().slice(0, 256);
+  const rawStreetPart = fullAddress ? fullAddress.split(',')[0].trim() : '';
+  const street = rawStreetPart
+    ? rawStreetPart.replace(/^(?:lot|parcel)\s+[A-Za-z0-9-]+\s*[:,-]\s*(?=\d+[A-Za-z]?(?:-[A-Za-z0-9]+)?\s+[A-Za-z])/i, '').trim()
+    : '';
+  let city = String(input.city || '').replace(/\s+/g, ' ').trim().slice(0, 128);
+  const state = String(input.state || '').trim().toUpperCase().slice(0, 2);
+  let zip = String(input.zip || '').trim().slice(0, 10);
+  if ((!city || !zip) && fullAddress) {
+    const trailingMatch = fullAddress.match(/^.+?,\s*([A-Za-z][A-Za-z .'-]{1,40}?)(?:,\s*|\s+)(?:[A-Za-z]{2,}\s+)?(\d{5})(?:-\d{4})?\s*$/);
+    if (trailingMatch) {
+      const candCity = trailingMatch[1].trim();
+      if (!city && !/^[A-Za-z]{2}$/.test(candCity) && !/\d/.test(candCity) && !/^(?:unit|apt|ste|suite|lot|bldg|fl|floor|rm|room)\b/i.test(candCity)) {
+        city = candCity.slice(0, 128);
+      }
+      if (!zip) zip = trailingMatch[2].slice(0, 10);
+    }
+  }
+  if (!street || !city || !state || !isUsStateOrTerritoryCode(state)) return null;
+  if (!allowMissingZip && !/^\d{5}(?:-\d{4})?$/.test(zip)) return null;
+  if (/^(?:p\.?\s*o\.?\s*box|lot\b|parcel\b|vacant\b)/i.test(street)) return null;
+  const streetMatch = street.match(/^\s*(\d+[A-Za-z]?(?:-[A-Za-z0-9]+)?)\s+(.{2,})$/);
+  if (!streetMatch) return null;
+  const streetNumber = normalizeAddressToken(streetMatch[1]);
+  const route = normalizeRouteName(streetMatch[2]);
+  if (!streetNumber || !route) return null;
+  const zip5 = /^\d{5}/.test(zip) ? zip.slice(0, 5) : '';
+  return {
+    street,
+    city,
+    state,
+    zip5,
+    query: `${street}, ${city}, ${state}${zip5 ? ` ${zip}` : ''}`,
+    streetNumber,
+    route,
+  };
+}
+
+function exactCensusGeocode(match, expected) {
+  if (!match || typeof match !== 'object' || !expected || typeof expected !== 'object') return null;
+  const matchedAddress = String(match.matchedAddress || '').trim().slice(0, 256);
+  const numberMatch = matchedAddress.match(/^\s*(\d+[A-Za-z]?(?:-[A-Za-z0-9]+)?)\b/);
+  if (!numberMatch) return null;
+  const returnedStreetNumber = normalizeAddressToken(numberMatch[1]);
+  const comps = match.addressComponents && typeof match.addressComponents === 'object' ? match.addressComponents : {};
+  const componentStreet = [comps.preDirection, comps.streetName, comps.suffixType, comps.postDirection].filter(Boolean).join(' ');
+  const matchedStreet = matchedAddress.split(',')[0].replace(/^\s*\d+[A-Za-z]?(?:-[A-Za-z0-9]+)?\s+/, '');
+  const returnedRoutes = [componentStreet, matchedStreet].map(normalizeRouteName).filter(Boolean);
+  const returnedState = String(comps.state || '').trim().toUpperCase();
+  const returnedZip5 = String(comps.zip || '').trim().slice(0, 5);
+
+  const expStreetNumber = normalizeAddressToken(expected.streetNumber);
+  const expRoute = normalizeRouteName(expected.route);
+  const expState = String(expected.state || '').trim().toUpperCase();
+  const expZip5 = String(expected.zip5 || expected.zip || '').trim().slice(0, 5);
+
+  if (!expStreetNumber || !expRoute || !expState) return null;
+  if (returnedStreetNumber !== expStreetNumber || !returnedRoutes.includes(expRoute) || returnedState !== expState) {
+    return null;
+  }
+  if (expZip5 && returnedZip5 !== expZip5) {
+    return null;
+  }
+
+  const lat = match?.coordinates?.y == null || match?.coordinates?.y === '' ? NaN : Number(match.coordinates.y);
+  const lng = match?.coordinates?.x == null || match?.coordinates?.x === '' ? NaN : Number(match.coordinates.x);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180 || (lat === 0 && lng === 0)) {
+    return null;
+  }
+  if (!isCoordInStateBounds(lat, lng, returnedState || expState).ok) {
+    return null;
+  }
+  return {
+    lat,
+    lng,
+    matchedAddress,
+    precision: 'street_interpolated',
+  };
+}
+
+async function readBoundedCensusJson(res, maxBytes = MAX_GEOCODER_RESPONSE_BYTES) {
+  const declared = Number(res.headers?.get?.('content-length') || 0);
+  if (Number.isFinite(declared) && declared > maxBytes) {
+    throw new Error('Geocoder response exceeded byte limit');
+  }
+  if (res.body && typeof res.body.getReader === 'function') {
+    const reader = res.body.getReader();
+    const chunks = [];
+    let total = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) {
+        total += value.byteLength;
+        if (total > maxBytes) {
+          try { await reader.cancel(); } catch {}
+          throw new Error('Geocoder response exceeded byte limit');
+        }
+        chunks.push(Buffer.from(value));
+      }
+    }
+    return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+  }
+  if (typeof res.text === 'function') {
+    const rawText = await res.text();
+    if (Buffer.byteLength(rawText, 'utf8') > maxBytes) {
+      throw new Error('Geocoder response exceeded byte limit');
+    }
+    return JSON.parse(rawText);
+  }
+  return res.json();
+}
+
+async function geocodeExactAddress(observedAddress, options = {}) {
+  const expected = parseStructuredExpectedAddress(observedAddress, {
+    allowMissingZip: Boolean(options.allowMissingZip),
+  });
+  if (!expected) return null;
+
+  const cachePath = options.cachePath || resolveDefaultCachePath();
+  const normKey = normalizeAddress(expected.query);
+  if (!normKey) return null;
+  const hash = hashAddress(normKey);
+
+  const customFetch = options.fetchImpl || options.fetchFn;
+  const inTestEnv = process.env.NODE_ENV === 'test' || Boolean(process.env.NODE_TEST_CONTEXT);
+  const shouldUseCache = options.skipCache === true
+    ? false
+    : Boolean(options.cachePath || options.useCache === true || (!inTestEnv && (!customFetch || customFetch === globalThis.fetch)));
+
+  if (shouldUseCache) {
+    const cache = loadCache(cachePath);
+    const cached = cache[hash];
+    if (cached
+        && cached.precision === 'street_interpolated'
+        && Number.isFinite(Number(cached.lat))
+        && Number.isFinite(Number(cached.lng))
+        && isCoordInStateBounds(Number(cached.lat), Number(cached.lng), expected.state).ok) {
+      return {
+        ...cached,
+        lat: Number(cached.lat),
+        lng: Number(cached.lng),
+        precision: 'street_interpolated',
+        cached: true,
+        hash,
+      };
+    }
+  }
+
+  const fetchFn = customFetch || globalThis.fetch;
+  if (typeof fetchFn !== 'function') return null;
+
+  const url = new URL(CENSUS_STRUCTURED_GEOCODER_ENDPOINT);
+  const searchParams = {
+    street: expected.street,
+    city: expected.city,
+    state: expected.state,
+    benchmark: 'Public_AR_Current',
+    format: 'json',
+  };
+  if (expected.zip5) searchParams.zip = expected.zip5;
+  url.search = new URLSearchParams(searchParams).toString();
+
+  const timeoutMs = Math.max(1000, Number(options.timeoutMs) || 5000);
+  const controller = typeof AbortController === 'function' ? new AbortController() : null;
+  let timer = null;
+  let clearParentAbort = null;
+  if (controller) {
+    if (options.signal) {
+      if (options.signal.aborted) controller.abort();
+      else {
+        const onAbort = () => controller.abort();
+        options.signal.addEventListener('abort', onAbort, { once: true });
+        clearParentAbort = () => options.signal.removeEventListener('abort', onAbort);
+      }
+    }
+    timer = setTimeout(() => controller.abort(), timeoutMs);
+    if (typeof timer.unref === 'function') timer.unref();
+  }
+
+  try {
+    const res = await fetchFn(url, {
+      method: 'GET',
+      redirect: 'error',
+      signal: controller ? controller.signal : options.signal,
+      headers: {
+        Accept: 'application/json',
+        'User-Agent': 'PropertyCrawl/2.0 (Foreclosure Discovery Engine)',
+      },
+    });
+    if (!res || !res.ok) return null;
+    const json = await readBoundedCensusJson(res);
+    const matches = Array.isArray(json?.result?.addressMatches) ? json.result.addressMatches : [];
+    const verified = matches.map((m) => exactCensusGeocode(m, expected)).filter(Boolean);
+    if (verified.length !== 1) return null;
+
+    const record = {
+      source: 'US_CENSUS_GEOCODER',
+      matchedAddress: verified[0].matchedAddress,
+      lat: verified[0].lat,
+      lng: verified[0].lng,
+      precision: 'street_interpolated',
+      timestamp: new Date().toISOString(),
+    };
+    if (shouldUseCache) {
+      const cache = loadCache(cachePath);
+      cache[hash] = record;
+      saveCache(cache, cachePath);
+    }
+    return {
+      ...record,
+      cached: false,
+      hash,
+    };
+  } catch (_) {
+    return null;
+  } finally {
+    if (timer) clearTimeout(timer);
+    if (clearParentAbort) clearParentAbort();
+  }
+}
+
 module.exports = {
   normalizeAddress,
+  normalizeAddressToken,
+  normalizeRouteName,
   hashAddress,
   parseCensusResponse,
+  parseStructuredExpectedAddress,
+  exactCensusGeocode,
   geocodeAddress,
+  geocodeExactAddress,
   loadCache,
   saveCache,
   DEFAULT_CACHE_PATH,
-  CENSUS_GEOCODER_ENDPOINT
+  CENSUS_GEOCODER_ENDPOINT,
+  CENSUS_STRUCTURED_GEOCODER_ENDPOINT,
 };

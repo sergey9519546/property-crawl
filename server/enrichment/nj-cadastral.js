@@ -632,6 +632,12 @@ function applyNjCadastralData(listing, { candidate = null, feature = null, obser
   if (mappedType && (!listing.propType || listing.propType === 'Unknown')) {
     listing.propType = mappedType;
   }
+  if (durableParcel.recordedSalePrice !== null && !(Number(listing.lastSalePrice) > 0)) {
+    listing.lastSalePrice = durableParcel.recordedSalePrice;
+  }
+  if (durableParcel.deedDate && !listing.lastSaleDate) {
+    listing.lastSaleDate = durableParcel.deedDate;
+  }
 }
 
 async function enrichNjListing(listing, options = {}) {

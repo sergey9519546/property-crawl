@@ -1,11 +1,17 @@
 'use strict';
 
 const { inspectSourceRecordUrl, hostnameMatches } = require('./source-policy');
+const { baseBuildingKey } = require('../geo/state-bounds');
 
 const STOCK_HOSTS = ['unsplash.com', 'pexels.com', 'pixabay.com', 'picsum.photos', 'placehold.co', 'placeholder.com'];
 const CONTEXT_HOSTS = ['arcgisonline.com', 'arcgis.com', 'googleapis.com', 'google.com', 'openstreetmap.org'];
 const DOCUMENT_EXTENSION = /\.(?:pdf|docx?|xlsx?|pptx?|txt|html?|svg|ico|zip)(?:$|[?#])/i;
-const PLACEHOLDER = /(?:no[ _-]?(?:image|photo)|image[ _-]?not[ _-]?available|placeholder|default[ _-]?(?:photo|image)|spacer|transparent|tracking|pixel|logo|icon|banner|type_land|watermark)/i;
+const PLACEHOLDER = /(?:no[ _-]?(?:image|photo|pic)|nophoto|image[ _-]?(?:not[ _-]?available|pending)|coming[ _-]?soon|placeholder|default[ _-]?(?:photo|image)|thumb[ _-]?default|missing[ _-]?(?:image|photo)|silhouette|spacer|transparent|tracking|pixel|logo|icon|banner|type_land|watermark)/i;
+
+const VOLATILE_QUERY_PARAMS = new Set([
+  'v', 't', 'ts', 'sig', 'signature', 'expires', 'token',
+  'id', 'listingid', 'w', 'h', 'width', 'height', 'quality',
+]);
 
 function inspectImageUrl(value, baseUrl) {
   const reject = (reason) => ({ accepted: false, reason, url: null });
@@ -25,6 +31,74 @@ function inspectImageUrl(value, baseUrl) {
   if (PLACEHOLDER.test(path)) return reject('placeholder_or_site_art');
   url.hash = '';
   return { accepted: true, reason: null, url: url.toString() };
+}
+
+/**
+ * Normalizes an image URL for cross-listing duplicate/poison detection by
+ * stripping volatile cache-busting, sizing, or signing query parameters.
+ */
+function canonicalizePhotoUrl(rawUrl) {
+  const inspected = inspectImageUrl(rawUrl);
+  if (!inspected.accepted || !inspected.url) return null;
+  try {
+    const parsed = new URL(inspected.url);
+    parsed.hash = '';
+    const kept = [];
+    for (const [k, v] of parsed.searchParams.entries()) {
+      if (!VOLATILE_QUERY_PARAMS.has(k.toLowerCase())) {
+        kept.push([k, v]);
+      }
+    }
+    kept.sort((a, b) => a[0].localeCompare(b[0]) || a[1].localeCompare(b[1]));
+    parsed.search = kept.length ? new URLSearchParams(kept).toString() : '';
+    return parsed.toString();
+  } catch (_) {
+    return null;
+  }
+}
+
+/**
+ * Strips unit/apartment/suite suffixes so multiple units in one condo or
+ * townhome building collapse to a single building identity.
+ */
+function normalizeBaseBuildingKey(listing) {
+  return baseBuildingKey(listing);
+}
+
+/**
+ * Scans both listing.photo and listing.images[] across a batch to flag any
+ * canonical photo URL shared across >= minDistinctBuildings distinct buildings
+ * (portal default banners, county logos, or scraper cross-bleed).
+ */
+function detectDuplicatePhotoUrls(listings, { minDistinctBuildings = 3 } = {}) {
+  const buckets = new Map();
+  if (!Array.isArray(listings)) return new Set();
+  for (const listing of listings) {
+    if (!listing || typeof listing !== 'object') continue;
+    const building = normalizeBaseBuildingKey(listing);
+    if (!building) continue;
+    const rawUrls = [
+      listing.photo,
+      ...(Array.isArray(listing.images) ? listing.images : []),
+    ];
+    const seenInRow = new Set();
+    for (const raw of rawUrls) {
+      const canonical = canonicalizePhotoUrl(raw);
+      if (!canonical || seenInRow.has(canonical)) continue;
+      seenInRow.add(canonical);
+      let buildings = buckets.get(canonical);
+      if (!buildings) {
+        buildings = new Set();
+        buckets.set(canonical, buildings);
+      }
+      buildings.add(building);
+    }
+  }
+  const poisoned = new Set();
+  for (const [url, buildings] of buckets.entries()) {
+    if (buildings.size >= minDistinctBuildings) poisoned.add(url);
+  }
+  return poisoned;
 }
 
 function inspectPublisherPhoto(listing) {
@@ -95,4 +169,11 @@ function extractDetailImages({ source, html, sourceUrl, address }) {
   return selected;
 }
 
-module.exports = { inspectImageUrl, inspectPublisherPhoto, extractDetailImages };
+module.exports = {
+  inspectImageUrl,
+  inspectPublisherPhoto,
+  extractDetailImages,
+  canonicalizePhotoUrl,
+  normalizeBaseBuildingKey,
+  detectDuplicatePhotoUrls,
+};

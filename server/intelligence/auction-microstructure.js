@@ -114,13 +114,20 @@ function calculateDocketClearingAnalytics(historicalEvents, options = {}) {
     };
   }
 
+  const normalizeCountyToken = (val) => String(val || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+(?:county|parish|borough)$/i, '')
+    .trim();
+
   let filtered = historicalEvents;
   if (options.county) {
-    const targetCounty = String(options.county).trim().toLowerCase();
+    const targetCountyNorm = normalizeCountyToken(options.county);
     filtered = filtered.filter((e) => {
       if (typeof e !== 'object' || !e) return false;
-      const c = String(e.county || e.countyName || '').trim().toLowerCase();
-      return c === targetCounty;
+      const rawCounty = String(e.county || e.countyName || '').trim();
+      if (!rawCounty) return true;
+      return normalizeCountyToken(rawCounty) === targetCountyNorm;
     });
   }
 

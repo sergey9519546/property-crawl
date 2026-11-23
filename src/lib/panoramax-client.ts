@@ -5,7 +5,9 @@ export type PanoramaxCandidate = {
   mediaType: 'panorama_360' | 'directional_sequence';
   capturedAt: string | null;
   distanceMeters: number;
+  targetHeading?: number | null;
   viewerUrl: string;
+  thumbUrl: string | null;
   license: { id: string | null; url: string | null; displayApproved: boolean };
   attribution: { provider: string; producer: string | null };
 };
@@ -17,11 +19,14 @@ export type MapillaryCandidate = {
   mediaType: 'panorama_360' | 'directional_sequence';
   capturedAt: string | null;
   distanceMeters: number;
+  targetHeading?: number | null;
   viewerUrl: string;
   thumbUrl: string | null;
   license: { id: string | null; url: string | null; displayApproved: boolean };
   attribution: { provider: string; producer: string | null };
 };
+
+const UUID_PICTURE_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export type AlternativeCandidate = PanoramaxCandidate | MapillaryCandidate;
 
@@ -64,6 +69,18 @@ export function parsePanoramaxCandidate(raw: unknown): PanoramaxCandidate | null
   );
   if (!viewerUrl) return null;
 
+  const thumbUrl = safeHttpsUrl(
+    item.thumbUrl,
+    (host, url) =>
+      host === 'api.panoramax.xyz'
+      && UUID_PICTURE_RE.test(String(item.pictureId))
+      && url.pathname === `/api/pictures/${item.pictureId}/thumb.jpg`
+  );
+  const licenseUrl = safeHttpsUrl(license.url, () => true);
+  const targetHeading = typeof item.targetHeading === 'number' && Number.isFinite(item.targetHeading)
+    ? item.targetHeading
+    : null;
+
   const attribution = item.attribution as Record<string, unknown> | undefined;
   return {
     provider: 'panoramax',
@@ -72,10 +89,12 @@ export function parsePanoramaxCandidate(raw: unknown): PanoramaxCandidate | null
     mediaType: item.mediaType as PanoramaxCandidate['mediaType'],
     capturedAt: typeof item.capturedAt === 'string' && Number.isFinite(Date.parse(item.capturedAt)) ? item.capturedAt : null,
     distanceMeters: item.distanceMeters,
+    targetHeading,
     viewerUrl,
+    thumbUrl,
     license: {
       id: typeof license.id === 'string' ? license.id : null,
-      url: typeof license.url === 'string' ? license.url : null,
+      url: licenseUrl,
       displayApproved: true,
     },
     attribution: {
@@ -112,6 +131,10 @@ export function parseMapillaryCandidate(raw: unknown): MapillaryCandidate | null
     item.thumbUrl,
     (host) => host === 'mapillary.com' || host.endsWith('.mapillary.com') || host.endsWith('.fbcdn.net')
   );
+  const licenseUrl = safeHttpsUrl(license.url, () => true);
+  const targetHeading = typeof item.targetHeading === 'number' && Number.isFinite(item.targetHeading)
+    ? item.targetHeading
+    : null;
 
   const attribution = item.attribution as Record<string, unknown> | undefined;
   return {
@@ -121,11 +144,12 @@ export function parseMapillaryCandidate(raw: unknown): MapillaryCandidate | null
     mediaType: item.mediaType as MapillaryCandidate['mediaType'],
     capturedAt: typeof item.capturedAt === 'string' && Number.isFinite(Date.parse(item.capturedAt)) ? item.capturedAt : null,
     distanceMeters: item.distanceMeters,
+    targetHeading,
     viewerUrl,
     thumbUrl,
     license: {
       id: typeof license.id === 'string' ? license.id : null,
-      url: typeof license.url === 'string' ? license.url : null,
+      url: licenseUrl,
       displayApproved: true,
     },
     attribution: {

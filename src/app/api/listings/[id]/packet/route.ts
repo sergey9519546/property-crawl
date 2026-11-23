@@ -1,5 +1,6 @@
 import { proxyPropertyApi } from "@/lib/property-api";
 import { proxyPrivatePropertyApi } from "@/lib/workspace-proxy";
+import { currentMember } from "@/lib/member-account";
 import { hasPermission, readWorkspaceSession, workspaceSessionConfiguration } from "@/lib/workspace-session";
 import { buildDecisionPacket, formatDecisionPacketMarkdown } from "@server/export/decision-packet";
 
@@ -63,7 +64,9 @@ export async function GET(request: Request) {
     return Response.json({ error: "Listing not found", id }, { status: 404 });
   }
 
-  if (!Array.isArray(listing.observations)) {
+  const member = session.authenticated ? null : await currentMember(request).catch(() => null);
+  const isEntitledCaller = session.authenticated || Boolean(member?.entitled);
+  if (isEntitledCaller && !Array.isArray(listing.observations)) {
     try {
       const db = require("@server/db/client");
       if (typeof db.getListingObservations === "function" && listing.id) {

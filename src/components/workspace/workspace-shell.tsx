@@ -282,13 +282,13 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
   return <WorkspaceSessionProvider includeChrome>{children}</WorkspaceSessionProvider>;
 }
 
-export function PrivateWorkspaceGate({ title, headingLevel = 2, children }: { title?: string; headingLevel?: 1 | 2 | 3; children?: React.ReactNode }) {
+export function PrivateWorkspaceGate({ title, headingLevel = 2, allowMember = false, children }: { title?: string; headingLevel?: 1 | 2 | 3; allowMember?: boolean; children?: React.ReactNode }) {
   const session = useWorkspaceSession();
   const { messages } = useLocale();
   const gate = messages.workspace.privateGate;
   const resolvedTitle = title || gate.defaultTitle;
   const Heading = `h${headingLevel}` as 'h1' | 'h2' | 'h3';
   if (session.loading) return <section className="rounded-card border border-line bg-card p-7 text-sm text-ink-3 shadow-sm"><Heading className="text-xl font-semibold text-ink">{gate.checkingTitle}</Heading><p className="mt-2">{gate.checkingBody}</p></section>;
-  if (session.authenticated) return <>{children}</>;
+  if (session.authenticated || (allowMember && session.memberTools)) return <>{children}</>;
   return <section className="rounded-card border border-line bg-card p-7 shadow-sm"><LockKeyhole className="text-ink" /><Heading className="mt-4 text-xl font-semibold">{resolvedTitle}</Heading><p className="mt-2 max-w-xl text-sm leading-6 text-ink-3">{gate.body}</p><button type="button" onClick={session.requestUnlock} className="mt-5 rounded-control bg-ink px-4 py-2.5 text-sm font-semibold text-white hover:bg-ink-2">{gate.unlockBtn}</button></section>;
 }

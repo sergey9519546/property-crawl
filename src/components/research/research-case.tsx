@@ -198,7 +198,7 @@ export function ResearchCase({ caseId }: { caseId: string }) {
 
   return <div className="mx-auto max-w-[1380px] px-5 py-8 sm:px-8">
     <Link href={returnTo} className="inline-flex items-center gap-2 text-xs font-semibold text-ink-2 hover:text-ink"><ArrowLeft size={14} />{t.rcBackResearch}</Link>
-    <PrivateWorkspaceGate title={t.rcGateTitle} headingLevel={1}>
+    <PrivateWorkspaceGate allowMember title={t.rcGateTitle} headingLevel={1}>
       {loading && !detail
         ? <>
             <h1 className="mt-6 text-2xl font-semibold text-ink">{t.rcLoadingTitle}</h1>

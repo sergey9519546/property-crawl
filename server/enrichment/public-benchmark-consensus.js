@@ -135,38 +135,42 @@ function computePublicBenchmarkConsensus(listingContext = {}, options = {}) {
         periodConvention = 'annual_roll_midyear_q2';
       }
     }
-    if (assessmentYear === null) unobservedReasons.push('Assessment year is unknown; no HPI trajectory computed.');
+    if (assessmentYear === null) {
+      unobservedReasons.push('Assessment year is unknown; no HPI trajectory computed.');
+    }
 
-    try {
-      const appreciation = computeHpiAppreciation(state, baselinePeriod, currentPeriod, activeHpiSeries, {
-        assessedValue: assessorRoll.assessedValue,
-      });
+    if (baselinePeriod !== null) {
+      try {
+        const appreciation = computeHpiAppreciation(state, baselinePeriod, currentPeriod, activeHpiSeries, {
+          assessedValue: assessorRoll.assessedValue,
+        });
 
-      if (appreciation) {
-        assessedTrajectory = {
-          state,
-          baselinePeriod,
-          periodConvention,
-          currentPeriod,
-          baselineHpi: appreciation.baselineHpi,
-          currentHpi: appreciation.currentHpi,
-          hpiMultiplier: appreciation.multiplier,
-          hpiAppreciationPct: appreciation.appreciationPct,
-          hpiAdjustedAssessedValue: appreciation.hpiAdjustedAssessedValue,
-          source: 'FHFA House Price Index (HPI) Quarterly Series',
-          provenance: {
-            sourceUrl: options.hpiSeries?.sourceUrl || 'https://www.fhfa.gov/data/hpi',
-            retrievedAt: options.hpiSeries?.retrievedAt || new Date().toISOString(),
-            datasetSha256: options.hpiSeries?.datasetSha256 || null,
+        if (appreciation) {
+          assessedTrajectory = {
+            state,
+            baselinePeriod,
             periodConvention,
-          },
-        };
-        sourcesAvailable.push('fhfa_hpi');
-      } else {
-        unobservedReasons.push(`FHFA HPI index benchmarks unavailable for state "${state}".`);
+            currentPeriod,
+            baselineHpi: appreciation.baselineHpi,
+            currentHpi: appreciation.currentHpi,
+            hpiMultiplier: appreciation.multiplier,
+            hpiAppreciationPct: appreciation.appreciationPct,
+            hpiAdjustedAssessedValue: appreciation.hpiAdjustedAssessedValue,
+            source: 'FHFA House Price Index (HPI) Quarterly Series',
+            provenance: {
+              sourceUrl: options.hpiSeries?.sourceUrl || 'https://www.fhfa.gov/data/hpi',
+              retrievedAt: options.hpiSeries?.retrievedAt || new Date().toISOString(),
+              datasetSha256: options.hpiSeries?.datasetSha256 || null,
+              periodConvention,
+            },
+          };
+          sourcesAvailable.push('fhfa_hpi');
+        } else {
+          unobservedReasons.push(`FHFA HPI index benchmarks unavailable for state "${state}".`);
+        }
+      } catch {
+        unobservedReasons.push(`Error computing FHFA HPI trajectory for state "${state}".`);
       }
-    } catch {
-      unobservedReasons.push(`Error computing FHFA HPI trajectory for state "${state}".`);
     }
   } else {
     if (!state) {

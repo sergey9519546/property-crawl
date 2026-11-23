@@ -53,3 +53,10 @@ test("flags nominal <= $500 starting bids when valuation range is absent", () =>
   assert.match(out.flags[0], /nominal \$100 starting bid/i);
   assert.match(out.flags[0], /no value range was published/i);
 });
+
+test("uses federal disposition copy and suppresses state redemption on federal REO listings", () => {
+  const out = listingCatch({ source: "hud", state: "MI", redemptionDays: 180, openingBid: null });
+  const all = out.flags.join(" ");
+  assert.match(all, /federal disposition feed/i);
+  assert.doesNotMatch(all, /until the sale|redemption rule/i);
+});

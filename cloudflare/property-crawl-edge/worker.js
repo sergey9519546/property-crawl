@@ -181,6 +181,7 @@ export default {
           headers.set('content-length', String(obj.size));
           headers.set('cache-control', 'public, max-age=300, s-maxage=3600');
           headers.set('x-content-type-options', 'nosniff');
+          headers.set('content-security-policy', "default-src 'none'; sandbox");
           if (etagMatchesHeader(request.headers.get('if-none-match'), obj)) {
             return new Response(null, { status: 304, headers });
           }
@@ -200,6 +201,7 @@ export default {
         headers.set('accept-ranges', 'bytes');
         headers.set('cache-control', 'public, max-age=300, s-maxage=3600');
         headers.set('x-content-type-options', 'nosniff');
+        headers.set('content-security-policy', "default-src 'none'; sandbox");
 
         if (!('body' in obj)) {
           const isConditionalNotModified =

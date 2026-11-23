@@ -127,7 +127,7 @@ export function ResearchInbox() {
     </div>
 
     <div className="mt-8 grid gap-5 lg:grid-cols-[1fr_330px]">
-      <PrivateWorkspaceGate title={m.workspacePages.researchUnlockTitle}>
+      <PrivateWorkspaceGate allowMember title={m.workspacePages.researchUnlockTitle}>
         <section>
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-card p-3">
             <div className="flex gap-1" role="tablist" aria-label="Case status">{tabs.map((tab) => <button key={tab.value} type="button" role="tab" aria-selected={state === tab.value} onClick={() => setState(tab.value)} className={`rounded-control px-4 py-2 text-xs font-semibold ${state === tab.value ? "bg-ink text-white" : "text-ink-3 hover:bg-paper"}`}>{tab.value === "inbox" ? m.workspacePages.researchTabInbox : tab.value === "pursue" ? m.workspacePages.researchTabPursuing : m.workspacePages.researchTabPassed}</button>)}</div>

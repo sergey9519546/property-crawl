@@ -159,4 +159,34 @@ describe('Three-Way Public-Record Benchmark Consensus (Hack #4)', () => {
     assert.equal(result.estHigh, null);
     assert.equal(result.dealScore, null);
   });
+
+  test('does not emit false HPI state-unavailable message when assessmentYear is null', () => {
+    const njSeries = {
+      version: 1,
+      sourceUrl: 'https://www.fhfa.gov/data/hpi',
+      retrievedAt: '2026-10-30T00:00:00Z',
+      datasetSha256: 'b'.repeat(64),
+      values: { NJ: { '2020Q2': 310, '2026Q1': 470 } },
+    };
+    const result = computeRawConsensus({
+      address: '10 Berkley Place, Colts Neck, NJ 07722',
+      state: 'NJ',
+      county: 'Monmouth County',
+      zip: '07722',
+      assessed: 350000,
+      assessmentYear: null,
+      parcel: {
+        county: 'Monmouth County',
+        canonicalApn: '1309-1-1',
+        assessedValue: { total: 350000 },
+      },
+    }, { hpiSeries: njSeries });
+
+    assert.equal(result.assessedTrajectory, null);
+    assert.ok(result.unobservedReasons.includes('Assessment year is unknown; no HPI trajectory computed.'));
+    assert.equal(
+      result.unobservedReasons.some((r) => /FHFA HPI index benchmarks unavailable/i.test(r)),
+      false,
+    );
+  });
 });

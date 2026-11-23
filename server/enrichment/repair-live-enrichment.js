@@ -417,9 +417,14 @@ async function repairLiveEnrichment(options = {}) {
   // Pass 4: Fast Local Deterministic Catch Summary Backfill ($0, runs before external ArcGIS calls)
   if (!dryRun && options.includeCatchBackfill !== false && !budgetExpired()) {
     try {
+      const { arbitrateTitleRisk } = require('../intelligence/title-risk-engine');
       const catchQuery = await pool.query(
         `SELECT id,
+                source_key AS "source",
                 state,
+                plaintiff,
+                defendant,
+                raw_notice AS "raw",
                 opening_bid::float8 AS "openingBid",
                 est_low::float8 AS "estLow",
                 est_high::float8 AS "estHigh",
@@ -431,7 +436,8 @@ async function repairLiveEnrichment(options = {}) {
                 judgment_amount::float8 AS "judgment",
                 provenance
            FROM listings
-          WHERE catch_summary IS NULL
+          WHERE (
+            catch_summary IS NULL
             AND (
               est_low IS NULL
               OR est_high IS NULL
@@ -443,6 +449,10 @@ async function repairLiveEnrichment(options = {}) {
               OR NULLIF(TRIM(COALESCE(senior_lien_risk, '')), '') IS NOT NULL
               OR (provenance ? 'titleWarnings')
             )
+          ) OR (
+            source_key IN ('hud', 'gsa', 'usda', 'fannie', 'freddie', 'fdic')
+            AND catch_summary LIKE '%until sale day%'
+          )
           ORDER BY id ASC
           LIMIT $1`,
         [catchLimit],
@@ -453,10 +463,23 @@ async function repairLiveEnrichment(options = {}) {
           report.timedOut = true;
           return;
         }
-        const persistedTitleWarnings = Array.isArray(row?.provenance?.titleWarnings)
+        let persistedTitleWarnings = Array.isArray(row?.provenance?.titleWarnings)
           ? row.provenance.titleWarnings
           : [];
-        const persistedRiskLevel = row?.provenance?.riskLevel || null;
+        let persistedRiskLevel = row?.provenance?.riskLevel || null;
+        if (persistedTitleWarnings.length === 0) {
+          try {
+            const tr = arbitrateTitleRisk(row);
+            if (Array.isArray(tr?.titleWarnings) && tr.titleWarnings.length > 0) {
+              persistedTitleWarnings = tr.titleWarnings;
+            }
+            if (!persistedRiskLevel && tr?.riskLevel) {
+              persistedRiskLevel = tr.riskLevel;
+            }
+          } catch {
+            // Keep existing signals
+          }
+        }
         const summary = computeCatchSummary(row, persistedTitleWarnings, persistedRiskLevel);
         if (!summary) return;
         await pool.query(

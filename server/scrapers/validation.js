@@ -2,6 +2,7 @@ const { findBotChallengeSignature } = require('./circuit-breaker');
 const { normalizeOcrText } = require('../ai/notice-parser');
 const { inspectSourceRecordUrl } = require('./source-policy');
 const { isUsStateOrTerritoryCode } = require('../state-codes');
+const { isCoordInStateBounds } = require('../geo/state-bounds');
 const LISTING_SCHEMA = require('./listing.schema.json');
 
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._:/-]{1,159}$/;
@@ -17,14 +18,49 @@ function isKnown(value) {
 
 function sanitizeListingForIngestion(item = {}) {
   const rawText = normalizeOcrText(String(item.raw ?? ''));
+  const state = String(item.state ?? '').trim().toUpperCase();
+  const hasLat = item.lat != null && item.lat !== '';
+  const hasLng = item.lng != null && item.lng !== '';
+  const nLat = hasLat ? Number(item.lat) : null;
+  const nLng = hasLng ? Number(item.lng) : null;
+  const inWgs84Range = Number.isFinite(nLat) && Number.isFinite(nLng)
+    && nLat >= -90 && nLat <= 90 && nLng >= -180 && nLng <= 180;
+  const coordsCheck = hasLat && hasLng && state && inWgs84Range
+    ? isCoordInStateBounds(nLat, nLng, state)
+    : null;
+  let lat = item.lat;
+  let lng = item.lng;
+  let provenance = item.provenance;
+  if (coordsCheck && !coordsCheck.ok) {
+    lat = null;
+    lng = null;
+    const baseProv = provenance && typeof provenance === 'object' && !Array.isArray(provenance)
+      ? (() => {
+          const { coordinates: _droppedCoords, ...restProv } = provenance;
+          return restProv;
+        })()
+      : {};
+    provenance = {
+      ...baseProv,
+      coordinatesRejected: {
+        lat: Number.isFinite(nLat) ? nLat : null,
+        lng: Number.isFinite(nLng) ? nLng : null,
+        state,
+        reason: coordsCheck.reason,
+      },
+    };
+  }
   return {
     ...item,
     id: String(item.id ?? '').trim(),
     source: String(item.source ?? '').trim().toLowerCase(),
-    state: String(item.state ?? '').trim().toUpperCase(),
+    state,
     address: String(item.address ?? '').replace(/\s+/g, ' ').trim(),
     sourceUrl: item.sourceUrl == null ? null : String(item.sourceUrl).trim(),
-    raw: rawText.trim()
+    raw: rawText.trim(),
+    lat,
+    lng,
+    ...(provenance !== undefined ? { provenance } : {}),
   };
 }
 

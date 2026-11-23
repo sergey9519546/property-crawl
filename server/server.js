@@ -385,8 +385,10 @@ async function handleRequest(req, res) {
         status: 'ok',
         uptime: process.uptime(),
         timestamp: new Date().toISOString(),
-        release: { commit: /^[a-f0-9]{40}$/i.test(process.env.RENDER_GIT_COMMIT || process.env.PROPERTY_RELEASE_SHA || '')
-          ? (process.env.RENDER_GIT_COMMIT || process.env.PROPERTY_RELEASE_SHA) : null },
+        release: (() => {
+          const rawCommit = process.env.VERCEL_GIT_COMMIT_SHA || process.env.RENDER_GIT_COMMIT || process.env.PROPERTY_RELEASE_SHA || '';
+          return { commit: /^[a-f0-9]{40}$/i.test(rawCommit) ? rawCommit : null };
+        })(),
         // Honest runtime mode — a Pool object is not a connection.
         dataMode: db.dataMode(),
         snapshotEvidence: require('./scrapers/discovery-snapshots').evidenceStoreHealth(),

@@ -52,12 +52,8 @@ jobs:
 
       - name: Post-deploy smoke
         env:
-          DEPLOY_SMOKE_URL: ${{ secrets.DEPLOY_SMOKE_URL }}
+          DEPLOY_SMOKE_URL: ${{ secrets.DEPLOY_SMOKE_URL || 'https://property-crawl-api.vercel.app' }}
         run: |
-          if [ -z "$DEPLOY_SMOKE_URL" ]; then
-            echo "DEPLOY_SMOKE_URL not set — skip live verify."
-            exit 0
-          fi
           echo "Smoke: $DEPLOY_SMOKE_URL/api/health"
           curl -fsS --max-time 30 "$DEPLOY_SMOKE_URL/api/health" | tee /tmp/health.json
           grep -qi 'ok\|status\|ready\|live' /tmp/health.json

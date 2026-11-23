@@ -141,9 +141,22 @@ export async function proxyPropertyApi(request: Request, dependencies: {
       cache: "no-store", redirect: "error", signal: AbortSignal.timeout(timeoutMs),
     });
     const responseHeaders = new Headers({ "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" });
-    for (const name of ["content-type", "content-disposition", "retry-after", "allow", "x-ratelimit-limit", "x-ratelimit-remaining", "x-ratelimit-reset", "referrer-policy", "cross-origin-resource-policy", "x-property-image-provider", "x-property-image-attribution", "x-property-image-distance-meters", "x-property-image-heading", "x-property-image-capture-date", "x-content-sha256", "set-cookie"]) {
+    for (const name of ["content-type", "content-disposition", "retry-after", "allow", "x-ratelimit-limit", "x-ratelimit-remaining", "x-ratelimit-reset", "referrer-policy", "cross-origin-resource-policy", "x-property-image-provider", "x-property-image-attribution", "x-property-image-distance-meters", "x-property-image-heading", "x-property-image-capture-date", "x-property-image-coordinate-basis", "x-property-image-coordinate-precision", "x-content-sha256", "set-cookie"]) {
       const value = upstream.headers.get(name);
       if (value) responseHeaders.set(name, value);
+    }
+    const imageProvider = upstream.headers.get("x-property-image-provider") || "";
+    if (
+      request.method === "GET"
+      && upstream.status === 200
+      && url.pathname === "/api/property-image"
+      && url.searchParams.get("mode")?.toLowerCase() === "aerial"
+      && (imageProvider.startsWith("USGS") || imageProvider.startsWith("USDA"))
+    ) {
+      responseHeaders.set(
+        "Cache-Control",
+        upstream.headers.get("cache-control") || "public, max-age=604800, stale-while-revalidate=2592000"
+      );
     }
     if (origin) { responseHeaders.set("Access-Control-Allow-Origin", origin); responseHeaders.set("Vary", "Origin"); }
     // Export responses are bounded by record count at the API and may exceed

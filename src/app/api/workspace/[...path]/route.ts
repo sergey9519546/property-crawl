@@ -1,7 +1,21 @@
-import { proxyPrivatePropertyApi } from "@/lib/workspace-proxy";
+import { proxyMemberPropertyApi, proxyPrivatePropertyApi } from "@/lib/workspace-proxy";
 
-export const GET = (request: Request) => proxyPrivatePropertyApi(request);
-export const POST = (request: Request) => proxyPrivatePropertyApi(request);
-export const PATCH = (request: Request) => proxyPrivatePropertyApi(request);
-export const DELETE = (request: Request) => proxyPrivatePropertyApi(request);
+function dispatchWorkspaceProxy(request: Request, method: "GET" | "POST" | "PATCH" | "DELETE") {
+  try {
+    const pathname = new URL(request.url).pathname;
+    if (pathname.startsWith("/api/workspace/cases")) {
+      return proxyMemberPropertyApi(request, {
+        permission: method === "GET" ? "canViewWorkspace" : "canManageHunts",
+      });
+    }
+  } catch {
+    // Fall through to private operator proxy
+  }
+  return proxyPrivatePropertyApi(request);
+}
+
+export const GET = (request: Request) => dispatchWorkspaceProxy(request, "GET");
+export const POST = (request: Request) => dispatchWorkspaceProxy(request, "POST");
+export const PATCH = (request: Request) => dispatchWorkspaceProxy(request, "PATCH");
+export const DELETE = (request: Request) => dispatchWorkspaceProxy(request, "DELETE");
 

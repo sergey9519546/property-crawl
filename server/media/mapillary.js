@@ -1,5 +1,11 @@
 'use strict';
 
+const {
+  evaluateStreetCandidate,
+  rankStreetCandidates,
+  bearingDegrees,
+} = require('./camera-geometry');
+
 // server/media/mapillary.js
 //
 // Mapillary lookup helper. Mirrors the Panoramax module's shape:
@@ -109,6 +115,10 @@ function normalize(image, target, radius) {
   const creator = image.creator && typeof image.creator === 'object' ? image.creator : null;
   const producer = creator && typeof creator.username === 'string' ? creator.username.trim().slice(0, 200) : null;
   const isPano = String(image.image_type || '').toLowerCase() === 'pano';
+  const azimuth = optionalNumber(image.compass_angle);
+  const geomEval = evaluateStreetCandidate({ lat, lng, is360: isPano, azimuth }, target, { radiusMeters: radius });
+  if (!geomEval.ok) return null;
+  const targetHeading = geomEval.targetHeading ?? (meters >= 0.5 ? Math.round(bearingDegrees(lat, lng, target.lat, target.lng)) : null);
   return {
     provider: 'mapillary',
     pictureId,
@@ -116,7 +126,11 @@ function normalize(image, target, radius) {
     location: { lat, lng },
     distanceMeters: Number(meters.toFixed(1)),
     capturedAt: captured,
-    azimuth: optionalNumber(image.compass_angle),
+    azimuth,
+    targetHeading,
+    angularErrorDeg: geomEval.angularErrorDeg,
+    orientationVerified: true,
+    is360: isPano,
     mediaType: isPano ? 'panorama_360' : 'directional_sequence',
     license: DISPLAY_LICENSE,
     attribution: { provider: 'Mapillary', producer: producer || null },
@@ -244,10 +258,14 @@ async function lookupMapillary(location, options = {}) {
     const payload = await readJson(response, max);
     const raw = Array.isArray(payload?.data) ? payload.data.slice(0, limit) : [];
     const seen = new Set();
-    const candidates = raw
+    const rawCandidates = raw
       .map((entry) => normalize(entry, target, radius))
-      .filter((entry) => entry && !seen.has(entry.pictureId) && seen.add(entry.pictureId))
-      .sort((a, b) => a.distanceMeters - b.distanceMeters);
+      .filter((entry) => entry && !seen.has(entry.pictureId) && seen.add(entry.pictureId));
+    const candidates = rankStreetCandidates(
+      rawCandidates.map((entry) => ({ ...entry, lat: entry.location.lat, lng: entry.location.lng })),
+      target,
+      { radiusMeters: radius }
+    ).map(({ lat: _lat, lng: _lng, ...entry }) => entry);
     const panoramicMetadata = candidates.filter((entry) => entry.mediaType === 'panorama_360');
     // Mapillary images are CC-BY-SA-4.0 by default per Mapillary's terms;
     // every returned image already has license.displayApproved = true.

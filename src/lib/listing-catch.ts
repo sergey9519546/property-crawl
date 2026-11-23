@@ -3,6 +3,7 @@
 // imputed. ponytail: deterministic rules, swap in a cached LLM paragraph later.
 
 type CatchInput = {
+  source?: string | null;
   state?: string | null;
   openingBid?: unknown;
   estLow?: unknown;
@@ -38,6 +39,9 @@ export function listingCatch(listing: CatchInput, titleWarnings: string[] = []):
   const bid = num(listing.openingBid);
   const low = num(listing.estLow);
   const high = num(listing.estHigh);
+  const sourceKey = String(listing.source || "").trim().toLowerCase();
+  const hasFederalTaxLien = /internal revenue|federal tax lien/i.test(`${listing.seniorLienRisk || ""} ${titleWarnings.join(" ")}`);
+  const isFederalReo = ["hud", "gsa", "usda", "fannie", "freddie", "fdic"].includes(sourceKey) && !hasFederalTaxLien;
 
   if (bid !== null && bid > 0 && low !== null && high !== null && high >= low && low > 0) {
     const mid = (low + high) / 2;
@@ -50,6 +54,8 @@ export function listingCatch(listing: CatchInput, titleWarnings: string[] = []):
     const judgment = num(listing.judgment);
     if (judgment !== null && judgment > 0) {
       flags.push(`No opening bid is published prior to sale (typical for sheriff sales). Court judgment on execution is ${money(judgment)}; the upset price/reserve is announced morning of the sale.`);
+    } else if (isFederalReo) {
+      flags.push("No asking amount was published in the federal disposition feed — confirm current list price on the agency portal.");
     } else {
       flags.push("No opening amount was published, so the price is unknown until the sale.");
     }
@@ -61,9 +67,9 @@ export function listingCatch(listing: CatchInput, titleWarnings: string[] = []):
   else notes.push(`Reported ${occupancy.toLowerCase()}.`);
 
   const redemption = num(listing.redemptionDays);
-  if (redemption !== null && redemption > 0) {
+  if (!isFederalReo && redemption !== null && redemption > 0) {
     flags.push(`${listing.state || "State"} redemption rule: up to ${Math.round(redemption)} days. The former owner may be able to buy it back after you win, so confirm the period in the sale terms.`);
-  } else if (text(listing.redemptionWarning)) {
+  } else if (!isFederalReo && text(listing.redemptionWarning)) {
     flags.push(text(listing.redemptionWarning)!);
   }
 

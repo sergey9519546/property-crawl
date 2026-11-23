@@ -95,10 +95,13 @@ function computeCatchSummary(listing = {}, titleWarnings = [], riskLevel = null)
     return `Senior-lien risk flagged as "${seniorLien.toLowerCase()}" — liens ahead of this sale may survive it; title search required.`;
   }
 
-  // 4. No opening bid
+  // 4. No opening bid / asking price
   if (bid === null || bid <= 0) {
     if (judgment !== null && judgment > 0) {
       return `No opening bid published — court judgment ${money(judgment)}; the upset price is announced on sale day.`;
+    }
+    if (isFederalReo) {
+      return 'No asking price published in the federal disposition feed — confirm list price on the agency portal.';
     }
     return 'No opening amount published — price unknown until sale day; confirm before bidding.';
   }

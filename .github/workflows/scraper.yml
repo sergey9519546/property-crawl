@@ -53,14 +53,18 @@ jobs:
 
       - name: Trigger Production Scraper Run
         env:
-          PRODUCTION_APP_URL: ${{ secrets.PRODUCTION_APP_URL || 'https://property-crawl.vercel.app' }}
+          PRODUCTION_APP_URL: ${{ secrets.PRODUCTION_APP_URL || 'https://property-crawl-api.vercel.app' }}
           SCRAPER_ADMIN_TOKEN: ${{ secrets.SCRAPER_ADMIN_TOKEN }}
         run: |
-          # Trigger backend scraper refresh when configured
+          # Trigger bounded serverless next-slice and prune actions when configured
           curl -sSf "${PRODUCTION_APP_URL}/api/health" > /dev/null 2>&1 || echo "Wakeup ping dispatched"
           if [ -n "${SCRAPER_ADMIN_TOKEN}" ]; then
-            curl -s --max-time 55 -X POST "${PRODUCTION_APP_URL}/api/scrapers/run?wave=wave1" \
-              -H "x-scraper-token: ${SCRAPER_ADMIN_TOKEN}" || echo "Production wave1 trigger skipped or timed out"
-            curl -s --max-time 55 -X POST "${PRODUCTION_APP_URL}/api/scrapers/run?wave=wave2" \
-              -H "x-scraper-token: ${SCRAPER_ADMIN_TOKEN}" || echo "Production wave2 trigger skipped or timed out"
+            curl -fsS --max-time 55 -X POST "${PRODUCTION_APP_URL}/api/scrapers/run" \
+              -H "Authorization: Bearer ${SCRAPER_ADMIN_TOKEN}" \
+              -H "Content-Type: application/json" \
+              -d '{"action":"next-slice"}' || echo "Production next-slice trigger skipped or timed out"
+            curl -fsS --max-time 55 -X POST "${PRODUCTION_APP_URL}/api/scrapers/run" \
+              -H "Authorization: Bearer ${SCRAPER_ADMIN_TOKEN}" \
+              -H "Content-Type: application/json" \
+              -d '{"action":"prune"}' || echo "Production prune trigger skipped or timed out"
           fi

@@ -145,26 +145,38 @@ export function AlternativeStreetView({ listingId, address, onSelectMap }: { lis
     <div className="flex h-full min-h-[250px] flex-col bg-paper" data-testid="alternative-street-view">
       <div className="relative min-h-0 flex-1">
         {activeCandidate.provider === 'panoramax' ? (
-          <>
-            <div ref={viewerHost} aria-label={format(t.streetContextFallbackAlt, { address })} className="h-full min-h-[280px] w-full" />
-            {viewerState !== 'loaded' ? (
-              <div role="status" className="absolute bottom-3 left-3 right-3 rounded-lg bg-card p-3 text-xs shadow">
-                {viewerState === 'loading'
-                  ? t.panoramaxLoading
-                  : t.panoramaxFailed}
-                {viewerState === 'failed' ? (
-                  <button type="button" className="ml-2 font-semibold underline" onClick={() => setAttempt((value) => value + 1)}>
-                    {t.tryAgainShort}
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
-          </>
+          activeCandidate.thumbUrl && viewerState === 'failed' ? (
+            <div className="relative flex h-full min-h-[280px] w-full items-center justify-center bg-paper p-2">
+              <img
+                src={activeCandidate.thumbUrl}
+                alt={format(t.streetContextAlt, { provider: 'Panoramax', address })}
+                referrerPolicy="no-referrer"
+                className="max-h-full max-w-full rounded object-contain"
+              />
+            </div>
+          ) : (
+            <>
+              <div ref={viewerHost} aria-label={format(t.streetContextFallbackAlt, { address })} className="h-full min-h-[280px] w-full" />
+              {viewerState !== 'loaded' ? (
+                <div role="status" className="absolute bottom-3 left-3 right-3 rounded-lg bg-card p-3 text-xs shadow">
+                  {viewerState === 'loading'
+                    ? t.panoramaxLoading
+                    : t.panoramaxFailed}
+                  {viewerState === 'failed' ? (
+                    <button type="button" className="ml-2 font-semibold underline" onClick={() => setAttempt((value) => value + 1)}>
+                      {t.tryAgainShort}
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+            </>
+          )
         ) : activeCandidate.thumbUrl && !mapillaryFailed ? (
           <div className="relative flex h-full min-h-[280px] w-full items-center justify-center bg-paper p-2">
             <img
               src={activeCandidate.thumbUrl}
               alt={format(t.streetContextAlt, { provider: 'Mapillary', address })}
+              referrerPolicy="no-referrer"
               className="max-h-full max-w-full rounded object-contain"
               onError={() => setMapillaryFailed(true)}
             />
@@ -223,7 +235,13 @@ export function AlternativeStreetView({ listingId, address, onSelectMap }: { lis
           {activeCandidate.attribution.provider}
           {activeCandidate.attribution.producer ? ' / ' + activeCandidate.attribution.producer : ''}
           {' / '}
-          {activeCandidate.license.id || t.recordedLicense}
+          {activeCandidate.license.url ? (
+            <a href={activeCandidate.license.url} target="_blank" rel="noopener noreferrer" className="underline">
+              {activeCandidate.license.id || t.recordedLicense}
+            </a>
+          ) : (
+            activeCandidate.license.id || t.recordedLicense
+          )}
           {activeCandidate.provider === 'panoramax' ? t.currentDetailsViewer : '.'}
         </p>
         <p className="text-ink-3">{t.streetConditionDisclaimer}</p>

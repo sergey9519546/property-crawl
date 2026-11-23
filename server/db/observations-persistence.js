@@ -830,6 +830,7 @@ async function compactPgObservations(pool, options = {}) {
       }
     }
     cachedStats = null;
+    invalidateCountyStatsCache(pool);
   } else {
     prunedRows = deletedIds.length;
   }
@@ -854,33 +855,92 @@ async function compactPgObservations(pool, options = {}) {
 
 const { aggregateCountyObservationStats } = require('../intelligence/auction-microstructure');
 
+const COUNTY_STATS_CACHE_TTL_MS = 5 * 60 * 1000;
+const countyStatsPoolCache = new WeakMap();
+
+function invalidateCountyStatsCache(pool) {
+  if (pool && countyStatsPoolCache.has(pool)) {
+    countyStatsPoolCache.get(pool).clear();
+  }
+}
+
 async function loadCountyObservationStats(pool, { state, county, minSample = 1 } = {}) {
   if (!pool || typeof pool.query !== 'function' || !state || !county) return null;
   const targetState = String(state).trim().toUpperCase();
   const targetCounty = String(county).trim();
-  if (!targetState || !targetCounty) return null;
+  const targetCountyNorm = targetCounty
+    .toLowerCase()
+    .replace(/\s+(?:county|parish|borough)$/i, '')
+    .trim();
+  if (!targetState || !targetCountyNorm) return null;
 
-  const result = await queryWithStatementTimeout(
-    pool,
-    `SELECT so.source_key, so.record_id, so.listing_id, so.observed_at, so.sale_date, so.status,
-            COALESCE(NULLIF(so.raw_payload->>'state', ''), l.state) AS state,
-            COALESCE(NULLIF(so.raw_payload->>'county', ''), l.county) AS county
-       FROM source_observations so
-       LEFT JOIN listings l ON l.id = so.listing_id
-      WHERE UPPER(COALESCE(NULLIF(so.raw_payload->>'state', ''), l.state, '')) = $1
-        AND LOWER(COALESCE(NULLIF(so.raw_payload->>'county', ''), l.county, '')) = LOWER($2)
-      ORDER BY so.observed_at ASC, so.id ASC
-      LIMIT 5000`,
-    [targetState, targetCounty],
-  );
-  const rows = Array.isArray(result?.rows) ? result.rows : [];
-  if (rows.length === 0) return null;
-  const stats = aggregateCountyObservationStats(rows, {
+  let cacheMap = countyStatsPoolCache.get(pool);
+  if (!cacheMap) {
+    cacheMap = new Map();
+    countyStatsPoolCache.set(pool, cacheMap);
+  }
+  const cacheKey = `${targetState}|${targetCountyNorm}|${minSample}`;
+  const cached = cacheMap.get(cacheKey);
+  if (cached && (Date.now() - cached.cachedAt) < COUNTY_STATS_CACHE_TTL_MS) {
+    return cached.value;
+  }
+
+  let rows = [];
+  try {
+    const primaryRes = await queryWithStatementTimeout(
+      pool,
+      `SELECT so.source_key, so.record_id, so.listing_id, so.observed_at, so.sale_date,
+              COALESCE(NULLIF(so.status, ''), l.lifecycle_status, l.status) AS status,
+              l.state AS state,
+              l.county AS county
+         FROM listings l
+         JOIN source_observations so ON so.listing_id = l.id
+        WHERE UPPER(l.state) = $1
+          AND REGEXP_REPLACE(LOWER(TRIM(COALESCE(l.county, ''))), '\\s+(county|parish|borough)$', '') = $2
+        ORDER BY so.observed_at DESC, so.id DESC
+        LIMIT 2500`,
+      [targetState, targetCountyNorm],
+      3500,
+    );
+    rows = Array.isArray(primaryRes?.rows) ? primaryRes.rows : [];
+  } catch {
+    rows = [];
+  }
+
+  if (rows.length === 0) {
+    const fallbackRes = await queryWithStatementTimeout(
+      pool,
+      `SELECT so.source_key, so.record_id, so.listing_id, so.observed_at, so.sale_date, so.status,
+              COALESCE(NULLIF(so.raw_payload->>'state', ''), l.state) AS state,
+              COALESCE(NULLIF(so.raw_payload->>'county', ''), l.county) AS county
+         FROM source_observations so
+         LEFT JOIN listings l ON l.id = so.listing_id
+        WHERE UPPER(COALESCE(NULLIF(so.raw_payload->>'state', ''), l.state, '')) = $1
+          AND REGEXP_REPLACE(LOWER(TRIM(COALESCE(NULLIF(so.raw_payload->>'county', ''), l.county, ''))), '\\s+(county|parish|borough)$', '') = $2
+        ORDER BY so.observed_at ASC, so.id ASC
+        LIMIT 2500`,
+      [targetState, targetCountyNorm],
+      3500,
+    );
+    rows = Array.isArray(fallbackRes?.rows) ? fallbackRes.rows : [];
+  }
+
+  if (rows.length === 0) {
+    cacheMap.set(cacheKey, { value: null, cachedAt: Date.now() });
+    return null;
+  }
+  const orderedRows = rows.length > 1 && rows[0]?.observed_at && rows[rows.length - 1]?.observed_at
+    && String(rows[0].observed_at) > String(rows[rows.length - 1].observed_at)
+    ? [...rows].reverse()
+    : rows;
+  const stats = aggregateCountyObservationStats(orderedRows, {
     state: targetState,
     county: targetCounty,
     minSample,
   });
-  return stats.totalDockets > 0 ? stats : null;
+  const value = stats.totalDockets > 0 ? stats : null;
+  cacheMap.set(cacheKey, { value, cachedAt: Date.now() });
+  return value;
 }
 
 module.exports = {

@@ -260,9 +260,11 @@ function intelligenceScope(evaluated, matched, filters) {
     minQuality,
     totalIsPageScoped,
     pageScope: { evaluated, matched },
-    note: totalIsPageScoped
+    note: minQuality > 0
       ? 'Quality and opportunity ranking, and any minimum-quality threshold, are applied after this page is loaded. total counts matches on this page, not in the whole search.'
-      : 'quality/opportunity sorts apply after listing intelligence annotation.',
+      : totalIsPageScoped
+        ? 'Quality and opportunity ranking reorder the candidate window loaded for this page; total reflects the whole search.'
+        : 'quality/opportunity sorts apply after listing intelligence annotation.',
   };
 }
 
@@ -728,17 +730,25 @@ async function handleListings(req, res, dbOverride = null, options = {}) {
     const viewListings = (filters.offset === 0 && !filters.cursor && isIntelligenceView && viewListingsAll.length > filters.limit)
       ? viewListingsAll.slice(0, filters.limit)
       : viewListingsAll;
+    const effectiveTotal = (isIntelligenceView && filters.minQuality > 0)
+      ? viewListingsAll.length
+      : result.total;
+    const effectivePage = (viewListings.length < result.listings.length)
+      ? {
+          ...page,
+          nextCursor: null,
+          hasMore: (filters.offset + viewListings.length) < (Number(effectiveTotal) || 0),
+        }
+      : page;
     const body = {
       ...result,
-      page,
+      page: effectivePage,
       revision: result.revision || null,
       facets: result.facets || {},
       intelligence: intelligenceScope(presentedListings.length, viewListingsAll.length, filters),
       pipeline: summarizeInventory(viewListings),
       listings: stripGridListings(viewListings),
-      total: (isIntelligenceView && filters.minQuality > 0)
-        ? viewListingsAll.length
-        : result.total,
+      total: effectiveTotal,
       // Surface the same honesty signals the health endpoint provides so
       // clients (workbench, tests) can see demo vs postgres without a second call.
       dataMode: typeof db.dataMode === 'function' ? db.dataMode() : (db.isPg ? 'postgres' : 'unavailable'),

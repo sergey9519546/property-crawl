@@ -3,6 +3,7 @@
 // aliases. Next.js still loads this file fine via its own resolver.
 const { inspectSourceRecordUrl } = require('../../server/scrapers/source-policy');
 const { hasParcelBoundaryCoverage } = require('./parcel-boundary-coverage');
+const { isCoordInStateBounds } = require('../../server/geo/state-bounds');
 
 function object(value) {
   return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
@@ -33,6 +34,10 @@ function inspectMapLocation(listing) {
   const { lat, lng } = listing;
   if (typeof lat !== 'number' || typeof lng !== 'number' || !Number.isFinite(lat) || !Number.isFinite(lng)
       || Math.abs(lat) > 90 || Math.abs(lng) > 180 || (lat === 0 && lng === 0)) return reject('coordinates_missing_or_invalid');
+  if (text(listing.state)) {
+    const stateCheck = isCoordInStateBounds(lat, lng, listing.state);
+    if (!stateCheck.ok) return reject('coords_outside_state_bbox');
+  }
   const derived = object(provenance.derivedFields);
   if (['lat', 'lng', 'latitude', 'longitude', 'coordinates', 'location', 'geocode'].some((key) => Boolean(derived[key]))) {
     return reject('derived_coordinates');

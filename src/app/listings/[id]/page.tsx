@@ -510,6 +510,9 @@ export default async function ListingPage({ params, searchParams }: Props) {
             <ListingMedia
               listingId={listing.id}
               address={listing.address}
+              state={listing.state}
+              county={listing.county}
+              apn={listing.apn || listing.parcelKey || null}
               propType={listing.propType}
               source={listing.source}
               photo={detailPhoto}

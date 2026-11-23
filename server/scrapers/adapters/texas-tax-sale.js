@@ -275,12 +275,15 @@ function parseTexasTaxSaleCard(html = '', countyKey = 'harris', options = {}) {
     } catch (_) {}
   }
 
+  const zipMatch = String(address || rawText || '').match(/\b(7[5-9]\d{3})(?:-\d{4})?\b/);
+  const resolvedZip = options.zip || (zipMatch ? zipMatch[1] : null);
+
   return {
     id,
     address: address || legalDescription || `${countyInfo.county} County Tax Foreclosure`,
     city: countyInfo.defaultCity,
     state: 'TX',
-    zip: options.zip || null,
+    zip: resolvedZip,
     county: countyInfo.county,
     apn: apn || null,
     propType: 'Single Family', // Statutory default subject to cadastral enrichment

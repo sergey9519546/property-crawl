@@ -47,7 +47,7 @@ const DEPRECATED_SITEMAP_PING_ENDPOINTS = Object.freeze({
  * Submits an array of URLs to the IndexNow protocol endpoint in chunks of up to 10,000.
  *
  * @param {Object} options
- * @param {string} [options.host] - Domain host (e.g. "perfectproperty.org")
+ * @param {string} [options.host] - Domain host (e.g. "perfectproperty.bid")
  * @param {string} [options.key] - IndexNow API key (required in production; non-production defaults to default_test_key)
  * @param {string} [options.keyLocation] - URL of public key text verification file
  * @param {string[]} options.urls - List of URLs to index

@@ -12,6 +12,6 @@ jobs:
     steps:
       - name: Ping Production Healthcheck
         run: |
-          TARGET_URL="${{ secrets.PRODUCTION_APP_URL || 'https://property-crawl.vercel.app' }}/api/health"
+          TARGET_URL="${{ secrets.PRODUCTION_APP_URL || 'https://property-crawl-api.vercel.app' }}/api/health"
           echo "Pinging $TARGET_URL to verify liveness..."
           curl -fsS --max-time 15 "$TARGET_URL" > /dev/null || echo "Health ping dispatched"

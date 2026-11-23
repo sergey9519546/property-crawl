@@ -102,7 +102,14 @@ function parseAcceleratedDisposition(html) {
       rejected.push({ identity, reason: 'missing_title' });
       continue;
     }
-    const typeMatch = chunk.match(/data-type=["'](?:"|&quot;)?([^"']+?)(?:"|&quot;)?["']/i);
+    const typeAttrMatch = chunk.match(/data-type=(?:"([^"]*)"|'([^']*)')/i);
+    const rawTypeAttr = typeAttrMatch ? (typeAttrMatch[1] ?? typeAttrMatch[2] ?? '') : '';
+    const cleanedPropTypes = cardText(rawTypeAttr)
+      .replace(/[\[\]"']+/g, ' ')
+      .split(',')
+      .map((t) => t.replace(/\s+/g, ' ').trim())
+      .filter((t) => /[A-Za-z0-9]/.test(t));
+    const parsedPropType = cleanedPropTypes[0] ? cleanedPropTypes[0].slice(0, 64) : null;
     const listed = tags.find((tag) => tag.startsWith('DATE LISTED:')) || '';
     const areaMatch = chunk.match(/Rentable Area:\s*(?:<strong>)?\s*([\d,]+)/i);
     const gross = /Gross Square Footage/i.test(chunk);
@@ -119,7 +126,7 @@ function parseAcceleratedDisposition(html) {
       city: addressMatch[2] ? addressMatch[2].slice(0, 64) : null,
       zip: addressMatch[4],
       address,
-      propType: typeMatch ? cardText(typeMatch[1]).slice(0, 64) : null,
+      propType: parsedPropType,
       sqft: Number.isFinite(area) && area > 0 ? area : null,
       openingBid: null,
       price: null,
@@ -138,7 +145,7 @@ function parseAcceleratedDisposition(html) {
         sourceFacts: {
           program: 'accelerated_disposition',
           dateListed: listed.replace(/^DATE LISTED:\s*/, '') || null,
-          propertyType: typeMatch ? cardText(typeMatch[1]) : null,
+          propertyType: parsedPropType,
           auctionLinkFollowed: Boolean(directRealEstateUrl || disposalUrl),
           ...(disposalUrl ? { disposalUrl } : {}),
         }
@@ -427,7 +434,7 @@ class GsaSurplusScraper extends BaseScraper {
     const stateName = evProp?.state ?? this.attrValue(html, 'tour_property_state');
     const zip = evProp?.zipcode ?? this.attrValue(html, 'tour_property_zipcode');
 
-    if (!street || !/^\d/.test(street)) return null; // require a street number
+    if (!street || !/^(?:\d|(?:state|u\.?s\.?|county|old|fm|cr|sr|hwy|highway|route|rt|lot|parcel|tract|bldg|building)\b)/i.test(street)) return null;
     const state = STATE_NAME_TO_CODE[stateName] || (stateName && stateName.length === 2 ? stateName : 'US');
     if (state === 'US' || !zip) return null;
 

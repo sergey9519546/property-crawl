@@ -1,6 +1,8 @@
 import { proxyPropertyApi } from "@/lib/property-api";
 import { proxyPrivatePropertyApi } from "@/lib/workspace-proxy";
 
+export const maxDuration = 60;
+
 // Read-only cached evidence & pre-warmed narrative lookup (zero live LLM calls).
 export const GET = (request: Request) => proxyPropertyApi(request);
 

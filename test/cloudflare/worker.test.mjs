@@ -91,6 +91,7 @@ test('Cloudflare edge worker serves /health, rejects private/traversal /vault ke
   const rangeRes = await worker.fetch(new Request('https://edge.perfectproperty.bid/vault/public/doc.pdf', { headers: { Range: 'bytes=0-3' } }), env, createCtx());
   assert.equal(rangeRes.status, 206);
   assert.equal(rangeRes.headers.get('content-range'), 'bytes 0-3/16');
+  assert.equal(rangeRes.headers.get('content-security-policy'), "default-src 'none'; sandbox");
   assert.equal(await rangeRes.text(), '0123');
 });
 

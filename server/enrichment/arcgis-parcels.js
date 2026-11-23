@@ -1380,6 +1380,8 @@ async function queryArcgisParcel(params = {}, init = {}) {
     queryParams.set('inSR', '4326');
     queryParams.set('returnGeometry', 'true');
   } else if (apn) {
+    queryParams.set('returnGeometry', 'true');
+    queryParams.set('outSR', '4326');
     // APN attribute search
     const clean = isUsableApnForQuery(apn, config.apnField);
     if (!clean) return null;

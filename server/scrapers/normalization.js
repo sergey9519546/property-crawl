@@ -3,6 +3,7 @@ const { inspectImageUrl } = require('./media-policy');
 const { inspectSourceRecordUrl } = require('./source-policy');
 const { getRedemptionRule, detectSeniorLienSurvival } = require('../ai/legal-rules');
 const { COUNTY_ARCGIS_REGISTRY, resolveCountyKey } = require('../enrichment/arcgis-parcels');
+const { isCoordInStateBounds } = require('../geo/state-bounds');
 
 function cleanText(value, placeholders = []) {
   if (value === null || value === undefined) return null;
@@ -336,8 +337,9 @@ function standardizeListingRecord(raw = {}, options = {}) {
   const rawLat = numberOrNull(input.lat, { min: -90, max: 90 });
   const rawLng = numberOrNull(input.lng, { min: -180, max: 180 });
   const hasObservedGeocode = rawLat !== null && rawLng !== null && !(rawLat === 0 && rawLng === 0);
-  const lat = hasObservedGeocode ? rawLat : null;
-  const lng = hasObservedGeocode ? rawLng : null;
+  const coordBoundsCheck = hasObservedGeocode && state ? isCoordInStateBounds(rawLat, rawLng, state) : { ok: hasObservedGeocode, reason: null };
+  const lat = hasObservedGeocode && coordBoundsCheck.ok ? rawLat : null;
+  const lng = hasObservedGeocode && coordBoundsCheck.ok ? rawLng : null;
 
   const derivedFields = {};
   if (mid !== null) {
@@ -437,6 +439,16 @@ function standardizeListingRecord(raw = {}, options = {}) {
     observedAt: sourceObservedAt,
     ...(Object.keys(combinedDerived).length > 0 ? { derivedFields: combinedDerived } : {})
   };
+  if (hasObservedGeocode && !coordBoundsCheck.ok) {
+    delete provenance.coordinates;
+    provenance.coordinatesRejected = {
+      reason: coordBoundsCheck.reason,
+      lat: rawLat,
+      lng: rawLng,
+      state,
+      observedAt: sourceObservedAt,
+    };
+  }
   const existingMedia = asPlainObject(baseProvenance.media);
   const previousPhoto = asPlainObject(existingMedia.photo);
   const imageSource = previousPhoto.sourceRecordUrl

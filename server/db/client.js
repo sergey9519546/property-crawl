@@ -160,33 +160,58 @@ const SUMMARY_LISTING_SELECT = `
 // Shared ON CONFLICT provenance merge across createListing and createListingsBulk:
 // preserves accumulated derivedFields and authoritative cadastral parcelKey when
 // a subsequent raw scraper sweep refreshes the same record.
+const NORMALIZE_ADDR_SQL = (col) => `upper(btrim(regexp_replace(coalesce(${col}, ''), '[^A-Za-z0-9]+', ' ', 'g')))`;
+const SAME_ADDRESS_ON_CONFLICT_SQL = `(btrim(coalesce(EXCLUDED.address, '')) <> '' AND ${NORMALIZE_ADDR_SQL('EXCLUDED.address')} = ${NORMALIZE_ADDR_SQL('listings.address')} AND upper(btrim(coalesce(EXCLUDED.state, ''))) = upper(btrim(coalesce(listings.state, ''))))`;
+
+function sameNormalizedListingAddress(a, b) {
+  const norm = (x) => String(x?.address ?? '').toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim();
+  const addrA = norm(a);
+  const addrB = norm(b);
+  if (!addrA || !addrB || addrA !== addrB) return false;
+  return String(a?.state ?? '').trim().toUpperCase() === String(b?.state ?? '').trim().toUpperCase();
+}
+
 const PROVENANCE_UPSERT_SQL = `CASE
-          WHEN EXCLUDED.provenance IS NULL THEN listings.provenance
+          WHEN EXCLUDED.provenance IS NULL THEN
+            CASE
+              WHEN ${SAME_ADDRESS_ON_CONFLICT_SQL} THEN listings.provenance
+              WHEN listings.provenance IS NULL THEN NULL
+              WHEN jsonb_typeof(listings.provenance->'derivedFields') = 'object' THEN
+                jsonb_set(listings.provenance - 'coordinates', '{derivedFields}', (listings.provenance->'derivedFields') - 'geocode', true)
+              ELSE listings.provenance - 'coordinates'
+            END
           WHEN listings.provenance IS NULL THEN EXCLUDED.provenance
           ELSE (
             CASE
               WHEN jsonb_typeof(listings.provenance->'derivedFields') = 'object'
                AND jsonb_typeof(EXCLUDED.provenance->'derivedFields') = 'object' THEN
                 jsonb_set(
-                  (listings.provenance - 'publisherAbsence') || EXCLUDED.provenance,
+                  ((CASE WHEN ${SAME_ADDRESS_ON_CONFLICT_SQL} THEN listings.provenance ELSE (listings.provenance - 'coordinates') END) - 'publisherAbsence') || EXCLUDED.provenance,
                   '{derivedFields}',
-                  (listings.provenance->'derivedFields') || (EXCLUDED.provenance->'derivedFields'),
+                  (CASE WHEN ${SAME_ADDRESS_ON_CONFLICT_SQL} THEN (listings.provenance->'derivedFields') ELSE ((listings.provenance->'derivedFields') - 'geocode') END) || (EXCLUDED.provenance->'derivedFields'),
                   true
                 )
               WHEN jsonb_typeof(listings.provenance->'derivedFields') = 'object' THEN
                 jsonb_set(
-                  (listings.provenance - 'publisherAbsence') || EXCLUDED.provenance,
+                  ((CASE WHEN ${SAME_ADDRESS_ON_CONFLICT_SQL} THEN listings.provenance ELSE (listings.provenance - 'coordinates') END) - 'publisherAbsence') || EXCLUDED.provenance,
                   '{derivedFields}',
-                  listings.provenance->'derivedFields',
+                  (CASE WHEN ${SAME_ADDRESS_ON_CONFLICT_SQL} THEN (listings.provenance->'derivedFields') ELSE ((listings.provenance->'derivedFields') - 'geocode') END),
                   true
                 )
-              ELSE (listings.provenance - 'publisherAbsence') || EXCLUDED.provenance
+              ELSE ((CASE WHEN ${SAME_ADDRESS_ON_CONFLICT_SQL} THEN listings.provenance ELSE (listings.provenance - 'coordinates') END) - 'publisherAbsence') || EXCLUDED.provenance
             END
           ) || CASE
             WHEN listings.provenance->'derivedFields'->>'parcelKey' = 'true'
              AND NULLIF(listings.provenance->>'parcelKey', '') IS NOT NULL
              AND EXCLUDED.provenance->'derivedFields'->>'parcelKey' IS DISTINCT FROM 'true'
             THEN jsonb_build_object('parcelKey', listings.provenance->>'parcelKey')
+            ELSE '{}'::jsonb
+          END || CASE
+            WHEN ${SAME_ADDRESS_ON_CONFLICT_SQL}
+             AND jsonb_typeof(listings.provenance->'coordinates') = 'object'
+             AND jsonb_typeof(EXCLUDED.provenance->'coordinates') IS DISTINCT FROM 'object'
+             AND (EXCLUDED.geog IS NULL OR (EXCLUDED.latitude IS NOT DISTINCT FROM listings.latitude AND EXCLUDED.longitude IS NOT DISTINCT FROM listings.longitude))
+            THEN jsonb_build_object('coordinates', listings.provenance->'coordinates')
             ELSE '{}'::jsonb
           END
         END`;
@@ -413,10 +438,24 @@ function prepareListingForPersistence(listing = {}) {
   // Deterministic "Here's the Catch" one-liner — $0, computed from fields already
   // present on the normalized record. Title warnings are sourced from the existing
   // arbitrateTitleRisk result when available in provenance; fall back to empty.
-  const persistedTitleWarnings = Array.isArray(normalized.provenance?.titleWarnings)
+  let persistedTitleWarnings = Array.isArray(normalized.provenance?.titleWarnings)
     ? normalized.provenance.titleWarnings
     : (Array.isArray(listing.titleWarnings) ? listing.titleWarnings : []);
-  const persistedRiskLevel = normalized.provenance?.riskLevel || listing.riskLevel || null;
+  let persistedRiskLevel = normalized.provenance?.riskLevel || listing.riskLevel || null;
+  if (persistedTitleWarnings.length === 0) {
+    try {
+      const { arbitrateTitleRisk } = require('../intelligence/title-risk-engine');
+      const tr = arbitrateTitleRisk(normalized);
+      if (Array.isArray(tr?.titleWarnings) && tr.titleWarnings.length > 0) {
+        persistedTitleWarnings = tr.titleWarnings;
+      }
+      if (!persistedRiskLevel && tr?.riskLevel) {
+        persistedRiskLevel = tr.riskLevel;
+      }
+    } catch {
+      // Fall back to listing-level signals only
+    }
+  }
   normalized.catchSummary = computeCatchSummary(normalized, persistedTitleWarnings, persistedRiskLevel);
   return normalized;
 }
@@ -429,17 +468,38 @@ function mergeListingForInMemoryUpsert(existing, incoming) {
     merged.estLow = existing.estLow;
     merged.estHigh = existing.estHigh;
   }
-  if ((incoming.lat === null || incoming.lng === null) && existing.lat !== null && existing.lng !== null) {
-    merged.lat = existing.lat;
-    merged.lng = existing.lng;
+  const sameAddr = sameNormalizedListingAddress(existing, incoming);
+  if (incoming.lat === null || incoming.lng === null) {
+    if (sameAddr && existing.lat !== null && existing.lng !== null) {
+      merged.lat = existing.lat;
+      merged.lng = existing.lng;
+    } else {
+      merged.lat = null;
+      merged.lng = null;
+    }
   }
   if (existing.provenance || incoming.provenance) {
-    merged.provenance = { ...(existing.provenance || {}), ...(incoming.provenance || {}) };
+    const baseExistingProv = { ...(existing.provenance || {}) };
+    if (!sameAddr) {
+      delete baseExistingProv.coordinates;
+    }
+    merged.provenance = { ...baseExistingProv, ...(incoming.provenance || {}) };
     if (existing.provenance?.derivedFields || incoming.provenance?.derivedFields) {
+      const baseExistingDerived = { ...(existing.provenance?.derivedFields || {}) };
+      if (!sameAddr) {
+        delete baseExistingDerived.geocode;
+      }
       merged.provenance.derivedFields = {
-        ...(existing.provenance?.derivedFields || {}),
+        ...baseExistingDerived,
         ...(incoming.provenance?.derivedFields || {}),
       };
+    }
+    if (sameAddr
+        && existing.provenance?.coordinates
+        && typeof existing.provenance.coordinates === 'object'
+        && (!incoming.provenance || !incoming.provenance.coordinates || typeof incoming.provenance.coordinates !== 'object')
+        && (incoming.lat === null || (incoming.lat === existing.lat && incoming.lng === existing.lng))) {
+      merged.provenance.coordinates = existing.provenance.coordinates;
     }
   }
   for (const field of [
@@ -2443,9 +2503,9 @@ class DatabaseClient {
         city = COALESCE(EXCLUDED.city, listings.city),
         zip = COALESCE(EXCLUDED.zip, listings.zip),
         address = EXCLUDED.address,
-        latitude = CASE WHEN EXCLUDED.geog IS NOT NULL THEN EXCLUDED.latitude ELSE listings.latitude END,
-        longitude = CASE WHEN EXCLUDED.geog IS NOT NULL THEN EXCLUDED.longitude ELSE listings.longitude END,
-        geog = COALESCE(EXCLUDED.geog, listings.geog),
+        latitude = CASE WHEN EXCLUDED.geog IS NOT NULL THEN EXCLUDED.latitude WHEN ${SAME_ADDRESS_ON_CONFLICT_SQL} THEN listings.latitude ELSE NULL END,
+        longitude = CASE WHEN EXCLUDED.geog IS NOT NULL THEN EXCLUDED.longitude WHEN ${SAME_ADDRESS_ON_CONFLICT_SQL} THEN listings.longitude ELSE NULL END,
+        geog = CASE WHEN EXCLUDED.geog IS NOT NULL THEN EXCLUDED.geog WHEN ${SAME_ADDRESS_ON_CONFLICT_SQL} THEN listings.geog ELSE NULL END,
         beds = COALESCE(EXCLUDED.beds, listings.beds),
         baths = COALESCE(EXCLUDED.baths, listings.baths),
         sqft = COALESCE(EXCLUDED.sqft, listings.sqft),
@@ -2631,9 +2691,9 @@ class DatabaseClient {
         city = COALESCE(EXCLUDED.city, listings.city),
         zip = COALESCE(EXCLUDED.zip, listings.zip),
         address = EXCLUDED.address,
-        latitude = CASE WHEN EXCLUDED.geog IS NOT NULL THEN EXCLUDED.latitude ELSE listings.latitude END,
-        longitude = CASE WHEN EXCLUDED.geog IS NOT NULL THEN EXCLUDED.longitude ELSE listings.longitude END,
-        geog = COALESCE(EXCLUDED.geog, listings.geog),
+        latitude = CASE WHEN EXCLUDED.geog IS NOT NULL THEN EXCLUDED.latitude WHEN ${SAME_ADDRESS_ON_CONFLICT_SQL} THEN listings.latitude ELSE NULL END,
+        longitude = CASE WHEN EXCLUDED.geog IS NOT NULL THEN EXCLUDED.longitude WHEN ${SAME_ADDRESS_ON_CONFLICT_SQL} THEN listings.longitude ELSE NULL END,
+        geog = CASE WHEN EXCLUDED.geog IS NOT NULL THEN EXCLUDED.geog WHEN ${SAME_ADDRESS_ON_CONFLICT_SQL} THEN listings.geog ELSE NULL END,
         beds = COALESCE(EXCLUDED.beds, listings.beds),
         baths = COALESCE(EXCLUDED.baths, listings.baths),
         sqft = COALESCE(EXCLUDED.sqft, listings.sqft),
@@ -3673,10 +3733,10 @@ class DatabaseClient {
     const startedAt = Date.now();
     const budgetExceeded = () => maxDurationMs > 0 && (Date.now() - startedAt) >= maxDurationMs;
     const serviceLinkStaleDays = Math.max(1, Math.trunc(Number(options.serviceLinkStaleDays) || 5));
-    const serviceLinkFreshWindowDays = Math.max(1, Math.trunc(Number(options.serviceLinkFreshWindowDays) || 3));
+    const serviceLinkFreshWindowDays = Math.max(1, Math.trunc(Number(options.serviceLinkFreshWindowDays) || 2));
     const serviceLinkHardStaleDays = Math.max(serviceLinkStaleDays, Math.trunc(Number(options.serviceLinkHardStaleDays) || 7));
     const concludedGraceDays = Math.max(1, Math.trunc(Number(options.concludedGraceDays) || 1));
-    const observationRetentionDays = Math.max(7, Math.trunc(Number(options.observationRetentionDays) || 14));
+    const observationRetentionDays = Math.max(7, Math.trunc(Number(options.observationRetentionDays) || 10));
     const purgeQuery = (sql, params = [], timeoutMs = 12_000) => queryWithStatementTimeout(this.pool, sql, params, timeoutMs);
 
     let hasFreshServiceLinkLive = false;
@@ -3905,6 +3965,14 @@ class DatabaseClient {
       }
     } catch (obsErr) {
       console.warn('[DB] purgeStaleListings observation cleanup failed:', obsErr?.message || obsErr);
+    }
+
+    if (observationsDeleted > 0) {
+      try {
+        await this.pool.query('VACUUM (ANALYZE) source_observations');
+      } catch {
+        // Non-fatal inside transaction pools or read-only replicas
+      }
     }
 
     let snapshotsDeleted = 0;

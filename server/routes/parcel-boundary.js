@@ -1,6 +1,8 @@
 'use strict';
 
 const db = require('../db/client');
+const { isCoordInStateBounds } = require('../geo/state-bounds');
+const { isCompatibleNjSitusAddress } = require('../enrichment/nj-cadastral');
 const {
   resolveCountyEndpoint,
   isUsableApnForQuery,
@@ -242,7 +244,27 @@ function resolveBoundaryEndpoints(state, county = null) {
   return candidates;
 }
 
-async function querySingleArcGisEndpoint(serviceInfo, lat, lng, apn, county, hasCoords) {
+const MAX_PARCEL_RESPONSE_BYTES = 2 * 1024 * 1024;
+const SITUS_ADDRESS_KEYS = Object.freeze([
+  'SITEADDR', 'SITE_ADDR', 'SITUS_ADDR', 'SITUS_ADDRESS', 'SITE_ADDRESS',
+  'PROP_ADD', 'PROPERTY_ADDRESS', 'PROP_LOC', 'PHY_ADDR1',
+  'STREET_ADD', 'STREET_ADDRESS', 'ADDRESS', 'ADDR', 'LOCATION', 'PADDR', 'SITUS',
+]);
+
+function featureSitusAddress(candidate) {
+  const props = candidate?.properties || candidate?.attributes;
+  return props && typeof props === 'object' ? firstValue(props, SITUS_ADDRESS_KEYS, textValue) : null;
+}
+
+function isCompatibleParcelSitus(candidate, expectedAddress) {
+  if (!expectedAddress) return true;
+  const situs = featureSitusAddress(candidate);
+  if (!situs || /^0+(?:\s|$)/.test(situs.trim())) return true;
+  return isCompatibleNjSitusAddress(expectedAddress, situs);
+}
+
+async function querySingleArcGisEndpoint(serviceInfo, lat, lng, apn, county, hasCoords, options = {}) {
+  const expectedAddress = textValue(options?.expectedAddress);
   const apnField = serviceInfo.apnField || 'PARCEL_ID';
   const countyFilterField = serviceInfo.countyFilterField || null;
   const isIdentifyService = serviceInfo.operation === 'identify' || /\/identify$/i.test(serviceInfo.endpoint);
@@ -263,12 +285,43 @@ async function querySingleArcGisEndpoint(serviceInfo, lat, lng, apn, county, has
     try {
       const response = await fetch(queryUrl, {
         signal: controller.signal,
+        redirect: 'error',
         headers: { Accept: 'application/geo+json, application/json' }
       });
       if (!response.ok) {
         throw new ParcelBoundaryError(502, 'PARCEL_SOURCE_ERROR', `Parcel source returned HTTP ${response.status}.`);
       }
-      const geojson = await response.json();
+      const declaredLength = Number(response.headers?.get?.('content-length') || 0);
+      if (Number.isFinite(declaredLength) && declaredLength > MAX_PARCEL_RESPONSE_BYTES) {
+        throw new ParcelBoundaryError(502, 'PARCEL_SOURCE_TOO_LARGE', 'Parcel source response exceeded 2 MB size limit.');
+      }
+      let geojson;
+      if (response.body && typeof response.body.getReader === 'function') {
+        const reader = response.body.getReader();
+        const chunks = [];
+        let totalBytes = 0;
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (value) {
+            totalBytes += value.byteLength;
+            if (totalBytes > MAX_PARCEL_RESPONSE_BYTES) {
+              try { await reader.cancel(); } catch {}
+              throw new ParcelBoundaryError(502, 'PARCEL_SOURCE_TOO_LARGE', 'Parcel source response exceeded 2 MB size limit.');
+            }
+            chunks.push(Buffer.from(value));
+          }
+        }
+        geojson = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+      } else if (typeof response.text === 'function') {
+        const rawText = await response.text();
+        if (Buffer.byteLength(rawText, 'utf8') > MAX_PARCEL_RESPONSE_BYTES) {
+          throw new ParcelBoundaryError(502, 'PARCEL_SOURCE_TOO_LARGE', 'Parcel source response exceeded 2 MB size limit.');
+        }
+        geojson = JSON.parse(rawText);
+      } else {
+        geojson = await response.json();
+      }
       if (geojson?.error) {
         throw new ParcelBoundaryError(502, 'PARCEL_SOURCE_ERROR', 'Parcel source rejected the spatial query.');
       }
@@ -317,13 +370,18 @@ async function querySingleArcGisEndpoint(serviceInfo, lat, lng, apn, county, has
       }
     }
 
+    const matchesFeature = (candidate) => (
+      isCadastralGeometry(candidate?.geometry)
+      && isCompatibleParcelSitus(candidate, expectedAddress)
+    );
+
     // Check if spatial match succeeded
     let features = Array.isArray(geojson?.features) ? geojson.features.map(f => {
       if (f && f.geometry) f.geometry = normalizeFeatureGeometry(f.geometry);
       return f;
     }) : [];
 
-    let feature = features.find(candidate => isCadastralGeometry(candidate?.geometry));
+    let feature = features.find(matchesFeature);
 
     // If point query yielded no polygon but APN is available, try searching by APN
     if (!feature && apn && !isIdentifyService) {
@@ -344,7 +402,7 @@ async function querySingleArcGisEndpoint(serviceInfo, lat, lng, apn, county, has
             if (f && f.geometry) f.geometry = normalizeFeatureGeometry(f.geometry);
             return f;
           }) : [];
-          return items.find(candidate => isCadastralGeometry(candidate?.geometry)) || null;
+          return items.find(matchesFeature) || null;
         };
         if (exactApn && exactApn !== cleanApn) {
           feature = extractPolygon(await runApnWhere(`UPPER(${apnField}) = '${exactApn}'`));
@@ -386,10 +444,11 @@ const NATIVE_FETCH = typeof globalThis.fetch === 'function' ? globalThis.fetch :
 const PARCEL_CACHE_TTL_MS = 60 * 60 * 1000;
 const PARCEL_NEGATIVE_CACHE_TTL_MS = 5 * 60 * 1000;
 
-async function queryArcGisRest(lat, lng, state, apn = null, county = null) {
+async function queryArcGisRest(lat, lng, state, apn = null, county = null, options = {}) {
   const normalizedState = textValue(state)?.toUpperCase() || null;
+  const normalizedAddr = textValue(options?.expectedAddress)?.toUpperCase().replace(/\s+/g, ' ') || '';
   const allowCache = PARCEL_CACHE && globalThis.fetch === NATIVE_FETCH;
-  const cacheKey = allowCache ? `${normalizedState || ''}|${String(county || '').trim().toUpperCase()}|${Number.isFinite(lat) ? lat.toFixed(5) : ''}|${Number.isFinite(lng) ? lng.toFixed(5) : ''}|${apn || ''}` : null;
+  const cacheKey = allowCache ? `${normalizedState || ''}|${String(county || '').trim().toUpperCase()}|${Number.isFinite(lat) ? lat.toFixed(5) : ''}|${Number.isFinite(lng) ? lng.toFixed(5) : ''}|${apn || ''}${normalizedAddr ? `|${normalizedAddr}` : ''}` : null;
   if (cacheKey && PARCEL_CACHE.has(cacheKey)) {
     const cached = PARCEL_CACHE.get(cacheKey);
     const ttl = cached?.error ? PARCEL_NEGATIVE_CACHE_TTL_MS : PARCEL_CACHE_TTL_MS;
@@ -424,7 +483,7 @@ async function queryArcGisRest(lat, lng, state, apn = null, county = null) {
       continue;
     }
     try {
-      const result = await querySingleArcGisEndpoint(serviceInfo, lat, lng, apn, county, hasCoords);
+      const result = await querySingleArcGisEndpoint(serviceInfo, lat, lng, apn, county, hasCoords, options);
       if (cacheKey && PARCEL_CACHE && result) {
         if (PARCEL_CACHE.size >= 400) {
           const oldest = PARCEL_CACHE.keys().next().value;
@@ -514,7 +573,26 @@ async function handleParcelBoundary(req, res) {
       throw new ParcelBoundaryError(422, 'STATE_REQUIRED', 'State is required for parcel geometry lookup.');
     }
 
-    const parcelFeature = await queryArcGisRest(lat, lng, state, apn, county);
+    if (lat !== null && lng !== null) {
+      const boundsCheck = isCoordInStateBounds(lat, lng, state);
+      if (!boundsCheck.ok) {
+        throw new ParcelBoundaryError(
+          422,
+          'COORDINATES_OUT_OF_STATE_BOUNDS',
+          'Coordinates fall outside the declared state boundaries for parcel geometry lookup.'
+        );
+      }
+    }
+
+    const expectedAddress = textValue(listing?.address ?? params.address);
+    const parcelFeature = await queryArcGisRest(
+      lat,
+      lng,
+      state,
+      apn,
+      county,
+      expectedAddress ? { expectedAddress } : {}
+    );
     return res.json(parcelFeature);
   } catch (error) {
     return sendError(res, error);

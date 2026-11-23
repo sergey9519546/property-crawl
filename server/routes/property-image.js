@@ -1,5 +1,6 @@
 'use strict';
 
+const crypto = require('node:crypto');
 const db = require('../db/client');
 const { inspectSourceRecordUrl } = require('../scrapers/source-policy');
 const { inspectPublisherPhoto } = require('../scrapers/media-policy');
@@ -7,6 +8,14 @@ const { lookupPanoramax } = require('../media/panoramax');
 const { lookupMapillary } = require('../media/mapillary');
 const { createProviderCache } = require('../media/provider-cache');
 const { isUsStateOrTerritoryCode } = require('../state-codes');
+const { isCoordInStateBounds, isConusCoord } = require('../geo/state-bounds');
+const {
+  exactCensusGeocode,
+  geocodeExactAddress,
+  normalizeAddressToken,
+  normalizeRouteName,
+} = require('../enrichment/geocoder');
+const { distanceMeters, bearingDegrees } = require('../media/camera-geometry');
 
 const GOOGLE_MAPS_HOST = 'maps.googleapis.com';
 const GOOGLE_GEOCODING_PATH = '/maps/api/geocode/json';
@@ -83,6 +92,13 @@ class ProviderCircuit {
   }
 }
 
+function timingSafeEqualString(left, right) {
+  if (typeof left !== 'string' || typeof right !== 'string' || !left || !right) return false;
+  const a = crypto.createHash('sha256').update(left).digest();
+  const b = crypto.createHash('sha256').update(right).digest();
+  return crypto.timingSafeEqual(a, b);
+}
+
 class FixedWindowRateLimiter {
   constructor({ maxRequests = 30, windowMs = 60_000, now = Date.now, trustedProxyCount = 0 } = {}) {
     this.maxRequests = clampInteger(maxRequests, 1, 120, 30);
@@ -106,9 +122,22 @@ class FixedWindowRateLimiter {
     }, this.windowMs).unref();
   }
 
-  // Best-effort client IP. Without a trusted proxy count we never trust
-  // caller-controlled X-Forwarded-For and use the direct socket address.
-  static clientIp(req, trustedProxyCount = 0) {
+  // Best-effort client IP. Without a trusted edge secret or trusted proxy count,
+  // never trust caller-controlled forwarding headers and use the direct socket address.
+  static sanitizeClientIp(raw) {
+    if (typeof raw !== 'string') return null;
+    const candidate = raw.trim();
+    if (!candidate || candidate.length > 64 || /[\s,;\\]/.test(candidate)) return null;
+    return candidate;
+  }
+
+  static clientIp(req, trustedProxyCount = 0, trustedEdgeSecret = null) {
+    const expectedSecret = typeof trustedEdgeSecret === 'string' ? trustedEdgeSecret.trim() : '';
+    const providedSecret = headerValue(req?.headers, 'x-edge-secret');
+    if (expectedSecret && providedSecret && timingSafeEqualString(providedSecret, expectedSecret)) {
+      const forwardedClientIp = FixedWindowRateLimiter.sanitizeClientIp(headerValue(req?.headers, 'x-pp-client-ip'));
+      if (forwardedClientIp) return forwardedClientIp;
+    }
     const count = Math.max(0, Math.floor(Number(trustedProxyCount) || 0));
     if (count > 0) {
       const forwarded = String(req?.headers?.['x-forwarded-for'] || '')
@@ -140,7 +169,7 @@ class FixedWindowRateLimiter {
 
 class BoundedConcurrencyGate {
   constructor({ concurrency = 3, maxQueue = 20 } = {}) {
-    this.concurrency = clampInteger(concurrency, 1, 4, 3);
+    this.concurrency = clampInteger(concurrency, 1, 8, 3);
     this.maxQueue = clampInteger(maxQueue, 0, 100, 20);
     this.active = 0;
     this.queue = [];
@@ -284,9 +313,9 @@ function hasSourceIdentifiedArchive(listing) {
 }
 
 function validateListingForStreetView(listing, mode = 'metadata') {
-  // A requested interactive tour complements publisher photos. Automatic
-  // image fallback still prefers those photos and avoids unnecessary calls.
-  if (mode !== 'walkthrough' && mode !== 'alternatives' && hasUsablePublisherPhoto(listing)) {
+  // Interactive tours, community alternatives, and aerial ortho view complement
+  // publisher photos; automatic street-view image fallback skips when a photo exists.
+  if (mode !== 'walkthrough' && mode !== 'alternatives' && mode !== 'aerial' && hasUsablePublisherPhoto(listing)) {
     throw new PropertyImageError(409, 'publisher_photo_available', 'The publisher already supplies a usable property photo.');
   }
   const liveObserved=hasSourceObservedProvenance(listing),archiveIdentified=hasSourceIdentifiedArchive(listing);
@@ -322,37 +351,15 @@ function sourceCoordinates(listing) {
   const lat = validCoordinate(listing?.lat, -90, 90);
   const lng = validCoordinate(listing?.lng, -180, 180);
   if (lat === null || lng === null || (lat === 0 && lng === 0)) return null;
+  const state = safeText(listing?.state, 16)?.toUpperCase();
+  if (state && !isCoordInStateBounds(lat, lng, state).ok) return null;
   return {
     lat,
     lng,
     basis: 'source_coordinates',
+    precision: 'source_observed',
     resolution: null,
   };
-}
-
-const ROUTE_TOKEN_ALIASES = Object.freeze({
-  north: 'n', south: 's', east: 'e', west: 'w',
-  northeast: 'ne', northwest: 'nw', southeast: 'se', southwest: 'sw',
-  street: 'st', avenue: 'ave', boulevard: 'blvd', road: 'rd', drive: 'dr',
-  lane: 'ln', court: 'ct', circle: 'cir', terrace: 'ter', place: 'pl',
-  parkway: 'pkwy', highway: 'hwy', trail: 'trl',
-});
-
-function normalizeAddressToken(value) {
-  return String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-}
-
-function normalizeRouteName(value) {
-  return String(value || '')
-    .toLowerCase()
-    .replace(/\b(?:apartment|apt|unit|suite|ste)\b.*$/i, '')
-    .replace(/\s+#\s*\S+.*$/i, '')
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((token) => ROUTE_TOKEN_ALIASES[token] || token)
-    .join(' ');
 }
 
 function sourceObservedAddress(listing) {
@@ -399,31 +406,6 @@ function sourceObservedAddress(listing) {
     state,
     zip5: zip.slice(0, 5),
   };
-}
-
-function degreesToRadians(value) {
-  return value * Math.PI / 180;
-}
-
-function distanceMeters(lat1, lng1, lat2, lng2) {
-  const earthRadiusMeters = 6_371_008.8;
-  const deltaLat = degreesToRadians(lat2 - lat1);
-  const deltaLng = degreesToRadians(lng2 - lng1);
-  const startLat = degreesToRadians(lat1);
-  const endLat = degreesToRadians(lat2);
-  const haversine = Math.sin(deltaLat / 2) ** 2
-    + Math.cos(startLat) * Math.cos(endLat) * Math.sin(deltaLng / 2) ** 2;
-  return earthRadiusMeters * 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
-}
-
-function bearingDegrees(fromLat, fromLng, toLat, toLng) {
-  const startLat = degreesToRadians(fromLat);
-  const endLat = degreesToRadians(toLat);
-  const deltaLng = degreesToRadians(toLng - fromLng);
-  const y = Math.sin(deltaLng) * Math.cos(endLat);
-  const x = Math.cos(startLat) * Math.sin(endLat)
-    - Math.sin(startLat) * Math.cos(endLat) * Math.cos(deltaLng);
-  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
 }
 
 function resolveGeocodingConfig(env) {
@@ -642,119 +624,38 @@ async function resolveEphemeralCoordinates({ fetchImpl, config, listing, circuit
   return {
     ...resolved,
     basis: 'source_observed_address_rooftop_geocode',
+    precision: 'rooftop',
     resolution: {
       origin: 'google_geocoding_ephemeral',
       locationType: 'ROOFTOP',
+      precision: 'rooftop',
       partialMatch: false,
       persisted: false,
     },
   };
 }
 
-function exactCensusGeocode(match, expected) {
-  if (!match || typeof match !== 'object') return null;
-  const matchedAddress = safeText(match.matchedAddress, 256);
-  const numberMatch = matchedAddress?.match(/^\s*(\d+[A-Za-z]?(?:-[A-Za-z0-9]+)?)\b/);
-  if (!numberMatch) return null;
-  const returnedStreetNumber = normalizeAddressToken(numberMatch[1]);
-  const comps = match.addressComponents && typeof match.addressComponents === 'object' ? match.addressComponents : {};
-  const componentStreet = [comps.preDirection, comps.streetName, comps.suffixType, comps.postDirection].filter(Boolean).join(' ');
-  const matchedStreet = matchedAddress.split(',')[0].replace(/^\s*\d+[A-Za-z]?(?:-[A-Za-z0-9]+)?\s+/, '');
-  const returnedRoutes = [componentStreet, matchedStreet].map(normalizeRouteName).filter(Boolean);
-  const returnedState = String(comps.state || '').trim().toUpperCase();
-  const returnedZip5 = String(comps.zip || '').trim().slice(0, 5);
-  if (returnedStreetNumber !== expected.streetNumber
-      || !returnedRoutes.includes(expected.route)
-      || returnedState !== expected.state
-      || returnedZip5 !== expected.zip5) {
-    return null;
-  }
-  const lat = validCoordinate(match?.coordinates?.y, -90, 90);
-  const lng = validCoordinate(match?.coordinates?.x, -180, 180);
-  if (lat === null || lng === null || (lat === 0 && lng === 0)) return null;
-  return { lat, lng };
-}
-
 async function resolveCensusCoordinates({ fetchImpl, observedAddress, timeoutMs = 5_000 }) {
   if (!observedAddress || typeof fetchImpl !== 'function') return null;
-  const url = new URL('https://geocoding.geo.census.gov/geocoder/locations/address');
-  url.search = new URLSearchParams({
-    street: observedAddress.street,
-    city: observedAddress.city,
-    state: observedAddress.state,
-    zip: observedAddress.zip5,
-    benchmark: 'Public_AR_Current',
-    format: 'json',
-  }).toString();
-  try {
-    const response = await fetchWithTimeout(
-      fetchImpl,
-      url,
-      { method: 'GET', redirect: 'error', headers: { Accept: 'application/json' } },
-      timeoutMs
-    );
-    if (!response || !response.ok) return null;
-    const payload = JSON.parse(await readBoundedText(response, MAX_METADATA_BYTES));
-    const matches = Array.isArray(payload?.result?.addressMatches) ? payload.result.addressMatches : [];
-    const verified = matches.map((m) => exactCensusGeocode(m, observedAddress)).filter(Boolean);
-    if (verified.length !== 1) return null;
-    return {
-      ...verified[0],
-      basis: 'source_observed_address_census_geocode',
-      resolution: {
-        origin: 'us_census_geocoder_ephemeral',
-        locationType: 'RANGE_INTERPOLATED',
-        partialMatch: false,
-        persisted: false,
-      },
-    };
-  } catch (_) {
-    return null;
-  }
-}
-
-async function resolveArcgisCoordinates({ fetchImpl, observedAddress, timeoutMs = 5_000 }) {
-  if (!observedAddress?.query || typeof fetchImpl !== 'function') return null;
-  const url = new URL('https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates');
-  url.search = new URLSearchParams({
-    SingleLine: observedAddress.query,
-    countryCode: 'USA',
-    maxLocations: '1',
-    outFields: 'Match_addr,Addr_type,StAddr,Postal,RegionAbbr',
-    f: 'pjson',
-  }).toString();
-  try {
-    const response = await fetchWithTimeout(
-      fetchImpl,
-      url,
-      { method: 'GET', redirect: 'error', headers: { Accept: 'application/json' } },
-      timeoutMs
-    );
-    if (!response || !response.ok) return null;
-    const payload = JSON.parse(await readBoundedText(response, MAX_METADATA_BYTES));
-    const candidate = Array.isArray(payload?.candidates) ? payload.candidates[0] : null;
-    if (!candidate || Number(candidate.score) < 88) return null;
-    const addrType = String(candidate?.attributes?.Addr_type || '');
-    if (!['PointAddress', 'StreetAddress', 'Subaddress', 'Parcel'].includes(addrType)) return null;
-    const lat = validCoordinate(candidate?.location?.y, -90, 90);
-    const lng = validCoordinate(candidate?.location?.x, -180, 180);
-    if (lat === null || lng === null || (lat === 0 && lng === 0)) return null;
-    const returnedState = String(candidate?.attributes?.RegionAbbr || '').trim().toUpperCase();
-    if (observedAddress.state && returnedState && returnedState !== observedAddress.state) return null;
-    return {
-      lat,
-      lng,
-      basis: 'source_observed_address_arcgis_geocode',
-      resolution: {
-        origin: 'arcgis_world_geocoder_ephemeral',
-        locationType: addrType,
-        partialMatch: false,
-        persisted: false,
-      },
-    };
-  } catch (_) {
-    return null;
-  }
+  const hit = await geocodeExactAddress(observedAddress, {
+    fetchImpl,
+    timeoutMs,
+  });
+  if (!hit) return null;
+  return {
+    lat: hit.lat,
+    lng: hit.lng,
+    matchedAddress: hit.matchedAddress,
+    basis: 'source_observed_address_census_geocode',
+    precision: hit.precision || 'street_interpolated',
+    resolution: {
+      origin: 'us_census_geocoder_ephemeral',
+      locationType: 'RANGE_INTERPOLATED',
+      precision: hit.precision || 'street_interpolated',
+      partialMatch: false,
+      persisted: false,
+    },
+  };
 }
 
 function classifyMetadataStatus(status, circuit) {
@@ -1028,9 +929,14 @@ function createPropertyImageService(options = {}) {
   });
   const censusFallbackEnabled = env.PROPERTY_IMAGE_CENSUS_GEOCODER_FALLBACK === '1';
   const trustedProxyCount = Math.max(0, Math.floor(Number(env.TRUSTED_PROXY_COUNT) || 0));
+  const edgeSharedSecret = safeText(env.EDGE_SHARED_SECRET, 256) || null;
   const gate = options.gate || new BoundedConcurrencyGate({
     concurrency: env.PROPERTY_IMAGE_CONCURRENCY,
     maxQueue: env.PROPERTY_IMAGE_MAX_QUEUE,
+  });
+  const aerialPublicGate = options.aerialPublicGate || new BoundedConcurrencyGate({
+    concurrency: env.AERIAL_PUBLIC_CONCURRENCY ?? 4,
+    maxQueue: env.AERIAL_PUBLIC_MAX_QUEUE ?? 30,
   });
   const panoramaxCache = options.panoramaxCache || createProviderCache({
     ttlMs: env.PANORAMAX_CACHE_TTL_MS,
@@ -1152,6 +1058,23 @@ function createPropertyImageService(options = {}) {
     return null;
   }
 
+  function projectToWebMercator(lat, lng) {
+    const EARTH_RADIUS = 6378137.0;
+    const clampedLat = Math.max(-85.05112878, Math.min(85.05112878, lat));
+    const latRad = (clampedLat * Math.PI) / 180;
+    const lngRad = (lng * Math.PI) / 180;
+    const x = EARTH_RADIUS * lngRad;
+    const y = EARTH_RADIUS * Math.log(Math.tan(Math.PI / 4 + latRad / 2));
+    return { x, y, cosLat: Math.max(0.05, Math.cos(latRad)) };
+  }
+
+  function buildAerialWebMercatorBbox(lat, lng, widthMeters = 150, heightMeters = 112.5) {
+    const { x, y, cosLat } = projectToWebMercator(lat, lng);
+    const halfX = (widthMeters / 2) / cosLat;
+    const halfY = (heightMeters / 2) / cosLat;
+    return [x - halfX, y - halfY, x + halfX, y + halfY].map((n) => n.toFixed(2)).join(',');
+  }
+
   async function resolve(req) {
     try {
       if (String(req?.method || '').toUpperCase() !== 'GET') {
@@ -1169,77 +1092,93 @@ function createPropertyImageService(options = {}) {
         throw new PropertyImageError(400, 'invalid_mode', 'mode must be metadata, walkthrough, image, alternatives, or aerial.');
       }
 
-      limiter.consume(FixedWindowRateLimiter.clientIp(req, trustedProxyCount));
+      limiter.consume(FixedWindowRateLimiter.clientIp(req, trustedProxyCount, edgeSharedSecret));
       const listing = await database.getListingById(listingId);
       if (!listing) throw new PropertyImageError(404, 'listing_not_found', 'Listing not found.');
 
       if (mode === 'aerial') {
-        const directLat = validCoordinate(listing?.lat, -90, 90);
-        const directLng = validCoordinate(listing?.lng, -180, 180);
-        let aerialCoords = sourceCoordinates(listing)
-          || (directLat !== null && directLng !== null && !(directLat === 0 && directLng === 0)
-            ? { lat: directLat, lng: directLng, basis: 'listing_coordinates' }
-            : null);
+        validateListingForStreetView(listing, 'aerial');
+        const listingState = safeText(listing?.state, 16)?.toUpperCase() || null;
+        let aerialCoords = sourceCoordinates(listing);
         if (!aerialCoords) {
-          const observedAddress = sourceObservedAddress(listing) || (safeText(listing?.address, 256)
-            ? {
-                query: [listing.address, listing.city, listing.state, listing.zip].filter(Boolean).join(', '),
-                street: String(listing.address || '').split(',')[0].trim(),
-                city: String(listing.city || '').trim(),
-                state: String(listing.state || '').trim().toUpperCase(),
-                zip5: String(listing.zip || '').trim().slice(0, 5),
-              }
-            : null);
+          const observedAddress = sourceObservedAddress(listing);
           if (observedAddress) {
             const timeoutMs = clampInteger(env.GOOGLE_STREETVIEW_TIMEOUT_MS, 500, 10_000, 5_000);
-            aerialCoords = await resolveCensusCoordinates({ fetchImpl, observedAddress, timeoutMs })
-              || await resolveArcgisCoordinates({ fetchImpl, observedAddress, timeoutMs });
+            aerialCoords = await resolveCensusCoordinates({ fetchImpl, observedAddress, timeoutMs });
           }
+        }
+        if (aerialCoords && listingState && !isCoordInStateBounds(aerialCoords.lat, aerialCoords.lng, listingState).ok) {
+          aerialCoords = null;
         }
         if (!aerialCoords) {
-          throw new PropertyImageError(422, 'exact_location_unavailable', 'Aerial parcel imagery requires verified coordinates or a complete street address.');
+          throw new PropertyImageError(422, 'exact_location_unavailable', 'Aerial parcel imagery requires verified in-state coordinates or a complete source-observed street address with ZIP.');
         }
-        return await gate.run(async () => {
-          const deltaLng = 0.0008;
-          const deltaLat = 0.0006;
-          const exportUrl = new URL('https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export');
-          exportUrl.search = new URLSearchParams({
-            bbox: `${(aerialCoords.lng - deltaLng).toFixed(6)},${(aerialCoords.lat - deltaLat).toFixed(6)},${(aerialCoords.lng + deltaLng).toFixed(6)},${(aerialCoords.lat + deltaLat).toFixed(6)}`,
-            bboxSR: '4326',
-            imageSR: '3857',
-            size: '640,480',
-            format: 'jpg',
-            f: 'image',
-          }).toString();
+        return await aerialPublicGate.run(async () => {
+          const bbox = buildAerialWebMercatorBbox(aerialCoords.lat, aerialCoords.lng, 150, 112.5);
           const timeoutMs = clampInteger(env.GOOGLE_STREETVIEW_TIMEOUT_MS, 500, 10_000, 6_500);
-          const aerialRes = await fetchWithTimeout(
-            fetchImpl,
-            exportUrl,
-            { method: 'GET', redirect: 'error', headers: { Accept: 'image/jpeg,image/png' } },
-            timeoutMs
-          );
-          if (!aerialRes || !aerialRes.ok) {
-            throw new PropertyImageError(503, 'aerial_unavailable', 'Aerial satellite imagery is temporarily unavailable.');
+          const providers = [
+            {
+              endpoint: 'https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/export',
+              provider: 'USGS National Map',
+              attribution: 'U.S. Geological Survey (The National Map)',
+            },
+            ...(isConusCoord(aerialCoords.lat, aerialCoords.lng)
+              ? [{
+                  endpoint: 'https://gis.apfo.usda.gov/arcgis/rest/services/NAIP/USDA_CONUS_PRIME/ImageServer/exportImage',
+                  provider: 'USDA NAIP',
+                  attribution: 'USDA Farm Production and Conservation (NAIP Public Domain)',
+                }]
+              : []),
+          ];
+          let sawBadTile = false;
+          for (const source of providers) {
+            const exportUrl = new URL(source.endpoint);
+            exportUrl.search = new URLSearchParams({
+              bbox,
+              bboxSR: '3857',
+              imageSR: '3857',
+              size: '640,480',
+              format: 'jpg',
+              f: 'image',
+            }).toString();
+            try {
+              const aerialRes = await fetchWithTimeout(
+                fetchImpl,
+                exportUrl,
+                { method: 'GET', redirect: 'error', headers: { Accept: 'image/jpeg,image/png' } },
+                timeoutMs
+              );
+              if (!aerialRes || !aerialRes.ok) continue;
+              const buffer = await readBoundedBytes(aerialRes, MAX_IMAGE_BYTES, timeoutMs);
+              if (buffer.length < 2048 || (!imageMagicMatches('image/jpeg', buffer) && !imageMagicMatches('image/png', buffer))) {
+                sawBadTile = true;
+                continue;
+              }
+              const contentType = imageMagicMatches('image/png', buffer) ? 'image/png' : 'image/jpeg';
+              const ext = contentType === 'image/png' ? 'png' : 'jpg';
+              return {
+                status: 200,
+                headers: {
+                  ...baseHeaders(),
+                  'Cache-Control': 'public, max-age=604800, stale-while-revalidate=2592000',
+                  'Content-Type': contentType,
+                  'Content-Length': String(buffer.length),
+                  'Content-Disposition': `inline; filename="aerial-${listingId}.${ext}"`,
+                  'X-Property-Image-Provider': source.provider,
+                  'X-Property-Image-Attribution': source.attribution,
+                  'X-Property-Image-Coordinate-Basis': aerialCoords.basis,
+                  'X-Property-Image-Coordinate-Precision': aerialCoords.precision || (aerialCoords.basis === 'source_coordinates' ? 'source_observed' : 'street_interpolated'),
+                },
+                body: buffer,
+              };
+            } catch (_) {
+              // Cascade to next public-domain aerial source on timeout or upstream failure.
+            }
           }
-          const buffer = await readBoundedBytes(aerialRes, MAX_IMAGE_BYTES, timeoutMs);
-          if (buffer.length < 100 || (!imageMagicMatches('image/jpeg', buffer) && !imageMagicMatches('image/png', buffer))) {
+          if (sawBadTile) {
             throw new PropertyImageError(502, 'upstream_non_image', 'Aerial imagery service did not return a valid image.');
           }
-          const contentType = imageMagicMatches('image/png', buffer) ? 'image/png' : 'image/jpeg';
-          const ext = contentType === 'image/png' ? 'png' : 'jpg';
-          return {
-            status: 200,
-            headers: {
-              ...baseHeaders(),
-              'Cache-Control': 'public, max-age=86400',
-              'Content-Type': contentType,
-              'Content-Length': String(buffer.length),
-              'Content-Disposition': `inline; filename="aerial-${listingId}.${ext}"`,
-              'X-Property-Image-Provider': 'Esri World Imagery',
-              'X-Property-Image-Attribution': 'Esri, Maxar, Earthstar Geographics, USDA NAIP',
-            },
-            body: buffer,
-          };
+          throw new PropertyImageError(503, 'aerial_unavailable', 'Public-domain aerial imagery is temporarily unavailable.');
         });
       }
       const geocodingOutageCodes = new Set([
@@ -1268,8 +1207,6 @@ function createPropertyImageService(options = {}) {
             }
             const census = await resolveCensusCoordinates({ fetchImpl, observedAddress, timeoutMs: geocodeConfig.timeoutMs });
             if (census) return census;
-            const arcgis = await resolveArcgisCoordinates({ fetchImpl, observedAddress, timeoutMs: geocodeConfig.timeoutMs });
-            if (arcgis) return arcgis;
             throw error;
           }
         }
@@ -1277,8 +1214,6 @@ function createPropertyImageService(options = {}) {
           const timeoutMs = clampInteger(env.GOOGLE_STREETVIEW_TIMEOUT_MS, 500, 10_000, 5_000);
           const census = await resolveCensusCoordinates({ fetchImpl, observedAddress, timeoutMs });
           if (census) return census;
-          const arcgis = await resolveArcgisCoordinates({ fetchImpl, observedAddress, timeoutMs });
-          if (arcgis) return arcgis;
         }
         return resolveGeocodingConfig(env);
       }
@@ -1514,7 +1449,7 @@ function createPropertyImageService(options = {}) {
     }
   }
 
-  return { resolve, circuit, geocodingCircuit, limiter, gate, panoramaInFlight, panoramaxCache, mapillaryCache };
+  return { resolve, circuit, geocodingCircuit, limiter, gate, aerialPublicGate, panoramaInFlight, panoramaxCache, mapillaryCache };
 }
 
 function writeResult(res, result) {
@@ -1547,7 +1482,6 @@ module.exports.exactRooftopGeocode = exactRooftopGeocode;
 module.exports.hasSourceObservedProvenance = hasSourceObservedProvenance;
 module.exports.hasSourceIdentifiedArchive = hasSourceIdentifiedArchive;
 module.exports.hasUsablePublisherPhoto = hasUsablePublisherPhoto;
-module.exports.resolveArcgisCoordinates = resolveArcgisCoordinates;
 module.exports.resolveCensusCoordinates = resolveCensusCoordinates;
 module.exports.resolveEphemeralCoordinates = resolveEphemeralCoordinates;
 module.exports.resolveRequest = defaultService.resolve;

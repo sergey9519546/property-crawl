@@ -93,6 +93,7 @@ export function CatchReveal() {
 
   const next = () => {
     setRevealed(false);
+    setShowAerial(false);
     setIndex((i) => (listings.length ? (i + 1) % listings.length : 0));
   };
 

@@ -1,5 +1,12 @@
 'use strict';
+const {
+  evaluateStreetCandidate,
+  rankStreetCandidates,
+  bearingDegrees,
+} = require('./camera-geometry');
+
 const ORIGIN='https://api.panoramax.xyz',MAX_BYTES=1_000_000,DISPLAY_LICENSES=new Set(['CC-BY-SA-4.0','ETALAB-2.0']);
+const UUID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function strictNumber(v,min,max,name){if(typeof v!=='number'||!Number.isFinite(v)||v<min||v>max)throw new TypeError('Panoramax '+name+' must be a finite number');return v;}
 function integer(v,d,max,name){if(v==null)return d;if(typeof v!=='number'||!Number.isSafeInteger(v)||v<1||v>max)throw new RangeError('Panoramax '+name+' must be between 1 and '+max);return v;}
 function id(v){if(typeof v!=='string')return null;v=v.trim();return v&&v.length<=200?v:null;}
@@ -19,6 +26,7 @@ function licenseOf(i){
   return{id:licenseId,url,displayApproved:licenseId?DISPLAY_LICENSES.has(licenseId.toUpperCase()):false};
 }
 function pageOf(i){if(!Array.isArray(i?.links))return null;for(const rel of ['via','alternate','self']){const u=httpsUrl(i.links.find(x=>x?.rel===rel)?.href);if(u)return u;}return null;}
+function thumbUrlFor(pictureId){return UUID_RE.test(pictureId)?`${ORIGIN}/api/pictures/${pictureId}/thumb.jpg`:null;}
 function isPanorama(p){
   const projection=String(p?.['Xmp.GPano.ProjectionType']??p?.['xmp:gpano:projection_type']??p?.projection_type??'').trim().toLowerCase();
   return projection==='equirectangular'||optionalNumber(p?.field_of_view??p?.['view:fov'])===360;
@@ -36,7 +44,34 @@ function normalize(i,target,radius){
   const rawProducer=typeof p.producer==='string'?p.producer:typeof p['geovisio:producer']==='string'?p['geovisio:producer']:providerNames.join(', ');
   const producer=rawProducer?.trim().slice(0,200)||null;
   const capturedAt=typeof p.datetime==='string'&&Number.isFinite(Date.parse(p.datetime))?new Date(p.datetime).toISOString():null;
-  return{provider:'panoramax',pictureId,collectionId,location:{lat,lng},distanceMeters:Number(meters.toFixed(1)),capturedAt,azimuth:optionalNumber(p['view:azimuth']),mediaType:isPanorama(p)?'panorama_360':'directional_sequence',license,attribution:{provider:'Panoramax',producer},sourcePage:pageOf(i)};
+  const is360=isPanorama(p);
+  const azimuth=optionalNumber(p['view:azimuth']??p['view:compass_angle']??p.azimuth??p.compass_angle);
+  const geomEval=evaluateStreetCandidate({lat,lng,is360,azimuth},target,{radiusMeters:radius});
+  if(!is360&&azimuth!==null&&!geomEval.ok){
+    // Reject explicitly oriented flat shots pointing away or outside directional range
+    if(geomEval.reason==='directional_facing_away'||geomEval.reason==='directional_too_far'){
+      return null;
+    }
+  }
+  const targetHeading=geomEval.targetHeading??(meters>=0.5?Math.round(bearingDegrees(lat,lng,target.lat,target.lng)):null);
+  return{
+    provider:'panoramax',
+    pictureId,
+    collectionId,
+    location:{lat,lng},
+    distanceMeters:Number(meters.toFixed(1)),
+    capturedAt,
+    azimuth,
+    targetHeading,
+    angularErrorDeg:geomEval.angularErrorDeg,
+    orientationVerified:geomEval.ok,
+    is360,
+    mediaType:is360?'panorama_360':'directional_sequence',
+    license,
+    attribution:{provider:'Panoramax',producer},
+    sourcePage:pageOf(i),
+    thumbUrl:thumbUrlFor(pictureId),
+  };
 }
 async function readJson(response,max){
   const type=response.headers?.get?.('content-type')||'',length=Number(response.headers?.get?.('content-length'));
@@ -67,8 +102,27 @@ async function lookupPanoramax(location,options={}){
       items.push(...payload.features.slice(0,limit));if(items.length>=limit)break;
     }
     const seen=new Set(),candidates=items.map(i=>normalize(i,target,radius)).filter(c=>c&&!seen.has(c.pictureId)&&seen.add(c.pictureId)).sort((a,b)=>a.distanceMeters-b.distanceMeters);
-    const panoramicMetadata=candidates.filter(c=>c.mediaType==='panorama_360'),panoramas=panoramicMetadata.filter(c=>c.license.displayApproved),directionalSequences=candidates.filter(c=>c.mediaType==='directional_sequence');
-    const result={available:panoramas.length>0,candidate:panoramas[0]||null,panoramas,panoramicMetadata,directionalSequences,reason:panoramas.length?null:'No explicitly identified, display-licensed 360° Panoramax imagery is available within the configured radius.',queriedRadiusMeters:radius};
+    const panoramicMetadata=candidates.filter(c=>c.mediaType==='panorama_360');
+    const panoramas=panoramicMetadata.filter(c=>c.license.displayApproved);
+    const directionalSequences=candidates.filter(c=>c.mediaType==='directional_sequence');
+    const rankedDirectional=rankStreetCandidates(
+      directionalSequences.filter(c=>c.license.displayApproved).map(c=>({...c,lat:c.location.lat,lng:c.location.lng})),
+      target,
+      { radiusMeters: radius }
+    ).map(({lat:_lat,lng:_lng,...rest})=>rest);
+    const bestDirectional=rankedDirectional[0]||null;
+    const includeDirectional=options.includeDirectionalCandidate===true;
+    const chosenCandidate=panoramas[0]||(includeDirectional?bestDirectional:null);
+    const result={
+      available:Boolean(chosenCandidate),
+      candidate:chosenCandidate,
+      panoramas,
+      panoramicMetadata,
+      directionalSequences,
+      bestDirectional,
+      reason:chosenCandidate?null:'No explicitly identified, display-licensed 360° Panoramax imagery is available within the configured radius.',
+      queriedRadiusMeters:radius,
+    };
     if (cacheable) {
       const key = cache.buildKey({ provider: 'panoramax', lat: target.lat, lng: target.lng, radius });
       cache.set(key, result);
