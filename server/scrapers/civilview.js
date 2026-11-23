@@ -22,7 +22,7 @@ const { assertFetchableUrl } = require('./http');
 const { normalizeOcrText } = require('../ai/notice-parser');
 const { extractWithScrapling, isScraplingEnabled } = require('./scrapling-bridge');
 const { ALL_COUNTY_MAP, NATIONWIDE_COUNTY_MAP } = require('./adapters/civilview');
-const { attachParcelIdentity } = require('./normalization');
+const { attachParcelIdentity, normalizeOccupancy } = require('./normalization');
 
 const DETAIL_PATH = '/Sales/SaleDetails';
 const DEFAULT_TIMEOUT_MS = 30000;
@@ -1003,6 +1003,7 @@ class CivilViewScraper extends BaseScraper {
         }
       }
     }
+    occupancy = normalizeOccupancy(occupancy);
     const statusHistory = parseStatusHistory(html);
     const propertyId = summary.propertyId || new URL(summary.detailUrl).searchParams.get('PropertyId');
     const sourceObservedAt = new Date(this.now()).toISOString();

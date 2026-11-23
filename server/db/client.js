@@ -3987,7 +3987,7 @@ class DatabaseClient {
       console.warn('[DB] purgeStaleListings observation cleanup failed:', obsErr?.message || obsErr);
     }
 
-    if (observationsDeleted > 0) {
+    if (observationsDeleted > 0 && options.skipVacuum !== true && !budgetExceeded()) {
       try {
         await this.pool.query('VACUUM (ANALYZE) source_observations');
       } catch {

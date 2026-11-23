@@ -21,11 +21,17 @@ export const revalidate = 300;
 
 type ListingRecord = { id: string; saleDate?: string | null; status?: string | null; lifecycleStatus?: string | null };
 
-const CONCLUDED_SITEMAP_STATUSES = new Set(['sold', 'cancelled', 'canceled', 'withdrawn', 'removed', 'closed', 'archived', 'concluded']);
+const CONCLUDED_SITEMAP_STATUSES = new Set([
+  'sold', 'cancelled', 'canceled', 'withdrawn', 'removed', 'closed', 'archived', 'concluded',
+  'vacated', 'dismissed', 'redeemed', 'expired', 'completed', 'inactive',
+]);
 
 function isPastOrConcludedListing(record: ListingRecord, nowMs: number): boolean {
-  const status = String(record.lifecycleStatus ?? record.status ?? '').trim().toLowerCase();
-  if (status && CONCLUDED_SITEMAP_STATUSES.has(status)) return true;
+  const lifecycle = String(record.lifecycleStatus ?? '').trim().toLowerCase();
+  const status = String(record.status ?? '').trim().toLowerCase();
+  if ((lifecycle && CONCLUDED_SITEMAP_STATUSES.has(lifecycle)) || (status && CONCLUDED_SITEMAP_STATUSES.has(status))) {
+    return true;
+  }
   if (record.saleDate && /^\d{4}-\d{2}-\d{2}/.test(record.saleDate)) {
     const parsed = Date.parse(record.saleDate.slice(0, 10) + 'T23:59:59Z');
     if (Number.isFinite(parsed) && parsed < nowMs - 24 * 60 * 60 * 1000) {
@@ -114,6 +120,7 @@ async function buildSitemapEntries(): Promise<MetadataRoute.Sitemap> {
     { url: `${baseUrl}/listings`, lastModified: now, changeFrequency: 'hourly', priority: 0.9 },
     { url: `${baseUrl}/states`, lastModified: now, changeFrequency: 'daily', priority: 0.6 },
     { url: `${baseUrl}/sources`, lastModified: now, changeFrequency: 'weekly', priority: 0.7 },
+    { url: `${baseUrl}/pricing`, lastModified: now, changeFrequency: 'monthly', priority: 0.7 },
     { url: `${baseUrl}/activity`, lastModified: now, changeFrequency: 'weekly', priority: 0.5 },
     { url: `${baseUrl}/about`, lastModified: now, changeFrequency: 'monthly', priority: 0.5 },
     { url: `${baseUrl}/resources`, lastModified: now, changeFrequency: 'monthly', priority: 0.5 },

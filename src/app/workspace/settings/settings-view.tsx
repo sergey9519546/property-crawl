@@ -138,7 +138,7 @@ export function WorkspaceSettingsView() {
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ trigger: "workspace-settings" }),
+        body: JSON.stringify({ action: "next-slice", trigger: "workspace-settings" }),
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) {

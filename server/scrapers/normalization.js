@@ -15,6 +15,44 @@ function cleanText(value, placeholders = []) {
   return text;
 }
 
+function normalizeOccupancy(value) {
+  const text = cleanText(value, ['Unknown', 'N/A', 'NA', 'TBD', 'None']);
+  if (!text) return null;
+  const lowered = text.toLowerCase();
+  if (/(?:^|[^a-z])owner[- ]?occupied(?:$|[^a-z])/.test(lowered)) return 'Owner-Occupied';
+  if (/(?:^|[^a-z])(?:tenant[- ]?occupied|renter[- ]?occupied|rental|leased)(?:$|[^a-z])/.test(lowered)) return 'Tenant-Occupied';
+  if (/(?:^|[^a-z])(?:unoccupied|vacant)(?:$|[^a-z])/.test(lowered)) return 'Vacant';
+  if (/(?:^|[^a-z])occupied(?:$|[^a-z])/.test(lowered)) return 'Occupied';
+  return text;
+}
+
+function normalizeLifecycleStatus(value) {
+  const text = cleanText(value, ['Unknown', 'N/A', 'NA', 'None']);
+  if (!text) return null;
+  const lowered = text.toLowerCase();
+  if (/^auction\s+(?:begins|ends)\s*:/i.test(text) || /^(?:scheduled|upcoming|scheduled sale|notice of sale)$/i.test(lowered)) {
+    return 'Scheduled';
+  }
+  if (/^status\s*:\s*active\b/i.test(text) || /^active$/i.test(lowered)) {
+    return 'Active';
+  }
+  if (/^coming\s+soon$/i.test(lowered)) return 'Coming Soon';
+  if (/^adjourned\b/i.test(lowered)) return 'Adjourned';
+  if (/^sold\b/i.test(lowered)) return 'Sold';
+  if (/^cancel(?:l?ed)\b/i.test(lowered)) return 'Cancelled';
+  if (/^withdrawn\b/i.test(lowered)) return 'Withdrawn';
+  if (/^dismissed\b/i.test(lowered)) return 'Dismissed';
+  if (/^bankruptcy(?:\s+stay)?\b/i.test(lowered)) return 'Bankruptcy Stay';
+  if (/^stayed\b/i.test(lowered)) return 'Stayed';
+  if (/^vacated\b/i.test(lowered)) return 'Vacated';
+  if (/^redeemed\b/i.test(lowered)) return 'Redeemed';
+  if (/^postponed\b/i.test(lowered)) return 'Postponed';
+  if (/^closed\b/i.test(lowered)) return 'Closed';
+  if (/^expired\b/i.test(lowered)) return 'Expired';
+  if (/^concluded\b/i.test(lowered)) return 'Concluded';
+  return text;
+}
+
 function numberOrNull(value, options = {}) {
   if (value === null || value === undefined || value === '') return null;
   if (typeof value !== 'string' && typeof value !== 'number') return null;
@@ -428,14 +466,20 @@ function standardizeListingRecord(raw = {}, options = {}) {
   const sourceObservedAt = observationTimestamp(
     input.sourceObservedAt ?? input.observedAt ?? baseProvenance.observedAt ?? options.observedAt
   );
-  const lifecycleStatus = cleanText(input.lifecycleStatus);
+  const rawLifecycleStatus = cleanText(input.lifecycleStatus);
+  const lifecycleStatus = normalizeLifecycleStatus(rawLifecycleStatus);
   const transactionOutcome = cleanText(input.transactionOutcome);
   const hasDocuments = typeof input.hasDocuments === 'boolean' ? input.hasDocuments : deriveHasDocuments(input, baseProvenance);
+  const baseSourceFacts = asPlainObject(baseProvenance.sourceFacts);
+  const nextSourceFacts = (rawLifecycleStatus && lifecycleStatus && rawLifecycleStatus !== lifecycleStatus && !baseSourceFacts.rawLifecycleStatus)
+    ? { ...baseSourceFacts, rawLifecycleStatus }
+    : (Object.keys(baseSourceFacts).length > 0 ? baseSourceFacts : null);
   const provenance = {
     origin: 'live',
     observed: true,
     recordKind: 'source_record',
     ...baseProvenance,
+    ...(nextSourceFacts ? { sourceFacts: nextSourceFacts } : {}),
     observedAt: sourceObservedAt,
     ...(Object.keys(combinedDerived).length > 0 ? { derivedFields: combinedDerived } : {})
   };
@@ -519,7 +563,7 @@ function standardizeListingRecord(raw = {}, options = {}) {
     defendant: cleanText(input.defendant, ['—', 'Unknown']),
     judgment: numberOrNull(input.judgment, { min: 0 }),
     attorney: cleanText(input.attorney, ['—', 'Unknown']),
-    occupancy: cleanText(input.occupancy, ['Unknown']),
+    occupancy: normalizeOccupancy(input.occupancy),
     deposit: cleanText(input.deposit, ['Unknown']),
     photo,
     images: collectVerifiedImages({
@@ -566,6 +610,8 @@ module.exports = {
   computeTriage,
   mapDistressStage,
   normalizePropType,
+  normalizeOccupancy,
+  normalizeLifecycleStatus,
   collectVerifiedImages,
   deriveHasDocuments
 };

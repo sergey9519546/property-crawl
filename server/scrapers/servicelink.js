@@ -18,7 +18,7 @@ const SOURCE_KEY = 'servicelink';
 const PUBLISHER = 'ServiceLink Auction';
 const API_ORIGIN = 'https://www.servicelinkauction.com';
 const LISTINGS_PATH = '/api/listingsvc/v1/Listings';
-const DEFAULT_MAX_PAGES = (process.env.VERCEL === '1' || process.env.NOW_REGION) ? 5 : ((process.env.RENDER === 'true' || process.env.NODE_ENV === 'production') ? 40 : 1);
+const DEFAULT_MAX_PAGES = (process.env.VERCEL === '1' || process.env.NOW_REGION) ? 2 : ((process.env.RENDER === 'true' || process.env.NODE_ENV === 'production') ? 40 : 1);
 // Manual/canary sweeps may explicitly request a larger bounded segment. The
 // default remains one page; 100 pages caps one process run at 2,500 records at
 // the default page size and every page still observes crawl jitter.

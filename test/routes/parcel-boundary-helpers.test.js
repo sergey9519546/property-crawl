@@ -453,3 +453,24 @@ test('queryArcGisRest queries statewide CO/NC/NY/WI/CT/AR and enrolled county en
     global.fetch = originalFetch;
   }
 });
+
+
+test('resolveBoundaryEndpoints assigns bounded timeoutMs to OH statewide fallback and fails fast on abort', async () => {
+  const ohEndpoints = resolveBoundaryEndpoints('OH', 'Fairfield');
+  assert.equal(ohEndpoints.length, 1);
+  assert.equal(ohEndpoints[0].endpoint, ARCGIS_REGISTRY.OH.endpoint);
+  assert.equal(ohEndpoints[0].timeoutMs, 4000);
+
+  const originalFetch = global.fetch;
+  global.fetch = async () => {
+    throw Object.assign(new Error('The operation was aborted due to timeout'), { name: 'AbortError' });
+  };
+  try {
+    await assert.rejects(
+      () => queryArcGisRest(39.7137, -82.5993, 'OH', null, 'Fairfield'),
+      (err) => err && err.status === 502 && err.code === 'PARCEL_SOURCE_TIMEOUT',
+    );
+  } finally {
+    global.fetch = originalFetch;
+  }
+});

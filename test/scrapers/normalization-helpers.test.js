@@ -281,3 +281,44 @@ test('mapDistressStage: sheriff tax_deed / tax_sale program maps to tax_sale', (
   assert.equal(mapDistressStage('sheriff', '2026-12-01', 'tax_deed'), 'tax_sale');
   assert.equal(mapDistressStage('sheriff', '2026-12-01', 'Tax Sale'), 'tax_sale');
 });
+
+
+test('normalizeOccupancy and normalizeLifecycleStatus canonicalize values while preserving rawLifecycleStatus', () => {
+  const {
+    normalizeOccupancy,
+    normalizeLifecycleStatus,
+  } = require('../../server/scrapers/normalization');
+
+  assert.equal(normalizeOccupancy('OCCUPIED'), 'Occupied');
+  assert.equal(normalizeOccupancy('OWNER OCCUPIED'), 'Owner-Occupied');
+  assert.equal(normalizeOccupancy('tenant-occupied'), 'Tenant-Occupied');
+  assert.equal(normalizeOccupancy('UNOCCUPIED'), 'Vacant');
+  assert.equal(normalizeOccupancy('VACANT'), 'Vacant');
+  assert.equal(normalizeOccupancy('Unknown'), null);
+  assert.equal(normalizeOccupancy('  '), null);
+
+  assert.equal(normalizeLifecycleStatus('Auction Begins: 12/01/2026'), 'Scheduled');
+  assert.equal(normalizeLifecycleStatus('Auction Ends: 12/02/2026'), 'Scheduled');
+  assert.equal(normalizeLifecycleStatus('Status: Active Bidding'), 'Active');
+  assert.equal(normalizeLifecycleStatus('coming soon'), 'Coming Soon');
+  assert.equal(normalizeLifecycleStatus('Adjourned to 2026-12-15'), 'Adjourned');
+  assert.equal(normalizeLifecycleStatus('Sold'), 'Sold');
+  assert.equal(normalizeLifecycleStatus('Canceled'), 'Cancelled');
+  assert.equal(normalizeLifecycleStatus('Withdrawn'), 'Withdrawn');
+  assert.equal(normalizeLifecycleStatus('Dismissed'), 'Dismissed');
+  assert.equal(normalizeLifecycleStatus('Bankruptcy Stay'), 'Bankruptcy Stay');
+
+  const rec = standardizeListingRecord({
+    id: 'norm-occ-life-1',
+    source: 'sheriff',
+    state: 'OH',
+    address: '119 Union Street, Lancaster, 43130',
+    occupancy: 'OWNER OCCUPIED',
+    lifecycleStatus: 'Auction Begins: 12/01/2026',
+    sourceUrl: 'https://sheriff.example.com/1',
+    provenance: { origin: 'live', observed: true, publisher: 'Sheriff', recordId: 'norm-occ-life-1' },
+  });
+  assert.equal(rec.occupancy, 'Owner-Occupied');
+  assert.equal(rec.lifecycleStatus, 'Scheduled');
+  assert.equal(rec.provenance.sourceFacts.rawLifecycleStatus, 'Auction Begins: 12/01/2026');
+});

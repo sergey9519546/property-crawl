@@ -489,3 +489,136 @@ test('PropertyIntelligence UI preflight gates /api/federal-hazards on valid US c
   assert.match(detailSrc, /<PropertyIntelligence[^>]+lat=\{listing\.lat\s*\?\?\s*null\}[^>]+lng=\{listing\.lng\s*\?\?\s*null\}/);
   assert.match(drawerSrc, /<PropertyIntelligence[^>]+lat=\{listing\.lat\s*\?\?\s*null\}[^>]+lng=\{listing\.lng\s*\?\?\s*null\}/);
 });
+
+
+test('EPA Hazard: falls back to ECHO REST when legacy data.epa.gov returns HTTP 500 (including zero facilities)', async () => {
+  const { resetEpaProviderStateForTests } = require('../../server/enrichment/epa-hazard');
+  resetEpaProviderStateForTests();
+  const cachePop = path.join(TEMP_CACHE_DIR, 'epa-echo-pop.json');
+  const mockFetchWithFac = async (url) => {
+    if (url.includes('//data.epa.gov')) return { ok: false, status: 500 };
+    if (url.includes('echodata.epa.gov')) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            Results: {
+              QueryRows: '1',
+              Facilities: [
+                {
+                  RegistryID: '110000123456',
+                  FacName: 'Apex Industrial Solvents',
+                  FacStreet: '100 Factory Ln',
+                  FacCity: 'Newark',
+                  FacState: 'NJ',
+                  FacZip: '07102',
+                  RCRAPermitTypes: 'LQG',
+                  TRIIDs: '07102PXNDS',
+                },
+              ],
+            },
+          };
+        },
+      };
+    }
+    throw new Error(`Unexpected URL: ${url}`);
+  };
+  const pop = await queryEpaHazards({ lat: 40.7357, lng: -74.1724, cachePath: cachePop, fetchFn: mockFetchWithFac });
+  assert.equal(pop.status, 'success');
+  assert.equal(pop.facilities.length, 1);
+  assert.deepEqual(pop.facilities[0].programAcronyms, ['RCRAINFO', 'TRIS']);
+  assert.equal(pop.environmentalLiability.liabilityTier, 'moderate');
+
+  const cacheEmpty = path.join(TEMP_CACHE_DIR, 'epa-echo-empty.json');
+  const mockFetchZero = async (url) => {
+    if (url.includes('//data.epa.gov')) return { ok: false, status: 404 };
+    if (url.includes('echodata.epa.gov')) {
+      return {
+        ok: true,
+        async json() {
+          return { Results: { QueryRows: '0' } };
+        },
+      };
+    }
+    throw new Error(`Unexpected URL: ${url}`);
+  };
+  const clean = await queryEpaHazards({ lat: 40.3123, lng: -74.1234, cachePath: cacheEmpty, fetchFn: mockFetchZero });
+  assert.equal(clean.status, 'success');
+  assert.equal(clean.facilities.length, 0);
+  assert.equal(clean.environmentalLiability.liabilityTier, 'minimal');
+});
+
+test('EPA Hazard: falls back to OEI/FRS_INTERESTS Layer 8 when data.epa.gov and ECHO both fail', async () => {
+  const { resetEpaProviderStateForTests } = require('../../server/enrichment/epa-hazard');
+  resetEpaProviderStateForTests();
+  const cachePath = path.join(TEMP_CACHE_DIR, 'epa-gispub.json');
+  const mockFetch = async (url) => {
+    if (url.includes('//data.epa.gov')) return { ok: false, status: 500 };
+    if (url.includes('echodata.epa.gov')) return { ok: false, status: 503 };
+    if (url.includes('gispub.epa.gov/arcgis/rest/services/OEI/FRS_INTERESTS/MapServer/8/query')) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            features: [
+              {
+                attributes: {
+                  REGISTRY_ID: '110099988877',
+                  PRIMARY_NAME: 'Old Town Brownfield Parcel',
+                  LOCATION_ADDRESS: '44 Mill St',
+                  CITY_NAME: 'Trenton',
+                  STATE_CODE: 'NJ',
+                  POSTAL_CODE: '08608',
+                  LATITUDE83: 40.2206,
+                  LONGITUDE83: -74.7597,
+                  PGM_SYS_ACRNMS: 'ACRES',
+                },
+              },
+            ],
+          };
+        },
+      };
+    }
+    throw new Error(`Unexpected URL: ${url}`);
+  };
+  const out = await queryEpaHazards({ lat: 40.2206, lng: -74.7597, cachePath, fetchFn: mockFetch });
+  assert.equal(out.status, 'success');
+  assert.equal(out.facilities.length, 1);
+  assert.equal(out.facilities[0].registryId, '110099988877');
+  assert.ok(out.facilities[0].programAcronyms.includes('ACRES'));
+});
+
+test('USGS Terrain: succeeds via Promise.allSettled when 3 of 5 samples return and fails closed when fewer than 3 resolve', async () => {
+  const cachePartial = path.join(TEMP_CACHE_DIR, 'usgs-partial.json');
+  let callIndex = 0;
+  const mockThreeOfFive = async () => {
+    const n = ++callIndex;
+    // Fail south (idx 3) and west (idx 5)
+    if (n === 3 || n === 5) {
+      throw Object.assign(new Error('The operation was aborted'), { name: 'AbortError' });
+    }
+    const vals = { 1: 100, 2: 103, 4: 101.5 };
+    return {
+      ok: true,
+      async json() {
+        return { value: vals[n] };
+      },
+    };
+  };
+  const partial = await queryTerrainSlope({ lat: 40.5, lng: -74.5, cachePath: cachePartial, fetchFn: mockThreeOfFive });
+  assert.equal(partial.status, 'success');
+  assert.equal(partial.samples.length, 3);
+  assert.equal(partial.elevationMeters, 100);
+  assert.ok(partial.slopeAnalysis.slopePct > 0);
+
+  const cacheTooFew = path.join(TEMP_CACHE_DIR, 'usgs-too-few.json');
+  let twoIdx = 0;
+  const mockTwoOfFive = async () => {
+    twoIdx += 1;
+    if (twoIdx > 2) return { ok: false, status: 504 };
+    return { ok: true, async json() { return { value: 50 }; } };
+  };
+  const fail = await queryTerrainSlope({ lat: 40.51, lng: -74.51, cachePath: cacheTooFew, fetchFn: mockTwoOfFive });
+  assert.equal(fail.status, 'unavailable');
+  assert.equal(fail.slopeAnalysis, null);
+});

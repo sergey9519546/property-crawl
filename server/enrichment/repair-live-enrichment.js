@@ -96,6 +96,49 @@ function attachCensusCoordinates(listing, censusCoords, observedAt) {
   return true;
 }
 
+const TIGERWEB_COUNTY_ENDPOINT = 'https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/State_County/MapServer/1/query';
+
+async function resolveCensusCountyFromCoords({ lat, lng, fetchImpl = globalThis.fetch, timeoutMs = 4000 } = {}) {
+  const nLat = Number(lat);
+  const nLng = Number(lng);
+  if (!Number.isFinite(nLat) || !Number.isFinite(nLng) || (nLat === 0 && nLng === 0)) return null;
+  if (typeof fetchImpl !== 'function') return null;
+  if (process.env.NODE_ENV === 'test' && fetchImpl === globalThis.fetch && !process.env.DISCOVERY_TEST_ALLOW_REMOTE) {
+    return null;
+  }
+  const url = new URL(TIGERWEB_COUNTY_ENDPOINT);
+  url.searchParams.set('geometry', `${nLng},${nLat}`);
+  url.searchParams.set('geometryType', 'esriGeometryPoint');
+  url.searchParams.set('inSR', '4326');
+  url.searchParams.set('spatialRel', 'esriSpatialRelIntersects');
+  url.searchParams.set('outFields', 'NAME,BASENAME,STATE,COUNTY,GEOID');
+  url.searchParams.set('returnGeometry', 'false');
+  url.searchParams.set('f', 'json');
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetchImpl(url.toString(), {
+      signal: controller.signal,
+      headers: { Accept: 'application/json', 'User-Agent': 'PropertyCrawl/1.0 (Census TIGERweb County Lookup)' },
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    const attrs = json?.features?.[0]?.attributes;
+    if (!attrs || typeof attrs !== 'object') return null;
+    const rawCounty = attrs.BASENAME || (typeof attrs.NAME === 'string'
+      ? attrs.NAME.replace(/\s+(?:County|Parish|Borough|Census Area|Municipality|city and borough)$/i, '')
+      : '');
+    const county = String(rawCounty || '').replace(/\s+/g, ' ').trim();
+    if (!county) return null;
+    const geoid = typeof attrs.GEOID === 'string' && /^\d{5}$/.test(attrs.GEOID.trim()) ? attrs.GEOID.trim() : null;
+    return { county, countyFips: geoid };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function runWithConcurrency(items, concurrency, worker) {
   const limit = Math.max(1, Math.floor(Number(concurrency) || DEFAULT_CONCURRENCY));
   let cursor = 0;
@@ -126,6 +169,10 @@ async function repairLiveEnrichment(options = {}) {
   const geocodeLimit = Number.isInteger(Number(options.geocodeLimit)) && Number(options.geocodeLimit) > 0
     ? Number(options.geocodeLimit)
     : DEFAULT_GEOCODE_LIMIT;
+  const countyLimit = Number.isInteger(Number(options.countyLimit)) && Number(options.countyLimit) > 0
+    ? Number(options.countyLimit)
+    : 40;
+  const resolveCountyFn = options.resolveCountyFn || resolveCensusCountyFromCoords;
   const catchLimit = Number.isInteger(Number(options.catchLimit)) && Number(options.catchLimit) > 0
     ? Math.min(4000, Number(options.catchLimit))
     : DEFAULT_CATCH_LIMIT;
@@ -150,6 +197,8 @@ async function repairLiveEnrichment(options = {}) {
     civilviewUpdated: 0,
     geocodeCandidates: 0,
     geocodedCount: 0,
+    countyCandidates: 0,
+    countyBackfilled: 0,
     catchBackfilled: 0,
     timedOut: false,
     mismatchedSample: [],
@@ -412,6 +461,80 @@ async function repairLiveEnrichment(options = {}) {
     });
   } else {
     report.timedOut = true;
+  }
+
+  // Pass 3b: Bounded US Census TIGERweb County Backfill for HUD / Federal rows with valid coords & county IS NULL
+  if (options.includeCountyBackfill !== false && !budgetExpired()) {
+    try {
+      const countyQuery = await pool.query(
+        `SELECT id,
+                source_key AS "source",
+                state,
+                county,
+                latitude::float8 AS lat,
+                longitude::float8 AS lng,
+                provenance
+           FROM listings
+          WHERE discovery_is_live IS TRUE
+            AND (county IS NULL OR BTRIM(county) = '')
+            AND latitude IS NOT NULL
+            AND longitude IS NOT NULL
+            AND NOT (latitude = 0 AND longitude = 0)
+            AND (provenance->'derivedFields'->>'countyLookupAttemptedAt') IS NULL
+          ORDER BY CASE WHEN source_key = 'hud' THEN 0 ELSE 1 END,
+                   source_observed_at DESC NULLS LAST
+          LIMIT $1`,
+        [countyLimit],
+      );
+      const countyRows = Array.isArray(countyQuery?.rows) ? countyQuery.rows : [];
+      report.countyCandidates = countyRows.length;
+
+      await runWithConcurrency(countyRows, DEFAULT_CONCURRENCY, async (row) => {
+        if (budgetExpired()) {
+          report.timedOut = true;
+          return;
+        }
+        try {
+          const hit = await resolveCountyFn({
+            lat: Number(row.lat),
+            lng: Number(row.lng),
+            fetchImpl: fetchFn,
+            timeoutMs: 4000,
+          });
+          const nextProvenance = cloneJson(row.provenance);
+          nextProvenance.derivedFields = nextProvenance.derivedFields && typeof nextProvenance.derivedFields === 'object'
+            ? nextProvenance.derivedFields
+            : {};
+          nextProvenance.derivedFields.countyLookupAttemptedAt = observedAt;
+          if (hit?.county) {
+            if (hit.countyFips) nextProvenance.derivedFields.countyFips = hit.countyFips;
+            nextProvenance.derivedFields.countySource = 'census-tigerweb-state-county';
+            nextProvenance.derivedFields.countyBackfilledAt = observedAt;
+            if (!dryRun) {
+              await pool.query(
+                `UPDATE listings
+                    SET county = $2,
+                        provenance = $3::jsonb
+                  WHERE id = $1`,
+                [row.id, hit.county, JSON.stringify(nextProvenance)],
+              );
+            }
+            report.countyBackfilled += 1;
+          } else if (!dryRun) {
+            await pool.query(
+              `UPDATE listings
+                  SET provenance = $2::jsonb
+                WHERE id = $1`,
+              [row.id, JSON.stringify(nextProvenance)],
+            );
+          }
+        } catch (err) {
+          report.errors.push(`countyBackfill(${row.id}): ${err?.message || err}`);
+        }
+      });
+    } catch (err) {
+      report.errors.push(`countyBackfill: ${err?.message || err}`);
+    }
   }
 
   // Pass 4: Fast Local Deterministic Catch Summary Backfill ($0, runs before external ArcGIS calls)

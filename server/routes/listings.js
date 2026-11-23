@@ -462,6 +462,9 @@ async function handleListings(req, res, dbOverride = null, options = {}) {
         if (INTELLIGENCE_SORTS.has(String(mapUrl.searchParams.get('sort')))) {
           mapUrl.searchParams.set('sort', 'score');
         }
+        if (!mapUrl.searchParams.has('limit') || !mapUrl.searchParams.get('limit')) {
+          mapUrl.searchParams.set('limit', '500');
+        }
         if (typeof db.inventoryUnavailableReason === 'function') { const unavailable = db.inventoryUnavailableReason(); if (unavailable) return res.status(503).json({ error: 'No inventory is being served.', reason: unavailable, dataMode: typeof db.dataMode === 'function' ? db.dataMode() : null, clusters: [], points: [], total: 0 }); }
         return res.json(await discovery.map(db, discovery.queryFromUrl(mapUrl)));
       }
@@ -659,13 +662,14 @@ async function handleListings(req, res, dbOverride = null, options = {}) {
         page,
         revision: result.revision || null,
         facets: result.facets || {},
-        listings: result.listings.map(({ id, source, state, county, saleDate, status }) => ({
+        listings: result.listings.map(({ id, source, state, county, saleDate, status, lifecycleStatus }) => ({
           id,
           source,
           state,
           county: county ?? null,
           saleDate: saleDate ?? null,
           status: status ?? null,
+          lifecycleStatus: lifecycleStatus ?? null,
         })),
         dataMode: typeof db.dataMode === 'function' ? db.dataMode() : (db.isPg ? 'postgres' : 'unavailable'),
         postgresReachable: db.postgresReachable === true,

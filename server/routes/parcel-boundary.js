@@ -34,7 +34,8 @@ const ARCGIS_REGISTRY = Object.freeze({
   OH: {
     name: 'Ohio Geographically Referenced Information Program (OGRIP)',
     endpoint: 'https://gis5.oit.ohio.gov/arcgis/rest/services/LBRS/MapServer/0/query',
-    apnField: 'PARCELID'
+    apnField: 'PARCELID',
+    timeoutMs: 4000
   },
   FL: {
     name: 'Florida GIO / FDOR Statewide Cadastral Parcels',
@@ -223,6 +224,7 @@ function resolveBoundaryEndpoints(state, county = null) {
       apnField: config.apnField || 'PARCEL_ID',
       ...(config.countyFilterField ? { countyFilterField: config.countyFilterField } : {}),
       ...(config.operation ? { operation: config.operation } : {}),
+      ...(config.timeoutMs ? { timeoutMs: config.timeoutMs } : {}),
     });
   };
 
@@ -281,7 +283,7 @@ async function querySingleArcGisEndpoint(serviceInfo, lat, lng, apn, county, has
     const queryUrl = new URL(serviceInfo.endpoint);
     queryUrl.search = new URLSearchParams(params).toString();
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), Math.max(1000, Number(process.env.PARCEL_QUERY_TIMEOUT_MS) || 7500));
+    const timeout = setTimeout(() => controller.abort(), Math.max(1000, Number(process.env.PARCEL_QUERY_TIMEOUT_MS) || serviceInfo.timeoutMs || 6000));
     try {
       const response = await fetch(queryUrl, {
         signal: controller.signal,
@@ -443,6 +445,7 @@ const PARCEL_CACHE = (process.env.NODE_ENV === 'test' || process.env.NODE_TEST_C
 const NATIVE_FETCH = typeof globalThis.fetch === 'function' ? globalThis.fetch : null;
 const PARCEL_CACHE_TTL_MS = 60 * 60 * 1000;
 const PARCEL_NEGATIVE_CACHE_TTL_MS = 5 * 60 * 1000;
+const PARCEL_TRANSIENT_FAILURE_CACHE_TTL_MS = 60 * 1000;
 
 async function queryArcGisRest(lat, lng, state, apn = null, county = null, options = {}) {
   const normalizedState = textValue(state)?.toUpperCase() || null;
@@ -451,7 +454,9 @@ async function queryArcGisRest(lat, lng, state, apn = null, county = null, optio
   const cacheKey = allowCache ? `${normalizedState || ''}|${String(county || '').trim().toUpperCase()}|${Number.isFinite(lat) ? lat.toFixed(5) : ''}|${Number.isFinite(lng) ? lng.toFixed(5) : ''}|${apn || ''}${normalizedAddr ? `|${normalizedAddr}` : ''}` : null;
   if (cacheKey && PARCEL_CACHE.has(cacheKey)) {
     const cached = PARCEL_CACHE.get(cacheKey);
-    const ttl = cached?.error ? PARCEL_NEGATIVE_CACHE_TTL_MS : PARCEL_CACHE_TTL_MS;
+    const ttl = cached?.error
+      ? (cached.error.code === 'PARCEL_SOURCE_TIMEOUT' ? PARCEL_TRANSIENT_FAILURE_CACHE_TTL_MS : PARCEL_NEGATIVE_CACHE_TTL_MS)
+      : PARCEL_CACHE_TTL_MS;
     if (cached && Date.now() - cached.ts < ttl) {
       if (cached.error) throw cached.error;
       return cached.value;
@@ -510,6 +515,12 @@ async function queryArcGisRest(lat, lng, state, apn = null, county = null, optio
       if (oldest !== undefined) PARCEL_CACHE.delete(oldest);
     }
     PARCEL_CACHE.set(cacheKey, { ts: Date.now(), error: notFoundError });
+  } else if (!notFoundError && lastError?.code === 'PARCEL_SOURCE_TIMEOUT' && cacheKey && PARCEL_CACHE) {
+    if (PARCEL_CACHE.size >= 400) {
+      const oldest = PARCEL_CACHE.keys().next().value;
+      if (oldest !== undefined) PARCEL_CACHE.delete(oldest);
+    }
+    PARCEL_CACHE.set(cacheKey, { ts: Date.now(), error: lastError });
   }
   throw notFoundError || lastError;
 }

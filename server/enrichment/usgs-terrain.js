@@ -175,7 +175,7 @@ async function queryTerrainSlope({
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const sampleResults = await Promise.all(
+    const settled = await Promise.allSettled(
       points.map(async (pt) => {
         const elevation = await fetchSingleElevation(pt.lat, pt.lng, fetchFn, controller.signal);
         return { ...pt, elevationMeters: elevation };
@@ -184,25 +184,61 @@ async function queryTerrainSlope({
 
     clearTimeout(timer);
 
+    const sampleResults = settled
+      .filter((entry) => entry.status === 'fulfilled' && Number.isFinite(entry.value?.elevationMeters))
+      .map((entry) => entry.value);
+
+    if (sampleResults.length < 3) {
+      const firstRejected = settled.find((entry) => entry.status === 'rejected')?.reason;
+      const reason = firstRejected?.name === 'AbortError'
+        ? 'usgs_api_timeout'
+        : `usgs_api_network_error: ${firstRejected?.message || 'insufficient_elevation_samples'}`;
+      return {
+        status: 'unavailable',
+        reason,
+        slopeAnalysis: null,
+        provenance: 'usgs-3dep-elevation-query'
+      };
+    }
+
     const elevs = sampleResults.map((s) => s.elevationMeters);
     const minElev = Math.min(...elevs);
     const maxElev = Math.max(...elevs);
     const rise = maxElev - minElev;
-    const run = offsetMeters * 2; // Span across opposite sides (e.g. 60 meters)
+    const labels = new Set(sampleResults.map((s) => s.label));
+    const hasOppositePair = (labels.has('north') && labels.has('south')) || (labels.has('east') && labels.has('west'));
+    let run = offsetMeters * 2;
+    if (!hasOppositePair) {
+      let maxSpan = 0;
+      const cosLat = Math.max(0.1, Math.cos(radLat));
+      for (let i = 0; i < sampleResults.length; i += 1) {
+        for (let j = i + 1; j < sampleResults.length; j += 1) {
+          const dLatMeters = (sampleResults[i].lat - sampleResults[j].lat) * 111000;
+          const dLngMeters = (sampleResults[i].lng - sampleResults[j].lng) * 111000 * cosLat;
+          const dist = Math.hypot(dLatMeters, dLngMeters);
+          if (dist > maxSpan) maxSpan = dist;
+        }
+      }
+      run = Math.max(offsetMeters, Number(maxSpan.toFixed(2)));
+    }
+
+    const centerSample = sampleResults.find((s) => s.label === 'center');
+    const centerElevationMeters = centerSample
+      ? centerSample.elevationMeters
+      : Number(((minElev + maxElev) / 2).toFixed(2));
 
     const slopeAnalysis = classifySlope(rise, run);
     slopeAnalysis.minElevationMeters = minElev;
     slopeAnalysis.maxElevationMeters = maxElev;
-    slopeAnalysis.centerElevationMeters = sampleResults[0].elevationMeters;
-    slopeAnalysis.centerElevationFeet = Number((sampleResults[0].elevationMeters * 3.28084).toFixed(1));
+    slopeAnalysis.centerElevationMeters = centerElevationMeters;
+    slopeAnalysis.centerElevationFeet = Number((centerElevationMeters * 3.28084).toFixed(1));
 
     const record = {
       observedAt: new Date(now).toISOString(),
       slopeAnalysis,
-      elevationMeters: sampleResults[0].elevationMeters,
+      elevationMeters: centerElevationMeters,
       samples: sampleResults
     };
-
     cache[key] = record;
     saveCache(cache, cachePath);
 

@@ -81,6 +81,36 @@ function makeFakePool(initialRows) {
         }
         return { rowCount: target ? 1 : 0, rows: [] };
       }
+      if (normalizedSql.startsWith('SELECT') && normalizedSql.includes("county IS NULL OR BTRIM(county) = ''")) {
+        const limit = Number(params[0]) || 40;
+        return {
+          rows: rows
+            .filter((r) => (!r.county || !String(r.county).trim())
+              && r.lat != null && r.lng != null && !(r.lat === 0 && r.lng === 0)
+              && !r.provenance?.derivedFields?.countyLookupAttemptedAt)
+            .slice(0, limit)
+            .map((r) => ({ ...r })),
+        };
+      }
+      if (normalizedSql.startsWith('UPDATE listings SET county = $2')) {
+        const [id, county, provenanceJson] = params;
+        const target = rows.find((r) => r.id === id);
+        if (target) {
+          target.county = county;
+          target.provenance = JSON.parse(provenanceJson);
+          updates.push({ kind: 'county_backfill', id, county });
+        }
+        return { rowCount: target ? 1 : 0, rows: [] };
+      }
+      if (normalizedSql.startsWith('UPDATE listings SET provenance = $2::jsonb')) {
+        const [id, provenanceJson] = params;
+        const target = rows.find((r) => r.id === id);
+        if (target) {
+          target.provenance = JSON.parse(provenanceJson);
+          updates.push({ kind: 'county_lookup_attempted', id });
+        }
+        return { rowCount: target ? 1 : 0, rows: [] };
+      }
       if (normalizedSql.startsWith('SELECT') && normalizedSql.includes('catch_summary IS NULL')) {
         const limit = Number(params[0]) || 250;
         return {
@@ -449,4 +479,198 @@ test('POST /api/scrapers/run?action=next-slice resumes active continuation curso
   const preemptedBody = await runNextSlice({ gsaAgeMs: 2 * 3600_000, sheriffAgeMs: 10 * 3600_000 });
   assert.equal(preemptedBody.source, 'sheriff');
   assert.equal(preemptedBody.reason, 'oldest_observation');
+});
+
+
+test('GET /api/scrapers hydrates telemetry from Postgres when in-memory telemetry is cold', async () => {
+  const coldTelemetry = {
+    getHealthReport() {
+      return {
+        systemStatus: 'idle',
+        snapshotEvidence: { mode: 'filesystem', ok: true },
+        totalScrapers: 0,
+        scrapersInFault: 0,
+        scrapersChallengeGated: 0,
+        scrapersWithDrift: 0,
+        details: {},
+      };
+    },
+  };
+  const mockDb = {
+    isPg: true,
+    pool: {
+      async query(sql) {
+        const norm = sql.replace(/\s+/g, ' ').trim();
+        if (norm.includes('FROM source_observation_runs')) {
+          return {
+            rows: [
+              {
+                source_key: 'servicelink',
+                last_run_at: '2026-11-23T16:19:10.983Z',
+                last_success_at: '2026-11-23T16:19:10.983Z',
+                last_non_empty_at: '2026-11-23T16:19:10.983Z',
+                accepted_count: 200,
+                evidence_count: 200,
+                rejected_count: 0,
+                error: null,
+                duration_ms: 18420,
+                runs_count: 42,
+              },
+              {
+                source_key: 'sheriff',
+                last_run_at: '2026-11-23T08:56:01.436Z',
+                last_success_at: '2026-11-23T08:00:00.000Z',
+                last_non_empty_at: '2026-11-23T08:00:00.000Z',
+                accepted_count: 0,
+                evidence_count: 0,
+                rejected_count: 0,
+                error: 'secret-internal-stack-trace',
+                duration_ms: 4100,
+                runs_count: 9,
+              },
+            ],
+          };
+        }
+        if (norm.includes('FROM listings') && norm.includes('discovery_is_live')) {
+          return {
+            rows: [
+              { source_key: 'servicelink', active_listings: 2675 },
+              { source_key: 'sheriff', active_listings: 295 },
+            ],
+          };
+        }
+        return { rows: [] };
+      },
+    },
+  };
+
+  const handler = createScrapersHandler({
+    env: { SCRAPER_ADMIN_TOKEN: 'telemetry-secret' },
+    database: mockDb,
+    telemetry: coldTelemetry,
+    scheduler: { database: mockDb, realScrapers: [] },
+  });
+
+  const unauthRes = {
+    statusCode: 200,
+    body: null,
+    status(c) { this.statusCode = c; return this; },
+    json(b) { this.body = b; return this; },
+  };
+  await handler({ method: 'GET', url: '/api/scrapers', headers: {} }, unauthRes);
+  assert.equal(unauthRes.statusCode, 200);
+  assert.equal(unauthRes.body.telemetrySource, 'postgres+memory');
+  assert.equal(unauthRes.body.totalScrapers, 2);
+  assert.equal(unauthRes.body.scrapersInFault, 1);
+  assert.equal(unauthRes.body.systemStatus, 'degraded');
+  assert.ok(Array.isArray(unauthRes.body.scrapers) && unauthRes.body.scrapers.length === 2);
+  const sl = unauthRes.body.scrapers.find((s) => s.sourceKey === 'servicelink');
+  const sh = unauthRes.body.scrapers.find((s) => s.sourceKey === 'sheriff');
+  assert.equal(sl.activeListings, 2675);
+  assert.equal(sl.recordsIngested, 200);
+  assert.equal(sl.status, 'healthy');
+  assert.equal(sh.status, 'error');
+  assert.equal(sh.lastError, undefined, 'unauthenticated requests must omit internal lastError');
+
+  const authRes = {
+    statusCode: 200,
+    body: null,
+    status(c) { this.statusCode = c; return this; },
+    json(b) { this.body = b; return this; },
+  };
+  await handler({ method: 'GET', url: '/api/scrapers', headers: { 'x-scraper-token': 'telemetry-secret' } }, authRes);
+  const shAuth = authRes.body.scrapers.find((s) => s.sourceKey === 'sheriff');
+  assert.equal(shAuth.lastError, 'secret-internal-stack-trace');
+});
+
+
+test('repairLiveEnrichment Pass 3b backfills missing HUD county and countyFips via Census TIGERweb', async () => {
+  const pool = makeFakePool([
+    {
+      id: 'HUD-TX-48201',
+      source: 'hud',
+      state: 'TX',
+      county: null,
+      city: 'HOUSTON',
+      zip: '77002',
+      address: '100 Main St, Houston, TX 77002',
+      sourceUrl: 'https://www.hudhomestore.gov/listing/HUD-TX-48201',
+      lat: 29.7604,
+      lng: -95.3698,
+      propType: 'Single Family',
+      raw: 'HUD REO',
+      sourceObservedAt: '2026-11-22T00:00:00.000Z',
+      provenance: {
+        origin: 'live',
+        observed: true,
+        recordKind: 'source_record',
+        publisher: 'HUD Home Store',
+        recordId: 'HUD-TX-48201',
+        observedAt: '2026-11-22T00:00:00.000Z',
+      },
+    },
+    {
+      id: 'HUD-MISS-000',
+      source: 'hud',
+      state: 'FL',
+      county: null,
+      city: 'MIAMI',
+      zip: '33101',
+      address: '200 Biscayne Blvd, Miami, FL 33101',
+      sourceUrl: 'https://www.hudhomestore.gov/listing/HUD-MISS-000',
+      lat: 25.7743,
+      lng: -80.1937,
+      propType: 'Single Family',
+      raw: 'HUD REO',
+      sourceObservedAt: '2026-11-22T00:00:00.000Z',
+      provenance: {
+        origin: 'live',
+        observed: true,
+        recordKind: 'source_record',
+        publisher: 'HUD Home Store',
+        recordId: 'HUD-MISS-000',
+        observedAt: '2026-11-22T00:00:00.000Z',
+      },
+    },
+  ]);
+
+  const mockFetch = async (url) => {
+    if (String(url).includes('tigerweb.geo.census.gov')) {
+      if (String(url).includes('-95.3698')) {
+        return {
+          ok: true,
+          async json() {
+            return {
+              features: [
+                { attributes: { NAME: 'Harris County', BASENAME: 'Harris', STATE: '48', COUNTY: '201', GEOID: '48201' } },
+              ],
+            };
+          },
+        };
+      }
+      return { ok: true, async json() { return { features: [] }; } };
+    }
+    throw new Error(`Unexpected remote URL: ${url}`);
+  };
+
+  const report = await repairLiveEnrichment({
+    pool,
+    fetchFn: mockFetch,
+    includeCatchBackfill: false,
+    includeAssessorBackfill: false,
+  });
+
+  assert.equal(report.countyCandidates, 2);
+  assert.equal(report.countyBackfilled, 1);
+  assert.deepEqual(report.errors, []);
+
+  const hitRow = pool.rows.find((r) => r.id === 'HUD-TX-48201');
+  assert.equal(hitRow.county, 'Harris');
+  assert.equal(hitRow.provenance.derivedFields.countyFips, '48201');
+  assert.equal(hitRow.provenance.derivedFields.countySource, 'census-tigerweb-state-county');
+  assert.ok(hitRow.provenance.derivedFields.countyLookupAttemptedAt);
+
+  const missRow = pool.rows.find((r) => r.id === 'HUD-MISS-000');
+  assert.equal(missRow.county, null);
+  assert.ok(missRow.provenance.derivedFields.countyLookupAttemptedAt);
 });

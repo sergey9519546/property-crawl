@@ -40,8 +40,201 @@ function createScrapersHandler(dependencies = {}) {
     const method = req.method;
 
     if (method === 'GET' && (url.pathname === '/api/scrapers/health' || url.pathname === '/api/scrapers')) {
-      const report = activeTelemetry.getHealthReport();
-      return res.json(report);
+      const baseReport = activeTelemetry.getHealthReport() || {};
+      const details = { ...(baseReport.details || {}) };
+      const database = resolveDatabase();
+      const { resolveOperatorToken } = require('../security/operator-token');
+      const configuredToken = resolveOperatorToken(env);
+      const isAuthorized = Boolean(configuredToken && tokensMatch(presentedRunToken(req), configuredToken));
+
+      const knownScrapers = Array.isArray(activeScheduler?.realScrapers)
+        ? activeScheduler.realScrapers
+        : (Array.isArray(activeScheduler?.scrapers) ? activeScheduler.scrapers : []);
+      const nameToKey = new Map();
+      const keyToName = new Map();
+      for (const s of knownScrapers) {
+        if (s?.sourceKey && s?.name) {
+          nameToKey.set(s.name, s.sourceKey);
+          keyToName.set(s.sourceKey, s.name);
+        }
+      }
+      try {
+        const { SOURCE_CATALOG } = require('../sources/catalog');
+        if (Array.isArray(SOURCE_CATALOG)) {
+          for (const entry of SOURCE_CATALOG) {
+            if (entry?.key && entry?.name && !keyToName.has(entry.key)) {
+              keyToName.set(entry.key, entry.name);
+            }
+          }
+        }
+      } catch {
+        // Optional catalog metadata
+      }
+
+      const toIso = (val) => {
+        if (!val) return null;
+        const ts = Date.parse(String(val));
+        return Number.isFinite(ts) ? new Date(ts).toISOString() : null;
+      };
+
+      const scrapersMap = new Map();
+      for (const [name, state] of Object.entries(details)) {
+        const mappedKey = nameToKey.get(name) || String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-');
+        const memStatus = state?.circuitBreakerTripped
+          ? 'fault'
+          : (state?.lastErrorCode === 'UPSTREAM_BOT_CHALLENGE'
+              ? 'challenge_gated'
+              : (Number(state?.consecutiveFailures || 0) > 0 ? 'error' : (Number(state?.runs || 0) > 0 ? 'healthy' : 'idle')));
+        const sanitized = {
+          key: mappedKey,
+          sourceKey: mappedKey,
+          name,
+          runs: Number(state?.runs || 0),
+          lastRunAt: toIso(state?.lastRunAt),
+          lastSuccessAt: toIso(state?.lastSuccessAt),
+          lastNonEmptyAt: toIso(state?.lastNonEmptyAt),
+          recordsIngested: Number(state?.lastAcceptedCount ?? state?.recordsIngested ?? 0),
+          activeListings: Number(state?.activeListings || 0),
+          status: memStatus,
+          consecutiveFailures: Number(state?.consecutiveFailures || 0),
+          averageLatencyMs: Number(state?.averageLatencyMs || 0),
+          driftDetected: Boolean(state?.driftDetected),
+          ...(isAuthorized && state?.lastError ? { lastError: state.lastError } : {}),
+        };
+        scrapersMap.set(mappedKey, sanitized);
+      }
+
+      let pgHydrated = false;
+      if (database?.isPg && database?.pool && typeof database.pool.query === 'function') {
+        const [runsRes, countsRes] = await Promise.all([
+          database.pool.query(
+            `SELECT source_key, last_run_at, last_success_at, last_non_empty_at,
+                    accepted_count, evidence_count, rejected_count, error, duration_ms, runs_count
+               FROM source_observation_runs
+              ORDER BY source_key`
+          ).catch(() => null),
+          database.pool.query(
+            `SELECT source_key, COUNT(*)::int AS active_listings
+               FROM listings
+              WHERE discovery_is_live IS TRUE
+              GROUP BY source_key`
+          ).catch(() => null),
+        ]);
+
+        const activeCountMap = new Map();
+        if (Array.isArray(countsRes?.rows)) {
+          if (countsRes.rows.length > 0) pgHydrated = true;
+          for (const row of countsRes.rows) {
+            if (row?.source_key) {
+              activeCountMap.set(row.source_key, Number(row.active_listings || 0));
+            }
+          }
+        }
+
+        if (Array.isArray(runsRes?.rows) && runsRes.rows.length > 0) {
+          pgHydrated = true;
+          for (const row of runsRes.rows) {
+            const key = row?.source_key;
+            if (!key) continue;
+            const existing = scrapersMap.get(key) || null;
+            const dbRunIso = toIso(row.last_run_at);
+            const dbSuccessIso = toIso(row.last_success_at);
+            const dbNonEmptyIso = toIso(row.last_non_empty_at);
+            const memRunMs = existing?.lastRunAt ? Date.parse(existing.lastRunAt) : 0;
+            const dbRunMs = dbRunIso ? Date.parse(dbRunIso) : 0;
+            const preferDb = !existing || Number(existing.runs || 0) === 0 || dbRunMs >= memRunMs;
+            const hasDbError = Boolean(
+              row.error && (!dbSuccessIso || (dbRunMs > Date.parse(dbSuccessIso)))
+            );
+            const displayName = existing?.name || keyToName.get(key) || key;
+            const merged = {
+              key,
+              sourceKey: key,
+              name: displayName,
+              runs: Math.max(Number(existing?.runs || 0), Number(row.runs_count || 0)),
+              lastRunAt: preferDb ? dbRunIso : existing.lastRunAt,
+              lastSuccessAt: dbSuccessIso || existing?.lastSuccessAt || null,
+              lastNonEmptyAt: dbNonEmptyIso || existing?.lastNonEmptyAt || null,
+              recordsIngested: preferDb
+                ? Number(row.accepted_count || 0)
+                : Number(existing?.recordsIngested ?? row.accepted_count ?? 0),
+              activeListings: activeCountMap.get(key) ?? existing?.activeListings ?? 0,
+              status: existing?.status === 'fault'
+                ? 'fault'
+                : (preferDb
+                    ? (hasDbError ? 'error' : (dbRunIso ? 'healthy' : 'idle'))
+                    : existing.status),
+              consecutiveFailures: Math.max(
+                Number(existing?.consecutiveFailures || 0),
+                hasDbError ? 1 : 0
+              ),
+              averageLatencyMs: preferDb
+                ? Number(row.duration_ms || existing?.averageLatencyMs || 0)
+                : Number(existing?.averageLatencyMs || 0),
+              driftDetected: Boolean(existing?.driftDetected),
+              ...(isAuthorized && (existing?.lastError || row.error)
+                ? { lastError: existing?.lastError || row.error }
+                : {}),
+            };
+            scrapersMap.set(key, merged);
+            details[displayName] = {
+              ...(details[displayName] || {}),
+              ...merged,
+            };
+          }
+        }
+
+        for (const [key, activeListings] of activeCountMap.entries()) {
+          if (!scrapersMap.has(key)) {
+            const displayName = keyToName.get(key) || key;
+            const entry = {
+              key,
+              sourceKey: key,
+              name: displayName,
+              runs: 0,
+              lastRunAt: null,
+              lastSuccessAt: null,
+              lastNonEmptyAt: null,
+              recordsIngested: 0,
+              activeListings,
+              status: 'idle',
+              consecutiveFailures: 0,
+              averageLatencyMs: 0,
+              driftDetected: false,
+            };
+            scrapersMap.set(key, entry);
+            details[displayName] = entry;
+          } else {
+            const existing = scrapersMap.get(key);
+            existing.activeListings = activeListings;
+          }
+        }
+      }
+
+      const scrapers = Array.from(scrapersMap.values()).sort(
+        (a, b) => (b.activeListings - a.activeListings) || String(a.key).localeCompare(String(b.key))
+      );
+      const totalScrapers = pgHydrated ? scrapers.length : Number(baseReport.totalScrapers ?? scrapers.length);
+      const scrapersInFault = scrapers.filter((s) => s.status === 'fault' || s.status === 'error').length;
+      const scrapersWithDrift = scrapers.filter((s) => s.driftDetected).length;
+      const scrapersChallengeGated = Number(baseReport.scrapersChallengeGated || 0);
+      const systemStatus = (scrapersInFault > 0 || scrapersWithDrift > 0)
+        ? 'degraded'
+        : (scrapersChallengeGated > 0
+            ? 'nominal_gated'
+            : (totalScrapers === 0 ? 'idle' : 'healthy'));
+
+      return res.json({
+        ...baseReport,
+        systemStatus,
+        totalScrapers,
+        scrapersInFault,
+        scrapersWithDrift,
+        scrapersChallengeGated,
+        telemetrySource: pgHydrated ? 'postgres+memory' : 'memory',
+        scrapers,
+        details,
+      });
     }
 
     if (method === 'POST' && (url.pathname === '/api/scrapers/run' || url.pathname === '/api/scrapers')) {
@@ -120,6 +313,7 @@ function createScrapersHandler(dependencies = {}) {
           return res.status(503).json({ error: 'Prune requires an active PostgreSQL database connection' });
         }
         try {
+          const pruneStart = Date.now();
           const limit = Math.min(5000, Math.max(1, Number(body.limit ?? url.searchParams.get('limit')) || 5000));
           let concludedDeleted = 0;
           const delRes = await database.pool.query(
@@ -171,13 +365,55 @@ function createScrapersHandler(dependencies = {}) {
                 AND (prop_type IS NULL OR TRIM(prop_type) = '' OR prop_type = 'Unknown')`
           ).catch(() => ({ rowCount: 0 }));
           const propTypesCleaned = Number(gsaTypeCleanup?.rowCount || 0) + Number(hudTypeFill?.rowCount || 0);
+          const occupancyRes = await database.pool.query(
+            `UPDATE listings
+                SET occupancy = CASE
+                  WHEN UPPER(BTRIM(occupancy)) IN ('UNKNOWN', 'N/A', 'NA', 'TBD', 'NONE', '') THEN NULL
+                  WHEN LOWER(occupancy) ~ '(^|[^a-z])owner[- ]?occupied($|[^a-z])' THEN 'Owner-Occupied'
+                  WHEN LOWER(occupancy) ~ '(^|[^a-z])(tenant[- ]?occupied|renter[- ]?occupied|rental|leased)($|[^a-z])' THEN 'Tenant-Occupied'
+                  WHEN LOWER(occupancy) ~ '(^|[^a-z])(unoccupied|vacant)($|[^a-z])' THEN 'Vacant'
+                  WHEN LOWER(occupancy) ~ '(^|[^a-z])occupied($|[^a-z])' THEN 'Occupied'
+                  ELSE occupancy
+                END
+              WHERE occupancy IS NOT NULL
+                AND occupancy NOT IN ('Owner-Occupied', 'Tenant-Occupied', 'Vacant', 'Occupied')
+                AND (
+                  UPPER(BTRIM(occupancy)) IN ('UNKNOWN', 'N/A', 'NA', 'TBD', 'NONE', '')
+                  OR LOWER(occupancy) ~ '(^|[^a-z])(owner[- ]?occupied|tenant[- ]?occupied|renter[- ]?occupied|unoccupied|vacant|occupied)($|[^a-z])'
+                )`
+          ).catch(() => ({ rowCount: 0 }));
+          const occupancyNormalized = Number(occupancyRes?.rowCount || 0);
+          const lifecycleRes = await database.pool.query(
+            `UPDATE listings
+                SET lifecycle_status = CASE
+                  WHEN lifecycle_status ~* '^Auction\\s+(Begins|Ends)\\s*:' OR LOWER(BTRIM(lifecycle_status)) IN ('scheduled', 'upcoming', 'scheduled sale', 'notice of sale') THEN 'Scheduled'
+                  WHEN lifecycle_status ~* '^Status\\s*:\\s*Active' OR LOWER(BTRIM(lifecycle_status)) = 'active' THEN 'Active'
+                  WHEN LOWER(BTRIM(lifecycle_status)) = 'coming soon' THEN 'Coming Soon'
+                  WHEN lifecycle_status ~* '^Adjourned' THEN 'Adjourned'
+                  ELSE BTRIM(lifecycle_status)
+                END
+              WHERE lifecycle_status IS NOT NULL
+                AND (
+                  lifecycle_status ~* '^(Auction\\s+(Begins|Ends)\\s*:|Status\\s*:\\s*Active|Adjourned.+)'
+                  OR lifecycle_status IN ('scheduled', 'upcoming', 'active', 'coming soon', 'COMING SOON', 'SCHEDULED', 'ACTIVE', 'ADJOURNED')
+                )`
+          ).catch(() => ({ rowCount: 0 }));
+          const lifecycleNormalized = Number(lifecycleRes?.rowCount || 0);
+          const ohCityRes = await database.pool.query(
+            `UPDATE listings
+                SET city = BTRIM((regexp_match(address, '^[^,]+,\\s*([A-Za-z][A-Za-z .''-]+?),\\s*(?:OH\\s+)?\\d{5}'))[1])
+              WHERE state = 'OH'
+                AND (city IS NULL OR BTRIM(city) = '')
+                AND address ~ '^[^,]+,\\s*[A-Za-z][A-Za-z .''-]+?,\\s*(?:OH\\s+)?\\d{5}'`
+          ).catch(() => ({ rowCount: 0 }));
+          const ohCitiesBackfilled = Number(ohCityRes?.rowCount || 0);
           const stalePurged = typeof database.purgeStaleListings === 'function'
-            ? await database.purgeStaleListings({ batchSize: 50, maxDurationMs: 30_000 })
+            ? await database.purgeStaleListings({ batchSize: 50, maxDurationMs: 12_000, skipVacuum: true })
             : { deleted: 0, observationsDeleted: 0 };
-          const crossDedupe = typeof database.reconcileCrossSourceDuplicates === 'function'
+          const crossDedupe = (typeof database.reconcileCrossSourceDuplicates === 'function' && (Date.now() - pruneStart) < 25_000)
             ? await database.reconcileCrossSourceDuplicates().catch(() => ({ superseded: 0, cleared: 0 }))
             : null;
-          const mvRefreshed = typeof database.refreshNeighborhoodStatsMaterializedView === 'function'
+          const mvRefreshed = (typeof database.refreshNeighborhoodStatsMaterializedView === 'function' && (Date.now() - pruneStart) < 35_000)
             ? await database.refreshNeighborhoodStatsMaterializedView({ concurrent: true }).catch(() => false)
             : false;
           const countRes = await database.pool.query('SELECT count(*)::int AS n FROM listings');
@@ -185,7 +421,18 @@ function createScrapersHandler(dependencies = {}) {
           return res.json({
             status: 'completed',
             action: 'prune',
-            report: { concludedDeleted, statusReconciled, propTypesCleaned, stalePurged, crossDedupe, mvRefreshed, remainingTotal },
+            report: {
+              concludedDeleted,
+              statusReconciled,
+              propTypesCleaned,
+              occupancyNormalized,
+              lifecycleNormalized,
+              ohCitiesBackfilled,
+              stalePurged,
+              crossDedupe,
+              mvRefreshed,
+              remainingTotal,
+            },
           });
         } catch (err) {
           return res.status(err?.status || 500).json({ error: err?.message || 'Prune operation failed' });

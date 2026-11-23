@@ -6,21 +6,85 @@ const crypto = require('crypto');
 
 const DEFAULT_CACHE_PATH = path.resolve(__dirname, '../../.cache/epa-hazard-cache.json');
 const EPA_FRS_ENDPOINT = 'https://data.epa.gov/efservice/frs_rest_services.get_facilities';
-const EPA_EMEF_MAPSERVER = 'https://geopub.epa.gov/arcgis/rest/services/EMEF/efpoints/MapServer';
-const EPA_EMEF_LAYERS = [0, 1, 4, 5]; // Superfund (SEMS), TRI, Hazardous Waste (RCRAInfo), Brownfields (ACRES)
+const EPA_ECHO_FACILITY_ENDPOINT = 'https://echodata.epa.gov/echo/echo_rest_services.get_facility_info';
+const EPA_EMEF_MAPSERVER = 'https://gispub.epa.gov/arcgis/rest/services/OEI/FRS_INTERESTS/MapServer';
+const EPA_EMEF_LAYERS = [8]; // Facility Registry Service (FRS) FACILITY_INTERESTS
+const LEGACY_FRS_COOLDOWN_MS = 10 * 60 * 1000;
+let frsLegacyDownUntil = 0;
 
+function resetEpaProviderStateForTests() {
+  frsLegacyDownUntil = 0;
+}
+
+function mapEchoFacilityRecord(item = {}) {
+  const programs = [];
+  if (item.SEMSInd || item.SEMSIds || item.SFIds) programs.push('SEMS');
+  if (item.RCRAPermitTypes || item.RCRAComplianceStatus || item.RCRAIds || item.RCRAIDs) programs.push('RCRAINFO');
+  if (item.TRIIDs) programs.push('TRIS');
+  if (item.CWAPermitTypes || item.CWAComplianceStatus || item.NPDESIDs || item.CWPIds) programs.push('ICIS-NPDES');
+  if (item.CAAIDs || item.CAAComplianceStatus) programs.push('ICIS-AIR');
+  if (item.SDWASystemTypes) programs.push('SDWIS');
+  return {
+    RegistryId: item.RegistryID || null,
+    PrimaryName: item.FacName || 'Unknown facility',
+    LocationAddress: item.FacStreet || null,
+    CityName: item.FacCity || null,
+    StateCode: item.FacState || null,
+    PostalCode: item.FacZip || null,
+    Latitude83: item.FacLat ?? null,
+    Longitude83: item.FacLong ?? null,
+    ProgramSysAcronyms: programs.length > 0 ? programs : ['FRS'],
+  };
+}
+
+async function fetchEpaEchoFallback(coords, radiusMiles, fetchFn, timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const qs = new URLSearchParams({
+      output: 'JSON',
+      p_lat: String(coords.lat),
+      p_long: String(coords.lng),
+      p_radius: String(radiusMiles),
+      responseset: '25',
+    });
+    const res = await fetchFn(`${EPA_ECHO_FACILITY_ENDPOINT}?${qs.toString()}`, {
+      signal: controller.signal,
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) {
+      throw new Error(`epa_echo_http_${res.status}`);
+    }
+    const data = await res.json();
+    const results = data && typeof data === 'object' ? data.Results : null;
+    if (!results || typeof results !== 'object' || results.Error) {
+      throw new Error('epa_echo_invalid_payload');
+    }
+    const list = Array.isArray(results.Facilities) ? results.Facilities : [];
+    return list.map(mapEchoFacilityRecord);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 async function fetchEpaArcgisFallback(coords, radiusMiles, fetchFn, signal) {
+  const deltaLat = radiusMiles / 69;
+  const deltaLng = radiusMiles / (69 * Math.max(0.2, Math.cos((coords.lat * Math.PI) / 180)));
+  const xmin = Number((coords.lng - deltaLng).toFixed(5));
+  const ymin = Number((coords.lat - deltaLat).toFixed(5));
+  const xmax = Number((coords.lng + deltaLng).toFixed(5));
+  const ymax = Number((coords.lat + deltaLat).toFixed(5));
+
   const layerResults = await Promise.all(
     EPA_EMEF_LAYERS.map(async (layerId) => {
       const q = new URL(`${EPA_EMEF_MAPSERVER}/${layerId}/query`);
-      q.searchParams.set('geometry', `${coords.lng},${coords.lat}`);
-      q.searchParams.set('geometryType', 'esriGeometryPoint');
+      q.searchParams.set('geometry', `${xmin},${ymin},${xmax},${ymax}`);
+      q.searchParams.set('geometryType', 'esriGeometryEnvelope');
       q.searchParams.set('inSR', '4326');
+      q.searchParams.set('outSR', '4326');
       q.searchParams.set('spatialRel', 'esriSpatialRelIntersects');
-      q.searchParams.set('distance', String(radiusMiles));
-      q.searchParams.set('units', 'esriSRUnit_StatuteMile');
-      q.searchParams.set('outFields', 'registry_id,primary_name,location_address,city_name,state_code,postal_code,latitude,longitude,pgm_sys_acrnm');
+      q.searchParams.set('outFields', '*');
       q.searchParams.set('returnGeometry', 'false');
+      q.searchParams.set('resultRecordCount', '25');
       q.searchParams.set('f', 'json');
       const res = await fetchFn(q.toString(), {
         signal,
@@ -40,7 +104,10 @@ async function fetchEpaArcgisFallback(coords, radiusMiles, fetchFn, signal) {
   const byId = new Map();
   for (const list of layerResults) {
     for (const attr of list) {
-      const key = `${attr.registry_id || ''}:${attr.pgm_sys_acrnm || ''}:${attr.primary_name || ''}`;
+      const regId = attr.REGISTRY_ID || attr.registry_id || '';
+      const prg = attr.PGM_SYS_ACRNMS || attr.PGM_SYS_ACRNM || attr.pgm_sys_acrnm || '';
+      const name = attr.PRIMARY_NAME || attr.primary_name || '';
+      const key = `${regId}:${prg}:${name}`;
       if (!byId.has(key)) byId.set(key, attr);
     }
   }
@@ -225,54 +292,81 @@ async function queryEpaHazards({
   // Example: https://data.epa.gov/efservice/frs_rest_services.get_facilities/latitude83/39.7392/longitude83/-104.9903/search_radius/0.25/JSON
   const endpoint = `${EPA_FRS_ENDPOINT}/latitude83/${coords.lat}/longitude83/${coords.lng}/search_radius/${radiusMiles}/JSON`;
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    const res = await fetchFn(endpoint, {
-      signal: controller.signal,
-      headers: {
-        'Accept': 'application/json',
-        'User-Agent': 'PropertyCrawl/1.0 (Zero-Cost Federal Hazard GIS)'
-      }
-    });
-
-    clearTimeout(timer);
-
-    let rawList = [];
-    if (!res.ok) {
+  const queryFallbacks = async (primaryReason) => {
+    try {
+      return await fetchEpaEchoFallback(coords, radiusMiles, fetchFn, timeoutMs);
+    } catch {
       const fbController = new AbortController();
       const fbTimer = setTimeout(() => fbController.abort(), timeoutMs);
       try {
-        rawList = await fetchEpaArcgisFallback(coords, radiusMiles, fetchFn, fbController.signal);
+        return await fetchEpaArcgisFallback(coords, radiusMiles, fetchFn, fbController.signal);
       } catch {
-        return {
-          status: 'unavailable',
-          reason: `epa_api_http_${res.status}`,
-          environmentalLiability: null,
-          provenance: 'epa-envirofacts-spatial-query'
-        };
+        const err = new Error(primaryReason);
+        err.primaryReason = primaryReason;
+        throw err;
       } finally {
         clearTimeout(fbTimer);
       }
+    }
+  };
+
+  try {
+    let rawList = [];
+    const skipLegacyFrs = fetchFn === globalThis.fetch;
+
+    if (skipLegacyFrs) {
+      rawList = await queryFallbacks('epa_echo_and_gis_fallback_failed');
     } else {
-      const data = await res.json();
-      if (Array.isArray(data)) {
-        rawList = data;
-      } else if (data && Array.isArray(data.Results?.FRSFacet)) {
-        rawList = data.Results.FRSFacet;
-      } else if (data && Array.isArray(data.Facility)) {
-        rawList = data.Facility;
-      } else if (data && Array.isArray(data.features)) {
-        rawList = data.features.map((f) => f?.attributes).filter(Boolean);
-      } else {
-        return { status: 'unavailable', reason: 'epa_invalid_response', environmentalLiability: null, provenance: 'epa-envirofacts-spatial-query' };
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      let res;
+      try {
+        res = await fetchFn(endpoint, {
+          signal: controller.signal,
+          headers: {
+            'Accept': 'application/json',
+            'User-Agent': 'PropertyCrawl/1.0 (Zero-Cost Federal Hazard GIS)'
+          }
+        });
+      } catch (primaryErr) {
+        clearTimeout(timer);
+        if (fetchFn === globalThis.fetch) {
+          frsLegacyDownUntil = Date.now() + LEGACY_FRS_COOLDOWN_MS;
+        }
+        const primaryReason = primaryErr?.name === 'AbortError'
+          ? 'epa_api_timeout'
+          : `epa_api_network_error: ${primaryErr?.message || 'network_error'}`;
+        rawList = await queryFallbacks(primaryReason);
+        res = null;
+      }
+
+      if (res) {
+        clearTimeout(timer);
+        if (!res.ok) {
+          if (fetchFn === globalThis.fetch) {
+            frsLegacyDownUntil = Date.now() + LEGACY_FRS_COOLDOWN_MS;
+          }
+          rawList = await queryFallbacks(`epa_api_http_${res.status}`);
+        } else {
+          const data = await res.json();
+          if (Array.isArray(data)) {
+            rawList = data;
+          } else if (data && Array.isArray(data.Results?.FRSFacet)) {
+            rawList = data.Results.FRSFacet;
+          } else if (data && Array.isArray(data.Facility)) {
+            rawList = data.Facility;
+          } else if (data && Array.isArray(data.features)) {
+            rawList = data.features.map((f) => f?.attributes).filter(Boolean);
+          } else {
+            return { status: 'unavailable', reason: 'epa_invalid_response', environmentalLiability: null, provenance: 'epa-envirofacts-spatial-query' };
+          }
+        }
       }
     }
 
     const facilities = rawList.map((item) => {
-      const facLat = Number(item.Latitude83 || item.LATITUDE || item.latitude || item.lat);
-      const facLon = Number(item.Longitude83 || item.LONGITUDE || item.longitude || item.lng);
+      const facLat = Number(item.Latitude83 || item.LATITUDE || item.LATITUDE83 || item.latitude || item.lat);
+      const facLon = Number(item.Longitude83 || item.LONGITUDE || item.LONGITUDE83 || item.longitude || item.lng);
       const dist = (Number.isFinite(facLat) && Number.isFinite(facLon))
         ? haversineMiles(coords.lat, coords.lng, facLat, facLon)
         : null;
@@ -282,8 +376,8 @@ async function queryEpaHazards({
         programs = item.ProgramSysAcronyms;
       } else if (typeof item.ProgramSysAcronyms === 'string') {
         programs = item.ProgramSysAcronyms.split(',').map((s) => s.trim());
-      } else if (item.PROGRAM_SYSTEM_ACRONYMS || item.pgm_sys_acrnm) {
-        programs = String(item.PROGRAM_SYSTEM_ACRONYMS || item.pgm_sys_acrnm).split(',').map((s) => s.trim());
+      } else if (item.PGM_SYS_ACRNMS || item.PROGRAM_SYSTEM_ACRONYMS || item.pgm_sys_acrnm) {
+        programs = String(item.PGM_SYS_ACRNMS || item.PROGRAM_SYSTEM_ACRONYMS || item.pgm_sys_acrnm).split(',').map((s) => s.trim());
       }
 
       return {
@@ -320,10 +414,9 @@ async function queryEpaHazards({
       provenance: 'epa-envirofacts-spatial-query'
     };
   } catch (err) {
-    clearTimeout(timer);
     return {
       status: 'unavailable',
-      reason: err.name === 'AbortError' ? 'epa_api_timeout' : `epa_api_network_error: ${err.message}`,
+      reason: err?.primaryReason || (err?.name === 'AbortError' ? 'epa_api_timeout' : `epa_api_network_error: ${err?.message || 'unknown_error'}`),
       environmentalLiability: null,
       provenance: 'epa-envirofacts-spatial-query'
     };
@@ -332,6 +425,9 @@ async function queryEpaHazards({
 
 module.exports = {
   EPA_FRS_ENDPOINT,
+  EPA_ECHO_FACILITY_ENDPOINT,
+  EPA_EMEF_MAPSERVER,
+  resetEpaProviderStateForTests,
   normalizeCoordinates,
   haversineMiles,
   evaluateEnvironmentalLiability,

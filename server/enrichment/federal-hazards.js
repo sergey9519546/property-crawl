@@ -12,7 +12,7 @@ async function assessFederalHazards({
   lng,
   fetchFn = process.env.NODE_ENV === 'test' && !process.env.DISCOVERY_TEST_ALLOW_REMOTE ? null : globalThis.fetch,
   cachePaths = {},
-  timeoutMs = 3500,
+  timeoutMs = 8500,
   now = Date.now()
 } = {}) {
   const [floodResult, epaResult, terrainResult] = await Promise.all([
