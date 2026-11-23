@@ -132,6 +132,22 @@ function splitRealAuctionAddress(rawAddr = '', fallbackState = '') {
     }
   }
 
+  const cityZipMatch = normalized.match(/^(.+?),\s*([A-Za-z][A-Za-z .'-]{1,40}?)(?:,\s*|\s+)(?:([A-Za-z]{2})\s+)?(\d{5})(?:-\d{4})?\s*$/);
+  if (cityZipMatch) {
+    const candCity = cityZipMatch[2].trim();
+    const st = (cityZipMatch[3] ? cityZipMatch[3].toUpperCase() : expectedSt) || null;
+    const nonCityToken = /^[A-Za-z]{2}$/.test(candCity) || /\d/.test(candCity) || /^(?:unit|apt|ste|suite|lot|bldg|fl|floor|rm|room)\b/i.test(candCity);
+    if (!nonCityToken && (!expectedSt || !st || st === expectedSt)) {
+      return {
+        address: normalized,
+        streetAddress: cityZipMatch[1].replace(/[,\s]+$/, '').trim(),
+        city: titleCaseCity(candCity),
+        state: st,
+        zip: cityZipMatch[4],
+      };
+    }
+  }
+
   const zipOnlyMatch = normalized.match(/^(.+?),\s*(?:([A-Za-z]{2})\s+)?(\d{5})(?:-\d{4})?\s*$/);
   if (zipOnlyMatch) {
     return {
@@ -157,17 +173,17 @@ function deriveRealAuctionStatusFields(rawStatus = '', area = null) {
   const statusText = String(rawStatus || '').trim();
   const isAreaC = String(area || '').toUpperCase() === 'C';
   const effective = statusText || (isAreaC ? 'Canceled' : '');
-  if (!effective) return null;
-  if (/bankruptcy|automatic\s*stay/i.test(effective)) {
+  if (!effective) return { status: 'scheduled', lifecycleStatus: 'scheduled', transactionOutcome: null, cancellationReason: null };
+  if (/bankr?upt?c|automatic\s*stay/i.test(effective)) {
     return { status: 'stayed', lifecycleStatus: 'stayed', transactionOutcome: null, cancellationReason: 'Bankruptcy Stay' };
   }
-  if (/\bstay(?:ed)?\b/i.test(effective)) {
+  if (/\bstay(?:ed)?\b|\b(?:on\s+)?hold\b/i.test(effective)) {
     return { status: 'stayed', lifecycleStatus: 'stayed', transactionOutcome: null, cancellationReason: 'Court Stay' };
   }
-  if (/cancel|dismiss|withdrawn|vacated|redeem|removed/i.test(effective) || isAreaC) {
+  if (/cancel|dismiss|withdraw|vacat|redeem|removed|writ\s+expired|\bexpired\b/i.test(effective) || isAreaC) {
     return { status: 'cancelled', lifecycleStatus: 'cancelled', transactionOutcome: 'cancelled', cancellationReason: 'Canceled' };
   }
-  if (/postpone|adjourn|continue|reschedul/i.test(effective)) {
+  if (/postpone|\badj(?:ourn(?:ed|ment)?|d)?\b|continue|reschedul/i.test(effective)) {
     return { status: 'postponed', lifecycleStatus: 'postponed', transactionOutcome: null, cancellationReason: 'Postponed' };
   }
   if (/sold|third\s*party|plaintiff\s*bid|reverted/i.test(effective)) {

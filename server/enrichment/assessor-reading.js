@@ -293,13 +293,15 @@ function interpretAssessorParcel({ countyKey, parcel, openingBid } = {}) {
   }
 
   const bid = Number(openingBid);
-  const bidOk = Number.isFinite(bid) && bid > 0;
+  const isNominalBid = Number.isFinite(bid) && bid > 0 && bid <= 1000 && marketComparison !== null && marketComparison >= 10000;
+  const bidOk = Number.isFinite(bid) && bid > 0 && !isNominalBid;
   const ratio = marketComparison && bidOk ? bid / marketComparison : null;
   const dealScore = ratio !== null ? dealScoreFromRatio(ratio) : null;
   let withheldReason = null;
   if (!parcel) withheldReason = 'No parcel matched the published coordinates or APN.';
   else if (rawFigure === null) withheldReason = 'The assessor layer returned no positive total for the configured field.';
   else if (!rule) withheldReason = WITHHOLD[countyKey] || 'No market conversion is configured for this county.';
+  else if (isNominalBid) withheldReason = 'Published opening amount is a nominal starting bid placeholder (reserve undisclosed), so no bid-to-figure ratio is computed.';
   else if (!bidOk) withheldReason = 'Opening amount is not published, so no bid-to-figure ratio is computed.';
 
   return {

@@ -276,16 +276,16 @@ function canonicalStatus(value) {
   const raw = optionalText(value);
   if (!raw) return 'unknown';
   const normalized = raw.toLowerCase();
-  if (/cancel|withdraw|dismiss|settl|discontinu|\bredeem(?:ed)?\b/.test(normalized)) return 'cancelled';
+  if (/cancel|withdraw|dismiss|settl|discontinu|\bredeem(?:ed)?\b|\bwrit\s+expired\b|\bexpired\b|\bvacat(?:ed)?\b|\bremoved\b|\bno\s+sale\b/.test(normalized)) return 'cancelled';
   if (/postpon/.test(normalized)) return 'postponed';
-  if (/adjourn/.test(normalized)) return 'adjourned';
-  if (/stay|bankruptc/.test(normalized)) return 'stayed';
+  if (/\badj(?:ourn(?:ed|ment)?|d|\.)?(?:\b|$)/.test(normalized)) return 'adjourned';
+  if (/\bstay(?:ed)?\b|bankr?upt?c|\b(?:on\s+)?hold\b/.test(normalized)) return 'stayed';
   if (/reverted\s+to\s+(?:plaintiff|beneficiary)|(?:purchased|sold)\s*(?:-|to|:)\s*(?:plaintiff|beneficiary)/.test(normalized)) return 'closed';
   if (/\bsold\b|purchased\s*[-:]\s*(?:3rd|third)[-\s]*party/.test(normalized)) return 'sold';
   if (/\bclosed\b|\bauctioned\b|\bpost[-\s]?auction\b|\boutbid\b|\bended\b/.test(normalized)) return 'closed';
   if (/scheduled|coming\s*soon|pre[-.\s]?auction|\bauction\s*(?:begins|starts|date)\b/.test(normalized)) return 'scheduled';
   if (/pending/.test(normalized)) return 'pending';
-  if (/^(?:status\s*:\s*)?(?:active|live|open|bidding|available|re-?listed)$|\bauction\s*event\b/.test(normalized)) return 'active';
+  if (/^(?:status\s*:\s*)?(?:active|live|open|bidding|available|re-?listed)$|\bauction\s*(?:event|ends)\b|\bbidding\s+(?:open|ends)\b/.test(normalized)) return 'active';
   return 'unknown';
 }
 
@@ -328,7 +328,7 @@ function prepareListingForPersistence(listing = {}) {
   const geocode = normalizeGeocode(listing.lat, listing.lng);
   const primaryStatus = canonicalStatus(listing.status);
   const lifecycleCanonical = canonicalStatus(listing.lifecycleStatus);
-  const resolvedStatus = ['cancelled', 'closed', 'sold'].includes(lifecycleCanonical)
+  const resolvedStatus = ['cancelled', 'closed', 'sold', 'stayed', 'adjourned', 'postponed'].includes(lifecycleCanonical)
     ? lifecycleCanonical
     : (primaryStatus !== 'unknown' ? primaryStatus : lifecycleCanonical);
   const seniorLienRisk = typeof listing.seniorLienRisk === 'string' && listing.seniorLienRisk.trim()
@@ -1248,7 +1248,7 @@ class DatabaseClient {
              OR (city IS NOT NULL AND TRIM(city) != '' AND state IS NOT NULL AND TRIM(state) != '')
         )::int AS buckets_total
       FROM listings
-      WHERE (status = 'active' OR status IS NULL)
+      WHERE (status IN ('active', 'scheduled', 'pending', 'unknown') OR status IS NULL)
         AND source_observed_at IS NOT NULL
         AND source_observed_at >= $1::timestamptz
         AND ($2::text IS NULL OR state = $2)
@@ -1387,7 +1387,7 @@ class DatabaseClient {
     let sql = `
       SELECT ${SUMMARY_LISTING_SELECT}
       FROM listings
-      WHERE (status = 'active' OR status IS NULL)
+      WHERE (status IN ('active', 'scheduled', 'pending', 'unknown') OR status IS NULL)
         AND source_observed_at IS NOT NULL
         AND source_observed_at >= $1::timestamptz
     `;
@@ -1427,7 +1427,7 @@ class DatabaseClient {
             WHERE kind = $1 AND key = $2
             LIMIT 1
           `, [kind, key]),
-          pool.query(`SELECT COUNT(*)::int AS count FROM listings WHERE (status = 'active' OR status IS NULL)`)
+          pool.query(`SELECT COUNT(*)::int AS count FROM listings WHERE (status IN ('active', 'scheduled', 'pending', 'unknown') OR status IS NULL)`)
         ]);
         if (mvRes && mvRes.rows && mvRes.rows.length > 0) {
           const r = mvRes.rows[0];
@@ -1458,7 +1458,7 @@ class DatabaseClient {
 
     const [rowsRes, countRes] = await Promise.all([
       pool.query(sql, params),
-      pool.query(`SELECT COUNT(*)::int AS count FROM listings WHERE (status = 'active' OR status IS NULL)`)
+      pool.query(`SELECT COUNT(*)::int AS count FROM listings WHERE (status IN ('active', 'scheduled', 'pending', 'unknown') OR status IS NULL)`)
     ]);
 
     const rows = rowsRes.rows.map(mapPgListingRow);
@@ -1685,7 +1685,7 @@ class DatabaseClient {
         ARRAY_AGG(DISTINCT state ORDER BY state) FILTER (WHERE state IS NOT NULL AND state != '') AS states,
         MAX(source_observed_at)::text AS "latestObservation"
       FROM listings
-      WHERE (status = 'active' OR status IS NULL)
+      WHERE (status IN ('active', 'scheduled', 'pending', 'unknown') OR status IS NULL)
         AND (provenance IS NULL OR provenance->>'origin' IN ('live', 'email_notice'))
       GROUP BY source_key;
     `;

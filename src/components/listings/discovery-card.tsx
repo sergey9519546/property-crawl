@@ -4,7 +4,7 @@ import { listingFactOrigin } from "@/lib/evidence";
 
 import * as React from "react";
 import Link from "next/link";
-import { ArrowUpRight, Bookmark, FileText, Loader2 } from "lucide-react";
+import { ArrowUpRight, Bookmark, Loader2 } from "lucide-react";
 import { Fact } from "@/components/evidence/fact";
 import { ListingThumbnail } from "@/components/listings/listing-thumbnail";
 import { TriageChips } from "@/components/listings/triage-chips";
@@ -59,6 +59,7 @@ export const DiscoveryCard = React.memo(function DiscoveryCard({ listing, href, 
   const lifecycle = listing.lifecycle || listing.lifecycleStatus;
   const stale = listing.sourceFreshness?.status === "stale";
   const facts = [
+    listing.propType && listing.propType !== "Unknown" ? sourceDisplayText(listing.propType) : null,
     knownNumber(listing.beds) !== null ? `${listing.beds} ${m.listingsUi.bedShort}` : null,
     knownNumber(listing.baths) !== null ? `${listing.baths} ${m.listingsUi.bathShort}` : null,
     knownNumber(listing.sqft) !== null ? `${localizeNumberText(Number(listing.sqft), locale)} ${m.listingsUi.sqFtUnit}` : null,
@@ -179,7 +180,6 @@ export const DiscoveryCard = React.memo(function DiscoveryCard({ listing, href, 
           {listing.sourceObservedAt ? ` · ${locale === "en" ? displayDate(listing.sourceObservedAt) : localizeDisplayDate(listing.sourceObservedAt, locale, m.listingsUi.dateUnavailable)}` : ` · ${m.listingsUi.dateUnavailable}`}
         </span>
         {completeness ? <span title={completeness.missing.length ? `Not available in this record: ${completeness.missing.map(field => field.replace(/([A-Z])/g, " $1").toLowerCase()).join(", ")}` : "All tracked details are available in this record"}>{format(m.listingsUi.detailsAvailable, { known: completeness.known, total: completeness.total })}</span> : null}
-        {listing.hasDocuments === true ? <span className="inline-flex items-center gap-1"><FileText size={12} /> {m.listingsUi.documentsLabel}</span> : null}
         {effectiveDealScore !== null ? (() => {
           const band = bandForScore(effectiveDealScore);
           const isAssessor = listing.opportunity?.valuationBasis === 'enrolled_assessor_registry';
@@ -193,7 +193,6 @@ export const DiscoveryCard = React.memo(function DiscoveryCard({ listing, href, 
             </span>
           );
         })() : null}
-        {opportunity && knownNumber(opportunity.rank) !== null ? <span title={opportunity.note}>{format(m.listingsUi.opportunityRank, { rank: opportunity.rank })}</span> : null}
       </div>
       <div className="relative z-20 mt-auto grid gap-2 pt-4">
         <button type="button" aria-pressed={compared} aria-label={`${compared ? m.listingsUi.removeBtn : m.listingsUi.compareBtn}: ${listing.address}`} disabled={compareFull && !compared} onClick={() => onCompare(listing.id)} className="inline-flex min-h-11 items-center justify-center rounded-control border border-line-strong bg-card px-3 text-xs font-semibold text-ink-2 transition hover:border-ink-3 hover:bg-paper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-3 disabled:cursor-not-allowed disabled:opacity-50">

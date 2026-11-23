@@ -520,6 +520,7 @@ class GsaSurplusScraper extends BaseScraper {
     if (/condo/i.test(desc)) return 'Condo';
     if (/multi.?family|duplex/i.test(desc)) return 'Multi-Family';
     if (/vacant land|land only|raw land|acreage/i.test(desc)) return 'Land';
+    if (/single.?family|\bhome\b|\bhouse\b|residential|residence/i.test(desc)) return 'Single Family';
     return null;
   }
 

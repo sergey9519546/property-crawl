@@ -127,8 +127,8 @@ function createScrapersHandler(dependencies = {}) {
               WHERE id IN (
                 SELECT id FROM listings
                  WHERE discovery_terminal IS TRUE
-                    OR LOWER(COALESCE(lifecycle_status, '')) IN ('sold', 'closed', 'ended', 'completed', 'cancelled', 'retired', 'withdrawn', 'redeemed')
-                    OR LOWER(COALESCE(status, '')) IN ('sold', 'closed', 'ended', 'completed', 'cancelled', 'retired', 'withdrawn', 'redeemed')
+                    OR LOWER(COALESCE(lifecycle_status, '')) IN ('sold', 'closed', 'ended', 'completed', 'cancelled', 'canceled', 'retired', 'withdrawn', 'redeemed', 'dismissed', 'settled', 'discontinued', 'vacated', 'writ expired', 'expired')
+                    OR LOWER(COALESCE(status, '')) IN ('sold', 'closed', 'ended', 'completed', 'cancelled', 'canceled', 'retired', 'withdrawn', 'redeemed', 'dismissed', 'settled', 'discontinued', 'vacated', 'writ expired', 'expired')
                  LIMIT $1
               )`,
             [limit],
@@ -137,13 +137,21 @@ function createScrapersHandler(dependencies = {}) {
           const statusRes = await database.pool.query(
             `UPDATE listings
                 SET status = CASE
+                      WHEN LOWER(COALESCE(lifecycle_status, '')) ~ 'bankr?upt?c|\\mstay(ed)?\\M|\\m(on[[:space:]]+)?hold\\M' THEN 'stayed'
+                      WHEN LOWER(COALESCE(lifecycle_status, '')) ~ '\\madj(ourn(ed|ment)?|d)?\\M' THEN 'adjourned'
+                      WHEN LOWER(COALESCE(lifecycle_status, '')) ~ 'postpon' THEN 'postponed'
                       WHEN LOWER(COALESCE(lifecycle_status, '')) LIKE 'auction begins%' THEN 'scheduled'
-                      ELSE 'active'
+                      WHEN LOWER(COALESCE(lifecycle_status, '')) LIKE 'auction ends%' THEN 'active'
+                      WHEN LOWER(TRIM(COALESCE(lifecycle_status, ''))) IN ('status: active', 'active', 'live', 'open', 'bidding', 'available') THEN 'active'
+                      ELSE 'scheduled'
                     END
               WHERE LOWER(COALESCE(status, 'unknown')) = 'unknown'
                 AND (
-                  LOWER(COALESCE(lifecycle_status, '')) LIKE 'auction begins%'
+                  LOWER(COALESCE(lifecycle_status, '')) ~ 'bankr?upt?c|\\mstay(ed)?\\M|\\m(on[[:space:]]+)?hold\\M|\\madj(ourn(ed|ment)?|d)?\\M|postpon'
+                  OR LOWER(COALESCE(lifecycle_status, '')) LIKE 'auction begins%'
+                  OR LOWER(COALESCE(lifecycle_status, '')) LIKE 'auction ends%'
                   OR LOWER(TRIM(COALESCE(lifecycle_status, ''))) IN ('status: active', 'active', 'live', 'open', 'bidding', 'available')
+                  OR (source_key = 'sheriff' AND sale_date IS NOT NULL AND sale_date >= CURRENT_DATE)
                 )`,
           );
           const statusReconciled = Number(statusRes?.rowCount || 0);

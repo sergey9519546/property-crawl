@@ -351,7 +351,7 @@ class HudHomeScraper extends BaseScraper {
     return {
       id: `HUD-${caseNum.replace(/[^a-zA-Z0-9-]/g, '')}`,
       state: String(p.STATE_CODE || state).trim(), county: null, city, zip, address,
-      lat, lng,
+      lat, lng, propType: 'Single Family',
       openingBid: null, estLow: null, estHigh: null, assessed: null,
       saleDate: null, plaintiff: 'U.S. Department of Housing and Urban Development',
       defendant: null, judgment: null, attorney: null, occupancy: null, deposit: null,

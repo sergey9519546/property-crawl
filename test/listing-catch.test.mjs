@@ -46,3 +46,10 @@ test("clean record yields no flags", () => {
   const out = listingCatch({ openingBid: 1, estLow: 10, estHigh: 20, occupancy: "Vacant", deposit: "$500", saleDate: "2026-11-01", seniorLienRisk: "low" });
   assert.deepEqual(out.flags, []);
 });
+
+
+test("flags nominal <= $500 starting bids when valuation range is absent", () => {
+  const out = listingCatch({ openingBid: 100, estLow: null, estHigh: null });
+  assert.match(out.flags[0], /nominal \$100 starting bid/i);
+  assert.match(out.flags[0], /no value range was published/i);
+});

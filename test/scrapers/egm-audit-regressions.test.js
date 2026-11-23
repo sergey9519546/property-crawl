@@ -184,6 +184,11 @@ test('RealAuction FL address splitting strips hyphenated FL-ZIP while keeping un
   const { SheriffSaleScraper } = require('../../server/scrapers/sheriff');
 
   const split = splitRealAuctionAddress('5120 OAKDALE AVE, UNIT 4B, TAMPA, FL- 33610', 'FL');
+  const ohSplit = splitRealAuctionAddress('119 Union Street, Lancaster, 43130', 'OH');
+  assert.equal(ohSplit.streetAddress, '119 Union Street');
+  assert.equal(ohSplit.city, 'Lancaster');
+  assert.equal(ohSplit.state, 'OH');
+  assert.equal(ohSplit.zip, '43130');
   assert.equal(split.streetAddress, '5120 OAKDALE AVE, UNIT 4B');
   assert.equal(split.address, '5120 OAKDALE AVE, UNIT 4B, TAMPA, FL 33610');
   assert.equal(split.city, 'Tampa');

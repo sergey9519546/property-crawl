@@ -203,8 +203,10 @@ const SALE_PROXIMITY_SOURCES = new Set(['sheriff', 'civilview', 'ohio-sheriff-sa
 
 function mapDistressStage(source, saleDate, auctionProgram = null) {
   const key = typeof source === 'string' ? source.trim().toLowerCase() : '';
+  const program = typeof auctionProgram === 'string' ? auctionProgram.trim().toLowerCase() : '';
   if (REO_SOURCES.has(key)) return 'reo';
   if (SCHEDULED_SOURCES.has(key)) return 'scheduled';
+  if (key === 'tax_sale' || /tax[-_\s]?sale|tax[-_\s]?deed|tax[-_\s]?lien/.test(key) || /tax[-_\s]?sale|tax[-_\s]?deed|tax[-_\s]?lien/.test(program)) return 'tax_sale';
   if (SALE_PROXIMITY_SOURCES.has(key)) {
     const saleTime = saleDate ? Date.parse(saleDate) : NaN;
     if (Number.isFinite(saleTime)) {
@@ -213,7 +215,6 @@ function mapDistressStage(source, saleDate, auctionProgram = null) {
     }
     return 'pre_foreclosure';
   }
-  const program = typeof auctionProgram === 'string' ? auctionProgram.trim().toLowerCase() : '';
   if (key === 'servicelink' && program) {
     if (['traditional', 'reo', 'hud reo', 'bank owned'].includes(program)) return 'reo';
     if (program === 'short sale') return 'pre_foreclosure';

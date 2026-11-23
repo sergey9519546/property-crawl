@@ -122,7 +122,11 @@ export function BiddingSimulator({ listing, publishedUpsetEstimate }: BiddingSim
     }
   }, [listing.id, publishedRedemption]);
 
-  const publishedOpeningBid = positiveNumber(listing.openingBid);
+  const rawPublishedOpeningBid = positiveNumber(listing.openingBid);
+  const publishedMidpoint = (listing.estLow !== null && listing.estLow !== undefined && listing.estHigh !== null && listing.estHigh !== undefined && Number(listing.estHigh) >= Number(listing.estLow)) ? (Number(listing.estLow) + Number(listing.estHigh)) / 2 : null;
+  const publisherValuation = positiveNumber(listing.mid) ?? publishedMidpoint ?? positiveNumber(listing.estHigh) ?? positiveNumber(listing.estLow);
+  const isNominalStartingBid = rawPublishedOpeningBid !== null && rawPublishedOpeningBid <= 1000 && (publisherValuation === null || publisherValuation >= 10000);
+  const publishedOpeningBid = isNominalStartingBid ? null : rawPublishedOpeningBid;
   const provenance = listing.provenance && typeof listing.provenance === "object" ? listing.provenance : {};
   const publishedUpset = positiveNumber(publishedUpsetEstimate ?? (provenance.approximateUpsetPrice as { amount?: unknown } | null | undefined)?.amount);
   // publishedUpsetEstimate is supplied by the detail SSR page to keep the grid payload stripped.
@@ -130,7 +134,6 @@ export function BiddingSimulator({ listing, publishedUpsetEstimate }: BiddingSim
   const customOpeningBidNum = (() => { const val = enteredAmount(customOpeningBid); return val !== null && val > 0 ? val : null; })();
   const openingBid = publishedOpeningBid ?? customOpeningBidNum;
   const isCustomOpeningBid = publishedOpeningBid === null && customOpeningBidNum !== null;
-  const publishedMidpoint = (listing.estLow !== null && listing.estLow !== undefined && listing.estHigh !== null && listing.estHigh !== undefined && Number(listing.estHigh) >= Number(listing.estLow)) ? (Number(listing.estLow) + Number(listing.estHigh)) / 2 : null; const publisherValuation = positiveNumber(listing.mid) ?? publishedMidpoint ?? positiveNumber(listing.estHigh) ?? positiveNumber(listing.estLow);
   const customValuationNum = enteredAmount(customValuation);
   const estimatedValue = customValuationNum ?? publisherValuation;
   const isCustomValuation = customValuationNum !== null;
@@ -461,7 +464,7 @@ export function BiddingSimulator({ listing, publishedUpsetEstimate }: BiddingSim
             <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-catch-ink" />
             <div className="flex-1">
               <h3 className="text-sm font-bold">{m.detailUi.simUnavailableHeading}</h3>
-              <p className="mt-1 text-xs leading-relaxed text-ink-2">This record carries no published opening amount, so no bid scenario can be modeled. Nothing is inferred from the address or the county. Statutory deadlines, lien forensics, and packet export remain available below.</p>
+              <p className="mt-1 text-xs leading-relaxed text-ink-2">{isNominalStartingBid ? `Published $${Math.round(rawPublishedOpeningBid!).toLocaleString("en-US")} is a nominal starting bid placeholder (lender reserve / upset price undisclosed), so no acquisition scenario is modeled until you enter an assumed bid.` : "This record carries no published opening amount, so no bid scenario can be modeled. Nothing is inferred from the address or the county. Statutory deadlines, lien forensics, and packet export remain available below."}</p>
               <div className="mt-3 border-t border-catch/30 pt-3">
                 <label htmlFor="custom-opening-bid-input" className="block text-xs font-semibold text-ink">
                   Model scenario with your target or assumed opening bid:

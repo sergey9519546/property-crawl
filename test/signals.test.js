@@ -106,6 +106,14 @@ describe('Opportunity-Signal Evaluator (Priority Upgrade 3)', () => {
     assert.equal(ratioSig.nextAction, 'Monitor morning-of-sale announcements for plaintiff upset price or reserve credit bid.');
   });
 
+  test('withholds bid_to_value_ratio support on nominal <= $1000 starting bid placeholder', () => {
+    const res = evaluateOpportunitySignals(sampleListing({ openingBid: 100, mid: 250000, estLow: 225000, estHigh: 275000 }));
+    const sig = res.signals.find(s => s.key === 'bid_to_value_ratio');
+    assert.equal(sig.status, 'unknown');
+    assert.match(sig.label, /Nominal starting bid/i);
+    assert.equal(res.componentScores.bidToValueRatio.earnedPoints, 0);
+  });
+
   test('does not support unsupported valuation, unmatched parcel, or unknown lien evidence', () => {
     const result = evaluateOpportunitySignals(sampleListing({
       estLow: 200000,

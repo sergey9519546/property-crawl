@@ -3,7 +3,7 @@
 const defaultDb = require('../db/client');
 const { isCompatibleNjSitusAddress, enrichNjListing } = require('./nj-cadastral');
 const { parseExecutionAmount, parseDescriptionUpsetMatch } = require('../scrapers/civilview');
-const { sourceObservedAddress, resolveCensusCoordinates } = require('../routes/property-image');
+const { sourceObservedAddress, resolveCensusCoordinates, resolveArcgisCoordinates } = require('../routes/property-image');
 const { computeCatchSummary } = require('../intelligence/catch-summary');
 
 const DEFAULT_NJ_LIMIT = 40;
@@ -79,7 +79,7 @@ function attachCensusCoordinates(listing, censusCoords, observedAt) {
   listing.provenance = listing.provenance && typeof listing.provenance === 'object' ? listing.provenance : {};
   listing.provenance.coordinates = {
     origin: 'geocoder',
-    provider: 'US Census Bureau Geocoder (Public_AR_Current)',
+    provider: censusCoords.basis === 'source_observed_address_arcgis_geocode' ? 'ArcGIS World Geocoder' : 'US Census Bureau Geocoder (Public_AR_Current)',
     verification: 'exact_address_match',
     precision: 'parcel',
     sourceRecordUrl: listing.sourceUrl || null,
@@ -119,6 +119,7 @@ async function repairLiveEnrichment(options = {}) {
   const fetchFn = options.fetchFn || globalThis.fetch;
   const enrichNjFn = options.enrichNjListing || enrichNjListing;
   const resolveCensusFn = options.resolveCensusCoordinates || resolveCensusCoordinates;
+  const resolveArcgisFn = options.resolveArcgisCoordinates || resolveArcgisCoordinates;
   const njLimit = Number.isInteger(Number(options.njLimit)) && Number(options.njLimit) > 0
     ? Number(options.njLimit)
     : DEFAULT_NJ_LIMIT;
@@ -222,7 +223,7 @@ async function repairLiveEnrichment(options = {}) {
                             ELSE NULL END,
                 assessed_value = $4,
                 year_built = $5,
-                prop_type = $6,
+                prop_type = NULLIF($6, 'Unknown'),
                 provenance = $7::jsonb
           WHERE id = $1`,
         [
@@ -307,20 +308,23 @@ async function repairLiveEnrichment(options = {}) {
               source_observed_at::text AS "sourceObservedAt"
          FROM listings
         WHERE (latitude IS NULL OR longitude IS NULL OR (latitude = 0 AND longitude = 0))
+          AND NOT COALESCE(discovery_terminal, FALSE)
           AND address IS NOT NULL
           AND state IS NOT NULL
           AND (
             provenance->'derivedFields'->>'geocodeAttemptedAt' IS NULL
+            OR provenance->'derivedFields'->>'arcgisGeocodeAttemptedAt' IS NULL
             OR NOT (provenance->'derivedFields'->>'geocodeAttemptedAt' ~ '^20[0-9]{2}-')
             OR (provenance->'derivedFields'->>'geocodeAttemptedAt')::timestamptz < NOW() - INTERVAL '7 days'
           )
         ORDER BY CASE
           WHEN source_key = 'civilview' THEN 1
-          WHEN source_key = 'gsa' THEN 2
-          WHEN source_key = 'usda' THEN 3
-          WHEN source_key = 'treasury' THEN 4
-          WHEN source_key = 'irs' THEN 5
-          ELSE 6
+          WHEN source_key = 'sheriff' THEN 2
+          WHEN source_key = 'gsa' THEN 3
+          WHEN source_key = 'usda' THEN 4
+          WHEN source_key = 'treasury' THEN 5
+          WHEN source_key = 'irs' THEN 6
+          ELSE 7
         END, id ASC
         LIMIT $1`,
       [geocodeLimit],
@@ -352,7 +356,12 @@ async function repairLiveEnrichment(options = {}) {
               observedAddress,
               timeoutMs: 4000,
             });
-            attachCensusCoordinates(candidateListing, censusCoords, observedAt);
+            const resolvedCoords = censusCoords || await resolveArcgisFn({
+              fetchImpl: fetchFn,
+              observedAddress,
+              timeoutMs: 4000,
+            });
+            attachCensusCoordinates(candidateListing, resolvedCoords, observedAt);
           }
         }
         const resolvedLat = Number(candidateListing.lat);
@@ -386,6 +395,7 @@ async function repairLiveEnrichment(options = {}) {
             ? candidateListing.provenance.derivedFields
             : {};
           candidateListing.provenance.derivedFields.geocodeAttemptedAt = observedAt;
+          candidateListing.provenance.derivedFields.arcgisGeocodeAttemptedAt = observedAt;
           await pool.query(
             `UPDATE listings
                 SET latitude = NULL,

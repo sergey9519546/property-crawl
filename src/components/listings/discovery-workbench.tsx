@@ -432,7 +432,6 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
     }
   }, [filters, cursor, requestKey, setCursor]);
   React.useEffect(() => {
-    if (filters.view === "map") return;
     // Always revalidate on mount so client route state stays live.
     const delay = filters.q ? 250 : 0;
     const timer = window.setTimeout(() => void refresh(), delay);

@@ -80,8 +80,12 @@ function computeCatchSummary(listing = {}, titleWarnings = [], riskLevel = null)
     }
   }
 
-  // 2. Statutory redemption
-  if (redemption !== null && redemption > 0) {
+  const sourceKey = String(record.source || '').trim().toLowerCase();
+  const hasFederalTaxLien = /internal revenue|federal tax lien/i.test(`${record.seniorLienRisk || ''} ${titleWarnings.join(' ')}`);
+  const isFederalReo = ['hud', 'gsa', 'usda', 'fannie', 'freddie', 'fdic'].includes(sourceKey) && !hasFederalTaxLien;
+
+  // 2. Statutory redemption (suppressed for federal/agency REO unless IRS lien applies)
+  if (!isFederalReo && redemption !== null && redemption > 0) {
     const state = stateLabel(record.state);
     return `${state} law: up to ${Math.round(redemption)}-day statutory redemption window — the former owner may reclaim after sale.`;
   }
@@ -99,27 +103,38 @@ function computeCatchSummary(listing = {}, titleWarnings = [], riskLevel = null)
     return 'No opening amount published — price unknown until sale day; confirm before bidding.';
   }
 
+  const isNominalBid = bid > 0 && bid <= 500 && (estLow === null || estHigh === null);
+  const bidLead = isNominalBid ? `Nominal ${money(bid)} starting bid (reserve undisclosed)` : `Opening bid ${money(bid)}`;
+
   // 5. No sale date
   if (!saleDate) {
-    return `Opening bid ${money(bid)} but no sale date is published yet.`;
+    return isNominalBid ? `${bidLead} — no sale date is published yet.` : `${bidLead} but no sale date is published yet.`;
   }
 
   // 6. Occupancy flag
   if (!occupancy) {
-    return `Opening bid ${money(bid)}, sale ${saleDate}. Occupancy not disclosed — assume no interior access and budget for possible eviction.`;
+    return isNominalBid
+      ? `${bidLead}, sale ${saleDate}. Occupancy not disclosed — budget for eviction.`
+      : `${bidLead}, sale ${saleDate}. Occupancy not disclosed — assume no interior access and budget for possible eviction.`;
   }
   if (/occupied/i.test(occupancy) && !/unoccupied/i.test(occupancy)) {
-    return `Opening bid ${money(bid)}, sale ${saleDate}. Reported ${occupancy.toLowerCase()} — expect no interior access and possible eviction cost.`;
+    return isNominalBid
+      ? `${bidLead}, sale ${saleDate}. Reported ${occupancy.toLowerCase()} — no interior access.`
+      : `${bidLead}, sale ${saleDate}. Reported ${occupancy.toLowerCase()} — expect no interior access and possible eviction cost.`;
   }
 
   // 7. No deposit terms
   if (!deposit) {
-    return `Opening bid ${money(bid)}, sale ${saleDate}. Deposit terms not published — many sales require certified funds on sale day.`;
+    return isNominalBid
+      ? `${bidLead}, sale ${saleDate}. Deposit terms not published.`
+      : `${bidLead}, sale ${saleDate}. Deposit terms not published — many sales require certified funds on sale day.`;
   }
 
   // 8. No valuation range (clean but no comparables)
   if (estLow === null || estHigh === null) {
-    return `Opens at ${money(bid)} on ${saleDate}; no published valuation range — obtain independent comps before bidding.`;
+    return isNominalBid
+      ? `${bidLead} on ${saleDate}; no valuation range — obtain independent comps.`
+      : `Opens at ${money(bid)} on ${saleDate}; no published valuation range — obtain independent comps before bidding.`;
   }
 
   return null;

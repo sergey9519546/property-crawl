@@ -179,6 +179,16 @@ describe('computeCatchSummary — deterministic "Here\'s the Catch" one-liner', 
     assert.ok(out.includes('no published valuation range'));
     assert.ok(!out.includes('$250,000'));
   });
+  test('labels <= $500 opening bids without valuation bands as nominal starting bids', () => {
+    const out = computeCatchSummary({ openingBid: 100, saleDate: '2027-01-15' }, [], null);
+    assert.match(out, /Nominal \$100 starting bid \(reserve undisclosed\)/);
+    assert.ok(out.length < 160);
+  });
+
+  test('suppresses state redemption baseline for federal REO sources unless IRS tax lien', () => {
+    const hud = computeCatchSummary({ source: 'hud', state: 'MI', redemptionDays: 180, openingBid: 120000, saleDate: '2027-01-15' }, [], null);
+    assert.doesNotMatch(hud, /statutory redemption window/);
+  });
 });
 
 describe('presentListing — presentation-layer catch derivation', () => {

@@ -366,9 +366,21 @@ function sourceObservedAddress(listing) {
   const address = rawStreetPart
     ? rawStreetPart.replace(/^(?:lot|parcel)\s+[A-Za-z0-9-]+\s*[:,-]\s*(?=\d+[A-Za-z]?(?:-[A-Za-z0-9]+)?\s+[A-Za-z])/i, '').trim()
     : null;
-  const city = safeText(listing?.city, 128);
+  let city = safeText(listing?.city, 128);
   const state = safeText(listing?.state, 2)?.toUpperCase();
-  const zip = safeText(listing?.zip, 10);
+  let zip = safeText(listing?.zip, 10);
+  if ((!city || !zip) && fullAddress) {
+    const trailingMatch = fullAddress.match(/^.+?,\s*([A-Za-z][A-Za-z .'-]{1,40}?)(?:,\s*|\s+)(?:[A-Za-z]{2,}\s+)?(\d{5})(?:-\d{4})?\s*$/);
+    if (trailingMatch) {
+      const candCity = trailingMatch[1].trim();
+      if (!city && !/^[A-Za-z]{2}$/.test(candCity) && !/\d/.test(candCity) && !/^(?:unit|apt|ste|suite|lot|bldg|fl|floor|rm|room)\b/i.test(candCity)) {
+        city = safeText(candCity, 128);
+      }
+      if (!zip) {
+        zip = safeText(trailingMatch[2], 10);
+      }
+    }
+  }
   if (!address || !city || !state || !zip || !isUsStateOrTerritoryCode(state) || !/^\d{5}(?:-\d{4})?$/.test(zip)) {
     return null;
   }
@@ -1256,6 +1268,8 @@ function createPropertyImageService(options = {}) {
             }
             const census = await resolveCensusCoordinates({ fetchImpl, observedAddress, timeoutMs: geocodeConfig.timeoutMs });
             if (census) return census;
+            const arcgis = await resolveArcgisCoordinates({ fetchImpl, observedAddress, timeoutMs: geocodeConfig.timeoutMs });
+            if (arcgis) return arcgis;
             throw error;
           }
         }
@@ -1263,6 +1277,8 @@ function createPropertyImageService(options = {}) {
           const timeoutMs = clampInteger(env.GOOGLE_STREETVIEW_TIMEOUT_MS, 500, 10_000, 5_000);
           const census = await resolveCensusCoordinates({ fetchImpl, observedAddress, timeoutMs });
           if (census) return census;
+          const arcgis = await resolveArcgisCoordinates({ fetchImpl, observedAddress, timeoutMs });
+          if (arcgis) return arcgis;
         }
         return resolveGeocodingConfig(env);
       }
@@ -1531,6 +1547,7 @@ module.exports.exactRooftopGeocode = exactRooftopGeocode;
 module.exports.hasSourceObservedProvenance = hasSourceObservedProvenance;
 module.exports.hasSourceIdentifiedArchive = hasSourceIdentifiedArchive;
 module.exports.hasUsablePublisherPhoto = hasUsablePublisherPhoto;
+module.exports.resolveArcgisCoordinates = resolveArcgisCoordinates;
 module.exports.resolveCensusCoordinates = resolveCensusCoordinates;
 module.exports.resolveEphemeralCoordinates = resolveEphemeralCoordinates;
 module.exports.resolveRequest = defaultService.resolve;

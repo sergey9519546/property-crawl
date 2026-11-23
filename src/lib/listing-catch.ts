@@ -42,6 +42,8 @@ export function listingCatch(listing: CatchInput, titleWarnings: string[] = []):
   if (bid !== null && bid > 0 && low !== null && high !== null && high >= low && low > 0) {
     const mid = (low + high) / 2;
     notes.push(`Opens at ${money(bid)}, ${Math.round((bid / mid) * 100)}% of the stored ${money(low)}–${money(high)} value range.`);
+  } else if (bid !== null && bid > 0 && bid <= 500) {
+    flags.push(`Opens at a nominal ${money(bid)} starting bid (lender reserve is undisclosed, and no value range was published, so the listing alone can't tell you whether that is a discount).`);
   } else if (bid !== null && bid > 0) {
     flags.push(`Opens at ${money(bid)}, but no value range was published, so the listing alone can't tell you whether that is a discount.`);
   } else {

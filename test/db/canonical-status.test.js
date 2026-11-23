@@ -42,4 +42,13 @@ test('persistence keeps a recorded sale and a finished auction apart', () => {
     prepareListingForPersistence({ id: 'status-probe-4', status: 'unknown', lifecycleStatus: 'Status: Active' }).status,
     'active',
   );
+  assert.equal(storedStatus('WRIT EXPIRED'), 'cancelled');
+  assert.equal(storedStatus('Bankuptcy'), 'stayed');
+  assert.equal(storedStatus('On Hold'), 'stayed');
+  assert.equal(storedStatus('DEFENDANT 1ST 4 WEEK ADJ'), 'adjourned');
+  assert.equal(storedStatus('Auction Ends: Nov 24, 2026'), 'active');
+  assert.equal(
+    prepareListingForPersistence({ id: 'status-probe-5', status: 'scheduled', lifecycleStatus: 'DEFENDANT 1ST 4 WEEK ADJ' }).status,
+    'adjourned',
+  );
 });

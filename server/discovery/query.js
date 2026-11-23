@@ -146,13 +146,13 @@ const DISTRESS_STAGE_SQL =
   `(CASE `
   + `WHEN ${DISTRESS_STAGE_SOURCE_EXPR} IN ('hud','fannie','freddie','va','fdic','treasury','irs','gsa','landbank','landbanksearch','usda','hud-homestore','fannie-homepath','freddie-homesteps','va-vrm','fdic-asset-sales','usda-resales','treasury-forfeiture','irs-auctions','gsa-real-estate-sales') THEN 'reo' `
   + `WHEN ${DISTRESS_STAGE_SOURCE_EXPR} IN ('trustee','county-trustee-sale','bid4assets') THEN 'scheduled' `
+  + `WHEN ${DISTRESS_STAGE_SOURCE_EXPR} = 'tax_sale' OR ${DISTRESS_STAGE_SOURCE_EXPR} ~ 'tax[-_[:space:]]{0,1}sale|tax[-_[:space:]]{0,1}deed|tax[-_[:space:]]{0,1}lien' OR ${DISTRESS_STAGE_PROGRAM_EXPR} ~ 'tax[-_[:space:]]{0,1}sale|tax[-_[:space:]]{0,1}deed|tax[-_[:space:]]{0,1}lien' THEN 'tax_sale' `
   + `WHEN ${DISTRESS_STAGE_SOURCE_EXPR} IN ('sheriff','civilview','ohio-sheriff-sale') THEN `
     + `(CASE WHEN sale_date IS NOT NULL AND (sale_date::timestamp AT TIME ZONE 'UTC') <= (NOW() + INTERVAL '30 days') THEN 'scheduled' ELSE 'pre_foreclosure' END) `
   + `WHEN ${DISTRESS_STAGE_SOURCE_EXPR} = 'servicelink' AND ${DISTRESS_STAGE_PROGRAM_EXPR} IN ('traditional','reo','hud reo','bank owned') THEN 'reo' `
   + `WHEN ${DISTRESS_STAGE_SOURCE_EXPR} = 'servicelink' AND ${DISTRESS_STAGE_PROGRAM_EXPR} = 'short sale' THEN 'pre_foreclosure' `
   + `WHEN ${DISTRESS_STAGE_SOURCE_EXPR} = 'servicelink' AND (${DISTRESS_STAGE_PROGRAM_EXPR} IN ('tps','cwcot') OR ${DISTRESS_STAGE_PROGRAM_EXPR} ~ 'trustee|third[- ]party|foreclosure') THEN `
     + `(CASE WHEN sale_date IS NOT NULL AND (sale_date::timestamp AT TIME ZONE 'UTC') <= (NOW() + INTERVAL '30 days') THEN 'scheduled' ELSE 'pre_foreclosure' END) `
-  + `WHEN ${DISTRESS_STAGE_SOURCE_EXPR} = 'tax_sale' OR ${DISTRESS_STAGE_SOURCE_EXPR} ~ 'tax[-_]{0,1}sale|tax[-_]{0,1}deed' THEN 'tax_sale' `
   + `ELSE 'unknown' END)`;
 function parseDate(v, name) {
   if (!v) return null;
@@ -444,7 +444,7 @@ function matches(row, f) {
   }
   return true;
 }
-const TERMINAL_LIFECYCLE_RE = /(?:reverted\s+to\s+(?:plaintiff|beneficiary)|(?:purchased|sold)\s*[-:]\s*(?:3rd|third)[-\s]*party|(?:purchased|sold)\s*[-:]\s*(?:plaintiff|beneficiary)|(?:^|[^a-z0-9])(?:closed|sold)(?:$|[^a-z0-9])|dismiss|settl|cancel)/i;
+const TERMINAL_LIFECYCLE_RE = /(?:reverted\s+to\s+(?:plaintiff|beneficiary)|(?:purchased|sold)\s*[-:]\s*(?:3rd|third)[-\s]*party|(?:purchased|sold)\s*[-:]\s*(?:plaintiff|beneficiary)|(?:^|[^a-z0-9])(?:closed|sold)(?:$|[^a-z0-9])|dismiss|settl|cancel|writ\s+expired|\bexpired\b|withdraw|discontinu|redeem|vacat)/i;
 function isTerminalForRanking(row) {
   if (!row || typeof row !== "object") return false;
   const st = String(row.status || "").trim().toLowerCase();
@@ -477,18 +477,23 @@ function actionableEvidenceTier(row) {
   return (hasPriceOrRoll ? 2 : 0) + (hasCoords ? 1 : 0);
 }
 function triageSortKey(row, now) {
+  if (isTerminalForRanking(row)) return -1e14;
   const triagePriorityRaw = row.triagePriority ?? row.triage_priority;
   const triagePriority = triagePriorityRaw === null || triagePriorityRaw === undefined ? null : Number(triagePriorityRaw);
   const saleDateRaw = row.saleDate || row.sale_date || null;
   const saleDate = saleDateRaw ? Date.parse(saleDateRaw) : null;
-  const upcoming = saleDate !== null && Number.isFinite(saleDate) && saleDate >= now;
   const startOfToday = Math.floor(now / 86400000) * 86400000;
+  const hasSaleDate = saleDate !== null && Number.isFinite(saleDate);
+  const upcoming = hasSaleDate && saleDate >= startOfToday;
+  const isPastSale = hasSaleDate && saleDate < startOfToday;
   const days = upcoming ? (saleDate - startOfToday) / 86400000 : 0;
   const dateComp = upcoming ? 1e6 - Math.min(1e6, Math.max(0, days)) : 0;
   if (triagePriority !== null && Number.isFinite(triagePriority)) {
+    if (isPastSale) return -1e11 + (triagePriority * 1e3);
     return triagePriority * 1e8 + dateComp;
   }
   if (upcoming) return dateComp;
+  if (isPastSale) return -1e12;
   return -1;
 }
 function compare(a, b, sort, resolvedState = null) {
@@ -847,24 +852,27 @@ function pgSort(f, options = {}) {
     };
   if (f.sort === "equity")
     return { expr: `coalesce(${derivedEquity},-1)`, dir: sortDirection("equity") };
+  const terminalSql = accel
+    ? "discovery_terminal"
+    : "("
+    + "lower(coalesce(status, '')) IN ('sold', 'closed', 'cancelled') "
+    + "OR lower(coalesce(lifecycle_status, '')) ~ '(reverted[[:space:]]+to[[:space:]]+(plaintiff|beneficiary)|(purchased|sold)[[:space:]]*[-:][[:space:]]*(3rd|third)[- [:space:]]*party|(purchased|sold)[[:space:]]*[-:][[:space:]]*(plaintiff|beneficiary)|(^|[^a-z0-9])(closed|sold)($|[^a-z0-9])|dismiss|settl|cancel|writ[[:space:]]+expired|\\mexpired\\M|withdraw|discontinu|redeem|vacat)' "
+    + "OR nullif(coalesce(nullif(transaction_outcome, ''), provenance->'sourceFacts'->>'transactionOutcome', ''), '') IS NOT NULL "
+    + "OR (provenance ? 'publisherAbsence') "
+    + "OR (provenance ? 'supersededBy')"
+    + ")";
   if (f.sort === "triage")
     return {
-      expr: "((CASE "
+      expr: `((CASE `
+        + `WHEN ${terminalSql} THEN -1e14::float8 `
+        + "WHEN sale_date IS NOT NULL AND sale_date < CURRENT_DATE AND triage_priority IS NOT NULL THEN -1e11::float8 + (triage_priority * 1e3) "
+        + "WHEN sale_date IS NOT NULL AND sale_date < CURRENT_DATE THEN -1e12::float8 "
         + "WHEN triage_priority IS NOT NULL THEN (triage_priority * 1e8) + (CASE WHEN sale_date >= CURRENT_DATE THEN 1e6 - LEAST(1e6, GREATEST(0, (sale_date - CURRENT_DATE))) ELSE 0 END) "
         + "WHEN sale_date >= CURRENT_DATE THEN 1e6 - LEAST(1e6, GREATEST(0, (sale_date - CURRENT_DATE))) "
         + "ELSE -1 END)" + stateBoostSql + ")",
       dir: sortDirection("triage"),
     };
   if (f.sort === "score" || f.sort === "opportunity") {
-    const terminalSql = accel
-      ? "discovery_terminal"
-      : "("
-      + "lower(coalesce(status, '')) IN ('sold', 'closed', 'cancelled') "
-      + "OR lower(coalesce(lifecycle_status, '')) ~ '(reverted[[:space:]]+to[[:space:]]+(plaintiff|beneficiary)|(purchased|sold)[[:space:]]*[-:][[:space:]]*(3rd|third)[- [:space:]]*party|(purchased|sold)[[:space:]]*[-:][[:space:]]*(plaintiff|beneficiary)|(^|[^a-z0-9])(closed|sold)($|[^a-z0-9])|dismiss|settl|cancel)' "
-      + "OR nullif(coalesce(nullif(transaction_outcome, ''), provenance->'sourceFacts'->>'transactionOutcome', ''), '') IS NOT NULL "
-      + "OR (provenance ? 'publisherAbsence') "
-      + "OR (provenance ? 'supersededBy')"
-      + ")";
     const actionTierSql = accel
       ? "discovery_action_tier"
       : "("

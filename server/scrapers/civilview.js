@@ -284,10 +284,10 @@ function deriveStatusFromHistory(statusHistory) {
   if (/reverted\s+to\s+(?:plaintiff|beneficiary)|purchased\s*[-:]\s*(?:plaintiff|beneficiary)|sold\s*[-:]\s*(?:plaintiff|beneficiary)/.test(normalized)) {
     return { status: 'closed', lifecycleStatus: latestEntry, transactionOutcome: 'reverted_to_plaintiff' };
   }
-  if (/cancel|withdraw|dismiss|settl|discontinu/.test(normalized)) {
+  if (/cancel|withdraw|dismiss|settl|discontinu|\bredeem(?:ed)?\b|\bwrit\s+expired\b|\bexpired\b|\bvacat(?:ed)?\b|\bno\s+sale\b/.test(normalized)) {
     return { status: 'cancelled', lifecycleStatus: latestEntry, transactionOutcome: null };
   }
-  if (/bankruptc|stay/.test(normalized)) {
+  if (/bankr?upt?c|\bstay(?:ed)?\b|\b(?:on\s+)?hold\b/.test(normalized)) {
     if (/lifted|relief|vacated|exhaust/.test(normalized)) {
       return { status: 'scheduled', lifecycleStatus: latestEntry, transactionOutcome: null };
     }
@@ -296,7 +296,7 @@ function deriveStatusFromHistory(statusHistory) {
   if (/postpon/.test(normalized)) {
     return { status: 'postponed', lifecycleStatus: latestEntry, transactionOutcome: null };
   }
-  if (/adjourn/.test(normalized)) {
+  if (/\badj(?:ourn(?:ed|ment)?|d|\.)?(?:\b|$)/.test(normalized)) {
     return { status: 'adjourned', lifecycleStatus: latestEntry, transactionOutcome: null };
   }
   if (/\bsold\b/.test(normalized)) {
@@ -1019,13 +1019,13 @@ class CivilViewScraper extends BaseScraper {
     if (Array.isArray(statusHistory) && statusHistory.length > 0) {
       for (const entry of statusHistory) {
         const s = String(entry.status || '').toLowerCase();
-        if (/adjourn|postpone|continu/i.test(s)) {
+        if (/\badj(?:ourn(?:ed|ment)?|d|\.)?(?:\b|$)|postpone|continu/i.test(s)) {
           priorPostponements += 1;
           if (/debtor|defendant/i.test(s)) debtorAdjournments += 1;
           if (/plaintiff|bank|lender/i.test(s)) plaintiffAdjournments += 1;
           if (entry.date) lastAdjournmentDate = entry.date;
         }
-        if (/bankruptcy|automatic\s*stay|stay/i.test(s)) {
+        if (/bankr?upt?c|automatic\s*stay|\bstay\b/i.test(s)) {
           if (/lifted|relief|vacated|exhaust/i.test(s)) {
             statutoryStayExhausted = true;
             stayActive = false;

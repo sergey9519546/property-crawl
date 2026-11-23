@@ -275,3 +275,9 @@ test('mapDistressStage and computeTriage classify ServiceLink programs (TPS, CWC
   });
   assert.equal(rec.triage.distressStage, 'pre_foreclosure');
 });
+
+
+test('mapDistressStage: sheriff tax_deed / tax_sale program maps to tax_sale', () => {
+  assert.equal(mapDistressStage('sheriff', '2026-12-01', 'tax_deed'), 'tax_sale');
+  assert.equal(mapDistressStage('sheriff', '2026-12-01', 'Tax Sale'), 'tax_sale');
+});

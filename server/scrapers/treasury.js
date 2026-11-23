@@ -357,7 +357,7 @@ class TreasuryForfeitureScraper extends BaseScraper {
   }
 
   classifyPropertyType(body) {
-    if (/SINGLE FAMILY HOME/i.test(body)) return 'Single Family';
+    if (/single.?family|\bhome\b|\bresidence\b/i.test(body)) return 'Single Family';
     if (/CONDO/i.test(body)) return 'Condo';
     if (/MULTI.?FAMILY|MULTIPLEX/i.test(body)) return 'Multi-Family';
     if (/COMMERCIAL/i.test(body)) return 'Commercial';

@@ -317,7 +317,19 @@ function evaluateOpportunitySignals(listing = {}, options = {}) {
     ? ` [Market caveat: Discount measured against a declining market (${macroTrends.trendLabel || `${macroTrends.yoyPriceChangePct}% YoY`})].`
     : '';
 
-  if (publisherObserved && bid > 0 && mid > 0) {
+  const isNominalStartingBid = publisherObserved && bid > 0 && bid <= 1000 && mid >= 10000;
+  if (isNominalStartingBid) {
+    signals.push({
+      key: 'bid_to_value_ratio',
+      label: 'Nominal starting bid placeholder (reserve undisclosed)',
+      status: 'unknown',
+      evidenceClass: 'unresolved',
+      sourceUrl,
+      observedAt,
+      reason: `Published $${Math.round(bid).toLocaleString()} amount is a nominal starting bid placeholder against $${Math.round(mid).toLocaleString()} supported midpoint; lender reserve / upset price is undisclosed.`,
+      nextAction: 'Enter an assumed reserve or confirm court/platform upset price before computing bid-to-value spread.',
+    });
+  } else if (publisherObserved && bid > 0 && mid > 0) {
     const ratio = bid / mid;
     const discountPct = Math.round((1 - ratio) * 100);
     const evidenceClass = valuationProvenance === 'enrolled_assessor_registry' ? 'official_parcel_roll' : 'calculated_ratio';

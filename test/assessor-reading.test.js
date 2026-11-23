@@ -419,3 +419,12 @@ test('assessor reading converts enrolled CO, NC, NY, WI, AR, NJ 1:1 and CT at 70
   assert.match(ct.citation, /12-62a/);
   assert.match(ct.citation, /0\.70/);
 });
+
+
+test('assessor reading withholds dealScore on nominal starting-bid placeholders ($100 vs $250k roll)', () => {
+  const res = interpretAssessorParcel({ countyKey: 'FL-ORANGE', parcel: parcel(250000), openingBid: 100 });
+  assert.equal(res.marketComparison, 250000);
+  assert.equal(res.ratio, null);
+  assert.equal(res.dealScore, null);
+  assert.match(res.withheldReason, /nominal starting bid/i);
+});

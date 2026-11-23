@@ -370,6 +370,8 @@ class UsdaResalesScraper extends BaseScraper {
       estHigh: null,
       assessed: null,
       saleDate: null,
+      auctionProgram: listingType || 'USDA SFH',
+      lifecycleStatus: 'active',
       status: 'active',
       plaintiff: null,
       defendant: null,

@@ -89,3 +89,16 @@ test('queryFromUrl accepts opportunity and triage sorts without 400', () => {
   const qTriage = discovery.queryFromUrl(new URL('http://localhost/api/listings?sort=triage'));
   assert.equal(qTriage.sort, 'triage');
 });
+
+
+test('triage sort demotes terminal and past-sale rows below upcoming rows', async () => {
+  const future = new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10);
+  const past = '2020-01-01';
+  const rows = [
+    { ...row('past-high'), triagePriority: 55, saleDate: past, status: 'scheduled' },
+    { ...row('term-high'), triagePriority: 90, saleDate: future, status: 'cancelled' },
+    { ...row('live-low'), triagePriority: 10, saleDate: future, status: 'scheduled' },
+  ];
+  const res = await discovery.search(database(rows), discovery.queryFromUrl(new URL('http://localhost/api/listings?sort=triage&limit=10')));
+  assert.deepEqual(res.listings.map((x) => x.id), ['live-low', 'past-high', 'term-high']);
+});
