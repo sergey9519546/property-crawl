@@ -8,7 +8,7 @@ const { computeCatchSummary } = require('../intelligence/catch-summary');
 
 const DEFAULT_NJ_LIMIT = 40;
 const DEFAULT_GEOCODE_LIMIT = 60;
-const DEFAULT_CATCH_LIMIT = 250;
+const DEFAULT_CATCH_LIMIT = 1000;
 const DEFAULT_MAX_DURATION_MS = 20_000;
 const DEFAULT_CONCURRENCY = 5;
 
@@ -126,7 +126,7 @@ async function repairLiveEnrichment(options = {}) {
     ? Number(options.geocodeLimit)
     : DEFAULT_GEOCODE_LIMIT;
   const catchLimit = Number.isInteger(Number(options.catchLimit)) && Number(options.catchLimit) > 0
-    ? Math.min(2000, Number(options.catchLimit))
+    ? Math.min(4000, Number(options.catchLimit))
     : DEFAULT_CATCH_LIMIT;
   const maxDurationMs = Number.isFinite(Number(options.maxDurationMs)) && Number(options.maxDurationMs) >= 0
     ? Number(options.maxDurationMs)
@@ -404,24 +404,7 @@ async function repairLiveEnrichment(options = {}) {
     report.timedOut = true;
   }
 
-  // Pass 4: Bounded Enrolled County & Statewide ArcGIS Assessor Backfill
-  if (!dryRun && options.includeAssessorBackfill !== false && !budgetExpired()
-      && typeof database?.getListings === 'function' && typeof database?.createListing === 'function') {
-    try {
-      const { backfillAssessorRolls } = require('./assessor-backfill');
-      const assessorLimit = Math.min(25, Math.max(1, Number(options.assessorLimit) || 25));
-      report.assessorBackfill = await backfillAssessorRolls({
-        db: database,
-        limit: assessorLimit,
-        fetchFn,
-        now: nowMs,
-      });
-    } catch (err) {
-      report.errors.push(`assessorBackfill: ${err?.message || err}`);
-    }
-  }
-
-  // Pass 5: Bounded Deterministic Catch Summary Backfill ($0, zero fabrication)
+  // Pass 4: Fast Local Deterministic Catch Summary Backfill ($0, runs before external ArcGIS calls)
   if (!dryRun && options.includeCatchBackfill !== false && !budgetExpired()) {
     try {
       const catchQuery = await pool.query(
@@ -455,7 +438,7 @@ async function repairLiveEnrichment(options = {}) {
         [catchLimit],
       );
       const catchRows = Array.isArray(catchQuery?.rows) ? catchQuery.rows : [];
-      await runWithConcurrency(catchRows, 10, async (row) => {
+      await runWithConcurrency(catchRows, 20, async (row) => {
         if (budgetExpired()) {
           report.timedOut = true;
           return;
@@ -478,6 +461,23 @@ async function repairLiveEnrichment(options = {}) {
       if (err?.code !== '42703') {
         report.errors.push(`catchBackfill: ${err?.message || err}`);
       }
+    }
+  }
+
+  // Pass 5: Bounded Enrolled County & Statewide ArcGIS Assessor Backfill
+  if (!dryRun && options.includeAssessorBackfill !== false && !budgetExpired()
+      && typeof database?.getListings === 'function' && typeof database?.createListing === 'function') {
+    try {
+      const { backfillAssessorRolls } = require('./assessor-backfill');
+      const assessorLimit = Math.min(25, Math.max(1, Number(options.assessorLimit) || 25));
+      report.assessorBackfill = await backfillAssessorRolls({
+        db: database,
+        limit: assessorLimit,
+        fetchFn,
+        now: nowMs,
+      });
+    } catch (err) {
+      report.errors.push(`assessorBackfill: ${err?.message || err}`);
     }
   }
 

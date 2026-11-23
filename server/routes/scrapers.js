@@ -136,9 +136,15 @@ function createScrapersHandler(dependencies = {}) {
           concludedDeleted = delRes.rowCount || 0;
           const statusRes = await database.pool.query(
             `UPDATE listings
-                SET status = 'scheduled'
+                SET status = CASE
+                      WHEN LOWER(COALESCE(lifecycle_status, '')) LIKE 'auction begins%' THEN 'scheduled'
+                      ELSE 'active'
+                    END
               WHERE LOWER(COALESCE(status, 'unknown')) = 'unknown'
-                AND LOWER(COALESCE(lifecycle_status, '')) LIKE 'auction begins%'`,
+                AND (
+                  LOWER(COALESCE(lifecycle_status, '')) LIKE 'auction begins%'
+                  OR LOWER(TRIM(COALESCE(lifecycle_status, ''))) IN ('status: active', 'active', 'live', 'open', 'bidding', 'available')
+                )`,
           );
           const statusReconciled = Number(statusRes?.rowCount || 0);
           const stalePurged = typeof database.purgeStaleListings === 'function'

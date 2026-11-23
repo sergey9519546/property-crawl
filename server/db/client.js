@@ -285,7 +285,7 @@ function canonicalStatus(value) {
   if (/\bclosed\b|\bauctioned\b|\bpost[-\s]?auction\b|\boutbid\b|\bended\b/.test(normalized)) return 'closed';
   if (/scheduled|coming\s*soon|pre[-.\s]?auction|\bauction\s*(?:begins|starts|date)\b/.test(normalized)) return 'scheduled';
   if (/pending/.test(normalized)) return 'pending';
-  if (/^(?:active|live|open|bidding|available|re-?listed)$|\bauction\s*event\b/.test(normalized)) return 'active';
+  if (/^(?:status\s*:\s*)?(?:active|live|open|bidding|available|re-?listed)$|\bauction\s*event\b/.test(normalized)) return 'active';
   return 'unknown';
 }
 

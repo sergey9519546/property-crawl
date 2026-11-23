@@ -37,4 +37,9 @@ test('persistence keeps a recorded sale and a finished auction apart', () => {
     prepareListingForPersistence({ id: 'status-probe-3', status: 'unknown', lifecycleStatus: 'Auction Begins: Nov 23, 2026' }).status,
     'scheduled',
   );
+  assert.equal(storedStatus('Status: Active'), 'active');
+  assert.equal(
+    prepareListingForPersistence({ id: 'status-probe-4', status: 'unknown', lifecycleStatus: 'Status: Active' }).status,
+    'active',
+  );
 });
