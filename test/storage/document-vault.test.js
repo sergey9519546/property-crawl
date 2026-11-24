@@ -5,7 +5,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
-const { DocumentVault, sanitizeKey } = require('../../server/storage/document-vault');
+const { DocumentVault, sanitizeKey, vaultHealth } = require('../../server/storage/document-vault');
+const { evidenceStorageStatus } = require('../../server/discovery/evidence-storage');
+const { evidenceStoreHealth } = require('../../server/scrapers/discovery-snapshots');
 
 test('Document Vault: sanitizes keys and blocks directory traversal', () => {
   assert.equal(sanitizeKey('dockets/2026/notice.pdf'), 'dockets/2026/notice.pdf');
@@ -257,5 +259,52 @@ test('Document Vault: preserves x-amz-meta-* + sha256 on R2, lists via ListObjec
     assert.match(failing.lastError, /HTTP 503/);
   } finally {
     fs.rmSync(tmpVault, { recursive: true, force: true });
+  }
+});
+
+test('Document Vault & Evidence Store Health: reports durable R2 status and fails closed when REQUIRE_DURABLE_VAULT=1 lacks R2 config', () => {
+  const unconfigured = vaultHealth({ REQUIRE_DURABLE_VAULT: '1' }, { lastError: null });
+  assert.equal(unconfigured.backend, 'local');
+  assert.equal(unconfigured.durable, false);
+  assert.equal(unconfigured.required, true);
+  assert.equal(unconfigured.writesBlocked, true);
+  assert.match(unconfigured.reason, /REQUIRE_DURABLE_VAULT=1/);
+
+  const unconfiguredEvidence = evidenceStorageStatus({ env: { REQUIRE_DURABLE_VAULT: '1' }, evidenceDir: os.tmpdir() });
+  assert.equal(unconfiguredEvidence.required, true);
+  assert.equal(unconfiguredEvidence.writesBlocked, true);
+  assert.match(unconfiguredEvidence.reason, /REQUIRE_DURABLE_VAULT=1/);
+
+  const r2Env = {
+    R2_BUCKET: 'property-crawl-vault',
+    R2_ACCESS_KEY_ID: 'key_id',
+    R2_SECRET_ACCESS_KEY: 'secret_key',
+    R2_ENDPOINT: 'https://test-account.r2.cloudflarestorage.com',
+    REQUIRE_DURABLE_VAULT: '1',
+  };
+  const configuredVault = vaultHealth(r2Env, { lastError: null });
+  assert.deepEqual(configuredVault, {
+    backend: 'r2',
+    durable: true,
+    required: true,
+    bucket: 'property-crawl-vault',
+    endpointConfigured: true,
+  });
+
+  const configuredEvidence = evidenceStorageStatus({ env: r2Env, evidenceDir: os.tmpdir() });
+  assert.equal(configuredEvidence.durability, 'r2_durable_vault');
+  assert.equal(configuredEvidence.required, true);
+  assert.equal(configuredEvidence.r2Configured, true);
+  assert.equal(configuredEvidence.vaultBucket, 'property-crawl-vault');
+
+  const tmpSnapDir = fs.mkdtempSync(path.join(os.tmpdir(), 'snap-health-r2-'));
+  try {
+    const snapHealth = evidenceStoreHealth(tmpSnapDir, { env: r2Env });
+    assert.equal(snapHealth.backend, 'r2');
+    assert.equal(snapHealth.durability, 'r2_durable_vault');
+    assert.equal(snapHealth.required, true);
+    assert.equal(snapHealth.r2Configured, true);
+  } finally {
+    fs.rmSync(tmpSnapDir, { recursive: true, force: true });
   }
 });

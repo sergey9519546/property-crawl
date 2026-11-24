@@ -7,7 +7,34 @@ function evidenceStorageStatus({ env = process.env, evidenceDir, mountInfo, real
   const fallback = env.RENDER === 'true' ? 'ephemeral_filesystem' : 'local_filesystem_only';
   const result = { durability:fallback, required, mountVerified:false, backupVerified:false };
   const mount = env.PROPERTY_DURABLE_MOUNT_PATH;
-  if (!mount || !evidenceDir) return { ...result, ...(required ? {writesBlocked:true,reason:'Durable evidence mount is not configured'} : {}) };
+  const requireDurableVault = env.REQUIRE_DURABLE_VAULT === '1' || env.REQUIRE_DURABLE_VAULT === 'true';
+  const r2Bucket = env.R2_BUCKET || env.AWS_S3_BUCKET || null;
+  const r2AccessKey = env.R2_ACCESS_KEY_ID || env.AWS_ACCESS_KEY_ID || null;
+  const r2SecretKey = env.R2_SECRET_ACCESS_KEY || env.AWS_SECRET_ACCESS_KEY || null;
+  const r2Endpoint = env.R2_ENDPOINT || (env.R2_ACCOUNT_ID ? `https://${env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com` : null);
+  const r2Configured = Boolean(r2Bucket && r2AccessKey && r2SecretKey && r2Endpoint);
+  if (!mount) {
+    if (r2Configured) {
+      return {
+        durability: 'r2_durable_vault',
+        required: Boolean(required || requireDurableVault),
+        mountVerified: false,
+        r2Configured: true,
+        vaultBucket: String(r2Bucket),
+        backupVerified: false,
+      };
+    }
+    if (requireDurableVault) {
+      return {
+        ...result,
+        required: true,
+        writesBlocked: true,
+        reason: 'Durable R2 vault (REQUIRE_DURABLE_VAULT=1) requires R2_BUCKET, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, and R2_ENDPOINT',
+      };
+    }
+    return { ...result, ...(required ? {writesBlocked:true,reason:'Durable evidence mount is not configured'} : {}) };
+  }
+  if (!evidenceDir) return { ...result, ...(required ? {writesBlocked:true,reason:'Durable evidence mount is not configured'} : {}) };
   try {
     const mountedPath = realpath(mount), resolvedEvidence = realpath(evidenceDir);
     const relative = path.relative(mountedPath, resolvedEvidence);

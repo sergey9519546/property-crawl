@@ -354,17 +354,17 @@ export default {
     }
     const apiOrigin = String(env?.API_ORIGIN || 'https://property-crawl-api.vercel.app').replace(/\/+$/, '');
     const cron = controller?.cron;
-    const action = cron === '17 */6 * * *'
-      ? 'prune'
+    const actions = cron === '17 */6 * * *'
+      ? ['prune']
       : (cron === '29 * * * *'
-          ? 'repair-enrichment'
+          ? ['repair-enrichment']
           : (cron === '11 */2 * * *'
-              ? 'ai-prewarm'
+              ? ['ai-prewarm']
               : (cron === '41 */6 * * *'
-                  ? 'second-look'
-                  : (cron === '53 */6 * * *' ? 'dispatch-digests' : 'next-slice'))));
+                  ? ['second-look', 'dispatch-digests']
+                  : (cron === '53 */6 * * *' ? ['dispatch-digests'] : ['next-slice']))));
     const edgeSecret = String(env?.EDGE_SHARED_SECRET || '').trim();
-    const notifyFailure = async (details) => {
+    const notifyFailure = async (action, details) => {
       try {
         if (env?.ALERT_WEBHOOK_URL) {
           await fetch(env.ALERT_WEBHOOK_URL, {
@@ -391,32 +391,35 @@ export default {
         }
       } catch {}
     };
-    const payload = action === 'ai-prewarm'
-      ? { action: 'ai-prewarm', limit: 3, freeOnly: true, maxDurationMs: 38000 }
-      : { action };
-    const task = fetch(`${apiOrigin}/api/scrapers/run`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        ...(edgeSecret ? { 'x-edge-secret': edgeSecret } : {}),
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-      },
-      body: JSON.stringify(payload),
-      signal: typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(55_000) : undefined,
-    })
-      .then(async (res) => {
-        const text = await res.text().catch(() => '');
-        console.log(JSON.stringify({ event: 'edge_cron_complete', action, status: res.status, ok: res.ok, body: text.slice(0, 300) }));
-        if (!res.ok) {
-          await notifyFailure({ status: res.status, body: text.slice(0, 500) });
+    const task = (async () => {
+      for (const action of actions) {
+        const payload = action === 'ai-prewarm'
+          ? { action: 'ai-prewarm', limit: 3, freeOnly: true, maxDurationMs: 38000 }
+          : { action };
+        try {
+          const res = await fetch(`${apiOrigin}/api/scrapers/run`, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              ...(edgeSecret ? { 'x-edge-secret': edgeSecret } : {}),
+              'Content-Type': 'application/json',
+              Accept: 'application/json',
+            },
+            body: JSON.stringify(payload),
+            signal: typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(55_000) : undefined,
+          });
+          const text = await res.text().catch(() => '');
+          console.log(JSON.stringify({ event: 'edge_cron_complete', action, status: res.status, ok: res.ok, body: text.slice(0, 300) }));
+          if (!res.ok) {
+            await notifyFailure(action, { status: res.status, body: text.slice(0, 500) });
+          }
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error(JSON.stringify({ event: 'edge_cron_error', action, error: msg }));
+          await notifyFailure(action, { error: msg });
         }
-      })
-      .catch(async (err) => {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.error(JSON.stringify({ event: 'edge_cron_error', action, error: msg }));
-        await notifyFailure({ error: msg });
-      });
+      }
+    })();
     if (ctx && typeof ctx.waitUntil === 'function') {
       ctx.waitUntil(task);
     } else {

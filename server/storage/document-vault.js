@@ -762,6 +762,33 @@ class DocumentVault {
   }
 }
 
+function vaultHealth(env = process.env, vault = defaultVault) {
+  const r2Bucket = env?.R2_BUCKET || env?.AWS_S3_BUCKET || null;
+  const r2AccessKey = env?.R2_ACCESS_KEY_ID || env?.AWS_ACCESS_KEY_ID || null;
+  const r2SecretKey = env?.R2_SECRET_ACCESS_KEY || env?.AWS_SECRET_ACCESS_KEY || null;
+  const r2AccountId = env?.R2_ACCOUNT_ID || null;
+  let r2Endpoint = env?.R2_ENDPOINT || null;
+  if (!r2Endpoint && r2AccountId) {
+    r2Endpoint = `https://${r2AccountId}.r2.cloudflarestorage.com`;
+  }
+  const requireDurable = env?.REQUIRE_DURABLE_VAULT === '1' || env?.REQUIRE_DURABLE_VAULT === 'true';
+  const r2Ready = Boolean(r2Bucket && r2AccessKey && r2SecretKey && r2Endpoint);
+  return {
+    backend: r2Ready ? 'r2' : 'local',
+    durable: r2Ready,
+    required: requireDurable,
+    bucket: r2Ready ? String(r2Bucket) : null,
+    endpointConfigured: Boolean(r2Endpoint),
+    ...(requireDurable && !r2Ready
+      ? {
+          writesBlocked: true,
+          reason: 'Durable vault (REQUIRE_DURABLE_VAULT=1) requires R2/S3 credentials and endpoint',
+        }
+      : {}),
+    ...(vault?.lastError ? { lastError: vault.lastError } : {}),
+  };
+}
+
 const defaultVault = new DocumentVault();
 
 module.exports = {
@@ -770,4 +797,5 @@ module.exports = {
   sanitizeKey,
   createR2SignedHeaders,
   MAX_DOCUMENT_SIZE,
+  vaultHealth,
 };

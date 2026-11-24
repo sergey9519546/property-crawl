@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 
 import worker from '../../cloudflare/property-crawl-edge/worker.js';
 
@@ -204,21 +206,29 @@ test('Cloudflare edge worker scheduled() maps cron expressions to actions, abort
     await worker.scheduled({ cron: '41 */6 * * *' }, env, ctxSecondLook);
     await ctxSecondLook.flush();
     assert.equal(calls[4].body.action, 'second-look');
+    assert.equal(calls[5].body.action, 'dispatch-digests');
 
     const ctxDigests = createCtx();
     await worker.scheduled({ cron: '53 */6 * * *' }, env, ctxDigests);
     await ctxDigests.flush();
-    assert.equal(calls[5].body.action, 'dispatch-digests');
+    assert.equal(calls[6].body.action, 'dispatch-digests');
 
     const ctxPrewarm = createCtx();
     await worker.scheduled({ cron: '11 */2 * * *' }, env, ctxPrewarm);
     await ctxPrewarm.flush();
-    assert.deepEqual(calls[6].body, {
+    assert.deepEqual(calls[7].body, {
       action: 'ai-prewarm',
       limit: 3,
       freeOnly: true,
       maxDurationMs: 38000,
     });
+
+    const wranglerToml = fs.readFileSync(path.resolve('cloudflare/property-crawl-edge/wrangler.toml'), 'utf8');
+    const cronsLine = wranglerToml.split(/\r?\n/).find((line) => line.startsWith('crons ='));
+    assert.ok(cronsLine, 'wrangler.toml must declare crons');
+    const parsedCrons = JSON.parse(cronsLine.replace(/^crons\s*=\s*/, ''));
+    assert.ok(parsedCrons.length <= 5, `Expected <= 5 Workers Free crons, found ${parsedCrons.length}`);
+    assert.equal(parsedCrons.length, 5);
   } finally {
     globalThis.fetch = prevFetch;
   }

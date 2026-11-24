@@ -397,13 +397,13 @@ function verifiedSnapshotReceipt(listing, options = {}) {
   } catch { return null; }
 }
 
-function evidenceStoreHealth(snapshotDir = process.env.PROPERTY_EVIDENCE_DIR || DEFAULT_SNAPSHOT_DIR) {
+function evidenceStoreHealth(snapshotDir = process.env.PROPERTY_EVIDENCE_DIR || DEFAULT_SNAPSHOT_DIR, options = {}) {
   const target = path.join(snapshotDir, 'evidence-ledger.jsonl');
   const anchor = getLedgerAnchorStatus(target);
-  const storage = require('../discovery/evidence-storage').evidenceStorageStatus({ evidenceDir: snapshotDir });
+  const storage = require('../discovery/evidence-storage').evidenceStorageStatus({ env: options.env || process.env, evidenceDir: snapshotDir });
   const externalAnchor = Boolean(anchor.externalAnchor || storage.externalAnchor);
   const base = {
-    backend: 'file',
+    backend: storage.r2Configured ? 'r2' : 'file',
     ...storage,
     externalAnchor,
     ...(anchor.anchorBackend ? { anchorBackend: anchor.anchorBackend, anchoredEntries: anchor.anchoredEntries } : {}),
