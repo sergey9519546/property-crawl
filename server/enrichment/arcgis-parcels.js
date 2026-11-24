@@ -18,7 +18,8 @@ const STATEWIDE_ARCGIS_REGISTRY = {
     assessedLandField: 'LAND_VAL',
     assessedImprvField: 'IMPRVT_VAL',
     legalDescField: 'BLDG_DESC',
-    situsAddressField: 'ST_ADDRESS',
+    situsAddressField: 'PROP_LOC',
+    situsAddressFallbackField: 'ST_ADDRESS',
     countyFilterField: 'COUNTY'
   },
   FL: {
@@ -128,6 +129,7 @@ function buildStatewideCountyEntries(state, baseConfig, counties) {
       assessedImprvField: baseConfig.assessedImprvField,
       legalDescField: baseConfig.legalDescField,
       situsAddressField: baseConfig.situsAddressField,
+      ...(baseConfig.situsAddressFallbackField ? { situsAddressFallbackField: baseConfig.situsAddressFallbackField } : {}),
       ...(baseConfig.spatialFallback ? { spatialFallback: baseConfig.spatialFallback } : {}),
       ...(baseConfig.countyFilterField ? { countyFilterField: baseConfig.countyFilterField } : {}),
       statewideService: state
@@ -1279,9 +1281,13 @@ function normalizeArcgisAttributes(attributes, config) {
     }
   }
 
-  const situsRaw = config.situsAddressField
+  const primarySitusRaw = config.situsAddressField
     ? getAttributeCaseInsensitive(attributes, config.situsAddressField)
     : undefined;
+  const fallbackSitusRaw = (!primarySitusRaw && config.situsAddressFallbackField)
+    ? getAttributeCaseInsensitive(attributes, config.situsAddressFallbackField)
+    : undefined;
+  const situsRaw = primarySitusRaw || fallbackSitusRaw;
   const situsAddress = situsRaw ? String(situsRaw).replace(/\s+/g, ' ').trim() : '';
 
   return {

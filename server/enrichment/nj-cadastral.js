@@ -458,7 +458,7 @@ function selectBestNjCadastralFeature(features, listing = {}, geocodeAttrs = {})
   const compatibleFeatures = listingHouse
     ? features.filter((f) => isCompatibleNjSitusAddress(
       listingAddress,
-      f?.attributes?.ST_ADDRESS || f?.attributes?.PROP_LOC || '',
+      f?.attributes?.PROP_LOC || f?.attributes?.ST_ADDRESS || '',
     ))
     : features;
 
@@ -487,7 +487,7 @@ function selectBestNjCadastralFeature(features, listing = {}, geocodeAttrs = {})
 
   if (listingHouse) {
     const addressMatched = compatibleFeatures.filter((f) => {
-      const situs = String(f?.attributes?.ST_ADDRESS || f?.attributes?.PROP_LOC || '').trim();
+      const situs = String(f?.attributes?.PROP_LOC || f?.attributes?.ST_ADDRESS || '').trim();
       const candHouse = extractLeadingHouseNumber(situs);
       return candHouse && candHouse === listingHouse;
     });
@@ -617,8 +617,8 @@ async function queryNjCadastralByAddress(listing = {}, { fetchFn = globalThis.fe
   if (!cleanCounty && !cleanCity) return null;
 
   const where = cleanCounty
-    ? `UPPER(COUNTY) = '${cleanCounty}' AND UPPER(ST_ADDRESS) LIKE '${houseNum}%${coreStreet}%'`
-    : `UPPER(MUN_NAME) LIKE '${cleanCity}%' AND UPPER(ST_ADDRESS) LIKE '${houseNum}%${coreStreet}%'`;
+    ? `UPPER(COUNTY) = '${cleanCounty}' AND (UPPER(PROP_LOC) LIKE '${houseNum}%${coreStreet}%' OR UPPER(ST_ADDRESS) LIKE '${houseNum}%${coreStreet}%')`
+    : `UPPER(MUN_NAME) LIKE '${cleanCity}%' AND (UPPER(PROP_LOC) LIKE '${houseNum}%${coreStreet}%' OR UPPER(ST_ADDRESS) LIKE '${houseNum}%${coreStreet}%')`;
 
   const params = new URLSearchParams({
     f: 'json',
@@ -637,7 +637,7 @@ async function queryNjCadastralByAddress(listing = {}, { fetchFn = globalThis.fe
   const listingAddress = listing.address || queryLine;
   const compatible = features.filter((f) => {
     const attrs = f?.attributes || {};
-    const situs = attrs.ST_ADDRESS || attrs.PROP_LOC || '';
+    const situs = attrs.PROP_LOC || attrs.ST_ADDRESS || '';
     if (!isCompatibleNjSitusAddress(listingAddress, situs)) return false;
     if (cleanCity && attrs.MUN_NAME) {
       const candMun = normalizeMunicipality(attrs.MUN_NAME);
@@ -708,7 +708,7 @@ function applyNjCadastralData(listing, { candidate = null, feature = null, obser
     canonicalApn: canonicalApn || null,
     block: attrs.PCLBLOCK ? String(attrs.PCLBLOCK).trim() : null,
     lot: attrs.PCLLOT ? String(attrs.PCLLOT).trim() : null,
-    situsAddress: String(attrs.ST_ADDRESS || attrs.PROP_LOC || '').trim() || null,
+    situsAddress: String(attrs.PROP_LOC || attrs.ST_ADDRESS || '').trim() || null,
     propClass: attrs.PROP_CLASS ? String(attrs.PROP_CLASS).trim() : null,
     landUse: attrs.PROP_CLASS ? String(attrs.PROP_CLASS).trim() : 'UNKNOWN',
     legalDescription: attrs.BLDG_DESC ? String(attrs.BLDG_DESC).trim() : '',
@@ -812,7 +812,7 @@ async function enrichNjListing(listing, options = {}) {
           candidate = {
             location: { x: byAddress.lng, y: byAddress.lat },
             score: 100,
-            address: feature.attributes?.ST_ADDRESS || feature.attributes?.PROP_LOC || '',
+            address: feature.attributes?.PROP_LOC || feature.attributes?.ST_ADDRESS || '',
             attributes: { Addr_type: 'ParcelCentroid', Score: 100 },
           };
           candidateProvider = 'NJGIN Cadastral Parcel Centroid';

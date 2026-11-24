@@ -705,7 +705,7 @@ test('queryNjCadastralByAddress & enrichNjListing recover parcel centroid and re
       };
     },
   });
-  assert.equal(capturedWhere, "UPPER(COUNTY) = 'HUDSON' AND UPPER(ST_ADDRESS) LIKE '1427%46TH%'");
+  assert.equal(capturedWhere, "UPPER(COUNTY) = 'HUDSON' AND (UPPER(PROP_LOC) LIKE '1427%46TH%' OR UPPER(ST_ADDRESS) LIKE '1427%46TH%')");
   assert.ok(direct);
   assert.equal(direct.feature.attributes.PAMS_PIN, '0908_64_12');
   assert.equal(direct.lat, 40.785);
@@ -1049,7 +1049,26 @@ test('extractLeadingHouseNumberRange, isCompatibleNjSitusAddress, and queryNjCad
       };
     },
   });
-  assert.equal(capturedWhere, "UPPER(COUNTY) = 'ESSEX' AND UPPER(ST_ADDRESS) LIKE '548%SANDFORD%'");
+  assert.equal(capturedWhere, "UPPER(COUNTY) = 'ESSEX' AND (UPPER(PROP_LOC) LIKE '548%SANDFORD%' OR UPPER(ST_ADDRESS) LIKE '548%SANDFORD%')");
   assert.ok(result);
   assert.equal(result.feature.attributes.ST_ADDRESS, '548 SANDFORD AVE');
+});
+
+test('NJ MOD-IV normalizer prefers PROP_LOC property location over absentee-owner ST_ADDRESS mailing address', () => {
+  const { resolveCountyEndpoint, normalizeArcgisAttributes } = require('../server/enrichment/arcgis-parcels');
+  const { isCompatibleNjSitusAddress } = require('../server/enrichment/nj-cadastral');
+  const endpoint = resolveCountyEndpoint('NJ', 'Essex County');
+  const parcel = normalizeArcgisAttributes({
+    PAMS_PIN: '0714_4109_12',
+    COUNTY: 'ESSEX',
+    PROP_CLASS: '2',
+    PROP_LOC: '548-550 SANDFORD AVE',
+    ST_ADDRESS: '62 POE AVE',
+    NET_VALUE: 149500,
+    LAND_VAL: 17800,
+    IMPRVT_VAL: 131700,
+  }, endpoint);
+  assert.equal(parcel.situsAddress, '548-550 SANDFORD AVE');
+  assert.equal(isCompatibleNjSitusAddress('548-550 SANDFORD AVE, NEWARK, NJ 07106', parcel.situsAddress), true);
+  assert.equal(isCompatibleNjSitusAddress('548-550 SANDFORD AVE, NEWARK, NJ 07106', '62 POE AVE'), false);
 });
