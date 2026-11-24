@@ -875,11 +875,16 @@ function createScrapersHandler(dependencies = {}) {
 
           const rawLimit = Number(body.limit ?? url.searchParams.get('limit') ?? 10);
           const limit = Math.min(20, Math.max(1, Number.isFinite(rawLimit) ? Math.floor(rawLimit) : 10));
+          const rawMaxDur = Number(body.maxDurationMs ?? url.searchParams.get('maxDurationMs') ?? 38_000);
+          const maxDurationMs = Math.min(48_000, Math.max(5_000, Number.isFinite(rawMaxDur) && rawMaxDur > 0 ? Math.floor(rawMaxDur) : 38_000));
+          const freeOnly = body.freeOnly === true || url.searchParams.get('freeOnly') === 'true';
+          const effectiveEnv = freeOnly ? { ...env, AI_GATEWAY_FREE_ONLY: '1' } : env;
+          const startedAt = Date.now();
           const rawOidc = headerValue(req.headers, 'x-vercel-oidc-token');
           const oidcToken = typeof rawOidc === 'string' && rawOidc.trim() ? rawOidc.trim() : null;
 
           let costTracker = dependencies.costTracker || new CostTracker({
-            budgetLimitUsd: Number(env?.AI_BUDGET_LIMIT_USD) || 5.00,
+            budgetLimitUsd: Number(effectiveEnv?.AI_BUDGET_LIMIT_USD) || 5.00,
           });
 
           const rawList = typeof database.listListings === 'function'
@@ -905,26 +910,41 @@ function createScrapersHandler(dependencies = {}) {
           let rejectedUngrounded = 0;
           let failed = 0;
           let totalCostUsd = 0;
+          let stoppedEarly = false;
+          let stopReason = null;
           const modelsUsedSet = new Set();
 
           for (const listing of activeListings) {
-            if (attempted >= limit || costTracker.isOverBudget) break;
+            if (attempted >= limit) break;
+            if (costTracker.isOverBudget) {
+              stoppedEarly = true;
+              stopReason = 'budget_exceeded';
+              break;
+            }
+            if (Date.now() - startedAt >= maxDurationMs) {
+              stoppedEarly = true;
+              stopReason = 'time_budget';
+              break;
+            }
             const analysis = buildEvidenceSummary(listing);
-            const cached = await readCachedNarrative(analysis, { db: database, env });
+            const cached = await readCachedNarrative(analysis, { db: database, env: effectiveEnv });
             if (cached?.narrative) {
               skippedCached += 1;
               continue;
             }
-            if (costTracker.isOverBudget) break;
 
             attempted += 1;
+            const remainingBudgetMs = Math.max(2_000, maxDurationMs - (Date.now() - startedAt));
             const resNarrative = await generateAiNarrative(listing, {
-              env,
+              env: effectiveEnv,
               db: database,
               fetchFn: dependencies.fetchFn || globalThis.fetch,
               oidcToken,
               costTracker,
               persistCache: true,
+              signal: typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
+                ? AbortSignal.timeout(Math.min(10_000, remainingBudgetMs))
+                : undefined,
             });
             if (resNarrative?.narrative) {
               warmed += 1;
@@ -954,18 +974,26 @@ function createScrapersHandler(dependencies = {}) {
             failed,
             totalCostUsd,
             modelsUsed: Array.from(modelsUsedSet),
+            stoppedEarly,
+            stopReason,
+            freeOnly,
+            elapsedMs: Date.now() - startedAt,
           });
         } catch (err) {
           return res.status(err?.status || 500).json({ error: err?.message || 'AI prewarm failed' });
         }
       }
 
-      const querySources = url.searchParams.get('sources') || url.searchParams.get('sourceIds') || url.searchParams.get('sourceId');
+      const querySources = url.searchParams.get('sources') || url.searchParams.get('sourceIds') || url.searchParams.get('sourceId') || url.searchParams.get('source');
+      const singleSourceParam = body.sourceId || body.source || null;
       const sourceIds = (Array.isArray(body.sources) && body.sources.length > 0)
         ? body.sources
         : ((Array.isArray(body.sourceIds) && body.sourceIds.length > 0)
             ? body.sourceIds
-            : (body.sourceId ? [body.sourceId] : (querySources ? querySources.split(',').map(s => s.trim()).filter(Boolean) : undefined)));
+            : (singleSourceParam ? [String(singleSourceParam).trim()] : (querySources ? querySources.split(',').map(s => s.trim()).filter(Boolean) : undefined)));
+      if (action === 'run-source' && (!sourceIds || sourceIds.length === 0)) {
+        return res.status(400).json({ error: 'source or sourceId is required for run-source' });
+      }
       const wave = body.wave || url.searchParams.get('wave') || undefined;
       const allowNetwork = body.allowNetwork !== undefined
         ? Boolean(body.allowNetwork)

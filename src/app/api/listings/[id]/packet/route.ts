@@ -34,10 +34,12 @@ export async function GET(request: Request) {
     return proxyPropertyApi(request, { operatorToken: configuration.credential });
   }
 
-  const base = process.env.PROPERTY_API_URL || "http://localhost:3000";
+  const remoteBase = process.env.PROPERTY_API_URL ? process.env.PROPERTY_API_URL.replace(/\/$/, "") : null;
+  const base = remoteBase || "http://localhost:3000";
+  const isEdgeRuntime = process.env.NEXT_RUNTIME === "edge";
   let listing: any = null;
   try {
-    const res = await fetch(`${base.replace(/\/$/, "")}/api/listings/${encodeURIComponent(id)}`, {
+    const res = await fetch(`${base}/api/listings/${encodeURIComponent(id)}`, {
       cache: "no-store",
       signal: AbortSignal.timeout(10_000),
     });
@@ -48,10 +50,10 @@ export async function GET(request: Request) {
       }
     }
   } catch {
-    // API down or network issue; fall through to local db query
+    // API down or network issue; fall through to local db query when not in edge runtime
   }
 
-  if (!listing) {
+  if (!listing && !isEdgeRuntime) {
     try {
       const db = require("@server/db/client");
       listing = await db.getListingById(id);
@@ -66,7 +68,7 @@ export async function GET(request: Request) {
 
   const member = session.authenticated ? null : await currentMember(request).catch(() => null);
   const isEntitledCaller = session.authenticated || Boolean(member?.entitled);
-  if (isEntitledCaller && !Array.isArray(listing.observations)) {
+  if (isEntitledCaller && !Array.isArray(listing.observations) && !isEdgeRuntime) {
     try {
       const db = require("@server/db/client");
       if (typeof db.getListingObservations === "function" && listing.id) {

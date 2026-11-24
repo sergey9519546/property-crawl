@@ -91,6 +91,13 @@ export async function POST(request: Request) {
     );
   }
 
+  if (process.env.NEXT_RUNTIME === "edge") {
+    return Response.json(
+      { error: "Scrapy direct database ingestion requires Node runtime." },
+      { status: 503, headers: responseHeaders }
+    );
+  }
+
   const db = require("@server/db/client");
   if (typeof db.verifyConnection === "function" && !db.postgresReachable && db.pool) {
     await db.verifyConnection().catch(() => {});

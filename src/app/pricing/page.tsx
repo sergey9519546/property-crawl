@@ -9,80 +9,66 @@ import { getMessages } from "@/lib/i18n/messages";
 export async function generateMetadata(): Promise<Metadata> {
   const locale = await getRequestLocale();
   const m = getMessages(locale);
-  const title = locale === "en" ? "Pricing & Access Tiers | PerfectProperty" : m.meta.homeTitle;
   return {
-    title,
-    description:
-      "Evidence-first access plans for distressed real estate discovery, saved hunts, decision packet exports, and multi-market escrow allocation.",
+    title: m.pricing.metaTitle,
+    description: m.pricing.metaDescription,
     alternates: { canonical: "/pricing" },
   };
 }
 
-const TIERS = [
-  {
-    name: "Public Discovery",
-    price: "$0",
-    cadence: "always free",
-    ctaLabel: "Browse auctions",
-    ctaHref: "/listings",
-    highlight: false,
-    features: [
-      "Search active sheriff, tax deed, trustee & federal REO feeds",
-      "Inspect deterministic catch summaries & gap ledgers",
-      "Explore county map, parcel polygons & auction calendar",
-      "Use Bid Cost Model & statutory redemption calculators",
-    ],
-  },
-  {
-    name: "Pro Underwriting",
-    price: "$39",
-    cadence: "per month",
-    ctaLabel: "Subscribe in account",
-    ctaHref: "/account?tier=pro",
-    highlight: true,
-    features: [
-      "Saved hunts & email match digests across states and counties",
-      "Full JSON & Markdown Decision Packet exports with overrides",
-      "Private research cases, Second Look alerts & price-drop tracking",
-      "Account-scoped watchlist syncing across devices",
-    ],
-  },
-  {
-    name: "Desk & Team",
-    price: "$149",
-    cadence: "per month",
-    ctaLabel: "Configure team access",
-    ctaHref: "/account?tier=desk",
-    highlight: false,
-    features: [
-      "Everything in Pro Underwriting plus team workflows",
-      "Portfolio escrow capital allocator across overlapping auction dates",
-      "Bulk docket comparison & multi-jurisdiction underwriting exports",
-      "Priority county source onboarding & direct email-notice pipelines",
-    ],
-  },
-] as const;
-
 export default async function PricingPage() {
+  const locale = await getRequestLocale();
+  const m = getMessages(locale);
+  const p = m.pricing;
+
+  const tiers = [
+    {
+      id: "public",
+      name: p.publicName,
+      price: p.publicPrice,
+      cadence: p.publicCadence,
+      ctaLabel: p.publicCta,
+      ctaHref: "/listings",
+      highlight: false,
+      features: p.publicFeatures,
+    },
+    {
+      id: "pro",
+      name: p.proName,
+      price: p.proPrice,
+      cadence: p.proCadence,
+      ctaLabel: p.proCta,
+      ctaHref: "/account?tier=pro",
+      highlight: true,
+      features: p.proFeatures,
+    },
+    {
+      id: "desk",
+      name: p.deskName,
+      price: p.deskPrice,
+      cadence: p.deskCadence,
+      ctaLabel: p.deskCta,
+      ctaHref: "/account?tier=desk",
+      highlight: false,
+      features: p.deskFeatures,
+    },
+  ] as const;
+
   return (
     <WorkspaceSessionProvider>
       <div className="min-h-screen bg-paper text-ink">
         <SiteHeader />
         <main id="main-content" tabIndex={-1} className="mx-auto max-w-6xl px-5 py-16 outline-none sm:px-8 lg:px-12">
           <div className="max-w-2xl">
-            <p className="text-label font-bold uppercase tracking-widest text-ink-3">Plans &amp; Entitlements</p>
-            <h1 className="mt-2 text-display font-semibold tracking-tight text-ink">
-              Transparent pricing built around verified evidence.
-            </h1>
-            <p className="mt-4 text-lead text-ink-2">
-              Every plan keeps missing data visible and refuses fabricated comps. Paid tiers unlock automated saved hunts, full decision packets, and private underwriting cases.
-            </p>
+            <p className="text-label font-bold uppercase tracking-widest text-ink-3">{p.eyebrow}</p>
+            <h1 className="mt-2 text-display font-semibold tracking-tight text-ink">{p.heading}</h1>
+            <p className="mt-4 text-lead text-ink-2">{p.lead}</p>
           </div>
 
-          <section aria-label="Pricing tiers" className="mt-12 grid gap-6 md:grid-cols-3">
-            {TIERS.map((tier) => (
+          <section aria-label={p.tiersAria} className="mt-12 grid gap-6 md:grid-cols-3">
+            {tiers.map((tier) => (
               <article
-                key={tier.name}
+                key={tier.id}
                 className={`flex flex-col justify-between rounded-card border p-6 shadow-card ${
                   tier.highlight ? "border-ink bg-card shadow-raised" : "border-line bg-card"
                 }`}
@@ -118,13 +104,13 @@ export default async function PricingPage() {
           </section>
 
           <section className="mt-10 rounded-card border border-line bg-card p-6 shadow-card">
-            <h2 className="text-title font-semibold text-ink">Zero-Fabrication &amp; Billing Policy</h2>
+            <h2 className="text-title font-semibold text-ink">{p.policyHeading}</h2>
             <p className="mt-2 text-body text-ink-2">
-              Paid tiers never invent automated valuations, never contact homeowners, and never unlock synthetic deal scores. Manage billing or check Stripe activation status from your{" "}
+              {p.policyBodyBefore}{" "}
               <Link href="/account" className="font-semibold text-ink underline underline-offset-4">
-                account page
+                {p.policyLinkLabel}
               </Link>
-              .
+              {p.policyBodyAfter}
             </p>
           </section>
         </main>

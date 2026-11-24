@@ -1,128 +1,139 @@
 # Production Deployment Handoff & Environment Pre-Flight
-> Canonical pre-flight guide for deploying **property-crawl** to production.
-> Reference: [`docs/COMPLETION_CHECKLIST.md`](./COMPLETION_CHECKLIST.md) (Items #5, #6, #7, #8).
+> Canonical pre-flight guide for deploying **property-crawl** (**PerfectProperty**) to production.
+> Reference: [`docs/COMPLETION_CHECKLIST.md`](./COMPLETION_CHECKLIST.md) and [`CONTEXT.md`](../CONTEXT.md).
 
 ---
 
-## 1. Zero-Cost ($0.00/mo) Deployment Architecture
+## 1. Live Production Topology
 
-The application runs as a unified single-container multi-process stack using `Dockerfile.production`:
-1. **Public Ingress**: Runs on port `$PORT` (default `3000` on Render, `8000` on Koyeb).
-2. **Next.js 16 Canonical UI**: Binds the public port and proxies `/api/*` requests to the internal loopback API.
-3. **Internal Listing API**: Managed by `scripts/start-production.js` on internal port `3002` (or `$PORT+2`), serving catalog listings, intelligence metrics, and scrapers.
-4. **Data Persistence**:
-   - **No database configured**: the app boots in `dataMode: unavailable` and
-     listing routes refuse to serve — there is no silent in-memory fallback, and
-     the boot log says `NO INVENTORY WILL BE SERVED`.
-   - **$0 demo persistence**: `scripts/start-production.js` injects
-     `PROPERTY_DB=embedded` only when no `DATABASE_URL` is configured, giving the
-     container a real in-process PostgreSQL 16 + PostGIS 3.6 (ephemeral across
-     redeploys on free tiers).
-   - **Durable Production Mode**: provide `DATABASE_URL` pointing to
-     PostgreSQL + PostGIS. This is what the live Render service uses. With
-     `AUTO_MIGRATE=1`, boot applies pending migrations from
-     `server/db/migrations/` through the ledger-guarded runner
-     (`scripts/discovery-migrate.js`); the ingestion cycle starts 90 seconds
-     after boot (`SCRAPER_BOOT_DELAY_MS`) so the deploy health check passes
-     before collection begins.
+Production splits into four coordinated managed surfaces:
+
+1. **Canonical Web UI — Vercel (`https://perfectproperty.bid`)**:
+   - Next.js 16 App Router UI (`src/`), SSR/RSC pages, trilingual i18n (`en`, `hy`, `ru`), and per-request nonce CSP enforced in `src/proxy.ts` + `middleware.ts`.
+   - Proxies API traffic to the backend via `PROPERTY_API_URL` (`https://property-crawl-api.vercel.app`) and imports shared server helpers via `@server/*`.
+2. **Listing API & Intelligence Engine — Vercel Serverless (`https://property-crawl-api.vercel.app`)**:
+   - Packaged by `scripts/deploy-vercel-api.js` into a slim **4.38 MB** serverless bundle (`api/index.js` -> `server/vercel-handler.js`, `vercel.json` with `maxDuration: 60` and `/api` rewrite), excluding `data.js`, `data/listings.snapshot.json`, Python crawlers, fixtures, and test suites.
+   - `server/vercel-handler.js` routes ephemeral caches to `/tmp/property-crawl-cache`, forces `SCRAPER_BACKGROUND_ENABLED=0` inside serverless functions, and reconstructs `X-Forwarded-For` from `x-pp-client-ip` when `x-edge-secret` validates against `EDGE_SHARED_SECRET`.
+   - **Vercel AI Gateway (free-first OIDC)**: `server/ai/model_router.js` targets `https://ai-gateway.vercel.sh/v1` using `AI_GATEWAY_API_KEY` or `VERCEL_OIDC_TOKEN`, prioritizing free models (`nvidia/nemotron-3.5-lightning-free`, `reflection/beam-free`) with optional low-cost fallbacks (`AI_GATEWAY_FREE_ONLY=1` disables paid fallbacks) and a hard per-process spend cap (`AI_BUDGET_LIMIT_USD`). Public `GET /api/enrich` serves cached/deterministic summaries only; AI parsing requires operator auth.
+3. **Edge Proxy, Public R2 Vault, Cron & Email Routing — Cloudflare Worker (`https://edge.perfectproperty.bid`)**:
+   - `cloudflare/property-crawl-edge/worker.js` + `wrangler.toml` caches eligible public `GET`/`HEAD` API routes (`/api/coverage`, `/api/sources`, `/api/auction-calendar`, `/api/neighborhoods`, `/api/property-image/providers`), enforces `no-store` on private/mutation prefixes, and injects `x-edge-secret` and `x-pp-client-ip` upstream to `ORIGIN_URL`.
+   - Serves public evidence objects at `/vault/public/*` from the `VAULT` R2 bucket (`property-crawl-vault`) with `ETag`, byte-range support, and `default-src 'none'; sandbox` CSP, while rejecting private `/vault/*` keys with `403`.
+   - Dispatches five scheduled crons to `POST /api/scrapers/run` (`next-slice`, `repair-enrichment`, `prune`, `second-look`, `dispatch-digests`) and forwards Cloudflare Email Routing messages via `email()` as `action=email-ingest`.
+4. **Durable Database — Supabase PostgreSQL + PostGIS**:
+   - Managed PostgreSQL + PostGIS backing listings, observations, saved hunts, research cases, `ai_cache`, `document_reviews`, and billing entitlements across **42** SQL migrations (`003` through `044_account_billing_tier.sql` in `server/db/migrations/`, byte-mirrored under `src/lib/db/migrations/`).
+   - **No Silent Demo Fallback**: When no reachable database is configured, `server/db/client.js` reports `dataMode: "unavailable"` and listing endpoints return `503`. `server/db/database-target.js` ensures a configured `DATABASE_URL` takes precedence over embedded modes on cloud runtimes.
 
 ---
 
 ## 2. Environment Variables & Secret Configuration
 
-Configure these in your host dashboard (Render Web Service / Koyeb App / Hugging Face Space):
+Configure these variables directly in each host dashboard (**do NOT commit live secrets to git**):
 
-| Variable | Required? | Example / Default | Purpose |
+### Vercel Web UI (`perfectproperty.bid`) & Vercel Serverless API (`property-crawl-api.vercel.app`)
+
+| Variable | Required? | Scope / Example | Purpose |
 |---|---|---|---|
 | `NODE_ENV` | **Yes** | `production` | Enables production optimizations and strict CSP |
-| `PORT` | **Yes** | `3000` (Render) / `8000` (Koyeb) | Public HTTP listener port |
-| `DATABASE_URL` | **Yes** (for a public listing inventory) | `postgres://user:pass@host:5432/db` | Durable PostgreSQL + PostGIS persistence. Without it the app serves no inventory (fail-closed); the $0 demo path injects `PROPERTY_DB=embedded` instead |
-| `AUTO_MIGRATE` | Recommended | `1` | Applies pending migrations from `server/db/migrations/` on every boot (ledger-guarded) |
-| `SCRAPER_BOOT_DELAY_MS` | Recommended | `90000` | Defers the ingestion cycle past the deploy health-check window; too small and the UI health check starves under collector load |
-| `SCRAPER_ADMIN_TOKEN` | Recommended | `<random-32-char-token>` | Secures operator workspace & review queue |
-| `PROPERTY_OPERATOR_SECRET` | Optional | *(matches SCRAPER_ADMIN_TOKEN)* | Alias for operator authentication |
-| `WORKSPACE_SESSION_SECRET` | Recommended | `<random-32-char-token>` | Signs operator session cookies |
-| `WORKSPACE_SESSION_EPOCH` | Recommended | `1` | Session invalidation epoch |
-| `TRUSTED_PROXY_COUNT` | **Yes** (on Render) | `1` | Correct client IP resolution from `X-Forwarded-For` |
-| `SCRAPER_BACKGROUND_ENABLED`| Optional | `1` | Enables scheduled periodic background scraping |
-| `NEWSLETTER_ENDPOINT` | Optional | `https://hooks.zapier.com/...` | Webhook for newsletter delivery |
-| `CONTACT_ENDPOINT` | Optional | `https://hooks.zapier.com/...` | Webhook for contact form delivery |
+| `PROPERTY_API_URL` | **Yes** (UI) | `https://property-crawl-api.vercel.app` | Canonical backend URL used by Next.js server proxies |
+| `PUBLIC_APP_ORIGIN` | **Yes** | `https://perfectproperty.bid` | Canonical UI origin for CORS and redirects (never trusts `Host`) |
+| `CORS_ALLOWED_ORIGINS` | **Yes** | `https://perfectproperty.bid,https://edge.perfectproperty.bid` | Explicit CSV allowlist for API CORS |
+| `DATABASE_URL` | **Yes** (API) | `postgres://...pooler.supabase.com:6543/postgres?sslmode=require` | Supabase PostgreSQL + PostGIS runtime connection |
+| `DATABASE_DIRECT_URL` | Recommended | `postgres://postgres:...@db.<project>.supabase.co:5432/postgres` | Direct Postgres connection for migrations and ledger checks |
+| `EDGE_SHARED_SECRET` | **Yes** | `<random-32-char-token>` | Shared `x-edge-secret` authenticating Cloudflare Worker proxy/cron headers |
+| `TRUSTED_PROXY_COUNT` | **Yes** | `1` | Resolves real client IP from `x-pp-client-ip` / `X-Forwarded-For` |
+| `SCRAPER_ADMIN_TOKEN` | **Yes** | `<random-32-char-token>` | Protects `/api/scrapers/run`, `/api/document-review`, and admin mutations (timing-safe SHA-256) |
+| `PROPERTY_OPERATOR_SECRET` | Optional | *(alias for `SCRAPER_ADMIN_TOKEN`)* | Accepted operator credential alias |
+| `WORKSPACE_SESSION_SECRET` | **Yes** | `<random-32-char-token>` | Signs operator and member session cookies |
+| `WORKSPACE_SESSION_EPOCH` | Recommended | `1` | Increment to invalidate active sessions |
+| `VERCEL_OIDC_TOKEN` / `AI_GATEWAY_API_KEY` | Optional | Managed OIDC or gateway token | Authenticates Vercel AI Gateway (`https://ai-gateway.vercel.sh/v1`) |
+| `AI_GATEWAY_FREE_ONLY` | Optional | `1` | Restricts Vercel AI Gateway routing to free-tier models only |
+| `AI_BUDGET_LIMIT_USD` | Recommended | `5.00` | Hard cumulative AI spend cap per process |
+| `REQUIRE_DURABLE_VAULT` | Recommended | `1` | Enforces Cloudflare R2 storage for uploaded/archived evidence |
+| `R2_BUCKET` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_ENDPOINT` | With `REQUIRE_DURABLE_VAULT=1` | `property-crawl-vault` / `https://<account-id>.r2.cloudflarestorage.com` | S3-compatible Cloudflare R2 credentials for the evidence vault |
+| `GOOGLE_MAPS_API_KEY` | Optional | Server-restricted GCP key | Server-side geocoding & Street View metadata lookup only |
+| `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | Optional (UI) | HTTP-referrer-restricted GCP key | Browser map/Street View embed key (never reuse server key) |
+| `RESEND_API_KEY` / `RESEND_FROM` / `OPERATOR_EMAIL` | Optional | `alerts@perfectproperty.bid` | Outbound hunt digests, verification emails, and cron failure alerts |
+| `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` / `STRIPE_PRICE_ID_PRO` / `STRIPE_PRICE_ID_DESK` | Optional | Stripe live keys & price IDs | Member Pro (`$39/mo`) and Desk (`$149/mo`) billing & webhooks |
 
-> **Security Guardrail**: Do NOT commit live tokens to git. Generate random 32-character tokens directly in the hosting dashboard.
+### Cloudflare Worker (`edge.perfectproperty.bid`)
 
----
-
-## 3. GitHub Actions CI/CD Deployment Trigger
-
-The automated deployment pipeline lives in `.github/workflows/deploy.yml`.
-
-### Step 1: Add Secrets to GitHub Repository
-Go to **GitHub Settings → Secrets and variables → Actions** and add:
-- `RENDER_DEPLOY_HOOK_URL`: Your Render Webhook URL (from **Render Dashboard → Settings → Deploy Hook**).
-- `DEPLOY_SMOKE_URL`: The public URL of your service (e.g. `https://property-crawl.onrender.com`).
-
-### Step 2: Triggering Deploy
-- **Automated**: Once configured, every push to `main` with passing CI runs `.github/workflows/deploy.yml`.
-- **Manual Trigger via cURL**:
-  ```bash
-  curl -fsS -X POST "$RENDER_DEPLOY_HOOK_URL"
-  ```
+Configure in `cloudflare/property-crawl-edge/wrangler.toml` (`[vars]` + `[[r2_buckets]]`) and Wrangler secrets:
+- `ORIGIN_URL` & `API_ORIGIN`: `https://property-crawl-api.vercel.app`
+- `VAULT` R2 binding: `property-crawl-vault`
+- Secrets (`wrangler secret put`): `EDGE_SHARED_SECRET`, `SCRAPER_ADMIN_TOKEN` (must match the API), plus optional `ALERT_WEBHOOK_URL` or `RESEND_API_KEY` / `OPERATOR_EMAIL` for scheduled cron failure alerts.
 
 ---
 
-## 4. PostgreSQL Persistence & Migration Sequence
+## 3. Deployment & Bundle Staging Commands
 
-When connecting a durable PostgreSQL database:
+1. **Canonical Web UI (`perfectproperty.bid`)**:
+   - Connected to Vercel Next.js project (`vercel.json`: `"framework": "nextjs"`).
+   - Verify locally before push with `npm run lint && npm run build`.
+2. **Slim Serverless API (`property-crawl-api.vercel.app`)**:
+   - Stage and run the local `/api/health` smoke check (verifies the ~4.38 MB bundle boots in `NODE_ENV=production` without `data.js`):
+     ```bash
+     node scripts/deploy-vercel-api.js
+     ```
+   - Stage, smoke-test, and deploy to production Vercel:
+     ```bash
+     node scripts/deploy-vercel-api.js --deploy
+     ```
+3. **Cloudflare Edge Worker (`edge.perfectproperty.bid`)**:
+   - Run `node --test test/cloudflare/worker.test.mjs`, then deploy from `cloudflare/property-crawl-edge/`:
+     ```bash
+     npx wrangler deploy
+     ```
+4. **CI Post-Deploy Smoke Check**:
+   - `.github/workflows/deploy.yml` defaults `DEPLOY_SMOKE_URL` to `https://property-crawl-api.vercel.app` and curls `/api/health` after CI passes.
 
-1. **Verify Connection**:
+---
+
+## 4. Supabase PostgreSQL Persistence & Migration Sequence
+
+1. **Verify Direct Database Connectivity**:
    ```bash
-   node -e "const { Client } = require('pg'); new Client({ connectionString: process.env.DATABASE_URL }).connect().then(() => console.log('Connected')).catch(console.error);"
+   node -e "const { Client } = require('pg'); new Client({ connectionString: process.env.DATABASE_DIRECT_URL || process.env.DATABASE_URL }).connect().then(() => console.log('Connected')).catch(console.error);"
    ```
-2. **Apply Schema & Migrations**:
+2. **Verify Migration Mirror Parity & Apply Migrations (`003`–`044`)**:
    ```bash
-   npm run discovery:migrate
+   npm run schema:check && npm run discovery:migrate
    ```
-3. **Seed Database from Canonical Catalog**:
+3. **Verify Database Health on the Live API**:
    ```bash
-   npm run db:seed
+   curl -fsS "https://property-crawl-api.vercel.app/api/health" | grep '"dataMode":"postgres"'
    ```
-4. **Verify Database Health**:
-   ```bash
-   curl -fsS "http://localhost:3000/api/health" | grep '"dataMode":"postgres"'
-   ```
+   - Note: `npm run db:seed` is strictly for initializing isolated/test environments from `data.js`; never treat `data.js` as live production inventory.
 
 ---
 
 ## 5. Post-Deployment Verification & Smoke Protocol
 
-Run these verification checks immediately after deployment:
+Run these checks immediately after any UI, API, or Edge deployment:
 
 ```bash
-# 1. Check stack liveness and data mode
-curl -fsS "https://<your-host>/api/health"
-# Expected response includes: "status": "ok", "dataMode": "memory" (or "postgres")
+# 1. Check Vercel API health, release commit SHA, and postgres dataMode
+curl -fsS "https://property-crawl-api.vercel.app/api/health"
 
-# 2. Check paginated listings API
-curl -fsS "https://<your-host>/api/listings?limit=5"
-# Expected: 200 OK with listings array and total count matching CONTEXT.md
+# 2. Check Cloudflare Edge Worker liveness and R2 vault binding
+curl -fsS "https://edge.perfectproperty.bid/health"
 
-# 3. Check CSP header enforcement (no unsafe-inline on script-src)
-curl -I "https://<your-host>/" | grep -i "content-security-policy"
-# Expected: script-src 'self' 'nonce-...' 'strict-dynamic'
+# 3. Check paginated listings through the UI origin (or run npm run smoke:production)
+curl -fsS "https://perfectproperty.bid/api/listings?limit=5"
 
-# 4. Check operator route security (must fail closed with 401/503 without token)
-curl -s -o /dev/null -w "%{http_code}\n" "https://<your-host>/api/document-review"
-# Expected: 401 or 503
+# 4. Verify per-request nonce CSP enforcement (no unsafe-inline on script-src)
+curl -fsI "https://perfectproperty.bid/" | grep -i "content-security-policy"
+
+# 5. Verify operator endpoints reject unauthenticated requests (401 or 503)
+curl -s -o /dev/null -w "%{http_code}\n" "https://property-crawl-api.vercel.app/api/document-review"
 ```
 
 ---
 
 ## 6. Rollback Protocol
 
-If an issue occurs after deployment:
-1. **Host Rollback**: In the Render / Koyeb dashboard, navigate to **Deploys** and click **Rollback to this deploy** on the prior green release.
-2. **Database Rollback** (if Postgres schema was mutated):
-   Execute the verified restore procedure from `docs/RELEASE_RUNBOOK_ZERO_COST.md`:
+1. **Vercel UI & API Rollback**: In the Vercel Dashboard for `perfectproperty.bid` or `property-crawl-api`, open **Deployments** and click **Instant Rollback** on the previous green deployment (or re-deploy the prior commit with `node scripts/deploy-vercel-api.js --deploy`).
+2. **Cloudflare Worker Rollback**: In `cloudflare/property-crawl-edge/` (or Cloudflare Workers dashboard), run `npx wrangler rollback` to restore the prior active worker version.
+3. **Supabase PostgreSQL Rollback** (if a schema migration must be reverted): Restore via Supabase Point-in-Time Recovery (PITR) or logical dump:
    ```bash
-   pg_restore -d "$DATABASE_URL" --clean <backup_file>.dump
+   pg_restore -d "$DATABASE_DIRECT_URL" --clean <backup_file>.dump
    ```

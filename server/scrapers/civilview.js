@@ -777,12 +777,15 @@ class CivilViewScraper extends BaseScraper {
         ? 'partial_failure'
         : emitted.length > 0
           ? 'success'
-          : 'empty';
+          : (abortedForDeadline ? 'partial' : 'empty');
       this.lastRunReport = report;
 
       if (emitted.length === 0) {
-        const reason = report.failures[0]?.error || 'No detail-backed records were available';
-        throw new Error(`CivilView produced no trustworthy records: ${reason}`);
+        if (!abortedForDeadline && report.failures.length > 0) {
+          const reason = report.failures[0]?.error || 'No detail-backed records were available';
+          throw new Error(`CivilView produced no trustworthy records: ${reason}`);
+        }
+        return emitted;
       }
 
       console.log(

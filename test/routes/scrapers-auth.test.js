@@ -194,6 +194,61 @@ test('POST /api/scrapers/run action=ai-prewarm respects auth, limit, ai_cache, a
     failed: 0,
     totalCostUsd: 0,
     modelsUsed: ['nvidia/nemotron-3.5-lightning-free'],
+    stoppedEarly: false,
+    stopReason: null,
+    freeOnly: false,
+    elapsedMs: payload.elapsedMs,
   });
+  assert.equal(typeof payload.elapsedMs, 'number');
   assert.equal(cacheMap.size, 2);
+
+  // freeOnly=true forces AI_GATEWAY_FREE_ONLY='1' and maxDurationMs time budget prevents 504 timeouts
+  let freeOnlyPayload = null;
+  await handler(
+    {
+      method: 'POST',
+      url: '/api/scrapers/run',
+      headers: { authorization: 'Bearer prewarm-secret' },
+      body: { action: 'ai-prewarm', limit: 2, freeOnly: true, maxDurationMs: 5000 },
+    },
+    { status() { return this; }, json(p) { freeOnlyPayload = p; } }
+  );
+  assert.equal(freeOnlyPayload.ok, true);
+  assert.equal(freeOnlyPayload.freeOnly, true);
+
+  // action=run-source requires source/sourceId and routes only that source
+  let missingSourceStatus = null;
+  await handler(
+    {
+      method: 'POST',
+      url: '/api/scrapers/run',
+      headers: { authorization: 'Bearer prewarm-secret' },
+      body: { action: 'run-source' },
+    },
+    { status(c) { missingSourceStatus = c; return this; }, json() {} }
+  );
+  assert.equal(missingSourceStatus, 400);
+
+  let capturedRunOptions = null;
+  const runSourceHandler = createScrapersHandler({
+    env: { SCRAPER_ADMIN_TOKEN: 'prewarm-secret' },
+    scheduler: {
+      async runAll(opts) {
+        capturedRunOptions = opts;
+        return { totalIngested: 0, totalRejected: 0, sourceResults: [] };
+      },
+    },
+  });
+  let rsStatus = 200;
+  await runSourceHandler(
+    {
+      method: 'POST',
+      url: '/api/scrapers/run',
+      headers: { authorization: 'Bearer prewarm-secret' },
+      body: { action: 'run-source', source: 'treasury' },
+    },
+    { status(c) { rsStatus = c; return this; }, json() {} }
+  );
+  assert.equal(rsStatus, 200);
+  assert.deepEqual(capturedRunOptions.sourceIds, ['treasury']);
 });

@@ -209,6 +209,16 @@ test('Cloudflare edge worker scheduled() maps cron expressions to actions, abort
     await worker.scheduled({ cron: '53 */6 * * *' }, env, ctxDigests);
     await ctxDigests.flush();
     assert.equal(calls[5].body.action, 'dispatch-digests');
+
+    const ctxPrewarm = createCtx();
+    await worker.scheduled({ cron: '11 */2 * * *' }, env, ctxPrewarm);
+    await ctxPrewarm.flush();
+    assert.deepEqual(calls[6].body, {
+      action: 'ai-prewarm',
+      limit: 3,
+      freeOnly: true,
+      maxDurationMs: 38000,
+    });
   } finally {
     globalThis.fetch = prevFetch;
   }

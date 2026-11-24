@@ -662,7 +662,8 @@ test('treasury and usda setCheckpoint unwrap object cursors and treasury sets bo
   process.env.VERCEL = '1';
   try {
     const vercelTreasury = new TreasuryForfeitureScraper({ useScrapling: false });
-    assert.equal(vercelTreasury.timeoutMs, 8_000);
+    assert.equal(vercelTreasury.timeoutMs, 15_000);
+    assert.equal(vercelTreasury.maxRetries, 2);
   } finally {
     if (prevVercel === undefined) delete process.env.VERCEL;
     else process.env.VERCEL = prevVercel;
@@ -673,4 +674,20 @@ test('treasury and usda setCheckpoint unwrap object cursors and treasury sets bo
   assert.equal(usda.stateOffset, 10);
   const usdaFromOpts = new UsdaResalesScraper({ useScrapling: false, checkpoint: { nextCursor: '7' } });
   assert.equal(usdaFromOpts.stateOffset, 7);
+});
+
+test('civilview empty-county and deadline-aborted slices return cleanly without throwing error state', async () => {
+  const { CivilViewScraper } = require('../../server/scrapers/civilview');
+  const scraper = new CivilViewScraper({ targetState: 'NJ', maxCounties: 1, useScrapling: false });
+  scraper.fetchCounties = async () => [
+    { id: '1', name: 'Atlantic County', state: 'NJ' },
+    { id: '2', name: 'Bergen County', state: 'NJ' },
+  ];
+  scraper.fetchCountySummaries = async () => ({ summaries: [], sessionCookie: '' });
+
+  const emptyResult = await scraper.scrapeFeed({ slice: true });
+  assert.deepEqual(emptyResult, []);
+  assert.equal(scraper.lastRunReport.outcome, 'empty');
+  assert.equal(scraper.lastRunReport.partialSweep, true);
+  assert.equal(scraper.lastRunReport.nextContinuationToken, '1');
 });

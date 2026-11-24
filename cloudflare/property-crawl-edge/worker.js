@@ -358,9 +358,11 @@ export default {
       ? 'prune'
       : (cron === '29 * * * *'
           ? 'repair-enrichment'
-          : (cron === '41 */6 * * *'
-              ? 'second-look'
-              : (cron === '53 */6 * * *' ? 'dispatch-digests' : 'next-slice')));
+          : (cron === '11 */2 * * *'
+              ? 'ai-prewarm'
+              : (cron === '41 */6 * * *'
+                  ? 'second-look'
+                  : (cron === '53 */6 * * *' ? 'dispatch-digests' : 'next-slice'))));
     const edgeSecret = String(env?.EDGE_SHARED_SECRET || '').trim();
     const notifyFailure = async (details) => {
       try {
@@ -389,6 +391,9 @@ export default {
         }
       } catch {}
     };
+    const payload = action === 'ai-prewarm'
+      ? { action: 'ai-prewarm', limit: 3, freeOnly: true, maxDurationMs: 38000 }
+      : { action };
     const task = fetch(`${apiOrigin}/api/scrapers/run`, {
       method: 'POST',
       headers: {
@@ -397,7 +402,7 @@ export default {
         'Content-Type': 'application/json',
         Accept: 'application/json',
       },
-      body: JSON.stringify({ action }),
+      body: JSON.stringify(payload),
       signal: typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(55_000) : undefined,
     })
       .then(async (res) => {

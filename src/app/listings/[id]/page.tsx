@@ -41,6 +41,7 @@ import { PropertyDocuments } from "@/components/listings/property-documents";
 import { EnrichmentView } from "@/components/listings/enrichment-view";
 import { NearbyComps } from "@/components/listings/nearby-comps";
 import { DueDiligenceChecklist } from "@/components/terminal/due-diligence-checklist";
+import { AiBriefingCard } from "@/components/listings/ai-briefing-card";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -682,6 +683,9 @@ export default async function ListingPage({ params, searchParams }: Props) {
           </section>
           {/* A state-table redemption baseline or a pattern-matched lien signal is modeled, not published, so it must not close the gap (same rule as signals.js). */}
           <GapLedger className="" listing={{ id: listing.id, state: listing.state, county: listing.county, gisUrl: gisLink?.url ?? null, occupancy: listing.occupancy, seniorLienRisk: (provenance.derivedFields as { seniorLienRisk?: unknown } | undefined)?.seniorLienRisk ? null : listing.seniorLienRisk, deposit: listing.deposit, redemptionDays: derivedRedemption ? null : listing.redemptionDays, redemptionWarning: derivedRedemption ? null : listing.redemptionWarning, openingBid: listing.openingBid, saleDate: listing.saleDate, sourceUrl: exactSourceUrl }} />
+          </div>
+          <div className="mt-6">
+            <AiBriefingCard listingId={listing.id} />
           </div>
           <nav aria-label={dUi.sectionNavAria} className="sticky top-0 z-10 -mx-1 mt-6 flex max-w-full gap-6 overflow-x-auto border-b border-line bg-paper/95 px-1 pt-2 text-sm font-semibold text-ink-3 backdrop-blur-sm">
             <a href="#property-facts" className="whitespace-nowrap border-b-2 border-ink px-1 pb-3 text-ink">{dUi.tabOverview}</a>

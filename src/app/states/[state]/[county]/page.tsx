@@ -65,6 +65,9 @@ const loadCountyData = cache(async function loadCountyData(stateCode: string, co
     county: normalizeCountySlug(countyParam).toLowerCase(),
     apiUrl: process.env.PROPERTY_API_URL || "http://localhost:3000",
     searchLocal: async (query) => {
+      if (process.env.NEXT_RUNTIME === "edge") {
+        throw new Error("Local inventory search unavailable in edge runtime");
+      }
       try {
         const db = require("@server/db/client");
         const discovery = require("@server/discovery/query");

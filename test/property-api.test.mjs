@@ -291,3 +291,17 @@ test('appOrigin validates https NEXT_PUBLIC_APP_URL fallback in production and r
     'http://127.0.0.1:3001',
   );
 });
+
+test('BE-05 App Router database fallbacks guard NEXT_RUNTIME=edge cleanly', async () => {
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const root = path.resolve(import.meta.dirname, '..');
+  for (const rel of [
+    'src/app/api/listings/[id]/packet/route.ts',
+    'src/app/states/[state]/[county]/page.tsx',
+    'src/app/api/public/scrapy-ingest/route.ts',
+  ]) {
+    const src = fs.readFileSync(path.join(root, rel), 'utf8');
+    assert.match(src, /NEXT_RUNTIME\s*[!=]==\s*["']edge["']/, `${rel} must guard @server/db/client against edge runtime`);
+  }
+});

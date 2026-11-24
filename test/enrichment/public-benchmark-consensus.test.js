@@ -189,4 +189,30 @@ describe('Three-Way Public-Record Benchmark Consensus (Hack #4)', () => {
       false,
     );
   });
+
+  test('hud-safmr supports compact deduplicated format identically to legacy entries and resolves official nationwide ZIPs', () => {
+    const { getHudSafmrBenchmark } = require('../../server/enrichment/hud-safmr');
+    const { compactSafmrEntries } = require('../../scripts/build-hud-safmr');
+
+    const compact = compactSafmrEntries([
+      { zip: '7722', area: 'Monmouth-Ocean, NJ HUD Metro FMR Area', rents: [2510, 2830, 3490, 4560, 5050] },
+      { zip: '33406', area: 'West Palm Beach-Boca Raton, FL HUD Metro FMR Area', rents: [1630, 1740, 2060, 2670, 3100] },
+    ]);
+    const fromCompact = getHudSafmrBenchmark({ zip: '07722', bedrooms: 2, benchmarksData: compact });
+    assert.equal(fromCompact.zip, '07722');
+    assert.equal(fromCompact.fairMarketRent, 3490);
+    assert.equal(fromCompact.hudAreaName, 'Monmouth-Ocean, NJ HUD Metro FMR Area');
+    assert.deepEqual(fromCompact.bedroomRents, [2510, 2830, 3490, 4560, 5050]);
+
+    const legacy = {
+      '07722': { area: 'Monmouth-Ocean, NJ HUD Metro FMR Area', rents: [2510, 2830, 3490, 4560, 5050] },
+    };
+    const fromLegacy = getHudSafmrBenchmark({ zip: '07722', bedrooms: 2, benchmarksData: legacy });
+    assert.equal(fromLegacy.fairMarketRent, fromCompact.fairMarketRent);
+    assert.equal(fromLegacy.paymentStandard90Pct, fromCompact.paymentStandard90Pct);
+    assert.equal(fromLegacy.paymentStandard110Pct, fromCompact.paymentStandard110Pct);
+
+    const liveNj = getHudSafmrBenchmark({ zip: '07722', bedrooms: 2 });
+    assert.ok(liveNj && liveNj.fairMarketRent > 0, '07722 NJ SAFMR benchmark should resolve from committed dataset');
+  });
 });
