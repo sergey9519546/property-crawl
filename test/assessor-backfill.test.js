@@ -994,3 +994,62 @@ test('presentListing sets enrolledAssessor corridor flag and discovery query fil
     await pglite.close();
   }
 });
+
+test('extractLeadingHouseNumberRange, isCompatibleNjSitusAddress, and queryNjCadastralByAddress support contiguous NJ multi-lot house ranges', async () => {
+  const {
+    extractLeadingHouseNumberRange,
+    isCompatibleNjSitusAddress,
+    queryNjCadastralByAddress,
+  } = require('../server/enrichment/nj-cadastral');
+
+  assert.deepEqual(extractLeadingHouseNumberRange('548'), { low: 548, high: 548, raw: '548' });
+  assert.deepEqual(extractLeadingHouseNumberRange('548-550 SANDFORD AVE'), { low: 548, high: 550, raw: '548-550' });
+  assert.deepEqual(extractLeadingHouseNumberRange('548-550 SANDFORD AVE, NEWARK, NJ 07106'), { low: 548, high: 550, raw: '548-550' });
+  assert.equal(extractLeadingHouseNumberRange('548-560 SANDFORD AVE'), null);
+  assert.equal(extractLeadingHouseNumberRange('550-548 SANDFORD AVE'), null);
+  assert.equal(extractLeadingHouseNumberRange('0-2 SANDFORD AVE'), null);
+  assert.equal(extractLeadingHouseNumberRange('548-2B SANDFORD AVE'), null);
+  assert.equal(extractLeadingHouseNumberRange('VACANT LAND'), null);
+
+  assert.equal(isCompatibleNjSitusAddress('548-550 SANDFORD AVE, NEWARK, NJ 07106', '548 SANDFORD AVE'), true);
+  assert.equal(isCompatibleNjSitusAddress('548-550 SANDFORD AVE, NEWARK, NJ 07106', '550 SANDFORD AVE'), true);
+  assert.equal(isCompatibleNjSitusAddress('548-550 SANDFORD AVE, NEWARK, NJ 07106', '548-550 SANDFORD AVE'), true);
+  assert.equal(isCompatibleNjSitusAddress('548-549 SANDFORD AVE, NEWARK, NJ 07106', '549 SANDFORD AVE'), true);
+
+  assert.equal(isCompatibleNjSitusAddress('548-550 SANDFORD AVE, NEWARK, NJ 07106', '556 SANDFORD AVE'), false);
+  assert.equal(isCompatibleNjSitusAddress('548-550 SANDFORD AVE, NEWARK, NJ 07106', '549 SANDFORD AVE'), false);
+  assert.equal(isCompatibleNjSitusAddress('548-550 SANDFORD AVE, NEWARK, NJ 07106', '548 BROAD ST'), false);
+
+  let capturedWhere = null;
+  const result = await queryNjCadastralByAddress({
+    address: '548-550 SANDFORD AVE, NEWARK, NJ 07106',
+    city: 'NEWARK',
+    county: 'Essex County',
+    state: 'NJ',
+    zip: '07106',
+  }, {
+    fetchFn: async (url) => {
+      capturedWhere = new URL(String(url)).searchParams.get('where');
+      return {
+        ok: true,
+        json: async () => ({
+          features: [{
+            attributes: {
+              PAMS_PIN: '0714_4100_12',
+              PCLBLOCK: '4100',
+              PCLLOT: '12',
+              COUNTY: 'ESSEX',
+              MUN_NAME: 'NEWARK CITY',
+              ST_ADDRESS: '548 SANDFORD AVE',
+              NET_VALUE: 315000,
+            },
+            geometry: { rings: [[[-74.22, 40.73], [-74.21, 40.73], [-74.21, 40.74], [-74.22, 40.74], [-74.22, 40.73]]] },
+          }],
+        }),
+      };
+    },
+  });
+  assert.equal(capturedWhere, "UPPER(COUNTY) = 'ESSEX' AND UPPER(ST_ADDRESS) LIKE '548%SANDFORD%'");
+  assert.ok(result);
+  assert.equal(result.feature.attributes.ST_ADDRESS, '548 SANDFORD AVE');
+});

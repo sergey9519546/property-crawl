@@ -530,6 +530,51 @@ export default async function CountyDocketPage({ params }: PageProps) {
           <CountyAlertSubscribe state={state} county={countyName} formalCounty={formalCounty} />
         </div>
 
+        <section aria-labelledby="courthouse-workbench-heading" className="mt-8 rounded-card border border-line bg-card p-6 shadow-sm">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1">
+              <h2 id="courthouse-workbench-heading" className="text-base font-bold text-ink">
+                {locale === "hy"
+                  ? "Նախաաճուրդային անդերռայթինգ և դատական աշխատանքային վահանակ"
+                  : locale === "ru"
+                    ? "Предторговый андеррайтинг и судебный рабочий стол"
+                    : "Pre-Bid Underwriting & Courthouse Workbench"}
+              </h2>
+              <p className="max-w-2xl text-xs leading-relaxed text-ink-3">
+                {locale === "hy"
+                  ? `Հաշվարկեք օրենքով սահմանված պահման ծախսերն ու փակման կանխիկը, պատրաստեք աճուրդային հայտաթերթեր և զտեք ${state} նահանգի գրանցված գնահատման կանոններով հողամասերը հայտ ներկայացնելուց առաջ։`
+                  : locale === "ru"
+                    ? `Рассчитайте уставные расходы владения и сумму к закрытию, подготовьте лист ставок для торгов и отфильтруйте участки штата ${state} с установленными правилами оценочных коэффициентов до подачи заявки.`
+                    : `Run statutory carry and cash-to-close math, prepare courthouse bid sheets, and filter ${state} parcels with enrolled assessor ratio rules before bidding.`}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2 shrink-0">
+              <Link
+                href="/bid-sheet"
+                className="inline-flex items-center justify-center rounded-control bg-ink px-4 py-2 text-xs font-semibold text-white transition hover:bg-ink-2"
+              >
+                {locale === "hy" ? "Բացել հայտաթերթը" : locale === "ru" ? "Открыть лист ставок" : "Open Bid Sheet"}
+              </Link>
+              <Link
+                href="/underwrite"
+                className="inline-flex items-center justify-center rounded-control border border-line-strong bg-paper px-4 py-2 text-xs font-semibold text-ink transition hover:bg-line"
+              >
+                {locale === "hy" ? "Բացել անդերռայթերը" : locale === "ru" ? "Открыть андеррайтер" : "Open Underwriter"}
+              </Link>
+              <Link
+                href={`/?state=${encodeURIComponent(state)}&enrolledOnly=true`}
+                className="inline-flex items-center justify-center rounded-control border border-line-strong bg-paper px-4 py-2 text-xs font-semibold text-ink transition hover:bg-line"
+              >
+                {locale === "hy"
+                  ? `Դիտել ${state} գրանցված հողամասերը`
+                  : locale === "ru"
+                    ? `Участки ${state} с правилами оценки`
+                    : `View ${state} Enrolled Parcels`}
+              </Link>
+            </div>
+          </div>
+        </section>
+
         <div className="mt-10">
           <div className="flex items-center justify-between border-b border-line pb-4">
             <div>

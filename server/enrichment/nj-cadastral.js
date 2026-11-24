@@ -252,6 +252,59 @@ function extractLeadingHouseNumber(rawAddress) {
   return match ? match[0] : '';
 }
 
+function extractLeadingHouseNumberRange(value) {
+  const cleaned = cleanStreetLineForComparison(value);
+  if (!cleaned) return null;
+  const trimmed = cleaned.trim();
+  const rangeMatch = trimmed.match(/^(\d+)\s*-\s*(\d+)(?=\s|$)/);
+  if (rangeMatch) {
+    const low = Number.parseInt(rangeMatch[1], 10);
+    const high = Number.parseInt(rangeMatch[2], 10);
+    if (Number.isInteger(low) && Number.isInteger(high) && low > 0 && high >= low && (high - low) <= 10) {
+      return { low, high, raw: `${rangeMatch[1]}-${rangeMatch[2]}` };
+    }
+    return null;
+  }
+  const singleMatch = trimmed.match(/^(\d+)(?=\s|$)/);
+  if (singleMatch) {
+    const num = Number.parseInt(singleMatch[1], 10);
+    if (Number.isInteger(num) && num > 0) {
+      return { low: num, high: num, raw: singleMatch[1] };
+    }
+  }
+  return null;
+}
+
+function stripLeadingHouseRangeFromStreet(cleanedAddress, range) {
+  if (!range) return cleanedAddress;
+  return String(cleanedAddress || '')
+    .trim()
+    .replace(/^\d+\s*-\s*\d+(?=\s|$)|^\d+(?=\s|$)/, '')
+    .trim();
+}
+
+function isCompatibleHouseRange(listingRange, situsRange) {
+  if (!listingRange || !situsRange) return false;
+  if (listingRange.low === listingRange.high && situsRange.low === situsRange.high) {
+    return listingRange.low === situsRange.low;
+  }
+  if (listingRange.low === situsRange.low && listingRange.high === situsRange.high) {
+    return true;
+  }
+  const single = listingRange.low === listingRange.high
+    ? listingRange
+    : (situsRange.low === situsRange.high ? situsRange : null);
+  const multi = listingRange.high > listingRange.low
+    ? listingRange
+    : (situsRange.high > situsRange.low ? situsRange : null);
+  if (single && multi && (multi.high - multi.low) <= 10) {
+    if (single.low < multi.low || single.low > multi.high) return false;
+    if (multi.high - multi.low === 1) return true;
+    return (single.low % 2) === (multi.low % 2);
+  }
+  return false;
+}
+
 function extractCoreStreetTokens(tokens, { stripLeadingHouse = true } = {}) {
   if (!Array.isArray(tokens) || tokens.length === 0) return [];
   const startIndex = stripLeadingHouse && /^\d+[A-Z]?$/.test(tokens[0]) ? 1 : 0;
@@ -287,18 +340,30 @@ function coreStreetStem(token) {
 function isCompatibleNjSitusAddress(listingAddress, situsAddress) {
   const cleanedSitus = cleanStreetLineForComparison(situsAddress);
   if (!cleanedSitus) return true;
+  const situsRange = extractLeadingHouseNumberRange(cleanedSitus);
   const situsTokens = normalizeTokens(cleanedSitus);
-  if (!situsTokens.length || !/^\d+[A-Z]?$/.test(situsTokens[0])) return true;
+  if (!situsRange && (!situsTokens.length || !/^\d+[A-Z]?$/.test(situsTokens[0]))) return true;
 
   const cleanedListing = cleanStreetLineForComparison(listingAddress);
   if (!cleanedListing) return true;
+  const listingRange = extractLeadingHouseNumberRange(cleanedListing);
   const listingTokens = normalizeTokens(cleanedListing);
-  if (!listingTokens.length || !/^\d+[A-Z]?$/.test(listingTokens[0])) return true;
+  if (!listingRange && (!listingTokens.length || !/^\d+[A-Z]?$/.test(listingTokens[0]))) return true;
 
-  if (normalizeHouseToken(listingTokens[0]) !== normalizeHouseToken(situsTokens[0])) return false;
+  if (listingRange && situsRange) {
+    if (!isCompatibleHouseRange(listingRange, situsRange)) return false;
+  } else if (listingRange || situsRange) {
+    return false;
+  } else if (normalizeHouseToken(listingTokens[0]) !== normalizeHouseToken(situsTokens[0])) {
+    return false;
+  }
 
-  const listingCore = extractCoreStreetTokens(listingTokens);
-  const situsCore = extractCoreStreetTokens(situsTokens);
+  const listingCore = listingRange
+    ? extractCoreStreetTokens(normalizeTokens(stripLeadingHouseRangeFromStreet(cleanedListing, listingRange)), { stripLeadingHouse: false })
+    : extractCoreStreetTokens(listingTokens);
+  const situsCore = situsRange
+    ? extractCoreStreetTokens(normalizeTokens(stripLeadingHouseRangeFromStreet(cleanedSitus, situsRange)), { stripLeadingHouse: false })
+    : extractCoreStreetTokens(situsTokens);
   if (listingCore.length > 0 && situsCore.length > 0) {
     const listingStems = listingCore.map(coreStreetStem);
     const situsStems = situsCore.map(coreStreetStem);
@@ -338,8 +403,14 @@ function isExactNjGeocodeMatch(listing = {}, candidate = {}) {
 
   const queryLine = extractNjGeocodeQuery(listing);
   const streetOnly = stripCityStateZipTail(queryLine, listing.city, listingZip);
-  const streetTokens = normalizeTokens(streetOnly);
-  const candStreetTokens = normalizeTokens(attrs.StAddr || candidate.address?.split(',')[0] || '');
+  const cleanedListingStreet = cleanStreetLineForComparison(streetOnly);
+  const listingRange = extractLeadingHouseNumberRange(cleanedListingStreet);
+  const streetTokens = listingRange
+    ? [String(listingRange.low), ...normalizeTokens(stripLeadingHouseRangeFromStreet(cleanedListingStreet, listingRange))]
+    : normalizeTokens(streetOnly);
+  const candStreetRaw = attrs.StAddr || candidate.address?.split(',')[0] || '';
+  const candRange = extractLeadingHouseNumberRange(candStreetRaw);
+  const candStreetTokens = normalizeTokens(candStreetRaw);
   if (!streetTokens.length || !candStreetTokens.length) return false;
 
   const noticeHouse = attrs.AddNum
@@ -349,8 +420,15 @@ function isExactNjGeocodeMatch(listing = {}, candidate = {}) {
   const listingHouse = listingHouseMatch ? listingHouseMatch[0] : '';
   const candHouseMatch = candStreetTokens[0].match(/^\d+[A-Z]?$/);
   const candHouse = candHouseMatch ? candHouseMatch[0] : '';
-  if (noticeHouse && listingHouse && noticeHouse !== listingHouse) return false;
-  if (listingHouse && (noticeHouse || candHouse) !== listingHouse) return false;
+  const effectiveCandHouse = noticeHouse || candHouse;
+  if (listingRange && listingRange.high > listingRange.low) {
+    const candNumRange = extractLeadingHouseNumberRange(effectiveCandHouse) || candRange;
+    if (!candNumRange || !isCompatibleHouseRange(listingRange, candNumRange)) return false;
+    if (noticeHouse && candHouse && normalizeHouseToken(noticeHouse) !== normalizeHouseToken(candHouse)) return false;
+  } else {
+    if (noticeHouse && listingHouse && noticeHouse !== listingHouse) return false;
+    if (listingHouse && effectiveCandHouse !== listingHouse) return false;
+  }
 
   const streetCore = extractCoreStreetTokens(streetTokens);
   const candCore = extractCoreStreetTokens(candStreetTokens);
@@ -361,7 +439,11 @@ function isExactNjGeocodeMatch(listing = {}, candidate = {}) {
     return false;
   }
 
-  const overlap = candStreetTokens.filter((token) => streetTokens.includes(token)).length;
+  const overlap = candStreetTokens.filter((token, idx) => (
+    idx === 0 && listingRange && listingRange.high > listingRange.low
+      ? true
+      : streetTokens.includes(token)
+  )).length;
   const required = Math.max(2, Math.ceil(candStreetTokens.length * 0.8));
   if (overlap < required) return false;
 
@@ -511,14 +593,17 @@ async function queryNjCadastralByAddress(listing = {}, { fetchFn = globalThis.fe
 
   const listingZip = String(listing.zip || '').trim().slice(0, 5);
   const streetOnly = cleanStreetLineForComparison(stripCityStateZipTail(queryLine, listing.city, listingZip));
+  const houseRange = extractLeadingHouseNumberRange(streetOnly);
   const streetTokens = normalizeTokens(streetOnly);
   if (!streetTokens.length) return null;
 
   const houseMatch = streetTokens[0].match(/^\d+[A-Z]?$/);
-  const houseNum = houseMatch ? houseMatch[0] : '';
+  const houseNum = houseRange ? String(houseRange.low) : (houseMatch ? houseMatch[0] : '');
   if (!houseNum) return null;
 
-  const coreTokens = extractCoreStreetTokens(streetTokens);
+  const coreTokens = houseRange
+    ? extractCoreStreetTokens(normalizeTokens(stripLeadingHouseRangeFromStreet(streetOnly, houseRange)), { stripLeadingHouse: false })
+    : extractCoreStreetTokens(streetTokens);
   const coreStreet = coreTokens.find((token) => /^[A-Z0-9]+$/.test(token)) || '';
   if (!coreStreet) return null;
 
@@ -773,6 +858,7 @@ module.exports = {
   NJ_CADASTRAL_URL,
   NJ_COUNTY_FIPS,
   extractNjGeocodeQuery,
+  extractLeadingHouseNumberRange,
   parseNjNoticeLotBlock,
   isCompatibleNjSitusAddress,
   isExactNjGeocodeMatch,

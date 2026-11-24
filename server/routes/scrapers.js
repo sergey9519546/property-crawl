@@ -336,6 +336,14 @@ function createScrapersHandler(dependencies = {}) {
           const rawGeocodeLimit = body.geocodeLimit ?? url.searchParams.get('geocodeLimit');
           const rawCatchLimit = body.catchLimit ?? url.searchParams.get('catchLimit');
           const rawMaxDurationMs = body.maxDurationMs ?? url.searchParams.get('maxDurationMs');
+          const parseBoundedLimit = (raw) => {
+            const n = raw != null && raw !== '' ? Number(raw) : NaN;
+            return Number.isFinite(n) && n >= 1 ? Math.min(200, Math.floor(n)) : undefined;
+          };
+          const assessorLimit = parseBoundedLimit(body.assessorLimit ?? url.searchParams.get('assessorLimit'));
+          const countyLimit = parseBoundedLimit(body.countyLimit ?? url.searchParams.get('countyLimit'));
+          const safmrLimit = parseBoundedLimit(body.safmrLimit ?? url.searchParams.get('safmrLimit'));
+          const spatialLimit = parseBoundedLimit(body.spatialLimit ?? url.searchParams.get('spatialLimit'));
           const njLimit = rawNjLimit != null && rawNjLimit !== '' ? Number(rawNjLimit) : NaN;
           const geocodeLimit = rawGeocodeLimit != null && rawGeocodeLimit !== '' ? Number(rawGeocodeLimit) : NaN;
           const catchLimit = rawCatchLimit != null && rawCatchLimit !== '' ? Number(rawCatchLimit) : NaN;
@@ -346,6 +354,10 @@ function createScrapersHandler(dependencies = {}) {
             ...(Number.isFinite(geocodeLimit) && geocodeLimit > 0 ? { geocodeLimit } : {}),
             ...(Number.isFinite(catchLimit) && catchLimit > 0 ? { catchLimit } : {}),
             ...(Number.isFinite(maxDurationMs) && maxDurationMs >= 0 ? { maxDurationMs } : {}),
+            ...(assessorLimit !== undefined ? { assessorLimit } : {}),
+            ...(countyLimit !== undefined ? { countyLimit } : {}),
+            ...(safmrLimit !== undefined ? { safmrLimit } : {}),
+            ...(spatialLimit !== undefined ? { spatialLimit } : {}),
             dryRun,
           });
           return res.json({ status: 'completed', action: 'repair-enrichment', report: repairReport });

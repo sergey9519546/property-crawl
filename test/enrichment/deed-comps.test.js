@@ -6,11 +6,13 @@ const { test, describe } = require('node:test');
 const {
   MIN_QUALIFIED_COMPS,
   DEED_COMPS_CAVEAT,
+  extractCandidateDeedRecords,
   computeQualifiedDeedComps,
 } = require('../../server/enrichment/deed-comps');
 const {
   computePublicBenchmarkConsensus,
 } = require('../../server/enrichment/public-benchmark-consensus');
+const { buildPropertyDossier } = require('../../server/intelligence/dossier');
 
 const AS_OF = '2026-11-24T00:00:00Z';
 
@@ -203,5 +205,240 @@ describe('L2 Qualified Deed Comps (DATA-01)', () => {
     assert.equal(withComps.estHigh, null);
     assert.equal(withComps.dealScore, null);
     assert.equal(withComps.arv, undefined);
+  });
+
+  test('extractCandidateDeedRecords normalizes NJ MOD-IV, FL DOR, and peer listings with clean deduplication', () => {
+    const njParcel = {
+      rawApn: '1301-12-4',
+      situsAddress: '10 Main St',
+      lastSalePrice: 400000,
+      lastSaleDate: '2026-06-15',
+      nuCode: '00',
+      buildingSqft: 2000,
+    };
+
+    const listing = {
+      id: 'NJ-SUBJ-1',
+      address: '10 Main St',
+      state: 'NJ',
+      county: 'Monmouth County',
+      zip: '07722',
+      apn: '1301-12-4',
+      lastSalePrice: 400000,
+      lastSaleDate: '2026-06-15',
+      assessorParcel: njParcel,
+      deedRecords: [
+        // Exact duplicate of assessorParcel (should dedup cleanly)
+        { apn: '1301-12-4', address: '10 Main St', lastSalePrice: 400000, lastSaleDate: '2026-06-15', nuCode: '00', buildingSqft: 2000 },
+        // Distinct comp in deedRecords
+        { apn: '1301-12-9', address: '14 Main St', lastSalePrice: 450000, lastSaleDate: '2026-07-01', nuCode: '00', buildingSqft: 2250 },
+      ],
+      publicRecords: {
+        deedComps: [
+          // FL DOR style comp
+          { SALE_PRC1: 500000, SALE_YR1: 2026, SALE_MO1: 8, QUAL_CD1: '01', TOT_LVG_AREA: 2500, PARCEL_ID: '1301-12-10', PHY_ADDR1: '18 Main St' },
+        ],
+      },
+      provenance: {
+        derivedFields: {
+          assessorRoll: { parcel: { ...njParcel } },
+        },
+      },
+    };
+
+    const peerListings = [
+      // Same state + county (different ZIP) -> included
+      {
+        id: 'NJ-PEER-1',
+        state: 'NJ',
+        county: 'Monmouth',
+        zip: '07728',
+        address: '22 Oak Rd',
+        apn: '1301-18-1',
+        assessorParcel: {
+          rawApn: '1301-18-1',
+          situsAddress: '22 Oak Rd',
+          recordedSalePrice: 540000,
+          deedDate: '2026-09-10',
+          nuCode: '00',
+          buildingSqft: 2700,
+        },
+      },
+      // Non-usable NU code peer -> normalized with qualified: false
+      {
+        id: 'NJ-PEER-NU',
+        state: 'NJ',
+        county: 'Monmouth',
+        zip: '07722',
+        address: '24 Oak Rd',
+        apn: '1301-18-2',
+        lastSalePrice: 150000,
+        lastSaleDate: '2026-09-12',
+        nuCode: '12',
+        buildingSqft: 1500,
+      },
+      // Different county and different zip -> excluded
+      {
+        id: 'NJ-OTHER-COUNTY',
+        state: 'NJ',
+        county: 'Essex',
+        zip: '07102',
+        address: '99 Broad St',
+        apn: '0714-1-1',
+        lastSalePrice: 300000,
+        lastSaleDate: '2026-09-01',
+        nuCode: '00',
+        buildingSqft: 1500,
+      },
+      // Different state -> excluded
+      {
+        id: 'FL-OTHER-STATE',
+        state: 'FL',
+        county: 'Monmouth',
+        zip: '07722',
+        address: '10 Palm Way',
+        SALE_PRC1: 350000,
+        SALE_YR1: 2026,
+        SALE_MO1: 9,
+        QUAL_CD1: '01',
+        TOT_LVG_AREA: 1750,
+      },
+    ];
+
+    const extracted = extractCandidateDeedRecords(listing, {
+      assessorParcel: njParcel,
+      peerListings,
+    });
+
+    // 10 Main St (deduped across assessorParcel, assessorRoll, listing, deedRecords), 14 Main St, 18 Main St, 22 Oak Rd, 24 Oak Rd
+    assert.equal(extracted.length, 5);
+
+    const flRec = extracted.find((r) => r.apn === '1301-12-10');
+    assert.deepEqual(flRec, {
+      salePrice: 500000,
+      saleDate: '2026-08-01',
+      sqft: 2500,
+      qualified: true,
+      nuCode: null,
+      qualCode: '01',
+      source: 'FLORIDA_DOR_STATEWIDE',
+      apn: '1301-12-10',
+      address: '18 Main St',
+    });
+
+    const nuPeer = extracted.find((r) => r.apn === '1301-18-2');
+    assert.equal(nuPeer.qualified, false);
+    assert.equal(nuPeer.nuCode, '12');
+
+    // computeQualifiedDeedComps accepts listing object directly (backward compatible with arrays)
+    const computed = computeQualifiedDeedComps(listing, { peerListings, asOf: AS_OF });
+    assert.equal(computed.available, true);
+    assert.equal(computed.sampleSize, 4); // 400k, 450k, 500k, 540k
+    assert.equal(computed.excludedCount, 1);
+    assert.equal(computed.excludedReasons.nj_non_usable_code, 1);
+    assert.equal(computed.medianSalePrice, 475000);
+    assert.equal(computed.medianPricePerSqft, 200);
+  });
+
+  test('buildPropertyDossier wires extracted and peer deed comps into publicBenchmarks.deedComps without fabricating estimates', () => {
+    const hpiSeries = {
+      version: 1,
+      sourceUrl: 'https://www.fhfa.gov/data/hpi',
+      retrievedAt: '2026-10-30T00:00:00Z',
+      datasetSha256: 'a'.repeat(64),
+      values: { FL: { '2020Q2': 300, '2026Q1': 450 } },
+    };
+
+    const listing = {
+      id: 'FL-DOSSIER-1',
+      source: 'sheriff',
+      sourceUrl: 'https://stjohns.realforeclose.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&AID=101',
+      sourceObservedAt: '2026-11-20T12:00:00Z',
+      address: '100 King St, St. Augustine, FL 32084',
+      county: 'St. Johns',
+      state: 'FL',
+      zip: '32084',
+      openingBid: 180000,
+      assessmentYear: 2020,
+      provenance: {
+        observed: true,
+        origin: 'live',
+        publisher: 'sheriff',
+        recordId: '101',
+        observedAt: '2026-11-20T12:00:00Z',
+      },
+    };
+
+    const peerListings = [
+      {
+        id: 'FL-PEER-1',
+        state: 'FL',
+        county: 'St. Johns County',
+        zip: '32084',
+        address: '102 King St',
+        apn: 'SJ-102',
+        SALE_PRC1: 300000,
+        SALE_YR1: 2026,
+        SALE_MO1: 5,
+        QUAL_CD1: '01',
+        TOT_LVG_AREA: 1500,
+      },
+      {
+        id: 'FL-PEER-2',
+        state: 'FL',
+        county: 'St. Johns County',
+        zip: '32084',
+        address: '104 King St',
+        apn: 'SJ-104',
+        SALE_PRC1: 360000,
+        SALE_YR1: 2026,
+        SALE_MO1: 7,
+        QUAL_CD1: '02',
+        TOT_LVG_AREA: 1800,
+      },
+      {
+        id: 'FL-PEER-3',
+        state: 'FL',
+        county: 'St. Johns County',
+        zip: '32086',
+        address: '106 King St',
+        apn: 'SJ-106',
+        SALE_PRC1: 420000,
+        SALE_YR1: 2026,
+        SALE_MO1: 9,
+        QUAL_CD1: '01',
+        TOT_LVG_AREA: 2100,
+      },
+    ];
+
+    const dossier = buildPropertyDossier(listing, {
+      now: Date.parse(AS_OF),
+      hpiSeries,
+      peerListings,
+    });
+
+    assert.ok(dossier.publicBenchmarks);
+    assert.ok(dossier.publicBenchmarks.deedComps);
+    assert.equal(dossier.publicBenchmarks.deedComps.layer, 'L2_QUALIFIED_DEED_COMPS');
+    assert.equal(dossier.publicBenchmarks.deedComps.available, true);
+    assert.equal(dossier.publicBenchmarks.deedComps.sampleSize, 3);
+    assert.equal(dossier.publicBenchmarks.deedComps.medianSalePrice, 360000);
+    assert.equal(dossier.publicBenchmarks.deedComps.medianPricePerSqft, 200);
+    assert.equal(dossier.publicBenchmarks.deedComps.isAppraisal, false);
+    assert.equal(dossier.publicBenchmarks.deedComps.isBidRecommendation, false);
+    assert.equal(dossier.publicBenchmarks.estLow, null);
+    assert.equal(dossier.publicBenchmarks.estHigh, null);
+    assert.equal(dossier.publicBenchmarks.dealScore, null);
+
+    // Without enough qualified comps, dossier still withholds values honestly
+    const sparseDossier = buildPropertyDossier(listing, {
+      now: Date.parse(AS_OF),
+      hpiSeries,
+      peerListings: peerListings.slice(0, 2),
+    });
+    assert.equal(sparseDossier.publicBenchmarks.deedComps.available, false);
+    assert.equal(sparseDossier.publicBenchmarks.deedComps.sampleSize, 2);
+    assert.equal(sparseDossier.publicBenchmarks.deedComps.medianSalePrice, null);
+    assert.equal(sparseDossier.publicBenchmarks.deedComps.medianPricePerSqft, null);
   });
 });

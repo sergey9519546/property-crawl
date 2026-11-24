@@ -7,7 +7,8 @@ import { classifyInvestmentStrategies, computeCashToClose, computeConstitutional
 import { fetchAssessorReadingCached } from "@/components/listings/assessor-reading";
 import { computeRedemptionExpectedValue } from "@/lib/redemption-ev";
 import { displayMoney, positiveNumber } from "@/lib/listing-display";
-import { readUnderwriteScenario, writeUnderwriteScenario } from "@/lib/underwrite-scenario";
+import { readUnderwriteScenario, syncScenarioToDealFile, writeUnderwriteScenario } from "@/lib/underwrite-scenario";
+import { useResolvedWorkspaceSession } from "@/components/workspace/workspace-shell";
 import { StatutoryDeadlinesTimeline } from "@/components/terminal/statutory-deadlines-timeline";
 import { TitleRiskForensics } from "@/components/terminal/title-risk-forensics";
 import { useLocale } from "@/components/i18n/locale-provider";
@@ -44,6 +45,8 @@ function enteredAmount(value: string): number | null {
 
 export function BiddingSimulator({ listing, publishedUpsetEstimate }: BiddingSimulatorProps) {
   const { messages: m } = useLocale();
+  const workspaceSession = useResolvedWorkspaceSession();
+  const dealSyncTimerRef = React.useRef<number | null>(null);
   const [rehabBudget, setRehabBudget] = useState(25_000);
   const [targetMargin, setTargetMargin] = useState(30);
   const [scenario, setScenario] = useState<Record<ScenarioField, string>>({
@@ -202,7 +205,7 @@ export function BiddingSimulator({ listing, publishedUpsetEstimate }: BiddingSim
     insurance = monthlyInsurance,
     redemptionProb = redemptionProbabilityPct,
   ) => {
-    writeUnderwriteScenario(listing.id, {
+    const payload = {
       ...next,
       rehabBudget: rehab,
       targetMargin: margin,
@@ -215,7 +218,19 @@ export function BiddingSimulator({ listing, publishedUpsetEstimate }: BiddingSim
       monthlyInsurance: insurance,
       redemptionProbabilityPct: redemptionProb,
       maxAllowableOffer: calculateMao(rehab, margin, customVal, customBid, next),
-    });
+    };
+    writeUnderwriteScenario(listing.id, payload);
+    const canSyncRemote = Boolean(workspaceSession?.authenticated || workspaceSession?.memberTools);
+    if (dealSyncTimerRef.current !== null && typeof window !== "undefined") {
+      window.clearTimeout(dealSyncTimerRef.current);
+    }
+    if (typeof window !== "undefined") {
+      dealSyncTimerRef.current = window.setTimeout(() => {
+        void syncScenarioToDealFile(listing.id, payload, {
+          fetchImpl: canSyncRemote ? undefined : null,
+        });
+      }, 350);
+    }
   };
 
   const updateHoldingMonths = (months: number) => {

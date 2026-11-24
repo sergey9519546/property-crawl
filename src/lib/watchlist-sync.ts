@@ -257,3 +257,23 @@ export function syncDeviceWatchlistToServer(options: {
   }
   return performWatchlistSync(options);
 }
+
+/**
+ * Adds a single listing ID to device storage (`perfectproperty:saved-listings`) if not already present.
+ * Returns `true` if newly added, `false` if already present, invalid, or storage is unavailable.
+ */
+export function addLocalWatchlistId(
+  listingId: string,
+  storage?: WatchlistStorage | null,
+): boolean {
+  if (typeof listingId !== "string") return false;
+  const normalized = listingId.trim();
+  if (!normalized) return false;
+  const current = readDeviceWatchlistIds(storage);
+  if (current.includes(normalized)) return false;
+  const ok = writeDeviceWatchlistIds([...current, normalized], storage);
+  if (ok) {
+    resetWatchlistSyncSession();
+  }
+  return ok;
+}

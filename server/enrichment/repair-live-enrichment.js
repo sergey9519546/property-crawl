@@ -7,7 +7,7 @@ const { sourceObservedAddress, resolveCensusCoordinates } = require('../routes/p
 const { computeCatchSummary } = require('../intelligence/catch-summary');
 
 const DEFAULT_NJ_LIMIT = 40;
-const DEFAULT_GEOCODE_LIMIT = 60;
+const DEFAULT_GEOCODE_LIMIT = 25;
 const DEFAULT_CATCH_LIMIT = 1000;
 const DEFAULT_MAX_DURATION_MS = 20_000;
 const DEFAULT_CONCURRENCY = 5;
@@ -383,9 +383,18 @@ async function repairLiveEnrichment(options = {}) {
     const missingRows = Array.isArray(missQuery?.rows) ? missQuery.rows : [];
     report.geocodeCandidates = missingRows.length;
 
+    const geocodePassStartedAt = wallClock();
+    const geocodePassCapMs = maxDurationMs > 0
+      ? Math.max(4_000, Math.floor(maxDurationMs * 0.45))
+      : Infinity;
+    const geocodePassExpired = () => (
+      budgetExpired()
+      || (maxDurationMs > 0 && (wallClock() - geocodePassStartedAt) >= geocodePassCapMs)
+    );
+
     await runWithConcurrency(missingRows, DEFAULT_CONCURRENCY, async (row) => {
-      if (budgetExpired()) {
-        report.timedOut = true;
+      if (geocodePassExpired()) {
+        if (budgetExpired()) report.timedOut = true;
         return;
       }
       const candidateListing = {

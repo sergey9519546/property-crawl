@@ -226,6 +226,29 @@ function computeOpportunity(listing = {}, now = Date.now()) {
   if (listing.hasDocuments === true) rank += 5;
   rank = Math.max(0, Math.min(100, Math.round(rank)));
 
+  const safmrRent = Number(listing?.hudSafmr?.fairMarketRent);
+  let safmrRentFloor = null;
+  if (Number.isFinite(safmrRent) && safmrRent > 0) {
+    const expenseRatio = 0.35;
+    const targetDscr = 1.20;
+    const monthlyRate = (7.25 / 100) / 12;
+    const totalMonths = 360;
+    const noiMonthly = safmrRent * (1 - expenseRatio);
+    const maxMonthlyDebt = noiMonthly / targetDscr;
+    const factor = Math.pow(1 + monthlyRate, totalMonths);
+    if (Number.isFinite(factor) && factor > 1) {
+      const maxLoan = maxMonthlyDebt * ((factor - 1) / (monthlyRate * factor));
+      if (Number.isFinite(maxLoan) && maxLoan >= 0) {
+        safmrRentFloor = Math.max(0, Math.floor(maxLoan / 0.75));
+      }
+    }
+  }
+
+  const judgmentNum = Number(listing?.judgment);
+  const judgmentToMidRatio = openingBid === null && Number.isFinite(judgmentNum) && judgmentNum > 0 && mid !== null && mid > 0
+    ? Number((judgmentNum / mid).toFixed(4))
+    : null;
+
   return {
     rank,
     shape,
@@ -235,6 +258,8 @@ function computeOpportunity(listing = {}, now = Date.now()) {
     bidSpread,
     bidToMidRatio: bidToMid !== null ? Number(bidToMid.toFixed(4)) : null,
     valuationBasis,
+    safmrRentFloor,
+    judgmentToMidRatio,
     note: 'Opportunity rank combines modeled deal score, sale urgency, and evidence completeness. Triage only.',
   };
 }

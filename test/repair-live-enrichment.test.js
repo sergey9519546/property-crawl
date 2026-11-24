@@ -971,3 +971,99 @@ test('repairLiveEnrichment invokes backfillAssessorRolls before Pass 4 with defa
   assert.equal(skippedCalls, 0, 'assessor backfill must skip when <= 4s reserve remains');
   assert.equal(reserveReport.catchBackfilled, 1, 'Pass 4 must still run within its 4s reserve');
 });
+
+test('repairLiveEnrichment caps DEFAULT_GEOCODE_LIMIT to 25 and yields Census geocoding early under tight maxDurationMs so Pass 3c runs', async () => {
+  const rows = [];
+  for (let i = 1; i <= 30; i += 1) {
+    rows.push({
+      id: `SL-GEO-${i}`,
+      source: 'servicelink',
+      state: 'TX',
+      county: 'Travis',
+      city: 'Austin',
+      zip: '78701',
+      address: `${100 + i} Congress Ave, Austin, TX 78701`,
+      sourceUrl: `https://www.servicelinkauction.com/listing/${i}`,
+      lat: null,
+      lng: null,
+      propType: 'Single Family',
+      openingBid: 100000,
+      raw: 'REO',
+      sourceObservedAt: '2026-11-22T00:00:00.000Z',
+      provenance: { origin: 'live', observed: true },
+    });
+  }
+  const pool = makeFakePool(rows);
+  let capturedGeocodeLimit = null;
+  const origQuery = pool.query.bind(pool);
+  pool.query = async (sql, params) => {
+    if (String(sql).includes('latitude IS NULL OR longitude IS NULL')) {
+      capturedGeocodeLimit = Number(params[0]);
+    }
+    return origQuery(sql, params);
+  };
+
+  let nowTick = 0;
+  let assessorCalled = false;
+  let assessorOpts = null;
+  const report = await repairLiveEnrichment({
+    db: {
+      pool,
+      async getListings() { return { total: 0, listings: [] }; },
+      async createListing(l) { return l; },
+    },
+    pool,
+    maxDurationMs: 12_000,
+    wallClock: () => nowTick,
+    includeCountyBackfill: false,
+    includeCatchBackfill: false,
+    resolveCensusCoordinates: async () => {
+      // Advance clock by 2000ms per lookup; 45% of 12_000ms is 5_400ms -> yields after ~3 calls
+      nowTick += 2_000;
+      return { lat: 30.2672, lng: -97.7431, basis: 'source_observed_address_census_geocode' };
+    },
+    backfillAssessorRolls: async (opts) => {
+      assessorCalled = true;
+      assessorOpts = opts;
+      return { considered: 1, harvested: 1, persisted: 1 };
+    },
+  });
+
+  assert.equal(capturedGeocodeLimit, 25, 'DEFAULT_GEOCODE_LIMIT must default to 25');
+  assert.equal(report.geocodeCandidates, 25);
+  assert.ok(report.geocodedCount > 0 && report.geocodedCount < 10, `expected Pass 2 to yield early, got ${report.geocodedCount}`);
+  assert.equal(assessorCalled, true, 'Pass 3c backfillAssessorRolls must execute after Pass 2 yields early');
+  assert.ok(assessorOpts.maxDurationMs >= 2_000, `expected assessor reserve > 0, got ${assessorOpts.maxDurationMs}`);
+});
+
+test('POST /api/scrapers/run?action=repair-enrichment forwards bounded assessorLimit and countyLimit', async () => {
+  let calledWith = null;
+  const handler = createScrapersHandler({
+    env: { SCRAPER_ADMIN_TOKEN: 'top-secret-token' },
+    repairLiveEnrichment: async (opts) => {
+      calledWith = opts;
+      return { dryRun: opts.dryRun };
+    },
+  });
+  const makeRes = () => ({
+    statusCode: 200,
+    body: null,
+    status(c) { this.statusCode = c; return this; },
+    json(b) { this.body = b; return this; },
+  });
+
+  const res1 = makeRes();
+  await handler({
+    method: 'POST',
+    url: '/api/scrapers/run?action=repair-enrichment&assessorLimit=75&countyLimit=500&safmrLimit=30&spatialLimit=0',
+    headers: { 'x-scraper-token': 'top-secret-token' },
+    body: { countyLimit: 250 },
+  }, res1);
+  assert.equal(res1.statusCode, 200);
+  assert.deepEqual(calledWith, {
+    assessorLimit: 75,
+    countyLimit: 200,
+    safmrLimit: 30,
+    dryRun: false,
+  });
+});

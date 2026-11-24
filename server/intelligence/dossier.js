@@ -22,6 +22,7 @@ const {
 const { evaluateEnvironmentalLiability, loadCache: loadEpaCache } = require('../enrichment/epa-hazard');
 const { classifySlope, loadCache: loadTerrainCache } = require('../enrichment/usgs-terrain');
 const { isCompatibleNjSitusAddress } = require('../enrichment/nj-cadastral');
+const { computeQualifiedDeedComps, extractCandidateDeedRecords } = require('../enrichment/deed-comps');
 
 function coordHash(coords, suffix = '') {
   const base = `${coords.lat},${coords.lng}${suffix ? `,${suffix}` : ''}`;
@@ -243,7 +244,8 @@ function resolveSyncFederalHazards(listing = {}, publicRecords = null, hazardCac
 
 function known(value) { return value !== null && value !== undefined && value !== ''; }
 
-function buildPropertyDossier(listing, { observations = { records: {}, signals: [] }, publicRecords = null, operatorInput = null, now = Date.now(), historyUnavailable = false, countyStats = null, hazardCachePaths = null, triggerWeights = triggerWeightManager, docketVerification = null, docketSummary = null, trajectoryOverride = null } = {}) {
+function buildPropertyDossier(listing, options = {}) {
+  const { observations = { records: {}, signals: [] }, publicRecords = null, operatorInput = null, now = Date.now(), historyUnavailable = false, countyStats = null, hazardCachePaths = null, triggerWeights = triggerWeightManager, docketVerification = null, docketSummary = null, trajectoryOverride = null } = options;
   const timestamp = listing.sourceObservedAt || listing.provenance?.observedAt;
   const publisherObserved = (listing.provenance?.origin === 'live' || listing.provenance?.origin === 'email_notice')
     && validateListingForIngestion(listing).isValid && Date.parse(timestamp) <= now + 300_000;
@@ -507,9 +509,22 @@ function buildPropertyDossier(listing, { observations = { records: {}, signals: 
     : null;
   const benchmarkAssessmentYear = rawListingAssessmentYear
     ?? (publicRecords?.parcel == null && !persistedConflict ? (roll?.assessmentYear ?? roll?.taxYear ?? null) : null);
+  const deedComps = options.deedComps || computeQualifiedDeedComps(
+    extractCandidateDeedRecords(listing, { ...options, assessorParcel: benchmarkParcel }),
+    {
+      zip: listing.zip,
+      asOf: now,
+      ...(options.deedCompsWindowMonths !== undefined ? { windowMonths: options.deedCompsWindowMonths } : {}),
+      ...(options.deedCompsSource ? { source: options.deedCompsSource } : {}),
+    },
+  );
+  const hpiSeries = options.hpiSeries !== undefined ? options.hpiSeries : loadObservedHpiSeries();
   return {
     evidenceReceipt: verifiedSnapshotReceipt(listing),
-    publicBenchmarks: computePublicBenchmarkConsensus({ ...listing, parcel: benchmarkParcel, assessmentYear: benchmarkAssessmentYear }, { hpiSeries: loadObservedHpiSeries() }),
+    publicBenchmarks: computePublicBenchmarkConsensus(
+      { ...listing, parcel: benchmarkParcel, assessmentYear: benchmarkAssessmentYear },
+      { assessorReading: options.assessorReading, hpiSeries, deedComps, asOf: now },
+    ),
     version: 1, generatedAt: new Date(now).toISOString(), listingId: listing.id, address: listing.address,
     source, facts, signals: calibratedSignals, contradictions, gaps, documentEvidence,
     hudSafmr: listing.hudSafmr || (listing.zip ? getHudSafmrBenchmark({ zip: listing.zip, bedrooms: listing.beds ?? 2 }) : null),

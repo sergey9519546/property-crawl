@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Settings, UserRound, Activity, BookOpenCheck, Crosshair, Database, FileWarning, Home, KeyRound, ListFilter, LockKeyhole, LogOut, PieChart, X } from "lucide-react";
+import { Settings, UserRound, Activity, Banknote, BookOpenCheck, Calculator, Crosshair, Database, FileWarning, Home, KeyRound, ListFilter, LockKeyhole, LogOut, PieChart, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/site/logo";
 import { LanguageSwitcher } from "@/components/i18n/language-switcher";
@@ -113,6 +113,8 @@ export function WorkspaceSessionProvider({ children, includeChrome = false }: { 
       { href: "/research", label: nav.research, icon: BookOpenCheck },
       { href: "/hunts", label: nav.hunts, icon: Crosshair },
       { href: "/portfolio", label: nav.portfolio, icon: PieChart },
+      { href: "/bid-sheet", label: "Bid Sheet", icon: Banknote },
+      { href: "/underwrite", label: "Underwrite", icon: Calculator },
       { href: "/sources", label: nav.sources, icon: Database },
       { href: "/activity", label: nav.activity, icon: Activity },
       { href: "/workspace/documents-review", label: "Reviews", labelText: nav.reviews, icon: FileWarning },
