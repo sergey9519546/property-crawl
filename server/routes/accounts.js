@@ -30,7 +30,13 @@ function createAccountsHandler(dependencies = {}) {
         return res.json({ account: await accounts.consumeLoginToken(body.token) });
       }
       if (req.method === 'POST' && url.pathname === '/api/accounts/subscription') {
-        return res.json({ account: await accounts.applySubscription(body) });
+        const billingTier = body.billingTier !== undefined ? body.billingTier : body.tier;
+        return res.json({
+          account: await accounts.applySubscription({
+            ...body,
+            ...(billingTier !== undefined ? { billingTier } : {}),
+          }),
+        });
       }
       if (req.method === 'POST' && url.pathname === '/api/accounts/webhook-event') {
         return res.json(await accounts.recordWebhookEvent(body.id, body.type));

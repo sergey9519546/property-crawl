@@ -453,6 +453,41 @@ async function callOpenAiExtraction(prompt, model, apiKey, signal, fetchFn) {
   };
 }
 
+async function callVercelGatewayExtraction(prompt, gwModel, gatewayToken, signal, fetchFn, baseUrl) {
+  const root = String(baseUrl || 'https://ai-gateway.vercel.sh/v1').replace(/\/+$/, '');
+  const response = await fetchFn(`${root}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${gatewayToken}`
+    },
+    body: JSON.stringify({
+      model: gwModel,
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0,
+      response_format: { type: 'json_object' }
+    }),
+    signal
+  });
+  if (!response || !response.ok) return null;
+  const responseBody = await response.json();
+  const content = responseBody.choices?.[0]?.message?.content;
+  let data = null;
+  try {
+    data = parseJsonContent(content);
+  } catch (_) {
+    return null;
+  }
+  if (!data) return null;
+  return {
+    provider: 'vercel_gateway',
+    model: gwModel,
+    data,
+    inputTokens: responseBody.usage?.prompt_tokens || Math.ceil(prompt.length / 4),
+    outputTokens: responseBody.usage?.completion_tokens || Math.ceil(String(content || '').length / 4)
+  };
+}
+
 function buildExtractionPrompt(cleanNotice) {
   return `Extract candidate fields from the legal notice. Do not infer, calculate, complete, or normalize missing facts. Every non-null candidate must include a short verbatim evidence excerpt found in the notice. Return only JSON in this shape: {"candidates":{"field":{"value":null,"evidence":null}}}. Candidate fields: property_address, city, state, zip, county, case_number, plaintiff_or_seller, defendant, judgment_amount, appraised_value, opening_bid, sale_date, sale_time, sale_type, deposit_terms, attorney, parcel_or_lot.\n\nNOTICE:\n${cleanNotice}`;
 }
@@ -463,24 +498,43 @@ async function callLlmWithRouting(promptOrOptions, modelArg, envArg = process.en
   const env = (isOpts ? promptOrOptions.env : envArg) ?? process.env;
   const fetchFn = (isOpts ? promptOrOptions.fetchFn : fetchFnArg) ?? globalThis.fetch;
   const externalSignal = (isOpts ? promptOrOptions.signal : signalArg) || null;
+  const oidcToken = isOpts ? (promptOrOptions.oidcToken || null) : null;
   const prompt = isOpts
     ? (promptOrOptions.prompt ?? (typeof promptOrOptions.cleanNotice === 'string' ? buildExtractionPrompt(promptOrOptions.cleanNotice) : ''))
     : promptOrOptions;
 
   if (typeof fetchFn !== 'function' || !prompt) return null;
 
+  const gatewayToken = oidcToken || env?.AI_GATEWAY_API_KEY || env?.VERCEL_OIDC_TOKEN || null;
   const geminiKey = env?.GEMINI_API_KEY || env?.GOOGLE_AI_API_KEY || null;
   const openaiKey = env?.OPENAI_API_KEY || null;
   const desiredProvider = ModelRouter.providerForModel(model);
+  const freeOnly = String(env?.AI_GATEWAY_FREE_ONLY || '').trim() === '1';
+  const baseUrl = ModelRouter.gatewayBaseUrl(env);
+
+  const pushGatewayAttempts = (targetAttempts) => {
+    if (!gatewayToken) return;
+    const baseChain = ModelRouter.gatewayModelChain(env);
+    const chain = (model && desiredProvider === 'vercel_gateway')
+      ? [model, ...baseChain.filter((m) => m !== model)]
+      : baseChain;
+    for (const gwModel of chain) {
+      if (freeOnly && !ModelRouter.isFreeGatewayModel(gwModel, env)) continue;
+      targetAttempts.push((sig) => callVercelGatewayExtraction(prompt, gwModel, gatewayToken, sig, fetchFn, baseUrl));
+    }
+  };
 
   const attempts = [];
   if (desiredProvider === 'gemini') {
     if (geminiKey) attempts.push((sig) => callGeminiExtraction(prompt, model || 'gemini-2.0-flash-lite', geminiKey, sig, fetchFn));
     if (openaiKey) attempts.push((sig) => callOpenAiExtraction(prompt, 'gpt-4o-mini', openaiKey, sig, fetchFn));
+    pushGatewayAttempts(attempts);
   } else if (desiredProvider === 'openai') {
     if (openaiKey) attempts.push((sig) => callOpenAiExtraction(prompt, model || 'gpt-4o-mini', openaiKey, sig, fetchFn));
     if (geminiKey) attempts.push((sig) => callGeminiExtraction(prompt, 'gemini-2.0-flash-lite', geminiKey, sig, fetchFn));
+    pushGatewayAttempts(attempts);
   } else {
+    pushGatewayAttempts(attempts);
     if (openaiKey) attempts.push((sig) => callOpenAiExtraction(prompt, 'gpt-4o-mini', openaiKey, sig, fetchFn));
     if (geminiKey) attempts.push((sig) => callGeminiExtraction(prompt, 'gemini-2.0-flash-lite', geminiKey, sig, fetchFn));
   }
@@ -504,10 +558,10 @@ async function callLlmWithRouting(promptOrOptions, modelArg, envArg = process.en
   return null;
 }
 
-async function callLlmExtraction(cleanNotice, model, env = process.env, fetchFn = globalThis.fetch) {
+async function callLlmExtraction(cleanNotice, model, env = process.env, fetchFn = globalThis.fetch, oidcToken = null) {
   if (typeof fetchFn !== 'function') return null;
   const prompt = buildExtractionPrompt(cleanNotice);
-  return callLlmWithRouting(prompt, model, env, fetchFn);
+  return callLlmWithRouting({ prompt, model, env, fetchFn, oidcToken });
 }
 
 async function handleParse(req, res, options = {}) {
@@ -530,11 +584,19 @@ async function handleParse(req, res, options = {}) {
   const cleanNotice = normalizeOcrText(
     neutralizePromptInjection(SecuritySanitizer.sanitizePromptInput(noticeText))
   );
+  const rawOidc = req.headers?.['x-vercel-oidc-token'];
+  const oidcToken = Array.isArray(rawOidc)
+    ? String(rawOidc[0] || '').trim() || null
+    : (typeof rawOidc === 'string' && rawOidc.trim() ? rawOidc.trim() : null);
+  const routerEnv = oidcToken && !env?.AI_GATEWAY_API_KEY && !env?.VERCEL_OIDC_TOKEN
+    ? { ...(env || {}), VERCEL_OIDC_TOKEN: oidcToken }
+    : env;
+
   const route = ModelRouter.selectRoute({
     taskType: 'notice_parser',
     promptLength: cleanNotice.length,
     isHighComplexity: cleanNotice.length > 4000,
-    env
+    env: routerEnv
   });
   const requestedModel = route.model;
   let model = requestedModel;
@@ -555,7 +617,7 @@ async function handleParse(req, res, options = {}) {
   let unverifiedCandidates = {};
 
   if ((confidence < 0.75 || forceLlm === true) && route.configured && !runtimeCostTracker.isOverBudget) {
-    const llmResult = await callLlmExtraction(cleanNotice, requestedModel, env, fetchFn);
+    const llmResult = await callLlmExtraction(cleanNotice, requestedModel, env, fetchFn, oidcToken);
     if (llmResult?.data) {
       model = llmResult.model || model;
       provider = llmResult.provider || provider;
@@ -607,5 +669,6 @@ module.exports.extractTextFromPdf = extractTextFromPdf;
 module.exports.sanitizeLlmCandidates = sanitizeLlmCandidates;
 module.exports.callLlmWithRouting = callLlmWithRouting;
 module.exports.callLlmExtraction = callLlmExtraction;
+module.exports.callVercelGatewayExtraction = callVercelGatewayExtraction;
 module.exports.getCostTracker = () => runtimeCostTracker;
-module.exports.resetCostTracker = (budgetLimitUsd = 5.00) => { runtimeCostTracker = new CostTracker({ budgetLimitUsd }); };
+module.exports.resetCostTracker = (budgetLimitUsd = Number(process.env.AI_BUDGET_LIMIT_USD) || 5.00) => { runtimeCostTracker = new CostTracker({ budgetLimitUsd }); };

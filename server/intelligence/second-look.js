@@ -30,6 +30,13 @@ function firstFinitePositive(...values) {
   return null;
 }
 
+function finitePositiveNumber(val) {
+  if (typeof val !== 'number' && typeof val !== 'string') return null;
+  if (typeof val === 'string' && val.trim() === '') return null;
+  const num = Number(val);
+  return Number.isFinite(num) && num > 0 ? num : null;
+}
+
 function resolveAssessedValue(freshListing = {}, prior = {}, caseItem = {}) {
   return firstFinitePositive(
     freshListing.assessedValue,
@@ -421,6 +428,23 @@ function evaluateSecondLookTriggers(caseItem = {}, freshListing = {}, options = 
       shouldTrigger = true;
       if (!primaryReason) primaryReason = hoaEvent.label;
     }
+  }
+
+  // 7. Buyer-Supplied Max Allowable Offer (MAO) Check (Zero-Fabrication: never impute MAO or ARV)
+  const buyerMao = finitePositiveNumber(caseItem.underwriteScenario?.maxAllowableOffer);
+  const publishedBid = finitePositiveNumber(freshListing.openingBid);
+  if (buyerMao !== null && publishedBid !== null && publishedBid <= buyerMao) {
+    const maoEvent = {
+      type: 'BID_AT_OR_BELOW_BUYER_MAO',
+      code: 'BID_AT_OR_BELOW_BUYER_MAO',
+      severity: 'HIGH',
+      openingBid: publishedBid,
+      maxAllowableOffer: buyerMao,
+      label: `Published opening bid ($${publishedBid.toLocaleString('en-US')}) is at or below buyer-supplied Max Allowable Offer ($${buyerMao.toLocaleString('en-US')}).`,
+    };
+    triggerEvents.push(maoEvent);
+    shouldTrigger = true;
+    if (!primaryReason) primaryReason = maoEvent.label;
   }
 
   return {

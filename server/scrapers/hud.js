@@ -514,7 +514,7 @@ class HudHomeScraper extends BaseScraper {
       defendant: null,
       occupancy: null,
       deposit: null,
-      sourceUrl: `${this.baseUrl}/propertydetails?caseNumber=${encodeURIComponent(caseNum)}`,
+      sourceUrl: `${this.baseUrl}/Property/PropertyDetails?caseNumber=${encodeURIComponent(caseNum)}`,
       raw: `caseNumber=${caseNum};address=${address};currentBid=${openingBid}`,
       provenance: {
         origin: 'live',
@@ -567,7 +567,7 @@ class HudHomeScraper extends BaseScraper {
           defendant: null,
           occupancy: null,
           deposit: null,
-          sourceUrl: `${this.baseUrl}/propertydetails?caseNumber=${encodeURIComponent(caseNum)}`,
+          sourceUrl: `${this.baseUrl}/Property/PropertyDetails?caseNumber=${encodeURIComponent(caseNum)}`,
           raw: row.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 2000),
           provenance: {
             origin: 'live',
@@ -639,7 +639,7 @@ class HudHomeScraper extends BaseScraper {
       occupancy: p.occupancy ?? null,
       deposit: p.earnestMoney ?? p.deposit ?? null,
       photoUrl: p.photoUrl ?? p.imageUrl ?? null,
-      sourceUrl: perListingUrl || `${this.baseUrl}/propertydetails?caseNumber=${encodeURIComponent(caseNum)}`,
+      sourceUrl: perListingUrl || `${this.baseUrl}/Property/PropertyDetails?caseNumber=${encodeURIComponent(caseNum)}`,
       raw: JSON.stringify(p),
       provenance: {
         origin: 'live',

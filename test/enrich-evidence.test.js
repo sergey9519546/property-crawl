@@ -217,3 +217,133 @@ test('GET /api/enrich returns deterministic summary and cached aiNarrative witho
   assert.equal(cachedPayload.aiNarrative, 'Cached fine-print summary for 100 Main St.');
   assert.equal(cachedPayload.costUsd, 0);
 });
+
+test('Vercel AI Gateway falls back from 429 free models to ultra-low-cost paid model and warms ai_cache', async () => {
+  const listing = await db.createListing({
+    id: `ENRICH-GW-429-${Date.now().toString(36)}`,
+    source: 'sheriff',
+    state: 'OH',
+    county: 'Cuyahoga',
+    address: '300 Euclid Ave',
+    openingBid: 82500,
+    status: 'scheduled',
+  });
+
+  const calledModels = [];
+  const authHeaders = [];
+  let postPayload = null;
+  await handleEnrich(
+    {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer gw-op-secret',
+        'x-vercel-oidc-token': 'oidc-header-token',
+      },
+      body: { listingId: listing.id, includeAiNarrative: true },
+    },
+    { status() { return this; }, json(p) { postPayload = p; } },
+    {
+      env: { SCRAPER_ADMIN_TOKEN: 'gw-op-secret' },
+      fetchFn: async (url, init) => {
+        assert.equal(url, 'https://ai-gateway.vercel.sh/v1/chat/completions');
+        authHeaders.push(init.headers.Authorization);
+        const reqBody = JSON.parse(init.body);
+        calledModels.push(reqBody.model);
+        if (reqBody.model === 'nvidia/nemotron-3.5-lightning-free' || reqBody.model === 'reflection/beam-free') {
+          return { ok: false, status: 429 };
+        }
+        return {
+          ok: true,
+          json: async () => ({
+            choices: [{ message: { content: 'Observed opening bid is $82,500; court, title, tax, and condition remain unverified.' } }],
+            usage: { prompt_tokens: 1000, completion_tokens: 500 },
+          }),
+        };
+      },
+    }
+  );
+
+  assert.deepEqual(calledModels, [
+    'nvidia/nemotron-3.5-lightning-free',
+    'reflection/beam-free',
+    'alibaba/qwen3.7-flash',
+  ]);
+  assert.deepEqual(authHeaders, [
+    'Bearer oidc-header-token',
+    'Bearer oidc-header-token',
+    'Bearer oidc-header-token',
+  ]);
+  assert.equal(postPayload.narrativeFallback, false);
+  assert.equal(postPayload.narrativeProvider, 'vercel_gateway');
+  assert.equal(postPayload.narrativeModel, 'alibaba/qwen3.7-flash');
+  // 1000 * $0.03/M + 500 * $0.13/M = $0.00003 + $0.000065 = $0.000095
+  assert.equal(postPayload.costUsd, 0.000095);
+
+  let getPayload = null;
+  await handleEnrich(
+    { method: 'GET', url: `http://localhost/api/enrich?listingId=${encodeURIComponent(listing.id)}` },
+    { status() { return this; }, json(p) { getPayload = p; } },
+    { fetchFn: async () => { throw new Error('GET must read ai_cache without fetching'); } }
+  );
+  assert.equal(getPayload.cached, true);
+  assert.equal(getPayload.model, 'alibaba/qwen3.7-flash');
+  assert.equal(getPayload.costUsd, 0);
+  assert.match(getPayload.aiNarrative, /\$82,500/);
+});
+
+test('AI_GATEWAY_FREE_ONLY=1 refuses paid Gateway fallbacks when free models rate-limit', async () => {
+  const listing = await db.createListing({
+    id: `ENRICH-GW-FREE-${Date.now().toString(36)}`,
+    source: 'sheriff',
+    state: 'OH',
+    county: 'Cuyahoga',
+    address: '400 Superior Ave',
+    openingBid: 45000,
+    status: 'scheduled',
+  });
+
+  const calledModels = [];
+  const res = await handleEnrich.generateAiNarrative(listing, {
+    env: { AI_GATEWAY_API_KEY: 'gw-key', AI_GATEWAY_FREE_ONLY: '1' },
+    fetchFn: async (_url, init) => {
+      calledModels.push(JSON.parse(init.body).model);
+      return { ok: false, status: 429 };
+    },
+  });
+
+  assert.deepEqual(calledModels, [
+    'nvidia/nemotron-3.5-lightning-free',
+    'reflection/beam-free',
+  ]);
+  assert.equal(res.fallback, true);
+  assert.equal(res.narrative, null);
+  assert.equal(res.costUsd, 0);
+});
+
+test('validateGroundedNarrative rejects hallucinated dollar figures and false assurance phrases', async () => {
+  const summary = handleEnrich.buildEvidenceSummary({
+    address: '500 Public Sq',
+    openingBid: 55000,
+    source: 'sheriff',
+  });
+
+  assert.equal(handleEnrich.validateGroundedNarrative('Observed opening bid is $55,000; title unverified.', summary).ok, true);
+  assert.equal(handleEnrich.validateGroundedNarrative('Estimated ARV is $180,000 above the $55,000 bid.', summary).ok, false);
+  assert.equal(handleEnrich.validateGroundedNarrative('Property conveys with clear title at $55,000.', summary).ok, false);
+  assert.equal(handleEnrich.validateGroundedNarrative('Guaranteed equity of $55,000.', summary).ok, false);
+  assert.equal(handleEnrich.validateGroundedNarrative('Sold free and clear.', summary).ok, false);
+
+  const listing = { id: 'UNGROUNDED-1', address: '500 Public Sq', openingBid: 55000, source: 'sheriff' };
+  const result = await handleEnrich.generateAiNarrative(listing, {
+    env: { AI_GATEWAY_API_KEY: 'gw-key', AI_GATEWAY_FREE_ONLY: '1' },
+    fetchFn: async () => ({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: 'Great deal with clear title and $250,000 ARV.' } }],
+      }),
+    }),
+  });
+  assert.equal(result.fallback, true);
+  assert.equal(result.narrative, null);
+  assert.equal(result.reason, 'ungrounded_claim');
+});

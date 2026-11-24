@@ -18,8 +18,10 @@ const TOKEN = 'member-test-operator-token';
 process.env.SCRAPER_ADMIN_TOKEN = TOKEN;
 
 const server = require('../server/server');
-const { createAccountService, createFileBackend, isEntitled } = require('../server/accounts/store');
-const { createCheckoutSession, subscriptionState } = require('../server/billing/stripe-checkout');
+const { createAccountService, createFileBackend, createPgBackend, isEntitled } = require('../server/accounts/store');
+const { createCheckoutSession, deriveBillingTier, subscriptionState } = require('../server/billing/stripe-checkout');
+const { startEmbeddedPostgres } = require('../server/db/pglite-pool');
+const { migrate } = require('../scripts/discovery-migrate');
 
 let baseUrl;
 function call(method, pathname, { token = TOKEN, account, body } = {}) {
@@ -224,4 +226,123 @@ test('billing portal fails closed 503 when unconfigured and Stripe webhook handl
   assert.match(enMessagesSrc, /Benchmark Evidence &(?:amp;)? Assessor Coverage/);
   assert.match(intelligenceSrc, /forfeitureRiskTerms/);
   assert.match(intelligenceSrc, /constitutionalBasis/);
+});
+
+test('subscriptionState and deriveBillingTier extract pro, desk, and null cleanly', () => {
+  const env = {
+    STRIPE_PRICE_ID: 'price_legacy',
+    STRIPE_PRICE_ID_PRO: 'price_pro',
+    STRIPE_PRICE_ID_DESK: 'price_desk',
+    STRIPE_PRICE_ID_TEAM: 'price_team',
+  };
+  assert.equal(subscriptionState({ id: 'sub_1', customer: 'cus_1', status: 'active', metadata: { tier: 'pro' } }, env).billingTier, 'pro');
+  assert.equal(subscriptionState({ id: 'sub_2', customer: 'cus_1', status: 'active', metadata: { tier: 'DESK' } }, env).billingTier, 'desk');
+  assert.equal(deriveBillingTier({ items: { data: [{ price: { id: 'price_desk' } }] } }, env), 'desk');
+  assert.equal(deriveBillingTier({ items: { data: [{ price: { id: 'price_team' } }] } }, env), 'desk');
+  assert.equal(deriveBillingTier({ items: { data: [{ price: 'price_pro' }] } }, env), 'pro');
+  assert.equal(deriveBillingTier({ plan: { id: 'price_legacy' } }, env), 'pro');
+  assert.equal(deriveBillingTier({ items: { data: [{ price: { id: 'price_unknown' } }] } }, env), null);
+});
+
+test('billingTier persists across FileAccountStore, /api/accounts/*, and reloads', async () => {
+  const { account } = await signUp('tiered@example.com');
+  assert.equal(account.billingTier, null);
+
+  const future = Math.floor(Date.now() / 1000) + 86400;
+  const proRes = await call('POST', '/api/accounts/subscription', {
+    body: { accountId: account.id, customerId: 'cus_TIER1', subscriptionId: 'sub_tier1', status: 'active', currentPeriodEnd: future, billingTier: 'pro' },
+  });
+  assert.equal(proRes.status, 200);
+  assert.equal(proRes.body.account.billingTier, 'pro');
+  assert.equal((await call('GET', `/api/accounts/${account.id}`)).body.account.billingTier, 'pro');
+
+  // Upgrading to desk updates billingTier; active renewal without tier preserves desk.
+  const deskRes = await call('POST', '/api/accounts/subscription', {
+    body: { customerId: 'cus_TIER1', subscriptionId: 'sub_tier1', status: 'active', currentPeriodEnd: future, billingTier: 'desk' },
+  });
+  assert.equal(deskRes.status, 200);
+  assert.equal(deskRes.body.account.billingTier, 'desk');
+
+  const renewalNoTier = await call('POST', '/api/accounts/subscription', {
+    body: { customerId: 'cus_TIER1', subscriptionId: 'sub_tier1', status: 'active', currentPeriodEnd: future + 86400 },
+  });
+  assert.equal(renewalNoTier.body.account.billingTier, 'desk');
+
+  // Re-reading from a fresh FileAccountStore instance preserves billingTier.
+  const reloadedService = createAccountService({ backend: createFileBackend(process.env.PROPERTY_ACCOUNTS_PATH) });
+  const reloadedAccount = await reloadedService.get(account.id);
+  assert.equal(reloadedAccount.billingTier, 'desk');
+
+  // Canceling with explicit billingTier: null clears it.
+  const canceled = await call('POST', '/api/accounts/subscription', {
+    body: { customerId: 'cus_TIER1', status: 'canceled', currentPeriodEnd: future, billingTier: null },
+  });
+  assert.equal(canceled.body.account.entitled, false);
+  assert.equal(canceled.body.account.billingTier, null);
+});
+
+test('billing_tier column migrates cleanly in PGlite and persists via PgAccountStore', { timeout: 120_000 }, async () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'member-accounts-pg-'));
+  const db = await startEmbeddedPostgres({ dataDir, log: () => {} });
+  try {
+    await migrate(db.pool);
+    const col = await db.pool.query(
+      "SELECT data_type, is_nullable FROM information_schema.columns WHERE table_schema='public' AND table_name='accounts' AND column_name='billing_tier'",
+    );
+    assert.equal(col.rows.length, 1);
+    assert.equal(col.rows[0].data_type, 'text');
+    assert.equal(col.rows[0].is_nullable, 'YES');
+
+    const service = createAccountService({ backend: createPgBackend(db.pool) });
+    const { token } = await service.issueLoginToken('pgtier@example.com');
+    const created = await service.consumeLoginToken(token);
+    assert.equal(created.billingTier, null);
+
+    const future = Math.floor(Date.now() / 1000) + 86400;
+    const pro = await service.applySubscription({
+      accountId: created.id,
+      customerId: 'cus_PGTIER',
+      subscriptionId: 'sub_pgtier',
+      status: 'active',
+      currentPeriodEnd: future,
+      billingTier: 'pro',
+    });
+    assert.equal(pro.billingTier, 'pro');
+    assert.equal((await service.get(created.id)).billingTier, 'pro');
+
+    const desk = await service.applySubscription({
+      customerId: 'cus_PGTIER',
+      subscriptionId: 'sub_pgtier',
+      status: 'trialing',
+      currentPeriodEnd: future,
+      billingTier: 'desk',
+    });
+    assert.equal(desk.billingTier, 'desk');
+    assert.equal((await service.get(created.id)).billingTier, 'desk');
+
+    const cleared = await service.applySubscription({
+      customerId: 'cus_PGTIER',
+      status: 'canceled',
+      currentPeriodEnd: future,
+      billingTier: null,
+    });
+    assert.equal(cleared.billingTier, null);
+  } finally {
+    await db.pool.end().catch(() => {});
+    fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  }
+});
+
+test('billingTier wiring and localized fallback errors exist in member-account, webhook, and AccountPanel', () => {
+  const memberSrc = fs.readFileSync(path.resolve(__dirname, '../src/lib/member-account.ts'), 'utf8');
+  assert.match(memberSrc, /billingTier:\s*BillingTier\s*\|\s*null/);
+
+  const webhookSrc = fs.readFileSync(path.resolve(__dirname, '../src/app/api/webhooks/stripe/route.ts'), 'utf8');
+  assert.match(webhookSrc, /normalizeBillingTier/);
+  assert.match(webhookSrc, /state\.billingTier/);
+
+  const panelSrc = fs.readFileSync(path.resolve(__dirname, '../src/components/account/account-panel.tsx'), 'utf8');
+  assert.match(panelSrc, /billing-tier-badge/);
+  assert.match(panelSrc, /localizeAccountError/);
+  assert.doesNotMatch(panelSrc, /"The request failed"/);
 });

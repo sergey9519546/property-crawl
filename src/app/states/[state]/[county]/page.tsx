@@ -4,7 +4,7 @@ import { STATE_NAMES } from "@/lib/hero-market-suggestions";
 import { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { bandForScore } from "@/lib/score-bands";
+import { bandForScore, scoreBandLabel } from "@/lib/score-bands";
 import { ArrowLeft, ExternalLink, Gavel, Scale, Calculator, CheckSquare, HelpCircle, AlertTriangle, MapPin } from "lucide-react";
 import { computeStatutoryFeePreset, computeStatutoryDeadlinesAndCarry } from "@/lib/underwriting";
 import { serializeJsonLd } from "@/lib/json-ld";
@@ -27,7 +27,8 @@ import { sourceDisplayText } from "@/lib/source-display";
 import { SOURCES } from "@/data/listings";
 import { getRequestLocale } from "@/lib/i18n/server";
 import { getMessages } from "@/lib/i18n/messages";
-import { interpolate } from "@/lib/i18n/translator";
+import { formatLocaleNumber, formatUsd, interpolate } from "@/lib/i18n/translator";
+import { localizeDisplayDate, localizePropType } from "@/lib/i18n/domain";
 
 export const dynamic = "force-dynamic";
 
@@ -149,6 +150,24 @@ export default async function CountyDocketPage({ params }: PageProps) {
   const upcomingCount = listings.filter((item) => saleOf(item) >= today).length;
   const thisWeekCount = listings.filter((item) => saleOf(item) >= today && saleOf(item) <= weekOut).length;
   const nextSale = upcomingCount > 0 ? saleOf(listings[0]) : null;
+  const nextSaleDisplay = nextSale ? localizeDisplayDate(nextSale, locale, nextSale) : "—";
+  const localizeBand = (score: number | null) => {
+    if (score === null) return null;
+    const band = bandForScore(score);
+    if (!band) return null;
+    if (locale === "en") {
+      return { band, label: scoreBandLabel(score) ?? band.label };
+    }
+    const label =
+      band.key === "elite"
+        ? m.designB2.bandEliteLabel
+        : band.key === "strong"
+          ? m.designB2.bandStrongLabel
+          : band.key === "fair"
+            ? m.designB2.bandFairLabel
+            : m.designB2.bandThinLabel;
+    return { band, label };
+  };
   const stats = computeCountyStats(listings);
   const redemption = getStatutoryRedemption(state);
   const gisLink = getCountyCadastralGisLink(state, countyName);
@@ -180,7 +199,7 @@ export default async function CountyDocketPage({ params }: PageProps) {
       <div className="min-h-screen bg-paper text-ink">
       <SiteHeader />
       <main id="main-content" tabIndex={-1} className="mx-auto max-w-5xl px-6 pb-20 pt-28 outline-none sm:pt-32">
-        <nav aria-label="Breadcrumb" className="mb-6 flex flex-wrap items-center gap-2 text-xs font-medium text-ink-3">
+        <nav aria-label={m.states.breadcrumbAria} className="mb-6 flex flex-wrap items-center gap-2 text-xs font-medium text-ink-3">
           <Link href="/" className="hover:text-ink transition-colors">{m.states.homeCrumb}</Link>
           <span>/</span>
           <Link href="/states" className="hover:text-ink transition-colors">{m.states.statesCrumb}</Link>
@@ -200,12 +219,21 @@ export default async function CountyDocketPage({ params }: PageProps) {
           <p className="mt-3 max-w-3xl text-sm leading-relaxed text-ink-3 sm:text-base">
             {locale === "en" ? (
               upcomingCount > 0
-                ? `${stats.totalCount} listing${stats.totalCount === 1 ? "" : "s"} in ${formalCounty}. ${upcomingCount} ${upcomingCount === 1 ? "sale is" : "sales are"} coming up, ${thisWeekCount} in the next 7 days. Next sale: ${nextSale}.`
+                ? `${stats.totalCount} listing${stats.totalCount === 1 ? "" : "s"} in ${formalCounty}. ${upcomingCount} ${upcomingCount === 1 ? "sale is" : "sales are"} coming up, ${thisWeekCount} in the next 7 days. Next sale: ${nextSaleDisplay}.`
                 : `No upcoming sales listed here right now. ${stats.totalCount} past or undated listing${stats.totalCount === 1 ? "" : "s"} below.`
             ) : (
               upcomingCount > 0
-                ? interpolate(m.states.countyUpcomingSummary, { totalCount: stats.totalCount, upcomingCount, thisWeekCount, nextSale: nextSale || "—", county: formalCounty })
-                : interpolate(m.states.countyPastSummary, { totalCount: stats.totalCount, county: formalCounty })
+                ? interpolate(m.states.countyUpcomingSummary, {
+                    totalCount: formatLocaleNumber(locale, stats.totalCount),
+                    upcomingCount: formatLocaleNumber(locale, upcomingCount),
+                    thisWeekCount: formatLocaleNumber(locale, thisWeekCount),
+                    nextSale: nextSaleDisplay,
+                    county: formalCounty,
+                  })
+                : interpolate(m.states.countyPastSummary, {
+                    totalCount: formatLocaleNumber(locale, stats.totalCount),
+                    county: formalCounty,
+                  })
             )}
             {" "}{m.states.countyConfirmNotice}
           </p>
@@ -219,15 +247,20 @@ export default async function CountyDocketPage({ params }: PageProps) {
           <div className="rounded-card border border-line bg-card p-5 shadow-sm">
             <div className="text-xs font-semibold uppercase tracking-wider text-ink-3">{m.states.metricNext7Days}</div>
             <div className="mt-2 text-2xl font-bold text-ink tabular-nums">
-              {thisWeekCount}
+              {formatLocaleNumber(locale, thisWeekCount)}
             </div>
-            <div className="mt-1 text-xs text-ink-3">{interpolate(m.states.metricUpcomingOf, { upcomingCount, totalCount: stats.totalCount })}</div>
+            <div className="mt-1 text-xs text-ink-3">
+              {interpolate(m.states.metricUpcomingOf, {
+                upcomingCount: formatLocaleNumber(locale, upcomingCount),
+                totalCount: formatLocaleNumber(locale, stats.totalCount),
+              })}
+            </div>
           </div>
 
           <div className="rounded-card border border-line bg-card p-5 shadow-sm">
             <div className="text-xs font-semibold uppercase tracking-wider text-ink-3">{m.states.metricTypicalBid}</div>
             <div className="mt-2 text-2xl font-bold text-ink tabular-nums">
-              {stats.medianOpeningBid ? `$${Math.round(stats.medianOpeningBid).toLocaleString("en-US")}` : m.states.metricNotPublished}
+              {stats.medianOpeningBid ? formatUsd(locale, stats.medianOpeningBid) : m.states.metricNotPublished}
             </div>
             <div className="mt-1 text-xs text-ink-3">{m.states.metricMedianNote}</div>
           </div>
@@ -297,7 +330,7 @@ export default async function CountyDocketPage({ params }: PageProps) {
             <div className="rounded-control border border-line bg-paper p-4">
               <div className="text-xs font-semibold uppercase tracking-wider text-ink-3">{m.states.estDepositWin}</div>
               <div className="mt-1 text-lg font-bold text-ink">
-                {feePreset ? `$${Math.round(feePreset.creditedDeposit).toLocaleString("en-US")}` : m.states.perWinningBid}
+                {feePreset ? formatUsd(locale, feePreset.creditedDeposit) : m.states.perWinningBid}
               </div>
               <div className="mt-1 text-label text-ink-3">
                 {feePreset ? feeSchedule.depositRequirement : `${feeSchedule.depositRequirement} (${m.states.depositWithheldNote})`}
@@ -308,10 +341,14 @@ export default async function CountyDocketPage({ params }: PageProps) {
               <div className="text-xs font-semibold uppercase tracking-wider text-ink-3">{m.states.transferAndFees}</div>
               <div className="mt-1 text-lg font-bold text-ink">
                 {feePreset
-                  ? `$${Math.round(feePreset.transferTax + feePreset.sheriffPoundage).toLocaleString("en-US")}`
+                  ? formatUsd(locale, feePreset.transferTax + feePreset.sheriffPoundage)
                   : feeSchedule.transferTaxRatePerThousand === 0 && feeSchedule.sheriffPoundageRatePercent === 0
                     ? m.states.zeroTaxPoundage
-                    : `$${Number(feeSchedule.transferTaxRatePerThousand || 0).toFixed(2)}/$1k + ${(Number(feeSchedule.sheriffPoundageRatePercent || 0) * 100).toFixed(1)}%`}
+                    : interpolate(m.states.transferPlusPoundageRate, {
+                        ratePerThousand: formatUsd(locale, Number(feeSchedule.transferTaxRatePerThousand || 0), { maximumFractionDigits: 2 }),
+                        perUnit: formatUsd(locale, 1000),
+                        poundagePct: (Number(feeSchedule.sheriffPoundageRatePercent || 0) * 100).toFixed(1),
+                      })}
               </div>
               <div className="mt-1 text-label text-ink-3">
                 {feePreset ? feeSchedule.transferTaxCitation : `${feeSchedule.transferTaxCitation} ${feeSchedule.sheriffPoundageCitation}`}
@@ -387,7 +424,7 @@ export default async function CountyDocketPage({ params }: PageProps) {
               <p className="mt-1.5 text-xs leading-relaxed text-ink-2">
                 {state}: {redemption.label}.
                 {redemption.upsetBid && redemption.upsetBid.hasUpsetBid
-                  ? ` ${STATE_NAMES[state] || state} (${redemption.upsetBid.statute}): ${redemption.upsetBid.windowDays}d.`
+                  ? ` ${STATE_NAMES[state] || state} (${redemption.upsetBid.statute}): ${interpolate(m.states.metricDaysCount, { days: redemption.upsetBid.windowDays })}.`
                   : ""}
                 {redemption.homesteadDistinction && redemption.homesteadDistinction.hasDistinction
                   ? ` ${redemption.homesteadDistinction.description}`
@@ -451,7 +488,7 @@ export default async function CountyDocketPage({ params }: PageProps) {
                 >
                   <span className="font-semibold tracking-wider">{sourceDisplayText(SOURCES[srcKey]?.label ?? srcKey)}</span>
                   <span className="rounded-full bg-line px-1.5 py-0.2 text-label font-bold tabular-nums text-ink-2">
-                    {count}
+                    {formatLocaleNumber(locale, count)}
                   </span>
                 </span>
               ))}
@@ -508,12 +545,16 @@ export default async function CountyDocketPage({ params }: PageProps) {
             {listings.map((item) => {
               const address = item.address || m.states.addressNotPublished;
               const city = item.city || "";
-              const propType = item.propType || m.states.propertyFallback;
-              const openingBid = item.openingBid != null ? `$${Math.round(Number(item.openingBid)).toLocaleString("en-US")}` : m.states.metricNotPublished;
-              const score = item.dealScore != null ? Number(item.dealScore) : null;
+              const propType = (item.propType ? localizePropType(item.propType, m, locale) : null) || m.states.propertyFallback;
+              const openingBid =
+                item.openingBid != null && Number.isFinite(Number(item.openingBid))
+                  ? formatUsd(locale, Number(item.openingBid))
+                  : m.states.metricNotPublished;
+              const score = item.dealScore != null && Number.isFinite(Number(item.dealScore)) ? Number(item.dealScore) : null;
               const saleDate = saleOf(item) || null;
-              const band = bandForScore(score);
-              const source = item.source || m.states.noticeFallback;
+              const saleDateDisplay = saleDate ? localizeDisplayDate(saleDate, locale, saleDate) : null;
+              const localizedBand = localizeBand(score);
+              const source = item.source ? sourceDisplayText(SOURCES[item.source]?.label ?? item.source) : m.states.noticeFallback;
 
               return (
                 <div
@@ -536,7 +577,7 @@ export default async function CountyDocketPage({ params }: PageProps) {
                       {[city, formalCounty, state, item.zip].filter(Boolean).join(", ")}
                     </div>
                     <div className={`text-xs font-semibold ${saleDate && saleDate >= today ? "text-ink" : "text-ink-3"}`}>
-                      {saleDate ? `${saleDate >= today ? m.states.saleLabel : m.states.salePassedLabel}: ${saleDate}` : m.states.saleDateNotPublished}
+                      {saleDateDisplay ? `${saleDate && saleDate >= today ? m.states.saleLabel : m.states.salePassedLabel}: ${saleDateDisplay}` : m.states.saleDateNotPublished}
                     </div>
                   </div>
 
@@ -546,9 +587,9 @@ export default async function CountyDocketPage({ params }: PageProps) {
                       <div className="text-base font-bold text-ink tabular-nums">{openingBid}</div>
                     </div>
                     <div className="flex items-center gap-2">
-                      {band && score !== null && (
-                        <span className="inline-block rounded px-2 py-0.5 text-xs font-bold" style={{ background: `${band.color}${band.alpha}`, color: band.color }}>
-                          {m.states.scorePrefix}: {Math.round(score)}/99 · {band.label}
+                      {localizedBand && score !== null && (
+                        <span className="inline-block rounded px-2 py-0.5 text-xs font-bold" style={{ background: `${localizedBand.band.color}${localizedBand.band.alpha}`, color: localizedBand.band.color }}>
+                          {m.states.scorePrefix}: {Math.round(score)}/99 · {localizedBand.label}
                         </span>
                       )}
                       <Link

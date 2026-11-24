@@ -702,18 +702,31 @@ function createScrapersHandler(dependencies = {}) {
               if (hasActive) activeCheckpoints.set(row.source_key, cur);
             }
             const obsRes = await database.pool.query(
-              'SELECT source_key, MAX(source_observed_at) AS latest_at FROM listings WHERE source_key = ANY($1::text[]) GROUP BY source_key',
+              `SELECT source_key,
+                      MAX(source_observed_at) AS latest_at,
+                      MIN(source_observed_at) FILTER (
+                        WHERE discovery_terminal IS NOT TRUE
+                          AND NOT (COALESCE(provenance, '{}'::jsonb) ? 'publisherAbsence')
+                      ) AS oldest_active_at
+                 FROM listings
+                WHERE source_key = ANY($1::text[])
+                GROUP BY source_key`,
               [SLICE_PRIORITY]
             );
-            const latestBySource = new Map(
-              (obsRes.rows || [])
-                .filter((r) => r && r.source_key)
-                .map((r) => [r.source_key, r.latest_at ? Date.parse(r.latest_at) || 0 : 0])
-            );
+            const latestBySource = new Map();
+            const oldestActiveBySource = new Map();
+            for (const r of obsRes.rows || []) {
+              if (!r || !r.source_key) continue;
+              latestBySource.set(r.source_key, r.latest_at ? Date.parse(r.latest_at) || 0 : 0);
+              if (r.oldest_active_at) {
+                const oldestMs = Date.parse(r.oldest_active_at) || 0;
+                if (oldestMs > 0) oldestActiveBySource.set(r.source_key, oldestMs);
+              }
+            }
             let runRows = [];
             try {
               const runsRes = await database.pool.query(
-                'SELECT source_key, last_run_at, accepted_count FROM source_observation_runs WHERE source_key = ANY($1::text[])',
+                'SELECT source_key, last_run_at, last_success_at, accepted_count, error FROM source_observation_runs WHERE source_key = ANY($1::text[])',
                 [SLICE_PRIORITY]
               );
               runRows = runsRes?.rows || [];
@@ -721,11 +734,19 @@ function createScrapersHandler(dependencies = {}) {
               runRows = [];
             }
             const runAtBySource = new Map();
+            const lastSuccessBySource = new Map();
             const acceptedBySource = new Map();
+            const errorBySource = new Map();
             for (const row of runRows) {
               if (!row || !row.source_key) continue;
-              runAtBySource.set(row.source_key, row.last_run_at ? Date.parse(row.last_run_at) || 0 : 0);
+              const runMs = row.last_run_at ? Date.parse(row.last_run_at) || 0 : 0;
+              const successMs = row.last_success_at ? Date.parse(row.last_success_at) || 0 : 0;
+              runAtBySource.set(row.source_key, runMs);
+              if (successMs > 0) lastSuccessBySource.set(row.source_key, successMs);
               acceptedBySource.set(row.source_key, Number(row.accepted_count) || 0);
+              if (row.error && (!successMs || runMs > successMs)) {
+                errorBySource.set(row.source_key, String(row.error));
+              }
             }
             const { SOURCE_CATALOG } = require('../sources/catalog');
             const cadenceHoursByKey = new Map();
@@ -738,12 +759,34 @@ function createScrapersHandler(dependencies = {}) {
             }
             const cadenceHours = (key) => cadenceHoursByKey.get(key) || (key === 'servicelink' ? 6 : 12);
             const nowMs = Date.now();
-            const activityMs = (key) => Math.max(
-              latestBySource.get(key) || 0,
+            const attemptMs = (key) => Math.max(
               runAtBySource.get(key) || 0,
               cpUpdatedBySource.get(key) || 0,
               sliceLastRunAt.get(key) || 0
             );
+            const activityMs = (key) => Math.max(
+              latestBySource.get(key) || 0,
+              attemptMs(key)
+            );
+            const effectiveFreshnessMs = (key) => {
+              const base = activityMs(key);
+              if (base <= 0) return 0;
+              const lastAttempt = attemptMs(key);
+              // Respect a 1h retry cooldown after an attempt so an errored or
+              // partially stale source cannot starve healthy sources every tick.
+              if (lastAttempt > 0 && (nowMs - lastAttempt) < 3_600_000) {
+                return base;
+              }
+              const oldestActive = oldestActiveBySource.get(key) || 0;
+              const staleRows = oldestActive > 0 && (nowMs - oldestActive) >= cadenceHours(key) * 3_600_000;
+              const hasError = errorBySource.has(key);
+              if (!staleRows && !hasError) return base;
+              const candidates = [
+                staleRows ? oldestActive : 0,
+                hasError ? (lastSuccessBySource.get(key) || latestBySource.get(key) || 0) : 0,
+              ].filter((t) => t > 0);
+              return candidates.length > 0 ? Math.min(...candidates) : base;
+            };
             const isRecentZeroYieldTrustee = (key) => {
               if (latestBySource.has(key)) return false;
               const lastRun = runAtBySource.get(key) || sliceLastRunAt.get(key) || 0;
@@ -752,7 +795,7 @@ function createScrapersHandler(dependencies = {}) {
               return accepted === 0 && (nowMs - lastRun) < cadenceHours(key) * 3_600_000;
             };
             const stalenessRatio = (key) => {
-              const last = activityMs(key);
+              const last = effectiveFreshnessMs(key);
               if (last <= 0) return Number.POSITIVE_INFINITY;
               return (nowMs - last) / (cadenceHours(key) * 3_600_000);
             };
@@ -769,16 +812,16 @@ function createScrapersHandler(dependencies = {}) {
                 const bestRatio = stalenessRatio(best);
                 const keyRatio = stalenessRatio(key);
                 if (keyRatio !== bestRatio) return keyRatio > bestRatio ? key : best;
-                return activityMs(key) < activityMs(best) ? key : best;
+                return effectiveFreshnessMs(key) < effectiveFreshnessMs(best) ? key : best;
               }, poolKeys[0]);
             };
             const resumed = SLICE_PRIORITY.find((key) => activeCheckpoints.has(key));
             const starving = latestBySource.size > 0
               ? SLICE_PRIORITY
                   .filter((key) => !isRecentZeroYieldTrustee(key))
-                  .reduce((oldest, key) => (!oldest || activityMs(key) < activityMs(oldest) ? key : oldest), null)
+                  .reduce((oldest, key) => (!oldest || effectiveFreshnessMs(key) < effectiveFreshnessMs(oldest) ? key : oldest), null)
               : null;
-            const starvingOverdue = Boolean(starving && (activityMs(starving) === 0 || (stalenessRatio(starving) >= 0.75 && (activityMs(resumed) - activityMs(starving)) > 15 * 60_000)));
+            const starvingOverdue = Boolean(starving && (activityMs(starving) === 0 || (stalenessRatio(starving) >= 0.75 && (activityMs(resumed) - effectiveFreshnessMs(starving)) > 15 * 60_000)));
             if (resumed && !starvingOverdue) {
               chosenSource = resumed;
               reason = 'active_continuation_cursor';
@@ -814,6 +857,106 @@ function createScrapersHandler(dependencies = {}) {
           return res.json({ status: 'completed', action: 'next-slice', source: chosenSource, reason, result });
         } catch (err) {
           return res.status(err?.status || 500).json({ error: err?.message || 'Next-slice run failed' });
+        }
+      }
+
+      if (action === 'ai-prewarm') {
+        const database = resolveDatabase();
+        if (!database || (typeof database.getListings !== 'function' && typeof database.listListings !== 'function')) {
+          return res.status(503).json({ error: 'AI prewarm requires an active listing store' });
+        }
+        try {
+          const {
+            buildEvidenceSummary,
+            generateAiNarrative,
+            readCachedNarrative,
+          } = require('./enrich');
+          const { CostRecord, CostTracker } = require('../ai/cost_tracker');
+
+          const rawLimit = Number(body.limit ?? url.searchParams.get('limit') ?? 10);
+          const limit = Math.min(20, Math.max(1, Number.isFinite(rawLimit) ? Math.floor(rawLimit) : 10));
+          const rawOidc = headerValue(req.headers, 'x-vercel-oidc-token');
+          const oidcToken = typeof rawOidc === 'string' && rawOidc.trim() ? rawOidc.trim() : null;
+
+          let costTracker = dependencies.costTracker || new CostTracker({
+            budgetLimitUsd: Number(env?.AI_BUDGET_LIMIT_USD) || 5.00,
+          });
+
+          const rawList = typeof database.listListings === 'function'
+            ? await database.listListings({ limit: limit * 2, sort: 'triage' })
+            : await database.getListings({ limit: limit * 2, sort: 'triage' });
+          const rows = Array.isArray(rawList?.listings)
+            ? rawList.listings
+            : (Array.isArray(rawList) ? rawList : []);
+
+          const terminalStatuses = new Set([
+            'sold', 'closed', 'ended', 'completed', 'cancelled', 'canceled',
+            'retired', 'withdrawn', 'redeemed', 'dismissed', 'vacated', 'expired',
+          ]);
+          const activeListings = rows.filter((row) => (
+            row
+            && row.discoveryTerminal !== true
+            && !terminalStatuses.has(String(row.status || '').toLowerCase())
+          ));
+
+          let attempted = 0;
+          let warmed = 0;
+          let skippedCached = 0;
+          let rejectedUngrounded = 0;
+          let failed = 0;
+          let totalCostUsd = 0;
+          const modelsUsedSet = new Set();
+
+          for (const listing of activeListings) {
+            if (attempted >= limit || costTracker.isOverBudget) break;
+            const analysis = buildEvidenceSummary(listing);
+            const cached = await readCachedNarrative(analysis, { db: database, env });
+            if (cached?.narrative) {
+              skippedCached += 1;
+              continue;
+            }
+            if (costTracker.isOverBudget) break;
+
+            attempted += 1;
+            const resNarrative = await generateAiNarrative(listing, {
+              env,
+              db: database,
+              fetchFn: dependencies.fetchFn || globalThis.fetch,
+              oidcToken,
+              costTracker,
+              persistCache: true,
+            });
+            if (resNarrative?.narrative) {
+              warmed += 1;
+              const callCost = Number(resNarrative.costUsd) || 0;
+              totalCostUsd = Number((totalCostUsd + callCost).toFixed(6));
+              if (resNarrative.model) modelsUsedSet.add(resNarrative.model);
+              costTracker = costTracker.add(new CostRecord({
+                model: resNarrative.model || 'unknown',
+                inputTokens: Number(resNarrative.inputTokens) || 0,
+                outputTokens: Number(resNarrative.outputTokens) || 0,
+                costUsd: callCost,
+              }));
+            } else if (resNarrative?.reason === 'ungrounded_claim') {
+              rejectedUngrounded += 1;
+            } else {
+              failed += 1;
+            }
+          }
+
+          return res.json({
+            ok: true,
+            action: 'ai-prewarm',
+            attempted,
+            warmed,
+            skippedCached,
+            rejectedUngrounded,
+            failed,
+            totalCostUsd,
+            modelsUsed: Array.from(modelsUsedSet),
+          });
+        } catch (err) {
+          return res.status(err?.status || 500).json({ error: err?.message || 'AI prewarm failed' });
         }
       }
 

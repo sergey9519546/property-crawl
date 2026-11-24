@@ -53,7 +53,7 @@ class TreasuryForfeitureScraper extends BaseScraper {
     this.baseUrl = 'https://www.treasury.gov/auctions/treasury/rp';
     this.detailConcurrency = Math.min(4, Math.max(1, Math.floor(Number(options.detailConcurrency) || 2)));
     this.maxRetries = Math.min(3, Math.max(1, Number(options.maxRetries || ((process.env.VERCEL === '1' || process.env.NOW_REGION) ? 1 : 2))));
-    this.maxItems = Math.max(1, Number(options.maxItems || process.env.TREASURY_MAX_ITEMS || ((process.env.VERCEL === '1' || process.env.NOW_REGION) ? 3 : 100)));
+    this.maxItems = Math.max(1, Number(options.maxItems || process.env.TREASURY_MAX_ITEMS || ((process.env.VERCEL === '1' || process.env.NOW_REGION) ? 12 : 100)));
     this.slugOffset = parseOffset(options.slugOffset ?? options.checkpoint ?? options.cursor ?? 0);
     this.lastRunReport = null;
     this.useScrapling = options.useScrapling ?? isScraplingEnabled('treasury');
@@ -134,9 +134,10 @@ class TreasuryForfeitureScraper extends BaseScraper {
         }
       });
 
+      const effectiveStartOffset = totalSlugs > this.maxItems ? startOffset : 0;
       const partialSweep = (attemptedCount < totalSlugs) || (targetSlugs.length < totalSlugs) || deadlineStopped;
-      const hasMoreAhead = totalSlugs > 0 && (deadlineStopped || (startOffset + attemptedCount) < totalSlugs);
-      const nextOffset = hasMoreAhead ? (startOffset + attemptedCount) % totalSlugs : 0;
+      const hasMoreAhead = totalSlugs > 0 && (deadlineStopped || (effectiveStartOffset + attemptedCount) < totalSlugs);
+      const nextOffset = hasMoreAhead ? (effectiveStartOffset + attemptedCount) % totalSlugs : 0;
       const nextContinuationToken = hasMoreAhead ? String(nextOffset) : null;
       this.slugOffset = nextOffset;
       this.lastRunReport = { outcome: failures.length ? 'partial_failure' : listings.length ? 'success' : 'empty', scope: { endpoint: '/auctions/treasury/rp/realprop.shtml', filters: { assetClass: 'real_property' } }, recordsDiscovered: slugs.length, recordsAttempted: attemptedCount, recordsEmitted: listings.length, recordsRejected: Math.max(0, attemptedCount - listings.length - failures.length), failures, complete: failures.length === 0 && !partialSweep, fullSweepComplete: failures.length === 0 && !partialSweep, partialSweep, truncated: partialSweep, nextContinuationToken, nextCursor: nextContinuationToken, fixtureFallbackUsed: false };

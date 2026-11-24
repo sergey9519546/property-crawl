@@ -180,7 +180,7 @@ export function TitleRiskForensics({
               : calculatedRisk === "HIGH"
               ? t.trfHighBadge
               : calculatedRisk === "MODERATE"
-              ? "Verification Required"
+              ? t.trfModerateBadge
               : t.trfStandardBadge}
           </span>
         </div>
@@ -190,7 +190,7 @@ export function TitleRiskForensics({
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="rounded-lg border border-line bg-paper p-2.5 space-y-1">
           <span className="font-semibold text-ink-3 uppercase block text-xs">{t.trfPetitionerLabel}</span>
-          <p className="font-bold text-ink truncate text-xs">{plaintiff || "Not published — unverified lien position"}</p>
+          <p className="font-bold text-ink truncate text-xs">{plaintiff || t.trfPlaintiffUnverified}</p>
           {judgment && judgment > 0 && (
             <p className="text-xs text-ink-2">{interpolate(t.trfJudgmentDebt, { amount: money(judgment) })}</p>
           )}
@@ -199,7 +199,7 @@ export function TitleRiskForensics({
           <span className="font-semibold text-ink-3 uppercase block text-xs">{t.trfSurvivalRuleLabel}</span>
           <p className="font-bold text-ink text-xs">
             {foreclosingType === "unknown"
-              ? "Unconfirmed Lien Position — Title Search Required"
+              ? t.trfUnconfirmedPosition
               : foreclosingType === "first_mortgage"
               ? t.trfWipesJunior
               : foreclosingType === "tax_deed"
@@ -210,9 +210,9 @@ export function TitleRiskForensics({
           </p>
           <p className="text-xs text-ink-3">
             {foreclosingType === "unknown"
-              ? "Foreclosing lien priority cannot be verified from the published plaintiff record; prior encumbrances may survive."
+              ? t.trfUnconfirmedPositionDesc
               : isNvHoaSuperPriority
-              ? "9-month super-priority HOA foreclosure extinguishes prior 1st mortgage (SFR Investments Pool 1; verify no prior lender super-priority tender)."
+              ? t.trfNvHoaSuperDesc
               : isJunior
               ? t.trfJuniorTakesSubject
               : t.trfSubordinateWiped}
@@ -228,7 +228,7 @@ export function TitleRiskForensics({
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-1.5">
           {[
-            { id: "unknown" as const, label: "Unknown / Unverified" },
+            { id: "unknown" as const, label: t.trfTypeUnknown },
             { id: "first_mortgage" as const, label: t.trfTypeFirst },
             { id: "second_mortgage" as const, label: t.trfTypeSecond },
             { id: "hoa_assessment" as const, label: t.trfTypeHoa },
@@ -255,8 +255,8 @@ export function TitleRiskForensics({
       {foreclosingType === "hoa_assessment" && stateCode === "NV" && (
         <div className="rounded-lg border border-line bg-paper p-3 space-y-2">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="font-bold text-ink text-xs">Nevada NRS 116.3116 HOA Foreclosure Scope</span>
-            <span className="text-xs text-ink-3">SFR Investments Pool 1 vs. lender tender / sub-priority dues</span>
+            <span className="font-bold text-ink text-xs">{t.trfNvHoaScopeTitle}</span>
+            <span className="text-xs text-ink-3">{t.trfNvHoaScopeHint}</span>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
             <button
@@ -268,7 +268,7 @@ export function TitleRiskForensics({
                   : "bg-card text-ink-2 border-line hover:border-ink/30"
               }`}
             >
-              Super-Priority (9-mo assessments prime 1st mortgage)
+              {t.trfNvHoaSuperBtn}
             </button>
             <button
               type="button"
@@ -279,7 +279,7 @@ export function TitleRiskForensics({
                   : "bg-card text-ink-2 border-line hover:border-ink/30"
               }`}
             >
-              Sub-Priority / Lender-Tendered (1st mortgage survives)
+              {t.trfNvHoaSubBtn}
             </button>
           </div>
         </div>
@@ -289,12 +289,12 @@ export function TitleRiskForensics({
       <div className="rounded-lg border border-line bg-paper p-3 space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <label htmlFor={delinquentTaxesInputId} className="font-bold text-ink text-xs">
-            Delinquent Property Taxes ($):
+            {t.trfTaxesLabel}
           </label>
           <span className="text-xs text-ink-3">
             {validDelinquentTaxes === null
-              ? "Unknown / blank (leave blank until tax roll verified, or enter 0 if clear)"
-              : `Supplied tax arrears: ${money(validDelinquentTaxes)}`}
+              ? t.trfTaxesUnknownHint
+              : interpolate(t.trfTaxesSuppliedHint, { amount: money(validDelinquentTaxes) })}
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -304,7 +304,7 @@ export function TitleRiskForensics({
             type="number"
             min="0"
             step="250"
-            placeholder="Unknown — enter 0 if verified clear, or tax arrears"
+            placeholder={t.trfTaxesPlaceholder}
             value={delinquentTaxesInput}
             onChange={(e) => setDelinquentTaxesInput(e.target.value)}
             className="w-full rounded-md border border-line bg-card px-3 py-1.5 text-xs text-ink font-semibold focus:outline-hidden focus:ring-1 focus:ring-ink"
@@ -435,19 +435,19 @@ export function TitleRiskForensics({
                 {hasIrsLienOverride
                   ? detectedIrsFromRecord
                     ? t.trfIrsDetected
-                    : "Simulated IRS 120d"
+                    : t.trfIrsSimActiveBtn
                   : detectedIrsFromRecord
-                  ? "IRS Check Suppressed (Sim)"
-                  : "Simulate IRS 120d"}
+                  ? t.trfIrsSuppressedBtn
+                  : t.trfIrsSimBtn}
               </button>
             </div>
             <p className="text-xs text-ink-3 leading-tight">
               {hasIrsLienOverride
                 ? detectedIrsFromRecord
                   ? t.trfIrsDetectedDesc
-                  : "Simulated IRS 120-day redemption sensitivity: models 26 U.S.C. § 7425 notice survival and 120-day redemption risk (no IRS lien detected in published record)."
+                  : t.trfIrsSimDesc
                 : detectedIrsFromRecord
-                ? "Recorded notice flagged an IRS tax lien signal; currently suppressed for manual sensitivity modeling only."
+                ? t.trfIrsSuppressedDesc
                 : t.trfNoIrsDesc}
             </p>
           </div>
@@ -462,13 +462,13 @@ export function TitleRiskForensics({
                   : "bg-card text-ink-3 border-line"
               }`}>
                 {!stateCode
-                  ? "State Unknown"
+                  ? t.trfStateUnknownBadge
                   : interpolate(isSuperPriorityState ? t.trfHoaSuperBadge : t.trfHoaStandardBadge, { state: stateCode })}
               </span>
             </div>
             <p className="text-xs text-ink-3 leading-tight">
               {!stateCode
-                ? "State code not published — confirm whether applicable state law grants HOA assessments super-priority over senior mortgages."
+                ? t.trfStateUnknownDesc
                 : interpolate(isSuperPriorityState ? t.trfHoaSuperDesc : t.trfHoaStandardDesc, { state: stateCode })}
             </p>
           </div>

@@ -10,12 +10,15 @@ export const MEMBER_SESSION_COOKIE = "pp_member_session";
 export const MEMBER_SESSION_SECONDS = 30 * 24 * 60 * 60;
 const ACCOUNT_ID = /^acct_[a-f0-9]{24}$/;
 
+export type BillingTier = "pro" | "desk";
+
 export type MemberAccount = {
   id: string;
   email: string;
   stripeCustomerId: string | null;
   subscriptionStatus: string | null;
   currentPeriodEnd: string | null;
+  billingTier: BillingTier | null;
   entitled: boolean;
 };
 
@@ -90,5 +93,10 @@ export async function currentMember(request: Request): Promise<MemberAccount | n
   const accountId = readMemberSession(request);
   if (!accountId) return null;
   const result = await accountsApi(`/${accountId}`);
-  return result.ok ? result.data.account ?? null : null;
+  if (!result.ok || !result.data.account) return null;
+  const account = result.data.account;
+  return {
+    ...account,
+    billingTier: account.billingTier === "pro" || account.billingTier === "desk" ? account.billingTier : null,
+  };
 }

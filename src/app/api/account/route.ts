@@ -8,6 +8,7 @@ export async function GET(request: Request) {
   return Response.json({ account: account && {
     email: account.email,
     entitled: account.entitled,
+    billingTier: account.billingTier ?? null,
     subscriptionStatus: account.subscriptionStatus,
     currentPeriodEnd: account.currentPeriodEnd,
     hasBilling: Boolean(account.stripeCustomerId),

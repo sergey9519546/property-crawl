@@ -72,6 +72,13 @@
     },
     {
       "table": "accounts",
+      "column": "billing_tier",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "accounts",
       "column": "created_at",
       "type": "timestamp with time zone",
       "nullable": false,

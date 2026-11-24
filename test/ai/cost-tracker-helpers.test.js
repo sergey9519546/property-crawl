@@ -159,3 +159,19 @@ test('CostTracker constructor: records array is frozen (no mutation)', () => {
   records.push(new CostRecord({ model: 'gpt-4o-mini' }));
   assert.equal(t.records.length, 1);
 });
+
+test('CostTracker.calculateCost: free Vercel Gateway models return exact 0 (never fallback rate)', () => {
+  assert.equal(CostTracker.calculateCost('nvidia/nemotron-3.5-lightning-free', 1_000_000, 1_000_000), 0);
+  assert.equal(CostTracker.calculateCost('reflection/beam-free', 500_000, 250_000), 0);
+});
+
+test('CostTracker.calculateCost: alibaba/qwen3.7-flash and paid Vercel Gateway rates', () => {
+  // 1M input * $0.03 + 1M output * $0.13 = $0.16
+  assert.equal(CostTracker.calculateCost('alibaba/qwen3.7-flash', 1_000_000, 1_000_000), 0.16);
+  // 1M input * $0.10 + 1M output * $0.40 = $0.50
+  assert.equal(CostTracker.calculateCost('google/gemini-2.5-flash-lite', 1_000_000, 1_000_000), 0.50);
+  // 1M input * $0.05 + 1M output * $0.40 = $0.45
+  assert.equal(CostTracker.calculateCost('openai/gpt-5-nano', 1_000_000, 1_000_000), 0.45);
+  assert.equal(CostTracker.calculateCost('openai/gpt-4o-mini', 1_000_000, 1_000_000), 0.75);
+  assert.equal(CostTracker.calculateCost('openai/gpt-4o', 1_000_000, 1_000_000), 12.50);
+});

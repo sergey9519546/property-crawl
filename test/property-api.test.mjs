@@ -1,6 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { proxyPropertyApi } from '../src/lib/property-api.ts';
+import { appOrigin } from '../src/lib/app-origin.ts';
+import {
+  SAVED_LISTINGS_DEVICE_KEY,
+  readDeviceWatchlistIds,
+  toggleDeviceWatchlistId,
+  syncDeviceWatchlistToServer,
+} from '../src/lib/watchlist-sync.ts';
 
 test('Next listing transport resolves the canonical API and preserves exact record identity', async () => {
   let calledUrl;
@@ -190,4 +197,97 @@ test('proxyPropertyApi preserves server-injected operatorToken even when client 
     { apiUrl: 'http://127.0.0.1:3102', fetchImpl },
   );
   assert.equal(seenHeaders[2].get('authorization'), 'Bearer caller-token');
+});
+
+test('watchlist-sync persists guest saves and idempotently reconciles them into /api/alerts', async () => {
+  const store = new Map();
+  const storage = {
+    getItem: (key) => (store.has(key) ? store.get(key) : null),
+    setItem: (key, value) => { store.set(key, value); },
+    removeItem: (key) => { store.delete(key); },
+  };
+
+  assert.equal(SAVED_LISTINGS_DEVICE_KEY, 'perfectproperty:saved-listings');
+  toggleDeviceWatchlistId('L-LOCAL-1', false, storage);
+  toggleDeviceWatchlistId('L-SHARED', false, storage);
+  toggleDeviceWatchlistId('L-RETIRED', false, storage);
+  assert.deepEqual(readDeviceWatchlistIds(storage), ['L-LOCAL-1', 'L-SHARED', 'L-RETIRED']);
+
+  const serverDeals = new Set(['L-SHARED']);
+  const postCalls = [];
+  const skippedIds = new Set();
+
+  const fetchImpl = async (url, init = {}) => {
+    assert.equal(url, '/api/alerts');
+    if (!init.method || init.method === 'GET') {
+      const deals = Array.from(serverDeals).map((id) => ({ id, listingId: id }));
+      return Response.json({ savedCount: deals.length, deals });
+    }
+    if (init.method === 'POST') {
+      const { listingId } = JSON.parse(String(init.body || '{}'));
+      postCalls.push(listingId);
+      if (listingId === 'L-RETIRED') {
+        return Response.json({ error: 'Listing not found' }, { status: 404 });
+      }
+      serverDeals.add(listingId);
+      return Response.json({ success: true }, { status: 201 });
+    }
+    throw new Error(`Unexpected method ${init.method}`);
+  };
+
+  const first = await syncDeviceWatchlistToServer({ storage, fetchImpl, skippedIds });
+  assert.deepEqual(postCalls.sort(), ['L-LOCAL-1', 'L-RETIRED']);
+  assert.deepEqual(first.syncedIds, ['L-LOCAL-1']);
+  assert.deepEqual(first.ids.sort(), ['L-LOCAL-1', 'L-SHARED']);
+  assert.equal(first.savedCount, 2);
+  assert.deepEqual(readDeviceWatchlistIds(storage), ['L-RETIRED']);
+
+  // Second pass must be idempotent: no duplicate POST for L-LOCAL-1, L-SHARED, or permanently rejected L-RETIRED.
+  postCalls.length = 0;
+  const second = await syncDeviceWatchlistToServer({ storage, fetchImpl, skippedIds });
+  assert.deepEqual(postCalls, []);
+  assert.deepEqual(second.syncedIds, []);
+  assert.equal(second.savedCount, 2);
+});
+
+test('appOrigin validates https NEXT_PUBLIC_APP_URL fallback in production and rejects unsafe origins', () => {
+  const req = new Request('https://spoofed.attacker.example/api/account/login');
+
+  assert.equal(
+    appOrigin(req, {
+      NODE_ENV: 'production',
+      PUBLIC_APP_ORIGIN: 'https://perfectproperty.bid/',
+      NEXT_PUBLIC_APP_URL: 'https://other.example',
+    }),
+    'https://perfectproperty.bid',
+  );
+
+  assert.equal(
+    appOrigin(req, {
+      NODE_ENV: 'production',
+      NEXT_PUBLIC_APP_URL: 'https://app.perfectproperty.bid/listings',
+    }),
+    'https://app.perfectproperty.bid',
+  );
+
+  for (const unsafe of [
+    'http://perfectproperty.bid',
+    'https://*.perfectproperty.bid',
+    '*',
+    'javascript:alert(1)',
+    'https://user:pass@perfectproperty.bid',
+    'not-a-valid-url',
+    '',
+  ]) {
+    assert.equal(
+      appOrigin(req, { NODE_ENV: 'production', NEXT_PUBLIC_APP_URL: unsafe }),
+      null,
+      `expected production appOrigin to reject unsafe NEXT_PUBLIC_APP_URL=${unsafe}`,
+    );
+  }
+
+  assert.equal(
+    appOrigin(new Request('http://127.0.0.1:3001/api/account/login'), { NODE_ENV: 'development' }),
+    'http://127.0.0.1:3001',
+  );
 });

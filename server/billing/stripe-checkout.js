@@ -18,12 +18,12 @@ function normalizeBillingTier(tier) {
 function resolvePriceId(env = process.env, tier = null) {
   const normalizedTier = normalizeBillingTier(tier);
   if (normalizedTier === 'desk') {
-    return String(env.STRIPE_PRICE_ID_DESK || env.STRIPE_PRICE_ID || '').trim();
+    return String(env.STRIPE_PRICE_ID_DESK || env.STRIPE_PRICE_ID_TEAM || env.STRIPE_PRICE_ID || '').trim();
   }
   if (normalizedTier === 'pro') {
     return String(env.STRIPE_PRICE_ID_PRO || env.STRIPE_PRICE_ID || '').trim();
   }
-  return String(env.STRIPE_PRICE_ID || env.STRIPE_PRICE_ID_PRO || env.STRIPE_PRICE_ID_DESK || '').trim();
+  return String(env.STRIPE_PRICE_ID || env.STRIPE_PRICE_ID_PRO || env.STRIPE_PRICE_ID_DESK || env.STRIPE_PRICE_ID_TEAM || '').trim();
 }
 
 /**
@@ -149,8 +149,55 @@ async function getSubscription(id, { env = process.env, fetchImpl = fetch } = {}
   return result.ok ? result.payload : null;
 }
 
+/**
+ * @param {Record<string, unknown> | null | undefined} subscription
+ * @param {Record<string, string | undefined> | { env?: Record<string, string | undefined> }} [envOrOptions]
+ * @returns {'pro' | 'desk' | null}
+ */
+function deriveBillingTier(subscription, envOrOptions = process.env) {
+  if (!subscription || typeof subscription !== 'object') return null;
+  const metaTier = normalizeBillingTier(subscription.metadata?.tier);
+  if (metaTier) return metaTier;
+
+  const env = envOrOptions && typeof envOrOptions === 'object' && 'env' in envOrOptions
+    ? (envOrOptions.env || process.env)
+    : (envOrOptions || process.env);
+
+  const items = Array.isArray(subscription.items?.data) ? subscription.items.data : [];
+  const priceIds = [];
+  for (const item of items) {
+    if (typeof item?.price === 'string' && item.price.trim()) priceIds.push(item.price.trim());
+    else if (typeof item?.price?.id === 'string' && item.price.id.trim()) priceIds.push(item.price.id.trim());
+    if (typeof item?.plan?.id === 'string' && item.plan.id.trim()) priceIds.push(item.plan.id.trim());
+  }
+  if (typeof subscription.plan?.id === 'string' && subscription.plan.id.trim()) {
+    priceIds.push(subscription.plan.id.trim());
+  }
+
+  const deskPrices = new Set([env.STRIPE_PRICE_ID_DESK, env.STRIPE_PRICE_ID_TEAM].map((v) => String(v || '').trim()).filter(Boolean));
+  const proPrices = new Set([env.STRIPE_PRICE_ID_PRO].map((v) => String(v || '').trim()).filter(Boolean));
+  const legacyPrice = String(env.STRIPE_PRICE_ID || '').trim();
+
+  for (const priceId of priceIds) {
+    if (deskPrices.has(priceId)) return 'desk';
+    if (proPrices.has(priceId)) return 'pro';
+  }
+  if (legacyPrice && priceIds.includes(legacyPrice)) return 'pro';
+
+  for (const item of items) {
+    const itemTier = normalizeBillingTier(item?.price?.metadata?.tier);
+    if (itemTier) return itemTier;
+  }
+  return null;
+}
+
 // Newer Stripe API versions moved current_period_end onto subscription items.
-function subscriptionState(subscription) {
+/**
+ * @param {Record<string, any> | null | undefined} subscription
+ * @param {Record<string, string | undefined> | { env?: Record<string, string | undefined> }} [envOrOptions]
+ * @returns {{ customerId: string, subscriptionId: string, status: string, currentPeriodEnd: number | null, accountId: string | null, billingTier: 'pro' | 'desk' | null } | null}
+ */
+function subscriptionState(subscription, envOrOptions = process.env) {
   if (!subscription || typeof subscription !== 'object') return null;
   const periodEnd = subscription.current_period_end ?? subscription.items?.data?.[0]?.current_period_end;
   return {
@@ -159,6 +206,7 @@ function subscriptionState(subscription) {
     status: subscription.status,
     currentPeriodEnd: Number.isFinite(periodEnd) ? periodEnd : null,
     accountId: subscription.metadata?.account_id || null,
+    billingTier: deriveBillingTier(subscription, envOrOptions),
   };
 }
 
@@ -253,6 +301,7 @@ function verifyStripeWebhook({
 
 module.exports = {
   normalizeBillingTier,
+  deriveBillingTier,
   resolvePriceId,
   checkoutConfigured,
   createCheckoutSession,

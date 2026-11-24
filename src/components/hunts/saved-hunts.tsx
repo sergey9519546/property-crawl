@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useWorkspaceSession } from "@/components/workspace/workspace-shell";
 import { useLocale } from "@/components/i18n/locale-provider";
+import { formatLocaleDate, formatLocaleNumber } from "@/lib/i18n/translator";
 import { compileHuntQuery, formatIsoDate } from "@/lib/hunt-query";
 
 type Rule = { field: string; operator: string; value?: string | number };
@@ -340,7 +341,7 @@ function RuleBuilderFields({
 }
 
 export function SavedHunts() {
-  const { messages: m } = useLocale();
+  const { locale, messages: m } = useLocale();
   const session = useWorkspaceSession();
   const [connected, setConnected] = useState(false);
   const [hunts, setHunts] = useState<Hunt[]>([]);
@@ -727,7 +728,7 @@ export function SavedHunts() {
                 </h2>
               </div>
               <span className="rounded-full bg-card px-3 py-1 text-xs font-bold text-ink">
-                {inbox.length} events
+                {formatLocaleNumber(locale, inbox.length)} events
               </span>
             </div>
             {inboxError && (
@@ -751,7 +752,7 @@ export function SavedHunts() {
                     </strong>
                     <span className="mt-1 block text-xs text-ink-3">
                       {event.huntName} · {eventTypeLabels[event.type] || event.type.replaceAll("_", " ")} ·{" "}
-                      {new Date(event.observedAt).toLocaleString()}
+                      {formatLocaleDate(locale, event.observedAt, { dateStyle: "medium", timeStyle: "short" })}
                     </span>
                     <span className="mt-2 block text-xs text-ink-2">
                       {sourceDisplayText(event.message)}
@@ -946,7 +947,7 @@ export function SavedHunts() {
               </form>
               <div>
                 <h2 className="mb-3 text-sm font-semibold">
-                  Your hunts · {hunts.length} / 20
+                  Your hunts · {formatLocaleNumber(locale, hunts.length)} / {formatLocaleNumber(locale, 20)}
                 </h2>
                 <div className="space-y-2">
                   {hunts.map((hunt) => (
@@ -1324,7 +1325,7 @@ export function SavedHunts() {
                             className="rounded-control bg-paper p-4"
                           >
                             <p className="text-2xl font-semibold">
-                              {evaluation.counts[key] || 0}
+                              {formatLocaleNumber(locale, evaluation.counts[key] || 0)}
                             </p>
                             <p className="mt-1 text-label text-ink-3">
                               {title}
@@ -1333,9 +1334,9 @@ export function SavedHunts() {
                         ))}
                       </div>
                       <p className="mt-3 text-xs leading-5 text-ink-3">
-                        {evaluation.counts.accepted} verified listings checked.{" "}
-                        {evaluation.counts.rejected || 0} incomplete records skipped.{" "}
-                        {evaluation.counts.notObserved || 0} previously matched
+                        {formatLocaleNumber(locale, evaluation.counts.accepted)} verified listings checked.{" "}
+                        {formatLocaleNumber(locale, evaluation.counts.rejected || 0)} incomplete records skipped.{" "}
+                        {formatLocaleNumber(locale, evaluation.counts.notObserved || 0)} previously matched
                         listings were not in the latest update.
                       </p>
                       {evaluation.rankingNote ? (
@@ -1423,7 +1424,7 @@ export function SavedHunts() {
                             </div>
                             <p className="mt-2 text-xs text-ink-3">
                               {sourceDisplayText(result.sourceId)} · Updated{" "}
-                              {new Date(result.observedAt).toLocaleString()}
+                              {formatLocaleDate(locale, result.observedAt, { dateStyle: "medium", timeStyle: "short" })}
                             </p>
                             {result.status === "match" && result.relevance ? (
                               <p className="mt-2 text-label leading-5 text-ink-3">

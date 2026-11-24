@@ -49,26 +49,17 @@ test('operator token alias PROPERTY_OPERATOR_SECRET resolves when primary unset'
   assert.equal(resolveOperatorToken({}), '');
 });
 
-test('fly.toml production port matches Dockerfile.production', () => {
-  const fly = fs.readFileSync(path.join(__dirname, '..', 'fly.toml'), 'utf8');
+test('Dockerfile.production and docker-compose.yml preserve runtime paths after retired host cleanup', () => {
   const docker = fs.readFileSync(path.join(__dirname, '..', 'Dockerfile.production'), 'utf8');
-  assert.match(fly, /internal_port\s*=\s*3000/);
-  assert.match(fly, /dockerfile\s*=\s*'Dockerfile\.production'/);
-  assert.match(fly, /memory_mb\s*=\s*1024/);
-  assert.doesNotMatch(fly, /^\s*memory\s*=/m);
-  assert.match(fly, /SCRAPER_ADMIN_TOKEN/);
-  assert.match(fly, /\[\[mounts\]\]/);
-  assert.match(fly, /destination\s*=\s*'\/app\/\.cache'/);
   assert.match(docker, /EXPOSE 3000/);
   assert.match(docker, /COPY[^\n]+\/app\/config\s+\.\/config/);
   assert.match(docker, /COPY[^\n]+\/app\/src\s+\.\/src/);
-  const koyeb = fs.readFileSync(path.join(__dirname, '..', 'koyeb.yml'), 'utf8');
-  assert.match(koyeb, /SCRAPER_ADMIN_TOKEN/);
-  assert.match(koyeb, /PROPERTY_DOCUMENT_REVIEW_STORE_PATH/);
   const compose = fs.readFileSync(path.join(__dirname, '..', 'docker-compose.yml'), 'utf8');
   assert.match(compose, /appcache:\/app\/\.cache/);
-  const base44 = fs.readFileSync(path.join(__dirname, '..', 'docker-compose.base44.yml'), 'utf8');
-  assert.doesNotMatch(base44, /env_file:\s*\n\s*- \.\/\.env\.local/);
+  assert.doesNotMatch(compose, /env_file:\s*\n\s*- \.\/\.env\.local/);
+  for (const retired of ['render.yaml', 'fly.toml', 'koyeb.yml', 'docker-compose.base44.yml']) {
+    assert.equal(fs.existsSync(path.join(__dirname, '..', retired)), false, `${retired} should remain retired from deploy root`);
+  }
 });
 
 test('marketing nav points at shipped routes, not phantom product names', () => {
@@ -132,21 +123,23 @@ test('legacy index.html does not load third-party puter/tailwind CDNs', () => {
   assert.doesNotMatch(html, /<script[^>]+src=["'][^"']*tailwindcss/i);
 });
 
-test('render.yaml does not pin PROPERTY_DB=embedded over the live DATABASE_URL', () => {
-  const render = fs.readFileSync(path.join(__dirname, '..', 'render.yaml'), 'utf8');
-  assert.doesNotMatch(render, /key:\s*PROPERTY_DB\b/);
-  assert.match(render, /key:\s*DATABASE_URL/);
-  assert.match(render, /key:\s*RESEND_API_KEY/);
-  assert.match(render, /key:\s*AUTO_MIGRATE[\s\S]*?value:\s*"1"/);
-  assert.doesNotMatch(render, /override embedded/i);
+test('database-target ensures live DATABASE_URL wins over embedded fallback in production', () => {
+  const { resolveDatabaseTarget } = require('../server/db/database-target');
+  assert.equal(
+    resolveDatabaseTarget({
+      DATABASE_URL: 'postgres://user:pass@db.example.com:5432/app',
+      PROPERTY_DB: 'embedded',
+      NODE_ENV: 'production',
+    }),
+    'tcp',
+  );
 });
 
-test('render.yaml does not independently generate divergent operator aliases', () => {
-  const render = fs.readFileSync(path.join(__dirname, '..', 'render.yaml'), 'utf8');
-  assert.match(render, /key: SCRAPER_ADMIN_TOKEN\s*\n\s*generateValue: true/);
-  // PROPERTY_OPERATOR_SECRET must not also generateValue independently.
-  const aliasBlock = render.split('PROPERTY_OPERATOR_SECRET')[1] || '';
-  assert.doesNotMatch(aliasBlock.slice(0, 80), /generateValue:\s*true/);
+test('Dockerfile.production does not hardcode divergent operator secrets or local .env files', () => {
+  const docker = fs.readFileSync(path.join(__dirname, '..', 'Dockerfile.production'), 'utf8');
+  assert.doesNotMatch(docker, /PROPERTY_OPERATOR_SECRET=/);
+  assert.doesNotMatch(docker, /SCRAPER_ADMIN_TOKEN=/);
+  assert.doesNotMatch(docker, /COPY\s+\.env/);
 });
 
 test('SEO schema and social proof do not overclaim partnerships or AI omniscience', () => {

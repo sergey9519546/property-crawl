@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Calendar, CheckCircle2, Clock, Info, Scale, ShieldCheck } from "lucide-react";
 import { StatutoryDeadlinesAndCarry } from "@/lib/underwriting";
 import { displayMoney } from "@/lib/listing-display";
@@ -41,49 +41,54 @@ export function StatutoryDeadlinesTimeline({
   const [anchorOption, setAnchorOption] = useState<AnchorOption>(
     hasPublishedSaleDate ? "sale_date" : "today"
   );
+  // Defer current-clock reads to post-mount state so SSR and initial hydration render identically.
+  const [nowMs, setNowMs] = useState<number | null>(null);
+  useEffect(() => {
+    setNowMs(Date.now());
+  }, []);
 
   const anchorDateStr = useMemo(() => {
-    const now = new Date();
     if (anchorOption === "sale_date" && hasPublishedSaleDate) {
       return String(saleDate).slice(0, 10);
     }
+    if (nowMs === null) return null;
     if (anchorOption === "7d_ago") {
-      const past = new Date(now.getTime() - 7 * 86_400_000);
-      return past.toISOString().slice(0, 10);
+      return new Date(nowMs - 7 * 86_400_000).toISOString().slice(0, 10);
     }
     if (anchorOption === "30d_ago") {
-      const past = new Date(now.getTime() - 30 * 86_400_000);
-      return past.toISOString().slice(0, 10);
+      return new Date(nowMs - 30 * 86_400_000).toISOString().slice(0, 10);
     }
-    return now.toISOString().slice(0, 10);
-  }, [anchorOption, saleDate, hasPublishedSaleDate]);
+    return new Date(nowMs).toISOString().slice(0, 10);
+  }, [anchorOption, saleDate, hasPublishedSaleDate, nowMs]);
 
   const daysElapsed = useMemo(() => {
+    if (nowMs === null || !anchorDateStr) return null;
     const anchorTime = Date.parse(anchorDateStr);
-    if (!Number.isFinite(anchorTime)) return 0;
-    const nowTime = Date.now();
-    return Math.floor((nowTime - anchorTime) / 86_400_000);
-  }, [anchorDateStr]);
+    if (!Number.isFinite(anchorTime)) return null;
+    return Math.floor((nowMs - anchorTime) / 86_400_000);
+  }, [anchorDateStr, nowMs]);
 
   // Compute remaining days and statuses for each statutory window
   const objectionDays = deadlinesAndCarry.objectionOrConfirmationDays;
-  const objectionRemaining = Math.max(0, objectionDays - Math.max(0, daysElapsed));
-  const objectionActive = daysElapsed >= 0 && daysElapsed < objectionDays;
-  const objectionExpired = daysElapsed >= objectionDays;
+  const objectionRemaining = daysElapsed !== null ? Math.max(0, objectionDays - Math.max(0, daysElapsed)) : objectionDays;
+  const objectionActive = daysElapsed !== null && daysElapsed >= 0 && daysElapsed < objectionDays;
+  const objectionExpired = daysElapsed !== null && daysElapsed >= objectionDays;
 
   const irsDays = deadlinesAndCarry.irsRedemptionDays;
-  const irsRemaining = Math.max(0, irsDays - Math.max(0, daysElapsed));
-  const irsActive = irsDays > 0 && daysElapsed >= 0 && daysElapsed < irsDays;
-  const irsExpired = irsDays > 0 && daysElapsed >= irsDays;
+  const irsRemaining = daysElapsed !== null ? Math.max(0, irsDays - Math.max(0, daysElapsed)) : irsDays;
+  const irsActive = irsDays > 0 && daysElapsed !== null && daysElapsed >= 0 && daysElapsed < irsDays;
+  const irsExpired = irsDays > 0 && daysElapsed !== null && daysElapsed >= irsDays;
 
   const stateRedemptionDays = deadlinesAndCarry.stateRedemptionDays;
-  const stateRedemptionRemaining = Math.max(0, stateRedemptionDays - Math.max(0, daysElapsed));
-  const stateRedemptionActive = stateRedemptionDays > 0 && daysElapsed >= 0 && daysElapsed < stateRedemptionDays;
-  const stateRedemptionExpired = stateRedemptionDays > 0 && daysElapsed >= stateRedemptionDays;
+  const stateRedemptionRemaining = daysElapsed !== null ? Math.max(0, stateRedemptionDays - Math.max(0, daysElapsed)) : stateRedemptionDays;
+  const stateRedemptionActive = stateRedemptionDays > 0 && daysElapsed !== null && daysElapsed >= 0 && daysElapsed < stateRedemptionDays;
+  const stateRedemptionExpired = stateRedemptionDays > 0 && daysElapsed !== null && daysElapsed >= stateRedemptionDays;
 
   const totalLockupDays = deadlinesAndCarry.effectiveLockupDays;
   const progressPct = totalLockupDays > 0
-    ? Math.min(100, Math.max(0, Math.round((Math.max(0, daysElapsed) / totalLockupDays) * 100)))
+    ? (daysElapsed === null
+      ? 0
+      : Math.min(100, Math.max(0, Math.round((Math.max(0, daysElapsed) / totalLockupDays) * 100))))
     : 100;
 
   // North Carolina Upset Bid Calculation (N.C.G.S. § 45-21.27)
@@ -182,10 +187,13 @@ export function StatutoryDeadlinesTimeline({
         <div className="space-y-1.5">
           <div className="flex items-center justify-between text-xs text-ink-3">
             <span>
-              {t.sdtAnchor} <strong>{fmtDate(anchorDateStr)}</strong> ({daysElapsed < 0 ? interpolate(t.sdtSaleInDays, { days: Math.abs(daysElapsed) }) : interpolate(t.sdtDaysElapsed, { days: daysElapsed })})
+              {t.sdtAnchor} <strong>{anchorDateStr ? fmtDate(anchorDateStr) : "—"}</strong>
+              {daysElapsed !== null
+                ? ` (${daysElapsed < 0 ? interpolate(t.sdtSaleInDays, { days: Math.abs(daysElapsed) }) : interpolate(t.sdtDaysElapsed, { days: daysElapsed })})`
+                : ""}
             </span>
             <span className="font-semibold text-ink">
-              {interpolate(t.sdtLockupPct, { pct: progressPct })}
+              {daysElapsed !== null ? interpolate(t.sdtLockupPct, { pct: progressPct }) : "—"}
             </span>
           </div>
           <div className="h-2.5 w-full rounded-full bg-card overflow-hidden border border-line">

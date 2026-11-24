@@ -92,5 +92,53 @@ test('air-gapped notice parser handles corrupted inputs without crashing', () =>
   assert.strictEqual(parsed.judgment_amount, 0);
 });
 
+test('ModelRouter selects free Vercel AI Gateway model first when AI_GATEWAY_API_KEY or VERCEL_OIDC_TOKEN is set', () => {
+  assert.strictEqual(
+    ModelRouter.selectModel({ taskType: 'notice_parser', env: { AI_GATEWAY_API_KEY: 'gw-key' } }),
+    'nvidia/nemotron-3.5-lightning-free'
+  );
+  assert.strictEqual(
+    ModelRouter.selectModel({ taskType: 'deal_analysis', env: { VERCEL_OIDC_TOKEN: 'oidc-tok' } }),
+    'nvidia/nemotron-3.5-lightning-free'
+  );
+  const route = ModelRouter.selectRoute({ taskType: 'notice_parser', env: { AI_GATEWAY_API_KEY: 'gw-key' } });
+  assert.deepStrictEqual(route, {
+    provider: 'vercel_gateway',
+    model: 'nvidia/nemotron-3.5-lightning-free',
+    configured: true,
+  });
+});
+
+test('ModelRouter preserves legacy provider selection when gateway is unset or legacy preferred', () => {
+  assert.strictEqual(
+    ModelRouter.selectModel({ taskType: 'notice_parser', promptLength: 500, env: { GEMINI_API_KEY: 'g-key' } }),
+    'gemini-2.0-flash-lite'
+  );
+  assert.strictEqual(
+    ModelRouter.selectModel({ taskType: 'deal_analysis', env: { AI_GATEWAY_API_KEY: 'gw-key', OPENAI_API_KEY: 'o-key' }, preferredProvider: 'openai' }),
+    'gpt-4o-mini'
+  );
+  assert.strictEqual(ModelRouter.providerForModel('alibaba/qwen3.7-flash'), 'vercel_gateway');
+  assert.strictEqual(ModelRouter.providerForModel('gemini-2.0-flash-lite'), 'gemini');
+  assert.strictEqual(ModelRouter.providerForModel('gpt-4o-mini'), 'openai');
+});
+
+test('ModelRouter gatewayModelChain, isFreeGatewayModel, and gatewayBaseUrl enforce free-first and strict https', () => {
+  assert.deepStrictEqual(ModelRouter.gatewayModelChain({ AI_GATEWAY_FREE_ONLY: '1' }), [
+    'nvidia/nemotron-3.5-lightning-free',
+    'reflection/beam-free',
+  ]);
+  assert.deepStrictEqual(
+    ModelRouter.gatewayModelChain({ AI_GATEWAY_MODELS: ' reflection/beam-free , , alibaba/qwen3.7-flash ' }),
+    ['reflection/beam-free', 'alibaba/qwen3.7-flash']
+  );
+  assert.strictEqual(ModelRouter.isFreeGatewayModel('nvidia/nemotron-3.5-lightning-free'), true);
+  assert.strictEqual(ModelRouter.isFreeGatewayModel('alibaba/qwen3.7-flash'), false);
+  assert.strictEqual(ModelRouter.gatewayBaseUrl({ AI_GATEWAY_BASE_URL: 'https://custom.gateway.example/v1/' }), 'https://custom.gateway.example/v1');
+  assert.strictEqual(ModelRouter.gatewayBaseUrl({ AI_GATEWAY_BASE_URL: 'http://insecure.example/v1' }), 'https://ai-gateway.vercel.sh/v1');
+  assert.strictEqual(ModelRouter.gatewayBaseUrl({ AI_GATEWAY_BASE_URL: 'https://user:pass@evil.example/v1' }), 'https://ai-gateway.vercel.sh/v1');
+  assert.strictEqual(ModelRouter.gatewayBaseUrl({ AI_GATEWAY_BASE_URL: 'https://*.wildcard.example/v1' }), 'https://ai-gateway.vercel.sh/v1');
+});
+
 console.log(`--- AI & SECURITY TEST SUMMARY: ${passed} Passed, ${failed} Failed ---`);
 if (failed > 0) process.exit(1);

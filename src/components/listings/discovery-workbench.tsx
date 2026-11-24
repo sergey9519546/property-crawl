@@ -54,6 +54,7 @@ import { sourceDisplayText } from "@/lib/source-display";
 import { summarizeInventoryHonesty } from "@/lib/inventory-honesty";
 import { useLocale } from "@/components/i18n/locale-provider";
 import { localizeDisplayDate } from "@/lib/i18n/domain";
+import { formatLocaleNumber } from "@/lib/i18n/translator";
 
 type Facet = { value: string; count: number };
 export type DiscoveryPayload = {
@@ -182,7 +183,7 @@ const DiscoverySearchField = React.memo(function DiscoverySearchField({
   );
 });
 export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?: DiscoveryPayload | null }) {
-  const { locale, messages: m, format } = useLocale();
+  const { locale, intlLocale, messages: m, format } = useLocale();
   const lUi = m.listingsUi;
   const localizedDefaults: Record<string, string> = locale === "en" ? defaults : {
     state: lUi.allStates,
@@ -262,12 +263,20 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
   const [watchlistListings, setWatchlistListings] = React.useState<PropertyListing[] | null>(null);
   const [watchlistLoading, setWatchlistLoading] = React.useState(false);
 
+  const watchlistFilterKey = React.useMemo(
+    () => discoverySearchParams({ ...filters, view: undefined }).toString(),
+    [filters],
+  );
+  const watchlistFiltersRef = React.useRef(filters);
+  watchlistFiltersRef.current = filters;
+
   React.useEffect(() => {
     if (!showSavedOnly) {
       setWatchlistListings(null);
       setWatchlistLoading(false);
       return;
     }
+    const activeFilters = watchlistFiltersRef.current;
     const savedIds = Array.from(saved).slice(0, 100);
     if (savedIds.length === 0) {
       setWatchlistListings([]);
@@ -279,32 +288,53 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
     setWatchlistLoading(true);
 
     const matchesActiveFilters = (listing: PropertyListing) => {
-      if (filters.state && String(listing.state || "").toUpperCase() !== filters.state.toUpperCase()) return false;
-      if (filters.county && !String(listing.county || "").toLowerCase().includes(filters.county.toLowerCase())) return false;
-      if (filters.source && String(listing.source || "").toLowerCase() !== filters.source.toLowerCase()) return false;
-      if (filters.type && String(listing.propType || "").toLowerCase() !== filters.type.toLowerCase()) return false;
-      if (filters.maxBid && Number(filters.maxBid) > 0) {
-        if (typeof listing.openingBid !== "number" || listing.openingBid > Number(filters.maxBid)) return false;
+      if (activeFilters.state && String(listing.state || "").toUpperCase() !== activeFilters.state.toUpperCase()) return false;
+      if (activeFilters.county && !String(listing.county || "").toLowerCase().includes(activeFilters.county.toLowerCase())) return false;
+      if (activeFilters.source && String(listing.source || "").toLowerCase() !== activeFilters.source.toLowerCase()) return false;
+      if (activeFilters.type && String(listing.propType || "").toLowerCase() !== activeFilters.type.toLowerCase()) return false;
+      if (activeFilters.program && activeFilters.program !== "all" && String(listing.program || listing.auctionProgram || "").toLowerCase() !== activeFilters.program.toLowerCase()) return false;
+      if (activeFilters.lifecycle && activeFilters.lifecycle !== "all" && String(listing.lifecycle || listing.lifecycleStatus || "").toLowerCase() !== activeFilters.lifecycle.toLowerCase()) return false;
+      if (activeFilters.occupancy && activeFilters.occupancy !== "all" && String(listing.occupancy || "").toLowerCase() !== activeFilters.occupancy.toLowerCase()) return false;
+      if (activeFilters.hasDocuments === "true" && listing.hasDocuments !== true && !listing.triage?.hasDocs) return false;
+      if (activeFilters.hasDocuments === "false" && listing.hasDocuments !== false) return false;
+      if (activeFilters.hasDocuments === "unknown" && listing.hasDocuments !== null && listing.hasDocuments !== undefined) return false;
+      if (activeFilters.hasPhoto === "true" && !listing.photo && !(Array.isArray(listing.images) && listing.images.length > 0)) return false;
+      if (activeFilters.hasPhoto === "false" && (listing.photo || (Array.isArray(listing.images) && listing.images.length > 0))) return false;
+      if (activeFilters.maxBid && Number(activeFilters.maxBid) > 0) {
+        if (typeof listing.openingBid !== "number" || listing.openingBid > Number(activeFilters.maxBid)) return false;
       }
-      if (filters.minScore && Number(filters.minScore) > 0) {
-        if (typeof listing.dealScore !== "number" || listing.dealScore < Number(filters.minScore)) return false;
+      if (activeFilters.minScore && Number(activeFilters.minScore) > 0) {
+        if (typeof listing.dealScore !== "number" || listing.dealScore < Number(activeFilters.minScore)) return false;
       }
-      if (filters.saleFrom && (!listing.saleDate || listing.saleDate < filters.saleFrom)) return false;
-      if (filters.saleTo && (!listing.saleDate || listing.saleDate > filters.saleTo)) return false;
-      if (filters.distressStage && filters.distressStage !== "all" && (listing.triage?.distressStage || "unknown") !== filters.distressStage) return false;
-      if (filters.q) {
+      if (activeFilters.minEquity && Number(activeFilters.minEquity) > 0) {
+        if (typeof listing.equity !== "number" || listing.equity < Number(activeFilters.minEquity)) return false;
+      }
+      if (activeFilters.saleFrom && (!listing.saleDate || listing.saleDate < activeFilters.saleFrom)) return false;
+      if (activeFilters.saleTo && (!listing.saleDate || listing.saleDate > activeFilters.saleTo)) return false;
+      if (activeFilters.distressStage && activeFilters.distressStage !== "all" && (listing.triage?.distressStage || "unknown") !== activeFilters.distressStage) return false;
+      if (activeFilters.isNew === "true" && !listing.triage?.isNew) return false;
+      if (activeFilters.priceDropped === "true" && !listing.triage?.priceDropped) return false;
+      if (activeFilters.occupancyKnown === "true" && !listing.triage?.occupancyKnown) return false;
+      if (activeFilters.stale === "true") {
+        const isStale = listing.sourceFreshness?.status
+          ? listing.sourceFreshness.status === "stale"
+          : Boolean((listing.triage?.staleDays ?? 0) > 30);
+        if (!isStale) return false;
+      }
+      if (activeFilters.q) {
         const hay = `${listing.id} ${listing.address || ""} ${listing.city || ""} ${listing.county || ""} ${listing.state || ""} ${listing.zip || ""}`.toLowerCase();
-        if (!hay.includes(filters.q.toLowerCase())) return false;
+        if (!hay.includes(activeFilters.q.toLowerCase())) return false;
       }
       return true;
     };
 
     const loadWatchlist = async () => {
       try {
-        const params = discoverySearchParams(filters, {
+        const params = discoverySearchParams(activeFilters, {
           limit: Math.max(48, Math.min(200, savedIds.length)),
           facets: "state,county,source,type,program,lifecycle,occupancy,freshness",
         });
+        params.delete("view");
         params.set("ids", savedIds.join(","));
         const res = await fetch(`/api/listings?${params.toString()}`, {
           cache: "no-store",
@@ -320,8 +350,10 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
             byId.set(item.id, item);
           }
         }
-        // When the backend ignores `ids=` (returns non-watchlist rows), hydrate missing saved IDs directly.
-        const ignoredIdsParam = returned.some((item) => item && typeof item.id === "string" && !saved.has(item.id));
+        // When the backend ignores `ids=` (returns non-watchlist rows or more pages exist), hydrate missing saved IDs directly.
+        const ignoredIdsParam =
+          returned.some((item) => item && typeof item.id === "string" && !saved.has(item.id))
+          || (Boolean(data?.page?.hasMore) && savedIds.some((id) => !byId.has(id)));
         const missingIds = savedIds.filter((id) => !byId.has(id));
         if (ignoredIdsParam && missingIds.length > 0) {
           for (let i = 0; i < missingIds.length; i += 6) {
@@ -364,7 +396,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
       active = false;
       controller.abort();
     };
-  }, [showSavedOnly, saved, filters]);
+  }, [showSavedOnly, saved, watchlistFilterKey]);
   const requestRef = React.useRef<{ controller: AbortController; id: number } | null>(null);
   const pendingSaves = React.useRef(new Set<string>());
   const [savingIds, setSavingIds] = React.useState<Set<string>>(new Set());
@@ -445,19 +477,28 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
   }, [refresh, filters.q, filters.view]);
   React.useEffect(() => {
     if (!session.memberTools) {
-      try {
-        const stored = window.localStorage.getItem("perfectproperty:saved-listings");
-        const ids = stored ? JSON.parse(stored) : [];
-        if (Array.isArray(ids)) {
-          setSaved(new Set(ids.filter((id): id is string => typeof id === "string")));
-        } else {
+      const readLocalSaved = () => {
+        try {
+          const stored = window.localStorage.getItem("perfectproperty:saved-listings");
+          const ids = stored ? JSON.parse(stored) : [];
+          if (Array.isArray(ids)) {
+            setSaved(new Set(ids.filter((id): id is string => typeof id === "string")));
+          } else {
+            setSaved(new Set());
+          }
+        } catch {
           setSaved(new Set());
         }
-      } catch {
-        setSaved(new Set());
-      }
+      };
+      readLocalSaved();
       setWatchlistError("");
-      return;
+      const onStorage = (event: StorageEvent) => {
+        if (event.key === "perfectproperty:saved-listings") readLocalSaved();
+      };
+      window.addEventListener("storage", onStorage);
+      return () => {
+        window.removeEventListener("storage", onStorage);
+      };
     }
     let active = true;
     // Carry properties saved while signed out into the server watchlist, then
@@ -504,7 +545,12 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
         if (active) { setSaved(new Set(ids)); setWatchlistError(""); }
       })
       .catch(() => {
-        if (active) setWatchlistError("We couldn't check your saved properties. Your watchlist is unchanged.");
+        if (active) {
+          if (localIds.length > 0) {
+            setSaved((prev) => (prev.size > 0 ? prev : new Set(localIds)));
+          }
+          setWatchlistError("We couldn't check your saved properties. Your watchlist is unchanged.");
+        }
       });
     return () => {
       active = false;
@@ -758,6 +804,16 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
         } as Record<string, string>)[filters.sort ?? ""] ?? lUi.sortOptions.triage,
       });
 
+  const isMapView = filters.view === "map";
+  const watchlistWholeCatalogActive = showSavedOnly && watchlistListings !== null && !isMapView;
+  const honestyListings = watchlistWholeCatalogActive ? filteredListings : payload?.listings;
+  const honestySummary = !(showSavedOnly && watchlistLoading && !isMapView) && honestyListings
+    ? summarizeInventoryHonesty(honestyListings)
+    : null;
+  const honestyLoadedLabel = honestySummary
+    ? `${formatLocaleNumber(locale, honestySummary.openingBidPublished)} of ${formatLocaleNumber(locale, honestySummary.shown)} ${watchlistWholeCatalogActive ? "saved listings" : "on this page"} list an opening bid`
+    : null;
+
   return (
     <section className="mx-auto max-w-[1440px] px-4 py-7 sm:px-6 lg:px-8">
       <header className="mb-4">
@@ -882,9 +938,13 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
             {chipLabel}
           </button>
         ))}
-        {localFilterActive ? (
-          <span className="text-xs text-ink-3">
-            {filteredListings.length} of {pageLength.toLocaleString()} shown on this page
+        {localFilterActive && !isMapView ? (
+          <span className="text-xs text-ink-3" data-testid="watchlist-filter-count">
+            {watchlistLoading
+              ? "Loading watchlist…"
+              : watchlistListings !== null
+                ? `${formatLocaleNumber(locale, filteredListings.length)} of ${formatLocaleNumber(locale, saved.size)} saved${saved.size > 100 ? " (first 100)" : ""}`
+                : `${formatLocaleNumber(locale, filteredListings.length)} of ${formatLocaleNumber(locale, pageLength)} shown on this page`}
           </span>
         ) : null}
       </div>
@@ -905,17 +965,37 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
               page-scoped qualifier stops a capped count from reading as the
               whole search. */}
           <p className="text-xs font-semibold text-ink-3" data-testid="inventory-page-count">
-            {payload
-              ? `${pageLength.toLocaleString()} on this page${
-                  typeof payload.total === "number"
-                    ? ` · ${payload.total.toLocaleString()} match this search${
-                        totalIsPageScoped ? ", counted on this page only" : ""
-                      }`
-                    : ""
-                }`
-              : loading || !error
-                ? "Updating results…"
-                : "Results unavailable right now"}
+            {isMapView
+              ? showSavedOnly
+                ? `Map shows all matching viewport records · ${formatLocaleNumber(locale, saved.size)} in watchlist (${watchlistLoading ? "loading…" : `${formatLocaleNumber(locale, filteredListings.length)} match filters`})`
+                : payload
+                  ? `Map view · ${
+                      typeof payload.total === "number"
+                        ? `${formatLocaleNumber(locale, payload.total)} match this search${
+                            totalIsPageScoped ? ", counted on this page only" : ""
+                          }`
+                        : `${formatLocaleNumber(locale, pageLength)} on this page`
+                    }`
+                  : loading || !error
+                    ? "Updating results…"
+                    : "Results unavailable right now"
+              : showSavedOnly
+                ? watchlistLoading
+                  ? "Loading watchlist…"
+                  : watchlistListings !== null
+                    ? `${formatLocaleNumber(locale, filteredListings.length)} of ${formatLocaleNumber(locale, saved.size)} saved${hasFilters ? " match this search" : " in your watchlist"}`
+                    : `${formatLocaleNumber(locale, filteredListings.length)} of ${formatLocaleNumber(locale, pageLength)} on this page in your watchlist`
+                : payload
+                  ? `${formatLocaleNumber(locale, pageLength)} on this page${
+                      typeof payload.total === "number"
+                        ? ` · ${formatLocaleNumber(locale, payload.total)} match this search${
+                            totalIsPageScoped ? ", counted on this page only" : ""
+                          }`
+                        : ""
+                    }`
+                  : loading || !error
+                    ? "Updating results…"
+                    : "Results unavailable right now"}
           </p>
           {/* Always rendered, never popped in. This line used to be
               conditional on `payload`, so it appeared from nothing once the
@@ -925,12 +1005,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
               same single line, so the block's height is stable from the first
               paint. */}
           <p className="mt-1 text-xs text-ink-3" data-testid="inventory-honesty">
-            {payload?.listings
-              ? (() => {
-                  const honesty = summarizeInventoryHonesty(payload.listings);
-                  return `${honesty.openingBidPublished} of ${honesty.shown} on this page list an opening bid`;
-                })()
-              : (locale === "en" ? "Checking published amounts…" : lUi.checkingPublishedAmounts)}
+            {honestyLoadedLabel || (locale === "en" ? "Checking published amounts…" : lUi.checkingPublishedAmounts)}
           </p>
           {/* "Modeled score" is the default sort, and it orders by a value the
               API withholds unless a record has both an opening amount and an
@@ -955,12 +1030,12 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
               both states -- which is the property the sibling line's guard
               already checks for the banner. */}
           <p className="mt-1 text-xs text-ink-3" data-testid="score-sort-honesty">
-            {payload?.listings
+            {honestyListings
               && (filters.sort || "triage") === "triage"
-              && summarizeInventoryHonesty(payload.listings).dealScorePresent === 0
-              && payload.listings.length > 0
+              && summarizeInventoryHonesty(honestyListings).dealScorePresent === 0
+              && honestyListings.length > 0
               ? "No listing on this page has a Deal Score yet; ranking prioritizes soonest upcoming auction sales and research triage signals."
-              : payload?.listings
+              : honestyListings
                 ? sortLabel
                 : "Checking which listings have a Deal Score…"}
           </p>
@@ -1019,9 +1094,10 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
             className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold aria-pressed:border-ink aria-pressed:bg-ink aria-pressed:text-white"
           >
             <Bookmark size={14} className={showSavedOnly ? "fill-white text-white" : ""} />
-            <span>{format(lUi.watchlistCount, { count: saved.size })}</span>
+            <span>{format(lUi.watchlistCount, { count: formatLocaleNumber(locale, saved.size) })}</span>
           </button>
           <button
+            type="button"
             onClick={() => setFilters({ view: "grid" })}
             aria-pressed={(filters.view || "grid") === "grid"}
             className="inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-semibold aria-pressed:bg-ink aria-pressed:text-white"
@@ -1030,6 +1106,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
             <span>{lUi.gridView}</span>
           </button>
           <button
+            type="button"
             onClick={() => setFilters({ view: "map" })}
             aria-pressed={filters.view === "map"}
             className="inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-semibold aria-pressed:bg-ink aria-pressed:text-white"
@@ -1038,6 +1115,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
             {lUi.mapView}
           </button>
           <button
+            type="button"
             onClick={() => setFilters({ view: "calendar" })}
             aria-pressed={filters.view === "calendar"}
             className="inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-semibold aria-pressed:bg-ink aria-pressed:text-white"
@@ -1046,6 +1124,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
             {lUi.calendarView}
           </button>
           <button
+            type="button"
             onClick={() => void refresh()}
             className="inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-semibold"
           >
@@ -1075,25 +1154,52 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
       <CompareTray ids={compare.ids} labels={compareLabels} onRemove={compare.remove} onMakeTarget={compare.makeTarget} onClear={compare.clear} />
       {filters.view === "map" ? (
         <div className="mt-5">
+          {showSavedOnly ? (
+            <div
+              role="status"
+              data-testid="map-watchlist-indicator"
+              className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line bg-paper px-4 py-2.5 text-xs text-ink-2"
+            >
+              <span>
+                Map view shows all viewport records matching your search filters ({watchlistLoading ? "loading watchlist…" : `${formatLocaleNumber(locale, filteredListings.length)} of ${formatLocaleNumber(locale, saved.size)} saved match`}; watchlist filtering applies to Grid and Calendar views).
+              </span>
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setFilters({ view: "grid" })}
+                  className="font-semibold text-ink underline"
+                >
+                  Show watchlist in Grid
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowSavedOnly(false)}
+                  className="font-semibold text-ink-3 underline hover:text-ink"
+                >
+                  Turn off watchlist
+                </button>
+              </div>
+            </div>
+          ) : null}
           <DiscoveryMap filters={filters} onOpenListing={openMapListing} onCompare={compare.toggle} compareIds={compare.ids} compareFull={compare.full} />
         </div>
       ) : !payload && error ? null : filters.view === "calendar" && payload ? (
         <DiscoveryCalendar
           listings={filteredListings}
           filters={filters}
-          truncated={Boolean(payload?.page?.hasMore)}
+          truncated={watchlistWholeCatalogActive ? false : Boolean(payload?.page?.hasMore)}
           compareIds={compare.ids}
           onCompare={compare.toggle}
-          pageNumber={cursorStack.length + 1}
-          hasPrev={cursorStack.length > 0}
-          hasMore={Boolean(payload?.page?.hasMore)}
-          loading={loading}
+          pageNumber={watchlistWholeCatalogActive ? 1 : cursorStack.length + 1}
+          hasPrev={watchlistWholeCatalogActive ? false : cursorStack.length > 0}
+          hasMore={watchlistWholeCatalogActive ? false : Boolean(payload?.page?.hasMore)}
+          loading={showSavedOnly ? watchlistLoading : loading}
           onPrevious={previous}
           onNext={next}
         />
       ) : (
         <>
-          {!payload ? (
+          {!payload || (showSavedOnly && watchlistLoading) ? (
             <div className="mt-5 grid min-h-screen place-items-center rounded-2xl border border-line bg-card p-16 text-sm text-ink-3">
               {/* min-h-screen, not a fixed pixel value: this placeholder was 185px tall
                   while the grid that replaces it renders ~12,400px of cards, so the
@@ -1107,7 +1213,23 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
           ) : !filteredListings.length ? (
             <div className="mt-5 rounded-2xl border border-dashed border-line-strong bg-card p-12 text-center">
               <SlidersHorizontal className="mx-auto text-ink-3" />
-              {localFilterActive && pageLength > 0 ? (
+              {showSavedOnly && (watchlistListings !== null || saved.size === 0) ? (
+                <>
+                  <h2 className="mt-4 text-lg font-bold">
+                    {saved.size === 0 ? lUi.emptyWatchlistEmptyTitle : lUi.emptyWatchlistFilteredTitle}
+                  </h2>
+                  <p className="mt-2 text-sm text-ink-3">
+                    {saved.size === 0 ? lUi.emptyWatchlistEmptyBody : lUi.emptyWatchlistFilteredBody}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setShowSavedOnly(false)}
+                    className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-ink px-3.5 py-2 text-xs font-semibold text-white hover:bg-ink-2"
+                  >
+                    {lUi.showAllListings}
+                  </button>
+                </>
+              ) : localFilterActive && pageLength > 0 ? (
                 <>
                   <h2 className="mt-4 text-lg font-bold">
                     {locale === "en" ? "No listings on this page match this filter." : lUi.emptyPageTitle}
@@ -1122,33 +1244,17 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
                         // emptied a 20-row page over a store of 9,798, and this
                         // line would have claimed "this search returns 0
                         // matching listings". Say what was actually examined.
-                        ? `This page loaded ${evaluated.toLocaleString()} ${evaluated === 1 ? "listing" : "listings"}, and none of them met the ranking or quality threshold applied here. Later pages have not been loaded, so matches may be on them.`
-                        : `This search returns ${payload.total.toLocaleString()} matching listing${
+                        ? `This page loaded ${formatLocaleNumber(locale, evaluated)} ${evaluated === 1 ? "listing" : "listings"}, and none of them met the ranking or quality threshold applied here. Later pages have not been loaded, so matches may be on them.`
+                        : `This search returns ${payload.total.toLocaleString(intlLocale)} matching listing${
                             payload.total === 1 ? "" : "s"
-                          }, but only ${pageLength.toLocaleString()} ${pageLength === 1 ? "is" : "are"} loaded here. Later pages have not been loaded, so matches may be on them.`
-                      : `Only ${pageLength.toLocaleString()} ${pageLength === 1 ? "listing is" : "listings are"} loaded here. Later pages have not been loaded, so matches may be on them.`}
+                          }, but only ${formatLocaleNumber(locale, pageLength)} ${pageLength === 1 ? "is" : "are"} loaded here. Later pages have not been loaded, so matches may be on them.`
+                      : `Only ${formatLocaleNumber(locale, pageLength)} ${pageLength === 1 ? "listing is" : "listings are"} loaded here. Later pages have not been loaded, so matches may be on them.`}
                   </p>
                   <button
                     onClick={clearLocalFilters}
                     className="mt-4 text-sm font-semibold text-ink underline"
                   >
                     {locale === "en" ? "Clear this filter" : lUi.clearFilter}
-                  </button>
-                </>
-              ) : showSavedOnly ? (
-                <>
-                  <h2 className="mt-4 text-lg font-bold">
-                    {saved.size === 0 ? lUi.emptyWatchlistEmptyTitle : lUi.emptyWatchlistFilteredTitle}
-                  </h2>
-                  <p className="mt-2 text-sm text-ink-3">
-                    {saved.size === 0 ? lUi.emptyWatchlistEmptyBody : lUi.emptyWatchlistFilteredBody}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => setShowSavedOnly(false)}
-                    className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-ink px-3.5 py-2 text-xs font-semibold text-white hover:bg-ink-2"
-                  >
-                    {lUi.showAllListings}
                   </button>
                 </>
               ) : (
@@ -1191,31 +1297,33 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
               ))}
             </div>
           )}
-          <div className="mt-7 flex items-center justify-between rounded-xl border border-line bg-card p-3">
-            <button
-              type="button"
-              aria-label="Previous page"
-              disabled={!cursorStack.length || loading}
-              onClick={previous}
-              className="inline-flex items-center gap-1 rounded-lg px-3 py-2 text-xs font-bold disabled:opacity-40"
-            >
-              <ChevronLeft size={15} />
-              {lUi.previousBtn}
-            </button>
-            <span className="text-xs text-ink-3">
-              {format(lUi.pageNumber, { page: cursorStack.length + 1 })}
-            </span>
-            <button
-              type="button"
-              aria-label="Next page"
-              disabled={!payload?.page?.hasMore || loading}
-              onClick={next}
-              className="inline-flex items-center gap-1 rounded-lg bg-ink px-3 py-2 text-xs font-bold text-white disabled:opacity-40"
-            >
-              {lUi.nextBtn}
-              <ChevronRight size={15} />
-            </button>
-          </div>
+          {!watchlistWholeCatalogActive ? (
+            <div className="mt-7 flex items-center justify-between rounded-xl border border-line bg-card p-3">
+              <button
+                type="button"
+                aria-label="Previous page"
+                disabled={!cursorStack.length || loading}
+                onClick={previous}
+                className="inline-flex items-center gap-1 rounded-lg px-3 py-2 text-xs font-bold disabled:opacity-40"
+              >
+                <ChevronLeft size={15} />
+                {lUi.previousBtn}
+              </button>
+              <span className="text-xs text-ink-3">
+                {format(lUi.pageNumber, { page: cursorStack.length + 1 })}
+              </span>
+              <button
+                type="button"
+                aria-label="Next page"
+                disabled={!payload?.page?.hasMore || loading}
+                onClick={next}
+                className="inline-flex items-center gap-1 rounded-lg bg-ink px-3 py-2 text-xs font-bold text-white disabled:opacity-40"
+              >
+                {lUi.nextBtn}
+                <ChevronRight size={15} />
+              </button>
+            </div>
+          ) : null}
         </>
       )}
     </section>
@@ -1382,7 +1490,7 @@ function DiscoveryCalendar({
               {rollupLoading
                 ? "Loading…"
                 : calendarRollup
-                  ? format(cUi.datedAuctionsCount, { count: calendarDatedTotal(calendarRollup).toLocaleString() })
+                  ? format(cUi.datedAuctionsCount, { count: formatLocaleNumber(locale, calendarDatedTotal(calendarRollup)) })
                   : cUi.notAvailableNow}
             </span>
           </div>
@@ -1398,7 +1506,7 @@ function DiscoveryCalendar({
                       {displayDate(week.weekStart)} – {displayDate(week.weekEnd)}
                     </span>
                     <span className="ml-2 text-ink-3">
-                      ({plural(week.count, cUi.saleCount, { count: week.count.toLocaleString() })})
+                      ({plural(week.count, cUi.saleCount, { count: formatLocaleNumber(locale, week.count) })})
                     </span>
                   </div>
                   <span className="font-bold text-ink-2">
@@ -1441,7 +1549,7 @@ function DiscoveryCalendar({
               {rollupLoading
                 ? "Loading…"
                 : neighborhoodRollup
-                  ? (neighborhoodRollup.bucketsTruncated && typeof neighborhoodRollup.bucketsTotal === "number" ? `Top ${neighborhoodRollup.count.toLocaleString()} of ${neighborhoodRollup.bucketsTotal.toLocaleString()} markets` : `${neighborhoodRollup.count.toLocaleString()} markets`)
+                  ? (neighborhoodRollup.bucketsTruncated && typeof neighborhoodRollup.bucketsTotal === "number" ? `Top ${formatLocaleNumber(locale, neighborhoodRollup.count)} of ${formatLocaleNumber(locale, neighborhoodRollup.bucketsTotal)} markets` : `${formatLocaleNumber(locale, neighborhoodRollup.count)} markets`)
                   : cUi.notAvailableNow}
             </span>
           </div>
@@ -1471,8 +1579,8 @@ function DiscoveryCalendar({
                       {bucket.label}
                     </button>
                     <span className="ml-2 text-ink-3">
-                      {bucket.count.toLocaleString()} {cUi.activeWord}
-                      {bucket.medianSqft !== null ? ` · ${bucket.medianSqft.toLocaleString()} sqft` : ""}
+                      {formatLocaleNumber(locale, bucket.count)} {cUi.activeWord}
+                      {bucket.medianSqft !== null ? ` · ${formatLocaleNumber(locale, bucket.medianSqft)} sqft` : ""}
                     </span>
                   </div>
                   <div className="shrink-0 text-right">
@@ -1527,7 +1635,7 @@ function DiscoveryCalendar({
                 <div>
                   <span className="block text-label font-bold uppercase text-ink-3">{cUi.activeListingsLabel}</span>
                   <strong className="mt-0.5 block text-sm text-ink">
-                    {typeof bucket.count === "number" ? bucket.count.toLocaleString() : "—"}
+                    {typeof bucket.count === "number" ? formatLocaleNumber(locale, bucket.count) : "—"}
                   </strong>
                 </div>
                 <div>
@@ -1542,7 +1650,7 @@ function DiscoveryCalendar({
                   <span className="block text-label font-bold uppercase text-ink-3">{cUi.medianSqftLabel}</span>
                   <strong className="mt-0.5 block text-sm text-ink">
                     {typeof bucket.medianSqft === "number"
-                      ? `${bucket.medianSqft.toLocaleString()} sqft`
+                      ? `${formatLocaleNumber(locale, bucket.medianSqft)} sqft`
                       : "Not published"}
                   </strong>
                 </div>

@@ -587,3 +587,77 @@ test('applySecondLookReconsideration preserves reconsiderationRequired and lates
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });
+
+test('second-look evaluates buyer-supplied underwriteScenario.maxAllowableOffer against published openingBid without fabrication', () => {
+  const baseCase = {
+    id: 'case_018f9e20a1bc724090123520',
+    state: 'pass',
+    listingSnapshot: {
+      openingBid: 120000,
+      assessedValue: 200000,
+      lifecycleStage: DISTRESS_STAGES.SCHEDULED_AUCTION,
+    },
+    underwriteScenario: {
+      maxAllowableOffer: 95000,
+    },
+  };
+
+  // Fires when published openingBid < maxAllowableOffer (even with <10% drop from 98k or direct check)
+  const belowMao = evaluateSecondLookTriggers(
+    { ...baseCase, listingSnapshot: { openingBid: 98000, lifecycleStage: DISTRESS_STAGES.SCHEDULED_AUCTION } },
+    { openingBid: 92000, lifecycleStage: DISTRESS_STAGES.SCHEDULED_AUCTION }
+  );
+  assert.equal(belowMao.shouldTrigger, true);
+  assert.equal(belowMao.recommendedState, 'inbox');
+  const belowEvent = belowMao.triggerEvents.find((e) => e.type === 'BID_AT_OR_BELOW_BUYER_MAO');
+  assert.ok(belowEvent);
+  assert.equal(belowEvent.code, 'BID_AT_OR_BELOW_BUYER_MAO');
+  assert.equal(belowEvent.severity, 'HIGH');
+  assert.equal(belowEvent.openingBid, 92000);
+  assert.equal(belowEvent.maxAllowableOffer, 95000);
+  assert.match(belowEvent.label, /Max Allowable Offer/);
+  assert.equal(belowMao.primaryReason, belowEvent.label);
+
+  // Fires on exact equality: openingBid === maxAllowableOffer
+  const equalMao = evaluateSecondLookTriggers(
+    { ...baseCase, listingSnapshot: { openingBid: 96000, lifecycleStage: DISTRESS_STAGES.SCHEDULED_AUCTION } },
+    { openingBid: 95000, lifecycleStage: DISTRESS_STAGES.SCHEDULED_AUCTION }
+  );
+  assert.equal(equalMao.shouldTrigger, true);
+  assert.ok(equalMao.triggerEvents.some((e) => e.type === 'BID_AT_OR_BELOW_BUYER_MAO'));
+
+  // Does NOT fire when openingBid > maxAllowableOffer
+  const aboveMao = evaluateSecondLookTriggers(
+    { ...baseCase, listingSnapshot: { openingBid: 96000, lifecycleStage: DISTRESS_STAGES.SCHEDULED_AUCTION } },
+    { openingBid: 95001, lifecycleStage: DISTRESS_STAGES.SCHEDULED_AUCTION }
+  );
+  assert.equal(aboveMao.shouldTrigger, false);
+  assert.equal(aboveMao.triggerEvents.some((e) => e.type === 'BID_AT_OR_BELOW_BUYER_MAO'), false);
+
+  // Does NOT fire when maxAllowableOffer is null, 0, negative, or absent (Zero-Fabrication invariant)
+  for (const scenario of [
+    undefined,
+    null,
+    {},
+    { maxAllowableOffer: null },
+    { maxAllowableOffer: 0 },
+    { maxAllowableOffer: -50000 },
+  ]) {
+    const res = evaluateSecondLookTriggers(
+      { ...baseCase, underwriteScenario: scenario, listingSnapshot: { openingBid: 100000, assessedValue: 200000, lifecycleStage: DISTRESS_STAGES.SCHEDULED_AUCTION } },
+      { openingBid: 100000, assessedValue: 200000, lifecycleStage: DISTRESS_STAGES.SCHEDULED_AUCTION }
+    );
+    assert.equal(res.shouldTrigger, false);
+    assert.equal(res.triggerEvents.some((e) => e.type === 'BID_AT_OR_BELOW_BUYER_MAO'), false);
+  }
+
+  // Does NOT fire when freshListing.openingBid is null, 0, negative, or absent
+  for (const openingBid of [undefined, null, 0, -1000]) {
+    const res = evaluateSecondLookTriggers(
+      { ...baseCase, listingSnapshot: { assessedValue: 200000, lifecycleStage: DISTRESS_STAGES.SCHEDULED_AUCTION } },
+      { openingBid, assessedValue: 200000, lifecycleStage: DISTRESS_STAGES.SCHEDULED_AUCTION }
+    );
+    assert.equal(res.shouldTrigger, false);
+    assert.equal(res.triggerEvents.some((e) => e.type === 'BID_AT_OR_BELOW_BUYER_MAO'), false);
+  }
+});

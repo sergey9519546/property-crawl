@@ -95,3 +95,105 @@ test('tokensMatch: treats numeric-coerced strings consistently with the underlyi
   assert.equal(tokensMatch(12345, '12345'), true);
   assert.equal(tokensMatch(12345, 12345), true);
 });
+
+test('POST /api/scrapers/run action=ai-prewarm respects auth, limit, ai_cache, and budget', async () => {
+  const crypto = require('node:crypto');
+  const { createScrapersHandler } = scrapersRoute;
+  const { buildEvidenceSummary } = require('../../server/routes/enrich');
+
+  const listings = [
+    { id: 'L-1', address: '1 First St', openingBid: 40000, source: 'sheriff', status: 'scheduled' },
+    { id: 'L-2', address: '2 Second St', openingBid: 60000, source: 'sheriff', status: 'scheduled' },
+    { id: 'L-3', address: '3 Third St', openingBid: 80000, source: 'sheriff', status: 'scheduled' },
+    { id: 'L-4', address: '4 Fourth St', openingBid: 90000, source: 'sheriff', status: 'sold' },
+  ];
+
+  // Pre-seed ai_cache for L-1 using the exact free Gateway prompt hash
+  const cacheMap = new Map();
+  const promptL1 = [
+    'Write a concise operator briefing summarizing ONLY the observed facts and explicitly stating all verification-required gaps below.',
+    'Zero-Fabrication Rule: Never invent ARV, repair cost, title status, lien clearance, occupancy, or bidding advice not present in the evidence summary.',
+    '',
+    buildEvidenceSummary(listings[0]),
+  ].join('\n');
+  const hashL1 = crypto
+    .createHash('sha256')
+    .update(`nvidia/nemotron-3.5-lightning-free:${promptL1.trim()}`)
+    .digest('hex');
+  cacheMap.set(hashL1, {
+    contentHash: hashL1,
+    model: 'nvidia/nemotron-3.5-lightning-free',
+    responseText: 'Pre-cached briefing for 1 First St at $40,000.',
+  });
+
+  const mockDb = {
+    async getListings() {
+      return { total: listings.length, listings };
+    },
+    async getAiCache(hash) {
+      return cacheMap.get(hash) || null;
+    },
+    async setAiCache(record) {
+      cacheMap.set(record.contentHash, record);
+    },
+  };
+
+  let fetchCalls = 0;
+  let seenOidc = null;
+  const handler = createScrapersHandler({
+    env: { SCRAPER_ADMIN_TOKEN: 'prewarm-secret' },
+    database: mockDb,
+    fetchFn: async (_url, init) => {
+      fetchCalls += 1;
+      seenOidc = init.headers.Authorization;
+      return {
+        ok: true,
+        json: async () => ({
+          choices: [{
+            message: { content: 'Observed opening bid is $60,000; title and condition remain unverified.' },
+          }],
+          usage: { prompt_tokens: 100, completion_tokens: 30 },
+        }),
+      };
+    },
+  });
+
+  // Unauthenticated request fails closed (401)
+  let unauthStatus = null;
+  await handler(
+    { method: 'POST', url: '/api/scrapers/run', headers: {}, body: { action: 'ai-prewarm', limit: 1 } },
+    { status(c) { unauthStatus = c; return this; }, json() {} }
+  );
+  assert.equal(unauthStatus, 401);
+
+  // Limit=1 warms 1 uncached active listing (L-2), skips cached (L-1), ignores sold (L-4), stops before L-3
+  let okStatus = 200;
+  let payload = null;
+  await handler(
+    {
+      method: 'POST',
+      url: '/api/scrapers/run',
+      headers: {
+        authorization: 'Bearer prewarm-secret',
+        'x-vercel-oidc-token': 'prewarm-oidc-tok',
+      },
+      body: { action: 'ai-prewarm', limit: 1 },
+    },
+    { status(c) { okStatus = c; return this; }, json(p) { payload = p; } }
+  );
+  assert.equal(okStatus, 200);
+  assert.equal(seenOidc, 'Bearer prewarm-oidc-tok');
+  assert.equal(fetchCalls, 1);
+  assert.deepEqual(payload, {
+    ok: true,
+    action: 'ai-prewarm',
+    attempted: 1,
+    warmed: 1,
+    skippedCached: 1,
+    rejectedUngrounded: 0,
+    failed: 0,
+    totalCostUsd: 0,
+    modelsUsed: ['nvidia/nemotron-3.5-lightning-free'],
+  });
+  assert.equal(cacheMap.size, 2);
+});

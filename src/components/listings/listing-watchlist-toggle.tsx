@@ -4,46 +4,39 @@ import * as React from "react";
 import { Bookmark } from "lucide-react";
 import { useWorkspaceSession } from "@/components/workspace/workspace-shell";
 import { useLocale } from "@/components/i18n/locale-provider";
+import {
+  readDeviceWatchlistIds,
+  removeDeviceWatchlistId,
+  resetWatchlistSyncSession,
+  syncDeviceWatchlistToServer,
+  toggleDeviceWatchlistId,
+} from "@/lib/watchlist-sync";
 
-// Same device-storage key and shape (JSON array of listing ids) as the /listings grid.
-const DEVICE_KEY = "perfectproperty:saved-listings";
-
-function readDeviceIds(): string[] {
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(DEVICE_KEY) || "[]");
-    return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : [];
-  } catch {
-    return [];
-  }
-}
-
+// Shares the "perfectproperty:saved-listings" device-storage key and shape
+// (JSON array of listing ids) with the /listings grid.
 export function ListingWatchlistToggle({ listingId }: { listingId: string }) {
   const { locale } = useLocale();
   const session = useWorkspaceSession();
   const [saved, setSaved] = React.useState(false);
+  const [savedCount, setSavedCount] = React.useState<number | null>(null);
   const [error, setError] = React.useState("");
   const [busy, setBusy] = React.useState(false);
 
   React.useEffect(() => {
     if (!session.memberTools) {
-      setSaved(readDeviceIds().includes(listingId));
+      resetWatchlistSyncSession();
+      const deviceIds = readDeviceWatchlistIds();
+      setSaved(deviceIds.includes(listingId));
+      setSavedCount(deviceIds.length);
       setError("");
       return;
     }
     let active = true;
-    void fetch("/api/alerts", { credentials: "same-origin", cache: "no-store" })
-      .then(async (response) => {
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error || "Watchlist could not be loaded.");
-        const ids = Array.isArray(data.deals)
-          ? data.deals.map((deal: unknown) =>
-              typeof deal === "string"
-                ? deal
-                : (deal as { listingId?: string; id?: string })?.listingId || (deal as { listingId?: string; id?: string })?.id
-            )
-          : [];
+    void syncDeviceWatchlistToServer()
+      .then((result) => {
         if (active) {
-          setSaved(ids.includes(listingId));
+          setSaved(result.ids.includes(listingId));
+          setSavedCount(result.savedCount);
           setError("");
         }
       })
@@ -57,15 +50,15 @@ export function ListingWatchlistToggle({ listingId }: { listingId: string }) {
 
   async function toggle() {
     if (!session.memberTools) {
-      try {
-        const ids = readDeviceIds();
-        const next = saved ? ids.filter((id) => id !== listingId) : Array.from(new Set([...ids, listingId]));
-        window.localStorage.setItem(DEVICE_KEY, JSON.stringify(next));
-        setSaved(!saved);
-        setError("");
-      } catch {
+      const result = toggleDeviceWatchlistId(listingId, saved);
+      if (!result.ok) {
         setError("Your browser is blocking saved properties, so the watchlist was not updated.");
+        return;
       }
+      resetWatchlistSyncSession();
+      setSaved(result.saved);
+      setSavedCount(result.ids.length);
+      setError("");
       return;
     }
     if (busy) return;
@@ -84,7 +77,12 @@ export function ListingWatchlistToggle({ listingId }: { listingId: string }) {
         session.requestUnlock();
       }
       if (!response.ok) throw new Error(data.error || "Watchlist could not be updated.");
-      setSaved(!saved);
+      const nextSaved = !saved;
+      if (!nextSaved) {
+        removeDeviceWatchlistId(listingId);
+      }
+      setSaved(nextSaved);
+      setSavedCount((prev) => (nextSaved ? (prev ?? 0) + 1 : Math.max(0, (prev ?? 1) - 1)));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Watchlist could not be updated.");
     } finally {
@@ -93,7 +91,7 @@ export function ListingWatchlistToggle({ listingId }: { listingId: string }) {
   }
 
   return (
-    <div>
+    <div data-watchlist-count={savedCount ?? undefined}>
       <button
         type="button"
         disabled={busy}

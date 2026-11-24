@@ -97,14 +97,89 @@ ${gaps.map((gap) => `- ${gap}`).join('\n')}
 This deterministic summary reports stored fields only. It is not a title search, legal opinion, appraisal, condition report, or bid recommendation.`;
 }
 
+function buildBriefingPrompt(deterministicSummary) {
+  return [
+    'Write a concise operator briefing summarizing ONLY the observed facts and explicitly stating all verification-required gaps below.',
+    'Zero-Fabrication Rule: Never invent ARV, repair cost, title status, lien clearance, occupancy, or bidding advice not present in the evidence summary.',
+    '',
+    deterministicSummary,
+  ].join('\n');
+}
+
+function extractDollarAmounts(text) {
+  const matches = String(text || '').match(/\$[0-9,]+(?:\.[0-9]+)?/g) || [];
+  const values = new Set();
+  for (const token of matches) {
+    const num = Number(token.replace(/[$,]/g, ''));
+    if (Number.isFinite(num)) values.add(num);
+  }
+  return values;
+}
+
+function validateGroundedNarrative(narrative, deterministicSummary) {
+  if (typeof narrative !== 'string') {
+    return { ok: false, reason: 'invalid_narrative' };
+  }
+  const trimmed = narrative.trim();
+  if (!trimmed || trimmed.length > 4000) {
+    return { ok: false, reason: 'invalid_narrative_length' };
+  }
+
+  const allowedDollars = extractDollarAmounts(deterministicSummary);
+  const narrativeDollars = trimmed.match(/\$[0-9,]+(?:\.[0-9]+)?/g) || [];
+  for (const token of narrativeDollars) {
+    const num = Number(token.replace(/[$,]/g, ''));
+    if (!Number.isFinite(num) || !allowedDollars.has(num)) {
+      return { ok: false, reason: 'ungrounded_dollar_figure' };
+    }
+  }
+
+  const summaryText = String(deterministicSummary || '');
+  const prohibited = [
+    /\bclear\s+title\b/i,
+    /\bguaranteed\s+equity\b/i,
+    /\bfree\s+and\s+clear\b/i,
+  ];
+  for (const pattern of prohibited) {
+    if (pattern.test(trimmed) && !pattern.test(summaryText)) {
+      return { ok: false, reason: 'prohibited_assurance_phrase' };
+    }
+  }
+
+  return { ok: true };
+}
+
+async function persistAiBriefCache({ dbClient = db, model, prompt, narrative, inputTokens = 0, outputTokens = 0, costUsd = 0 }) {
+  if (!dbClient || typeof dbClient.setAiCache !== 'function' || !narrative || !model || !prompt) {
+    return false;
+  }
+  try {
+    const contentHash = crypto.createHash('sha256').update(`${model}:${prompt.trim()}`).digest('hex');
+    await dbClient.setAiCache({
+      contentHash,
+      promptType: 'evidence-brief',
+      model,
+      inputTokens,
+      outputTokens,
+      costUsd,
+      responseText: narrative,
+    });
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
 async function generateAiNarrative(listing, options = {}) {
   const env = options.env || process.env;
   const fetchFn = options.fetchFn || globalThis.fetch;
+  const targetDb = options.db || db;
   const deterministicSummary = buildEvidenceSummary(listing);
+  const gatewayToken = options.oidcToken || env?.AI_GATEWAY_API_KEY || env?.VERCEL_OIDC_TOKEN || null;
   const geminiKey = env?.GEMINI_API_KEY || env?.GOOGLE_AI_API_KEY || null;
   const openaiKey = env?.OPENAI_API_KEY || null;
 
-  if (typeof fetchFn !== 'function' || (!geminiKey && !openaiKey)) {
+  if (typeof fetchFn !== 'function' || (!gatewayToken && !geminiKey && !openaiKey)) {
     return {
       narrative: null,
       provider: null,
@@ -116,15 +191,85 @@ async function generateAiNarrative(listing, options = {}) {
     };
   }
 
-  const prompt = [
-    'Write a concise operator briefing summarizing ONLY the observed facts and explicitly stating all verification-required gaps below.',
-    'Zero-Fabrication Rule: Never invent ARV, repair cost, title status, lien clearance, occupancy, or bidding advice not present in the evidence summary.',
-    '',
-    deterministicSummary,
-  ].join('\n');
-
+  const prompt = buildBriefingPrompt(deterministicSummary);
   const requestedModel = options.model || (openaiKey ? 'gpt-4o-mini' : 'gemini-2.0-flash-lite');
-  const preferredProvider = ModelRouter.providerForModel(requestedModel);
+  const preferredProvider = options.model ? ModelRouter.providerForModel(options.model) : null;
+  const explicitLegacyOverride = Boolean(
+    options.model
+    && ((preferredProvider === 'openai' && openaiKey) || (preferredProvider === 'gemini' && geminiKey))
+  );
+
+  let failureReason = 'llm_unavailable';
+
+  if (gatewayToken && !explicitLegacyOverride) {
+    const baseUrl = ModelRouter.gatewayBaseUrl(env);
+    const freeOnly = String(env?.AI_GATEWAY_FREE_ONLY || '').trim() === '1';
+    const baseChain = ModelRouter.gatewayModelChain(env);
+    const chain = (options.model && ModelRouter.providerForModel(options.model) === 'vercel_gateway')
+      ? [options.model, ...baseChain.filter((m) => m !== options.model)]
+      : baseChain;
+
+    for (const gwModel of chain) {
+      if (!ModelRouter.isFreeGatewayModel(gwModel, env) && (freeOnly || options.costTracker?.isOverBudget)) {
+        continue;
+      }
+      try {
+        const resp = await fetchFn(`${baseUrl}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${gatewayToken}`,
+          },
+          body: JSON.stringify({
+            model: gwModel,
+            messages: [{ role: 'user', content: prompt }],
+            temperature: 0,
+          }),
+          signal: options.signal || AbortSignal.timeout(8000),
+        });
+        if (!resp || !resp.ok) continue;
+        const body = await resp.json();
+        const text = body?.choices?.[0]?.message?.content?.trim();
+        if (!text) continue;
+
+        const grounded = validateGroundedNarrative(text, deterministicSummary);
+        if (!grounded.ok) {
+          failureReason = 'ungrounded_claim';
+          continue;
+        }
+
+        const inTok = body?.usage?.prompt_tokens || Math.ceil(prompt.length / 4);
+        const outTok = body?.usage?.completion_tokens || Math.ceil(text.length / 4);
+        const costUsd = CostTracker.calculateCost(gwModel, inTok, outTok);
+
+        if (options.persistCache) {
+          await persistAiBriefCache({
+            dbClient: targetDb,
+            model: gwModel,
+            prompt,
+            narrative: text,
+            inputTokens: inTok,
+            outputTokens: outTok,
+            costUsd,
+          });
+        }
+
+        return {
+          narrative: text,
+          provider: 'vercel_gateway',
+          model: gwModel,
+          costUsd,
+          inputTokens: inTok,
+          outputTokens: outTok,
+          cached: false,
+          fallback: false,
+          reason: null,
+        };
+      } catch (_) {
+        // Gateway model failed; try next model in chain or direct fallback
+      }
+    }
+  }
 
   const callOpenAi = async () => {
     if (!openaiKey) return null;
@@ -145,7 +290,9 @@ async function generateAiNarrative(listing, options = {}) {
       narrative: text,
       provider: 'openai',
       model: actualModel,
-      costUsd: Number(((inTok * 0.00000015) + (outTok * 0.0000006)).toFixed(6)),
+      inputTokens: inTok,
+      outputTokens: outTok,
+      costUsd: CostTracker.calculateCost(actualModel, inTok, outTok),
     };
   };
 
@@ -170,6 +317,8 @@ async function generateAiNarrative(listing, options = {}) {
       narrative: text,
       provider: 'gemini',
       model: actualModel,
+      inputTokens: Math.ceil(prompt.length / 4),
+      outputTokens: Math.ceil(text.length / 4),
       costUsd: 0,
     };
   };
@@ -179,6 +328,22 @@ async function generateAiNarrative(listing, options = {}) {
     try {
       const res = await attempt();
       if (res && res.narrative) {
+        const grounded = validateGroundedNarrative(res.narrative, deterministicSummary);
+        if (!grounded.ok) {
+          failureReason = 'ungrounded_claim';
+          continue;
+        }
+        if (options.persistCache) {
+          await persistAiBriefCache({
+            dbClient: targetDb,
+            model: res.model,
+            prompt,
+            narrative: res.narrative,
+            inputTokens: res.inputTokens || 0,
+            outputTokens: res.outputTokens || 0,
+            costUsd: Number(res.costUsd) || 0,
+          });
+        }
         return { ...res, cached: false, fallback: false, reason: null };
       }
     } catch (_) {
@@ -193,22 +358,27 @@ async function generateAiNarrative(listing, options = {}) {
     costUsd: 0,
     cached: false,
     fallback: true,
-    reason: 'llm_unavailable',
+    reason: failureReason,
   };
 }
 
-async function readCachedNarrative(analysis) {
-  if (typeof db.getAiCache !== 'function') return { narrative: null, model: null };
-  const prompt = [
-    'Write a concise operator briefing summarizing ONLY the observed facts and explicitly stating all verification-required gaps below.',
-    'Zero-Fabrication Rule: Never invent ARV, repair cost, title status, lien clearance, occupancy, or bidding advice not present in the evidence summary.',
-    '',
-    analysis,
-  ].join('\n');
-  for (const model of ['gemini-2.0-flash-lite', 'gpt-4o-mini', SUMMARY_MODEL]) {
+async function readCachedNarrative(analysis, options = {}) {
+  const targetDb = options.db || db;
+  const env = options.env || process.env;
+  if (!targetDb || typeof targetDb.getAiCache !== 'function') return { narrative: null, model: null };
+  const prompt = buildBriefingPrompt(analysis);
+  const modelsToCheck = Array.from(new Set([
+    ...ModelRouter.gatewayModelChain(env),
+    ...ModelRouter.FREE_GATEWAY_MODELS,
+    ...ModelRouter.PAID_GATEWAY_FALLBACK_MODELS,
+    'gemini-2.0-flash-lite',
+    'gpt-4o-mini',
+    SUMMARY_MODEL,
+  ]));
+  for (const model of modelsToCheck) {
     try {
       const hash = crypto.createHash('sha256').update(`${model}:${prompt.trim()}`).digest('hex');
-      const row = await db.getAiCache(hash);
+      const row = await targetDb.getAiCache(hash);
       const narrative = row?.response_text || row?.responseText || null;
       if (narrative) return { narrative, model: row?.model_used || row?.model || model };
     } catch (_) {
@@ -218,7 +388,8 @@ async function readCachedNarrative(analysis) {
   return { narrative: null, model: null };
 }
 
-async function handleCachedEnrichGet(req, res) {
+async function handleCachedEnrichGet(req, res, deps = {}) {
+  const targetDb = deps.db || db;
   let listingId = req.query?.listingId || '';
   if (!listingId && req.url) {
     try {
@@ -230,12 +401,12 @@ async function handleCachedEnrichGet(req, res) {
   if (!String(listingId).trim()) {
     return res.status(400).json({ error: 'listingId is required' });
   }
-  const listing = await db.getListingById(String(listingId).trim());
+  const listing = await targetDb.getListingById(String(listingId).trim());
   if (!listing) {
     return res.status(404).json({ error: 'Listing not found' });
   }
   const analysis = buildEvidenceSummary(listing);
-  const cached = await readCachedNarrative(analysis);
+  const cached = await readCachedNarrative(analysis, { db: targetDb, env: deps.env || process.env });
   const fallbackPrewarmed = listing.provenance?.aiCatch?.narrative || null;
   const aiNarrative = cached.narrative || fallbackPrewarmed;
   return res.json({
@@ -251,18 +422,19 @@ async function handleCachedEnrichGet(req, res) {
 
 async function handleEnrich(req, res, deps = {}) {
   if (req.method === 'GET') {
-    return handleCachedEnrichGet(req, res);
+    return handleCachedEnrichGet(req, res, deps);
   }
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  const targetDb = deps.db || db;
   const { listingId, includeAiNarrative, useAi, model } = req.body || {};
   if (!listingId) {
     return res.status(400).json({ error: 'listingId is required' });
   }
 
-  const listing = await db.getListingById(listingId);
+  const listing = await targetDb.getListingById(listingId);
   if (!listing) {
     return res.status(404).json({ error: 'Listing not found' });
   }
@@ -296,18 +468,33 @@ async function handleEnrich(req, res, deps = {}) {
     });
   }
 
+  const rawOidc = req.headers?.['x-vercel-oidc-token'];
+  const oidcToken = Array.isArray(rawOidc)
+    ? String(rawOidc[0] || '').trim() || null
+    : (typeof rawOidc === 'string' && rawOidc.trim() ? rawOidc.trim() : null);
+
   const ai = await generateAiNarrative(listing, {
     env,
+    db: targetDb,
     fetchFn: deps.fetchFn || globalThis.fetch,
     model: model || null,
+    oidcToken,
+    costTracker: activeTracker,
+    persistCache: true,
   });
-  if (activeTracker && typeof activeTracker.add === 'function' && Number(ai?.costUsd) > 0 && !ai?.cached) {
+  if (
+    activeTracker
+    && typeof activeTracker.add === 'function'
+    && ai?.narrative
+    && !ai?.cached
+    && (Number(ai?.costUsd) > 0 || Number(ai?.inputTokens) > 0 || Number(ai?.outputTokens) > 0)
+  ) {
     const updatedTracker = activeTracker.add(new CostRecord({
-      provider: ai.provider || 'openai',
+      provider: ai.provider || 'vercel_gateway',
       model: ai.model || SUMMARY_MODEL,
-      inputTokens: 0,
-      outputTokens: 0,
-      costUsd: Number(ai.costUsd),
+      inputTokens: Number(ai.inputTokens) || 0,
+      outputTokens: Number(ai.outputTokens) || 0,
+      costUsd: Number(ai.costUsd) || 0,
     }));
     if (!deps.costTracker) runtimeCostTracker = updatedTracker;
   }
@@ -330,3 +517,5 @@ module.exports = handleEnrich;
 module.exports.buildEvidenceSummary = buildEvidenceSummary;
 module.exports.SUMMARY_MODEL = SUMMARY_MODEL;
 module.exports.generateAiNarrative = generateAiNarrative;
+module.exports.validateGroundedNarrative = validateGroundedNarrative;
+module.exports.readCachedNarrative = readCachedNarrative;

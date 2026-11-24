@@ -542,3 +542,120 @@ test('extractTextFromPdf: degrades safely when compressed PDF stream is corrupt'
   const extracted = extractTextFromPdf(corruptPdf);
   assert.match(extracted, /plain fallback line/);
 });
+
+test('callLlmWithRouting: Vercel AI Gateway tries free models first, falls back on 429, and respects AI_GATEWAY_FREE_ONLY', async () => {
+  const parseRoute = require('../../server/routes/parse');
+  const notice = 'Sheriff sale Case No. 2026-CV-88 for parcel in Cuyahoga.';
+
+  const called1 = [];
+  const res1 = await parseRoute.callLlmWithRouting({
+    cleanNotice: notice,
+    model: 'nvidia/nemotron-3.5-lightning-free',
+    env: { AI_GATEWAY_API_KEY: 'gw-test-key' },
+    fetchFn: async (url, init) => {
+      assert.equal(url, 'https://ai-gateway.vercel.sh/v1/chat/completions');
+      assert.equal(init.headers.Authorization, 'Bearer gw-test-key');
+      const model = JSON.parse(init.body).model;
+      called1.push(model);
+      if (model === 'nvidia/nemotron-3.5-lightning-free' || model === 'reflection/beam-free') {
+        return { ok: false, status: 429 };
+      }
+      return {
+        ok: true,
+        json: async () => ({
+          choices: [{
+            message: {
+              content: JSON.stringify({
+                candidates: { case_number: { value: '2026-CV-88', evidence: 'Case No. 2026-CV-88' } },
+              }),
+            },
+          }],
+          usage: { prompt_tokens: 100, completion_tokens: 50 },
+        }),
+      };
+    },
+  });
+  assert.deepEqual(called1, [
+    'nvidia/nemotron-3.5-lightning-free',
+    'reflection/beam-free',
+    'alibaba/qwen3.7-flash',
+  ]);
+  assert.equal(res1?.provider, 'vercel_gateway');
+  assert.equal(res1?.model, 'alibaba/qwen3.7-flash');
+  assert.equal(res1?.data?.candidates?.case_number?.value, '2026-CV-88');
+
+  // AI_GATEWAY_FREE_ONLY=1 skips paid fallbacks
+  const called2 = [];
+  const res2 = await parseRoute.callLlmWithRouting({
+    cleanNotice: notice,
+    env: { AI_GATEWAY_API_KEY: 'gw-test-key', AI_GATEWAY_FREE_ONLY: '1' },
+    fetchFn: async (_url, init) => {
+      called2.push(JSON.parse(init.body).model);
+      return { ok: false, status: 429 };
+    },
+  });
+  assert.deepEqual(called2, [
+    'nvidia/nemotron-3.5-lightning-free',
+    'reflection/beam-free',
+  ]);
+  assert.equal(res2, null);
+});
+
+test('handleParse: forwards x-vercel-oidc-token to Vercel AI Gateway at $0 cost for free models', async () => {
+  const handleParse = require('../../server/routes/parse');
+  handleParse.resetCostTracker(5.00);
+  const store = new Map();
+  const mockCache = {
+    async get(prompt, model) { return store.get(`${model}::${prompt}`) || null; },
+    async set(prompt, model, value) { store.set(`${model}::${prompt}`, value); },
+  };
+  let seenAuth = null;
+  let seenModel = null;
+  const res = {
+    statusCode: 200,
+    body: null,
+    status(code) { this.statusCode = code; return this; },
+    json(payload) { this.body = payload; return this; },
+  };
+
+  await handleParse(
+    {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer op-parse-secret',
+        'x-vercel-oidc-token': 'oidc-parse-tok',
+      },
+      body: { noticeText: 'Sheriff auction Case No. 26-OIDC-12 in Cuyahoga County.', forceLlm: true },
+    },
+    res,
+    {
+      env: { SCRAPER_ADMIN_TOKEN: 'op-parse-secret' },
+      cache: mockCache,
+      fetchFn: async (_url, init) => {
+        seenAuth = init.headers.Authorization;
+        seenModel = JSON.parse(init.body).model;
+        return {
+          ok: true,
+          json: async () => ({
+            choices: [{
+              message: {
+                content: JSON.stringify({
+                  candidates: { case_number: { value: '26-OIDC-12', evidence: 'Case No. 26-OIDC-12' } },
+                }),
+              },
+            }],
+            usage: { prompt_tokens: 500, completion_tokens: 100 },
+          }),
+        };
+      },
+    }
+  );
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(seenAuth, 'Bearer oidc-parse-tok');
+  assert.equal(seenModel, 'nvidia/nemotron-3.5-lightning-free');
+  assert.equal(res.body.provider, 'vercel_gateway');
+  assert.equal(res.body.model, 'nvidia/nemotron-3.5-lightning-free');
+  assert.equal(res.body.costUsd, 0);
+  assert.equal(res.body.unverifiedCandidates.case_number.value, '26-OIDC-12');
+});

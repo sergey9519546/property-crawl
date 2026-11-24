@@ -1,0 +1,2 @@
+ALTER TABLE IF EXISTS accounts
+  ADD COLUMN IF NOT EXISTS billing_tier TEXT;

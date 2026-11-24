@@ -1,4 +1,4 @@
-import { getSubscription, subscriptionState, verifyStripeWebhook, stripeWebhookConfigured } from "@server/billing/stripe-checkout";
+import { getSubscription, normalizeBillingTier, subscriptionState, verifyStripeWebhook, stripeWebhookConfigured } from "@server/billing/stripe-checkout";
 import { accountsApi } from "@/lib/member-account";
 
 const MAX_STRIPE_WEBHOOK_BYTES = 512 * 1024;
@@ -93,6 +93,10 @@ export async function POST(request: Request) {
     state = subscriptionState(await getSubscription(object.subscription));
     if (!state) return retryLater("Subscription lookup failed", 502);
     if (!state.accountId) state.accountId = object.client_reference_id || null;
+    if (!state.billingTier) {
+      const sessionTier = normalizeBillingTier(object.metadata?.tier);
+      if (sessionTier) state.billingTier = sessionTier;
+    }
   } else if (typeof event?.type === "string" && event.type.startsWith("customer.subscription.")) {
     // Events can arrive out of order; the live subscription is the truth.
     state = subscriptionState((await getSubscription(object.id)) || object);
@@ -107,6 +111,7 @@ export async function POST(request: Request) {
         status: "past_due",
         currentPeriodEnd: null,
         accountId: object.subscription_details?.metadata?.account_id || object.metadata?.account_id || null,
+        billingTier: normalizeBillingTier(object.subscription_details?.metadata?.tier || object.metadata?.tier),
       };
     }
   }

@@ -140,7 +140,7 @@ export async function GET(request: Request) {
     configured: config.configured,
     ...session,
     permissions: session.authenticated ? permissionsForRole(session.role) : [],
-    member: member && { email: member.email, entitled: member.entitled },
+    member: member && { email: member.email, entitled: member.entitled, billingTier: member.billingTier ?? null },
   }, { headers: responseHeaders });
 }
 

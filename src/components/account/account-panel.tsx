@@ -8,11 +8,14 @@ import { useWorkspaceSession } from "@/components/workspace/workspace-shell";
 import { useLocale } from "@/components/i18n/locale-provider";
 import { formatLocaleDate } from "@/lib/i18n/translator";
 
+type BillingTier = "pro" | "desk";
+
 type Account = {
   email: string;
   entitled: boolean;
   subscriptionStatus: string | null;
   currentPeriodEnd: string | null;
+  billingTier?: BillingTier | null;
   hasBilling: boolean;
 };
 type Price = { unitAmount: number | null; currency: string | null; interval: string | null } | null;
@@ -147,6 +150,20 @@ export function AccountPanel() {
     return () => window.clearInterval(timer);
   }, [checkout, account, load]);
 
+  function localizeAccountError(status: number, bodyError: unknown): string {
+    if (locale === "en" && typeof bodyError === "string" && bodyError.trim()) return bodyError;
+    if (status === 429) return m.operatorUnlock.rateLimitGeneric;
+    if (status === 409 && typeof bodyError === "string") {
+      if (/active subscription/i.test(bodyError)) return m.accountUi.subscriptionActive;
+      if (/no billing account/i.test(bodyError)) return m.accountUi.noSubscriptionYet;
+    }
+    if (status === 503 && typeof bodyError === "string" && /not configured/i.test(bodyError)) {
+      return m.accountUi.checkoutNotConfigured;
+    }
+    if (status === 401) return m.accountUi.memberIntro;
+    return m.errors.globalErrorTitle;
+  }
+
   async function post(path: string, label: string, method = "POST", payload?: Record<string, unknown>) {
     setPending(label); setError("");
     try {
@@ -156,10 +173,13 @@ export function AccountPanel() {
         ...(payload ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) } : {}),
       });
       const body = await json(response);
-      if (!response.ok) throw new Error(typeof body.error === "string" ? body.error : "The request failed");
+      if (!response.ok) {
+        setError(localizeAccountError(response.status, body.error));
+        return null;
+      }
       return body;
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "The request failed");
+    } catch {
+      setError(m.errors.globalErrorTitle);
       return null;
     } finally { setPending(""); }
   }
@@ -176,6 +196,7 @@ export function AccountPanel() {
 
   const label = priceLabel(price, intlLocale);
   const periodEnd = account.currentPeriodEnd ? formatLocaleDate(locale, account.currentPeriodEnd, { dateStyle: "medium", timeZone: "UTC" }) : null;
+  const activeTierLabel = account.billingTier === "desk" ? "Desk" : account.billingTier === "pro" ? "Pro" : null;
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -185,7 +206,14 @@ export function AccountPanel() {
 
       {account.entitled ? (
         <div data-testid="subscription-active" className="rounded-2xl border border-go/30 bg-go-wash p-5 text-sm text-go">
-          <p className="font-semibold">{m.accountUi.subscriptionActive}{periodEnd ? ` · ${format(m.accountUi.renewsOrEnds, { date: periodEnd })}` : ""}</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="font-semibold">{m.accountUi.subscriptionActive}{periodEnd ? ` · ${format(m.accountUi.renewsOrEnds, { date: periodEnd })}` : ""}</p>
+            {activeTierLabel && (
+              <span data-testid="billing-tier-badge" className="inline-flex items-center rounded-full border border-go/40 bg-card px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-go">
+                {activeTierLabel}
+              </span>
+            )}
+          </div>
           <p className="mt-1">{m.accountUi.subscriptionUnlocked}</p>
           <div className="mt-4 flex flex-wrap gap-2">
             <Link href="/hunts" className={`${button} bg-ink text-white hover:bg-ink-2`}>{m.accountUi.openHunts}</Link>

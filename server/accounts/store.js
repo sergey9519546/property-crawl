@@ -7,6 +7,7 @@
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
+const { normalizeBillingTier } = require('../billing/stripe-checkout');
 
 const ACCOUNT_ID = /^acct_[a-f0-9]{24}$/;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -41,6 +42,7 @@ function publicAccount(account, now = Date.now()) {
     stripeCustomerId: account.stripeCustomerId || null,
     subscriptionStatus: account.subscriptionStatus || null,
     currentPeriodEnd: account.currentPeriodEnd || null,
+    billingTier: normalizeBillingTier(account.billingTier || account.billing_tier) || null,
     entitled: isEntitled(account, now),
   };
 }
@@ -103,7 +105,7 @@ function createFileBackend(filePath = process.env.PROPERTY_ACCOUNTS_PATH || DEFA
       return mutate((store) => {
         let account = store.accounts.find((a) => a.email === email);
         if (!account) {
-          account = { id: newId(), email, stripeCustomerId: null, subscriptionId: null, subscriptionStatus: null, currentPeriodEnd: null, createdAt: now(), updatedAt: now() };
+          account = { id: newId(), email, stripeCustomerId: null, subscriptionId: null, subscriptionStatus: null, currentPeriodEnd: null, billingTier: null, createdAt: now(), updatedAt: now() };
           store.accounts.push(account);
         }
         return account;
@@ -160,15 +162,28 @@ function createFileBackend(filePath = process.env.PROPERTY_ACCOUNTS_PATH || DEFA
 // ---- postgres backend ---------------------------------------------------
 
 const COLUMNS = `id, email, stripe_customer_id AS "stripeCustomerId", subscription_id AS "subscriptionId",
-  subscription_status AS "subscriptionStatus", current_period_end AS "currentPeriodEnd"`;
+  subscription_status AS "subscriptionStatus", current_period_end AS "currentPeriodEnd", billing_tier AS "billingTier"`;
 
 function createPgBackend(pool) {
   let ready = null;
-  // Same DDL as migration 029, so an un-migrated database still works.
-  const ensure = () => (ready ||= pool.query(fs.readFileSync(path.resolve(__dirname, '../db/migrations/029_accounts.sql'), 'utf8')).catch((error) => { ready = null; throw error; }));
-  const row = (r) => r && { ...r, currentPeriodEnd: r.currentPeriodEnd ? new Date(r.currentPeriodEnd).toISOString() : null };
+  // Same DDL as migrations 029 + 044, so an un-migrated database still works.
+  const ensure = () => (ready ||= (async () => {
+    await pool.query(fs.readFileSync(path.resolve(__dirname, '../db/migrations/029_accounts.sql'), 'utf8'));
+    await pool.query(fs.readFileSync(path.resolve(__dirname, '../db/migrations/044_account_billing_tier.sql'), 'utf8'));
+  })().catch((error) => { ready = null; throw error; }));
+  const row = (r) => r && {
+    ...r,
+    currentPeriodEnd: r.currentPeriodEnd ? new Date(r.currentPeriodEnd).toISOString() : null,
+    billingTier: normalizeBillingTier(r.billingTier),
+  };
   const one = async (sql, params) => { await ensure(); return row((await pool.query(sql, params)).rows[0]) || null; };
-  const FIELD_COLUMNS = { stripeCustomerId: 'stripe_customer_id', subscriptionId: 'subscription_id', subscriptionStatus: 'subscription_status', currentPeriodEnd: 'current_period_end' };
+  const FIELD_COLUMNS = {
+    stripeCustomerId: 'stripe_customer_id',
+    subscriptionId: 'subscription_id',
+    subscriptionStatus: 'subscription_status',
+    currentPeriodEnd: 'current_period_end',
+    billingTier: 'billing_tier',
+  };
   return {
     kind: 'postgres',
     get: (id) => one(`SELECT ${COLUMNS} FROM accounts WHERE id=$1`, [id]),
@@ -241,18 +256,26 @@ function createAccountService({ backend, now = () => Date.now() } = {}) {
     },
     // Apply a Stripe subscription state. The account is found by customer id,
     // or by the checkout's client_reference_id the first time.
-    async applySubscription({ accountId, customerId, subscriptionId, status, currentPeriodEnd }) {
+    async applySubscription({ accountId, customerId, subscriptionId, status, currentPeriodEnd, billingTier }) {
       if (!/^cus_[A-Za-z0-9]+$/.test(customerId || '')) throw new AccountError('ACCOUNT_INVALID', 'customerId is required');
       let account = await backend.getByCustomer(customerId);
       if (!account && ACCOUNT_ID.test(accountId || '')) account = await backend.get(accountId);
       if (!account) throw new AccountError('ACCOUNT_NOT_FOUND', 'No account for this customer', 404);
       const periodEnd = Number.isFinite(currentPeriodEnd) ? new Date(currentPeriodEnd * 1000).toISOString() : null;
-      return publicAccount(await backend.update(account.id, {
+      const subscriptionStatus = typeof status === 'string' ? status.slice(0, 40) : null;
+      const normalizedTier = normalizeBillingTier(billingTier);
+      const updates = {
         stripeCustomerId: customerId,
         ...(subscriptionId ? { subscriptionId } : {}),
-        subscriptionStatus: typeof status === 'string' ? status.slice(0, 40) : null,
+        subscriptionStatus,
         currentPeriodEnd: periodEnd,
-      }), now());
+      };
+      if (normalizedTier) {
+        updates.billingTier = normalizedTier;
+      } else if (billingTier === null && !ENTITLED_STATUSES.has(subscriptionStatus)) {
+        updates.billingTier = null;
+      }
+      return publicAccount(await backend.update(account.id, updates), now());
     },
     async hasWebhookEvent(eventId) {
       return backend.hasWebhookEvent ? backend.hasWebhookEvent(eventId) : false;

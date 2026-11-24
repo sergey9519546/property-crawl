@@ -189,12 +189,17 @@ test('TitleRiskForensics UI contract: synced 22 HOA states, unknown default, tax
   assert.match(trfSrc, /delinquentTaxesInput/);
   assert.match(trfSrc, /delinquentTaxesAmount:\s*validDelinquentTaxes/);
 
-  // 4. NV HOA super-priority parity and no contradiction with t.trfJuniorTakesSubject
-  assert.match(trfSrc, /isNvHoaSuperPriority\s*\?\s*"9-month super-priority HOA foreclosure extinguishes prior 1st mortgage/);
+  const enSrc = fs.readFileSync(path.join(__dirname, '..', 'src/lib/i18n/messages/en.ts'), 'utf8');
 
-  // 5. Empty state & explicit IRS manual simulation copy
-  assert.match(trfSrc, /!stateCode\s*\?\s*"State Unknown"/);
-  assert.match(trfSrc, /Simulated IRS 120-day redemption sensitivity/);
+  // 4. NV HOA super-priority parity and no contradiction with t.trfJuniorTakesSubject
+  assert.match(trfSrc, /isNvHoaSuperPriority\s*\?\s*t\.trfNvHoaSuperDesc/);
+  assert.match(enSrc, /trfNvHoaSuperDesc:\s*"9-month super-priority HOA foreclosure extinguishes prior 1st mortgage/);
+
+  // 5. Empty state & explicit IRS manual simulation copy (moved to i18n messages)
+  assert.match(trfSrc, /!stateCode\s*\?\s*t\.trfStateUnknownBadge/);
+  assert.match(trfSrc, /t\.trfIrsSimDesc/);
+  assert.match(enSrc, /trfStateUnknownBadge:\s*"State Unknown"/);
+  assert.match(enSrc, /trfIrsSimDesc:\s*"Simulated IRS 120-day redemption sensitivity/);
 
   // 6. Unpublished judgment is never fabricated from currentBid
   assert.doesNotMatch(trfSrc, /currentJudgment\s*=.*\?\s*judgment\s*:\s*currentBid/);

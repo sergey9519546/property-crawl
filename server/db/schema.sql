@@ -408,6 +408,7 @@ CREATE TABLE IF NOT EXISTS accounts (
   subscription_id TEXT,
   subscription_status TEXT,
   current_period_end TIMESTAMPTZ,
+  billing_tier TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

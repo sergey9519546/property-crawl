@@ -24,7 +24,10 @@ const { default: path } = await import('node:path');
 const { default: test } = await import('node:test');
 
 const ROOT = path.resolve(import.meta.dirname, '..');
-const client = fs.readFileSync(path.join(ROOT, 'server', 'db', 'client.js'), 'utf8');
+const client = [
+  fs.readFileSync(path.join(ROOT, 'server', 'db', 'listing-normalizers.js'), 'utf8'),
+  fs.readFileSync(path.join(ROOT, 'server', 'db', 'client.js'), 'utf8'),
+].join('\n');
 
 /** Comments are where the reasoning lives; a regex cannot tell prose from code. */
 const code = client

@@ -301,7 +301,11 @@ async function run() {
     // over both - a fork nine exports behind the real one, imported by nothing
     // but a test, which made the suite look like it pinned two maintained
     // clients. Deleted; see test/no-dead-duplicates.test.js.
-    const dbClient = fs.readFileSync(path.resolve(__dirname, '..', 'server', 'db', 'client.js'), 'utf8');
+    const dbClient = [
+      fs.readFileSync(path.resolve(__dirname, '..', 'server', 'db', 'client.js'), 'utf8'),
+      fs.readFileSync(path.resolve(__dirname, '..', 'server', 'db', 'listing-sql-constants.js'), 'utf8'),
+      fs.readFileSync(path.resolve(__dirname, '..', 'server', 'db', 'listing-normalizers.js'), 'utf8'),
+    ].join('\n');
     for (const column of ['county', 'city', 'zip', 'latitude', 'longitude', 'prop_type', 'opening_bid', 'est_low', 'est_high', 'deal_score', 'sale_date']) {
       assert.match(migration, new RegExp(`ALTER COLUMN ${column} DROP NOT NULL`));
     }
