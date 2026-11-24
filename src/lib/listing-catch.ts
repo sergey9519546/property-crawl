@@ -33,6 +33,23 @@ function text(value: unknown): string | null {
 
 const money = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
 
+const isInformationalPriorityNote = (warning: string): boolean =>
+  /^(?:SENIOR FORECLOSURE|TAX SALE PRIORITY):/i.test(warning.trim());
+
+function warningSeverity(warning: string): number {
+  const upper = warning.toUpperCase();
+  if (/CRITICAL TITLE DEFECT|BANKRUPTCY AUTOMATIC STAY|CONDEMN|DEMOLITION/.test(upper)) return 1;
+  if (/FEDERAL TAX LIEN|\bIRS\b|26 U\.S\.C\.|DEFECTIVE JOINDER|OMITTED PARTY/.test(upper)) return 2;
+  if (/PACE ASSESSMENT|MUNICIPAL|HOA SUPER-PRIORITY|CODE ENFORCEMENT/.test(upper)) return 3;
+  if (/UNCONFIRMED LIEN PRIORITY|NORTH CAROLINA 10-DAY UPSET BID/.test(upper)) return 4;
+  if (/STATUTORY REDEMPTION/.test(upper)) return 5;
+  return 6;
+}
+
+function stripShoutLabel(warning: string): string {
+  return warning.replace(/^[A-Z0-9][A-Z0-9 '’\u2013\u2014\/().§-]*:\s*/, "").trim();
+}
+
 export function listingCatch(listing: CatchInput, titleWarnings: string[] = []): ListingCatch {
   const flags: string[] = [];
   const notes: string[] = [];
@@ -41,7 +58,7 @@ export function listingCatch(listing: CatchInput, titleWarnings: string[] = []):
   const high = num(listing.estHigh);
   const sourceKey = String(listing.source || "").trim().toLowerCase();
   const hasFederalTaxLien = /internal revenue|federal tax lien/i.test(`${listing.seniorLienRisk || ""} ${titleWarnings.join(" ")}`);
-  const isFederalReo = ["hud", "gsa", "usda", "fannie", "freddie", "fdic"].includes(sourceKey) && !hasFederalTaxLien;
+  const isFederalReo = ["hud", "gsa", "usda", "fannie", "freddie", "fdic", "va"].includes(sourceKey) && !hasFederalTaxLien;
 
   if (bid !== null && bid > 0 && low !== null && high !== null && high >= low && low > 0) {
     const mid = (low + high) / 2;
@@ -63,7 +80,7 @@ export function listingCatch(listing: CatchInput, titleWarnings: string[] = []):
 
   const occupancy = text(listing.occupancy);
   if (!occupancy) flags.push("Occupancy is not published: assume no interior inspection and budget for a possible eviction.");
-  else if (/occupied/i.test(occupancy) && !/unoccupied/i.test(occupancy)) flags.push(`Reported ${occupancy.toLowerCase()}: expect no interior access and possible eviction cost.`);
+  else if (/occupied/i.test(occupancy) && !/\b(?:un|not|non[- ]?)occupied\b/i.test(occupancy)) flags.push(`Reported ${occupancy.toLowerCase()}: expect no interior access and possible eviction cost.`);
   else notes.push(`Reported ${occupancy.toLowerCase()}.`);
 
   const redemption = num(listing.redemptionDays);
@@ -75,11 +92,32 @@ export function listingCatch(listing: CatchInput, titleWarnings: string[] = []):
 
   const lien = text(listing.seniorLienRisk);
   if (lien && !/^(low|none)$/i.test(lien)) flags.push(`Senior-lien signal is ${lien.toLowerCase()}: liens ahead of this sale may survive it.`);
-  // Title-engine warnings arrive as "SHOUTED LABEL: sentence". Keep the
-  // sentence, and skip its redemption warning when redemption is already flagged.
+  // Title-engine warnings arrive as "SHOUTED LABEL: sentence". Keep informational
+  // priority context out of red Catch flags, sort actionable warnings by
+  // severity, and never drop a critical/high catch due to a fixed slice cap.
   const redemptionFlagged = (redemption !== null && redemption > 0) || !!text(listing.redemptionWarning);
-  for (const warning of titleWarnings.filter((w) => !(redemptionFlagged && /^STATUTORY REDEMPTION/.test(w))).slice(0, 2)) {
-    flags.push(warning.replace(/^[A-Z0-9][A-Z0-9 '’-]*:\s*/, ""));
+  const informationalTitleNotes: string[] = [];
+  const actionableWarnings: string[] = [];
+  for (const warning of titleWarnings) {
+    if (typeof warning !== "string" || !warning.trim()) continue;
+    if (isInformationalPriorityNote(warning)) {
+      informationalTitleNotes.push(stripShoutLabel(warning));
+      continue;
+    }
+    if (redemptionFlagged && /^STATUTORY REDEMPTION/i.test(warning.trim())) {
+      continue;
+    }
+    actionableWarnings.push(warning);
+  }
+  actionableWarnings.sort((a, b) => warningSeverity(a) - warningSeverity(b));
+  for (let i = 0; i < actionableWarnings.length; i++) {
+    const warning = actionableWarnings[i];
+    if (warningSeverity(warning) <= 3 || i < 2) {
+      flags.push(stripShoutLabel(warning));
+    }
+  }
+  for (const infoNote of informationalTitleNotes) {
+    if (infoNote) notes.push(infoNote);
   }
 
   const deposit = text(listing.deposit);

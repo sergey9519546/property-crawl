@@ -2,6 +2,8 @@
 
 const crypto = require('node:crypto');
 const { validateListingForIngestion } = require('../scrapers/validation');
+const { mapDistressStage } = require('../scrapers/normalization');
+const { computeResearchQuality } = require('../scrapers/listing-intelligence');
 const { queryFromUrl, matches: matchesDiscoveryQuery } = require('../discovery/query');
 const {
   HUNT_ID, MAX_BASELINE_RECORDS, MAX_EVENTS, MAX_HUNTS, loadStore, mutateStore,
@@ -34,6 +36,7 @@ const FIELD_DEFINITIONS = Object.freeze({
   transactionOutcome: { type: 'string', normalize: 'lower', evidenceClass: 'publisher_reported' },
   occupancy: { type: 'string', normalize: 'lower', evidenceClass: 'publisher_reported' },
   seniorLienRisk: { type: 'string', normalize: 'lower', evidenceClass: 'derived_unverified' },
+  distressStage: { type: 'string', normalize: 'lower', evidenceClass: 'derived_from_listing_values' },
   openingBid: { type: 'number', min: 0, max: 1_000_000_000, evidenceClass: 'publisher_reported' },
   estLow: { type: 'number', min: 0, max: 1_000_000_000, evidenceClass: 'derived_unverified' },
   estHigh: { type: 'number', min: 0, max: 1_000_000_000, evidenceClass: 'derived_unverified' },
@@ -42,6 +45,8 @@ const FIELD_DEFINITIONS = Object.freeze({
   ratio: { type: 'number', min: 0, max: 10000, evidenceClass: 'derived_from_listing_values' },
   equity: { type: 'number', min: -1_000_000_000, max: 1_000_000_000, evidenceClass: 'derived_from_listing_values' },
   dealScore: { type: 'number', min: 0, max: 100, evidenceClass: 'derived_from_listing_values' },
+  qualityScore: { type: 'number', min: 0, max: 100, evidenceClass: 'derived_from_listing_values' },
+  minQuality: { type: 'number', min: 0, max: 100, evidenceClass: 'derived_from_listing_values' },
   redemptionDays: { type: 'number', min: 0, max: 10000, evidenceClass: 'derived_unverified' },
   sqft: { type: 'number', min: 0, max: 100_000_000, evidenceClass: 'publisher_reported' },
   beds: { type: 'number', min: 0, max: 100, evidenceClass: 'publisher_reported' },
@@ -100,7 +105,58 @@ function cleanDate(value) {
   return new Date(value).toISOString();
 }
 
-function normalizeOne(value, definition) {
+const DISTRESS_STAGE_VALUES = new Set(['reo', 'pre_foreclosure', 'scheduled', 'tax_sale', 'unknown']);
+const DISTRESS_STAGE_ALIASES = Object.freeze({
+  reo: 'reo',
+  bank_owned: 'reo',
+  pre_foreclosure: 'pre_foreclosure',
+  preforeclosure: 'pre_foreclosure',
+  scheduled: 'scheduled',
+  scheduled_auction: 'scheduled',
+  scheduled_sale: 'scheduled',
+  tax_sale: 'tax_sale',
+  tax_deed: 'tax_sale',
+  tax_lien: 'tax_sale',
+  unknown: 'unknown',
+});
+
+function normalizeDistressStageValue(value) {
+  if (typeof value !== 'string') return null;
+  const cleaned = value.trim().toLowerCase().replace(/[\s-]+/g, '_');
+  if (!cleaned) return null;
+  return DISTRESS_STAGE_ALIASES[cleaned] || null;
+}
+
+function resolveListingDistressStage(listing) {
+  for (const candidate of [listing?.distressStage, listing?.lifecycleStage, listing?.stage, listing?.triage?.distressStage]) {
+    if (typeof candidate === 'string' && candidate.trim()) {
+      const normalized = normalizeDistressStageValue(candidate);
+      if (normalized) return normalized;
+      const fallback = candidate.trim().toLowerCase().replace(/[\s-]+/g, '_');
+      if (fallback) return fallback;
+    }
+  }
+  return mapDistressStage(
+    listing?.source,
+    listing?.saleDate,
+    listing?.auctionProgram || listing?.provenance?.sourceFacts?.auctionProgram || null,
+  );
+}
+
+function resolveListingQualityScore(listing, nowMs = Date.now()) {
+  if (listing?.qualityScore !== null && listing?.qualityScore !== undefined && listing?.qualityScore !== '') {
+    const num = Number(listing.qualityScore);
+    if (Number.isFinite(num)) return Math.max(0, Math.min(100, num));
+  }
+  if (listing?.researchQuality?.score !== null && listing?.researchQuality?.score !== undefined) {
+    const num = Number(listing.researchQuality.score);
+    if (Number.isFinite(num)) return Math.max(0, Math.min(100, num));
+  }
+  return computeResearchQuality(listing, nowMs).score;
+}
+
+function normalizeOne(value, definition, field = null) {
+  if (field === 'distressStage') return normalizeDistressStageValue(value);
   if (definition.type === 'string') return cleanString(value, definition);
   if (definition.type === 'number') return cleanNumber(value, definition);
   return cleanDate(value);
@@ -120,10 +176,76 @@ function validateCriteria(criteria, errors = []) {
       errors.push('criteria.discoveryFilters must be an object');
       return null;
     }
-    const allowed = new Set(['q', 'state', 'county', 'source', 'type', 'program', 'lifecycle', 'saleFrom', 'saleTo', 'maxBid', 'minScore', 'minEquity', 'occupancy', 'freshness', 'hasDocuments', 'seniorLien', 'redemption']);
+    const allowed = new Set(['q', 'state', 'county', 'source', 'type', 'program', 'lifecycle', 'saleFrom', 'saleTo', 'maxBid', 'minScore', 'minEquity', 'occupancy', 'freshness', 'hasDocuments', 'seniorLien', 'redemption', 'distressStage', 'minQuality']);
     const params = new URLSearchParams();
+    let normalizedDistressStage;
+    let normalizedMinQuality;
     for (const [key, raw] of Object.entries(criteria.discoveryFilters)) {
       if (!allowed.has(key)) { errors.push(`criteria.discoveryFilters.${key} is not supported`); continue; }
+      if (key === 'distressStage') {
+        if (Array.isArray(raw)) {
+          if (raw.length < 1 || raw.length > 20) {
+            errors.push('criteria.discoveryFilters.distressStage must contain 1 to 20 distress stages');
+            continue;
+          }
+          const items = [];
+          let invalid = false;
+          for (const item of raw) {
+            if (typeof item !== 'string' || !item.trim() || item.length > 256) { invalid = true; break; }
+            const lower = item.trim().toLowerCase();
+            if (lower === 'all') continue;
+            const stage = normalizeDistressStageValue(lower);
+            if (!stage || !DISTRESS_STAGE_VALUES.has(stage)) { invalid = true; break; }
+            items.push(stage);
+          }
+          if (invalid) { errors.push('criteria.discoveryFilters.distressStage contains an invalid distress stage'); continue; }
+          const deduped = [...new Set(items)];
+          if (deduped.length) normalizedDistressStage = deduped;
+        } else if (typeof raw === 'string') {
+          if (raw.length > 256) { errors.push('criteria.discoveryFilters.distressStage must be a string'); continue; }
+          const trimmed = raw.trim();
+          if (trimmed && trimmed.toLowerCase() !== 'all') {
+            if (trimmed.includes(',')) {
+              const parts = trimmed.split(',').map((p) => p.trim()).filter(Boolean);
+              const items = [];
+              let invalid = false;
+              for (const part of parts) {
+                if (part.toLowerCase() === 'all') continue;
+                const stage = normalizeDistressStageValue(part);
+                if (!stage || !DISTRESS_STAGE_VALUES.has(stage)) { invalid = true; break; }
+                items.push(stage);
+              }
+              if (invalid || !items.length) { errors.push('criteria.discoveryFilters.distressStage contains an invalid distress stage'); continue; }
+              const deduped = [...new Set(items)];
+              normalizedDistressStage = deduped.length === 1 ? deduped[0] : deduped.join(',');
+            } else {
+              const stage = normalizeDistressStageValue(trimmed);
+              if (!stage || !DISTRESS_STAGE_VALUES.has(stage)) { errors.push('Invalid distressStage'); continue; }
+              normalizedDistressStage = stage;
+              params.set('distressStage', stage);
+            }
+          }
+        } else {
+          errors.push('criteria.discoveryFilters.distressStage must be a string or array of strings');
+        }
+        continue;
+      }
+      if (key === 'minQuality') {
+        if (typeof raw !== 'string' && typeof raw !== 'number') {
+          errors.push('criteria.discoveryFilters.minQuality must be a number from 0 to 100');
+          continue;
+        }
+        const trimmed = typeof raw === 'string' ? raw.trim() : String(raw);
+        if (!trimmed) continue;
+        if (trimmed.length > 256) { errors.push('criteria.discoveryFilters.minQuality is too long'); continue; }
+        const num = Number(trimmed);
+        if (!Number.isFinite(num) || num < 0 || num > 100) {
+          errors.push('criteria.discoveryFilters.minQuality must be a number from 0 to 100');
+          continue;
+        }
+        normalizedMinQuality = String(num);
+        continue;
+      }
       if (typeof raw !== 'string' || raw.length > 256) { errors.push(`criteria.discoveryFilters.${key} must be a string`); continue; }
       if (raw.trim()) params.set(key, raw.trim());
     }
@@ -132,9 +254,12 @@ function validateCriteria(criteria, errors = []) {
       const parsed = queryFromUrl(new URL(`http://localhost/api/listings?${params}`));
       const normalized = {};
       for (const key of allowed) {
+        if (key === 'distressStage' || key === 'minQuality') continue;
         const value = parsed[key];
         if (value !== null && value !== '' && value !== 'all') normalized[key] = typeof value === 'boolean' ? String(value) : String(value);
       }
+      if (normalizedDistressStage !== undefined) normalized.distressStage = normalizedDistressStage;
+      if (normalizedMinQuality !== undefined) normalized.minQuality = normalizedMinQuality;
       const value = { discoveryFilters: normalized };
       if (Buffer.byteLength(canonicalJson(value), 'utf8') > MAX_CRITERIA_BYTES) errors.push(`criteria exceed the ${MAX_CRITERIA_BYTES}-byte limit`);
       return errors.length ? null : value;
@@ -155,7 +280,7 @@ function validateCriteria(criteria, errors = []) {
       errors.push(`${prefix} must be an object`);
       return;
     }
-    const definition = FIELD_DEFINITIONS[rule.field];
+    const definition = Object.hasOwn(FIELD_DEFINITIONS, rule.field) ? FIELD_DEFINITIONS[rule.field] : null;
     if (!definition) {
       errors.push(`${prefix}.field is not supported`);
       return;
@@ -171,32 +296,36 @@ function validateCriteria(criteria, errors = []) {
       normalized.push({ field: rule.field, operator: rule.operator });
       return;
     }
-    const listValue = ['in', 'not_in', 'between'].includes(rule.operator);
+    const effectiveOperator = rule.field === 'distressStage' && Array.isArray(rule.value)
+      && (rule.operator === 'eq' || rule.operator === 'neq')
+      ? (rule.operator === 'eq' ? 'in' : 'not_in')
+      : rule.operator;
+    const listValue = ['in', 'not_in', 'between'].includes(effectiveOperator);
     if (listValue) {
-      const expectedLength = rule.operator === 'between' ? 2 : null;
+      const expectedLength = effectiveOperator === 'between' ? 2 : null;
       if (!Array.isArray(rule.value) || (expectedLength && rule.value.length !== expectedLength)
         || (!expectedLength && (rule.value.length < 1 || rule.value.length > 20))) {
         errors.push(`${prefix}.value has an invalid list shape`);
         return;
       }
-      const values = rule.value.map((item) => normalizeOne(item, definition));
+      const values = rule.value.map((item) => normalizeOne(item, definition, rule.field));
       if (values.some((item) => item === null)) {
         errors.push(`${prefix}.value contains an invalid ${definition.type}`);
         return;
       }
-      if (rule.operator === 'between' && (definition.type === 'date' ? Date.parse(values[0]) > Date.parse(values[1]) : values[0] > values[1])) {
+      if (effectiveOperator === 'between' && (definition.type === 'date' ? Date.parse(values[0]) > Date.parse(values[1]) : values[0] > values[1])) {
         errors.push(`${prefix}.value lower bound must not exceed its upper bound`);
         return;
       }
-      normalized.push({ field: rule.field, operator: rule.operator, value: [...new Set(values)] });
+      normalized.push({ field: rule.field, operator: effectiveOperator, value: [...new Set(values)] });
       return;
     }
-    const value = normalizeOne(rule.value, definition);
+    const value = normalizeOne(rule.value, definition, rule.field);
     if (value === null) {
       errors.push(`${prefix}.value must be a valid ${definition.type}`);
       return;
     }
-    normalized.push({ field: rule.field, operator: rule.operator, value });
+    normalized.push({ field: rule.field, operator: effectiveOperator, value });
   });
   const value = { mode: criteria.mode, rules: normalized };
   if (Buffer.byteLength(canonicalJson(value), 'utf8') > MAX_CRITERIA_BYTES) errors.push(`criteria exceed the ${MAX_CRITERIA_BYTES}-byte limit`);
@@ -397,7 +526,13 @@ function supportedDerivedValue(listing, field, evidence) {
   return false;
 }
 
-function actualEvidence(listing, field, definition) {
+function actualEvidence(listing, field, definition, nowMs = Date.now()) {
+  if (field === 'distressStage') {
+    return { actual: resolveListingDistressStage(listing), evidenceClass: definition.evidenceClass };
+  }
+  if (field === 'qualityScore' || field === 'minQuality') {
+    return { actual: resolveListingQualityScore(listing, nowMs), evidenceClass: definition.evidenceClass };
+  }
   if (definition.evidenceClass === 'publisher_reported' && hasDerivedMarker(listing, field)) {
     return { actual: null, evidenceClass: 'derived_unverified' };
   }
@@ -418,11 +553,11 @@ function actualEvidence(listing, field, definition) {
   }
   const raw = field === 'sourceObservedAt' ? listing.sourceObservedAt || listing.provenance?.observedAt : listing[field];
   if (!known(raw)) return { actual: null, evidenceClass: definition.evidenceClass };
-  return { actual: normalizeOne(raw, definition), evidenceClass: definition.evidenceClass };
+  return { actual: normalizeOne(raw, definition, field), evidenceClass: definition.evidenceClass };
 }
 
-function actualValue(listing, field, definition) {
-  return actualEvidence(listing, field, definition).actual;
+function actualValue(listing, field, definition, nowMs = Date.now()) {
+  return actualEvidence(listing, field, definition, nowMs).actual;
 }
 
 function compareRule(actual, rule, definition) {
@@ -482,27 +617,61 @@ function evaluateListing(listing, hunt, options = {}) {
     };
   }
   if (hunt.criteria.discoveryFilters) {
-    const params = new URLSearchParams(hunt.criteria.discoveryFilters);
+    const df = hunt.criteria.discoveryFilters;
+    const params = new URLSearchParams();
+    for (const [key, val] of Object.entries(df)) {
+      if (key === 'distressStage' || key === 'minQuality' || val == null) continue;
+      params.set(key, String(val));
+    }
     const query = queryFromUrl(new URL(`http://localhost/api/listings?${params}`));
-    const status = matchesDiscoveryQuery(observed.listing, query, { now: Date.parse(now) }) ? 'match' : 'no_match';
+    const nowMs = Date.parse(now);
+    const candidateListing = observed.listing.openingBid === ''
+      ? { ...observed.listing, openingBid: null }
+      : observed.listing;
+    const baseMatched = matchesDiscoveryQuery(candidateListing, query, { now: nowMs });
+    const filterFailures = [];
+    if (!baseMatched) {
+      filterFailures.push('The record does not match the saved discovery filters.');
+    }
+    if (df.distressStage !== undefined) {
+      const expectedStages = Array.isArray(df.distressStage)
+        ? df.distressStage
+        : String(df.distressStage).split(',').map((s) => s.trim()).filter(Boolean);
+      const actualStage = resolveListingDistressStage(candidateListing);
+      if (expectedStages.length && !expectedStages.includes(actualStage)) {
+        filterFailures.push(`distressStage '${actualStage}' does not match ${expectedStages.join(', ')}.`);
+      }
+    }
+    if (df.minQuality !== undefined) {
+      const minQualityThreshold = Number(df.minQuality);
+      const actualQuality = resolveListingQualityScore(candidateListing, nowMs);
+      if (Number.isFinite(minQualityThreshold) && actualQuality < minQualityThreshold) {
+        filterFailures.push(`qualityScore ${actualQuality} is below minQuality ${minQualityThreshold}.`);
+      }
+    }
+    const status = filterFailures.length === 0 ? 'match' : 'no_match';
     const relevance = status === 'match'
-      ? rankHuntMatch(observed.listing, hunt, [{ status: 'match' }], { now: Date.parse(now) })
+      ? rankHuntMatch(observed.listing, hunt, [{ status: 'match' }], { now: nowMs })
       : null;
+    const reasonText = status === 'match'
+      ? 'The record matches the saved discovery filters.'
+      : filterFailures.join(' ');
     return {
       listingId: observed.listing.id, status, observedAt: new Date(observed.observedAt).toISOString(),
       address: observed.listing.address, sourceId: observed.listing.source, sourceUrl: observed.listing.sourceUrl,
       recordId: String(observed.listing.provenance.recordId),
       clauseResults: [{ field: 'discoveryFilters', operator: 'matches', expected: hunt.criteria.discoveryFilters,
         actual: status === 'match', status, evidenceClass: 'canonical_discovery_query',
-        reason: status === 'match' ? 'The record matches the saved discovery filters.' : 'The record does not match the saved discovery filters.' }],
-      reasons: status === 'match' ? [] : ['The record does not match the saved discovery filters.'],
+        reason: reasonText }],
+      reasons: status === 'match' ? [] : filterFailures,
       validationErrors: [],
       relevance,
     };
   }
+  const nowMs = Date.parse(now);
   const clauseResults = hunt.criteria.rules.map((rule) => {
-    const definition = FIELD_DEFINITIONS[rule.field];
-    const { actual, evidenceClass } = actualEvidence(observed.listing, rule.field, definition);
+    const definition = Object.hasOwn(FIELD_DEFINITIONS, rule.field) ? FIELD_DEFINITIONS[rule.field] : null;
+    const { actual, evidenceClass } = actualEvidence(observed.listing, rule.field, definition, nowMs);
     const status = compareRule(actual, rule, definition);
     return {
       field: rule.field, operator: rule.operator,
@@ -513,7 +682,7 @@ function evaluateListing(listing, hunt, options = {}) {
   });
   const status = combine(hunt.criteria.mode, clauseResults);
   const relevance = status === 'match'
-    ? rankHuntMatch(observed.listing, hunt, clauseResults, { now: Date.parse(now) })
+    ? rankHuntMatch(observed.listing, hunt, clauseResults, { now: nowMs })
     : null;
   return {
     listingId: observed.listing.id, status, observedAt: new Date(observed.observedAt).toISOString(),
@@ -525,11 +694,25 @@ function evaluateListing(listing, hunt, options = {}) {
   };
 }
 
-function compactMaterialSnapshot(listing, hunt) {
+function explainListingMatch(listing, hunt, options = {}) {
+  const result = evaluateListing(listing, hunt, options);
+  const explanation = result.reasons.length
+    ? result.reasons.join(' ')
+    : (result.clauseResults.map((clause) => clause.reason).filter(Boolean).join(' ') || 'Matched hunt criteria.');
+  return {
+    ...result,
+    matched: result.status === 'match',
+    explanation,
+  };
+}
+
+function compactMaterialSnapshot(listing, hunt, nowMs = Date.now()) {
   const discoveryMaterialFields = hunt.criteria.discoveryFilters ? [
     'id', 'address', 'city', 'county', 'state', 'source', 'propType', 'auctionProgram',
     'lifecycleStatus', 'occupancy', 'saleDate', 'openingBid', 'dealScore', 'equity',
     'seniorLienRisk', 'redemptionDays', 'hasDocuments',
+    ...(hunt.criteria.discoveryFilters.distressStage !== undefined ? ['distressStage'] : []),
+    ...(hunt.criteria.discoveryFilters.minQuality !== undefined ? ['qualityScore'] : []),
   ] : [];
   const fields = new Set([...MATERIAL_FIELDS, ...discoveryMaterialFields, ...(hunt.criteria.rules || []).map((rule) => rule.field)]);
   const snapshot = {};
@@ -545,7 +728,7 @@ function compactMaterialSnapshot(listing, hunt) {
         .map((document) => document?.id || document?.url || document?.sourceUrl)
         .filter(Boolean))].sort();
     }
-    else if (FIELD_DEFINITIONS[field]) snapshot[field] = actualValue(listing, field, FIELD_DEFINITIONS[field]);
+    else if (FIELD_DEFINITIONS[field]) snapshot[field] = actualValue(listing, field, FIELD_DEFINITIONS[field], nowMs);
     else {
       const value = listing[field];
       snapshot[field] = known(value) ? String(value).replace(/\s+/g, ' ').trim().slice(0, field === 'address' ? 500 : 200) : null;
@@ -606,9 +789,10 @@ function evaluateInventory(hunt, listings, options = {}) {
   for (const original of listings) {
     const evaluated = evaluateListing(original, hunt, { now: evaluatedAt });
     for (const clause of evaluated.clauseResults || []) {
-      const key = `${clause.field}|${clause.operator}|${canonicalJson(clause.value ?? null)}`;
+      const clauseValue = clause.expected ?? clause.value ?? null;
+      const key = `${clause.field}|${clause.operator}|${canonicalJson(clauseValue)}`;
       const tally = clauseTally.get(key)
-        || { field: clause.field, operator: clause.operator, value: clause.value ?? null, match: 0, noMatch: 0, unknown: 0 };
+        || { field: clause.field, operator: clause.operator, value: clauseValue, match: 0, noMatch: 0, unknown: 0 };
       if (clause.status === 'match') tally.match += 1;
       else if (clause.status === 'unknown') tally.unknown += 1;
       else tally.noMatch += 1;
@@ -620,7 +804,7 @@ function evaluateInventory(hunt, listings, options = {}) {
     }
     const key = identityKey(evaluated.sourceId, evaluated.recordId);
     const normalized = validateListingForIngestion(original).listing;
-    const snapshot = compactMaterialSnapshot(normalized, hunt);
+    const snapshot = compactMaterialSnapshot(normalized, hunt, Date.parse(evaluatedAt));
     const record = {
       identityKey: key, listingId: evaluated.listingId, sourceId: evaluated.sourceId,
       address: evaluated.address,
@@ -736,7 +920,9 @@ function runHunt(id, listings, options = {}) {
     const initial = !previousBaseline;
     const observedKeys = new Set();
     const events = [];
-    const results = [];
+    let results = [];
+    const unsatisfiableByKey = new Map();
+    const satisfiedKeys = new Set();
     const counts = {};
     let evaluated = null;
     const pageSize = 1000;
@@ -759,15 +945,35 @@ function runHunt(id, listings, options = {}) {
         if (['notObserved', 'newMatch', 'materialChange', 'noLongerMatches', 'evidenceUnknown'].includes(key)) continue;
         counts[key] = (counts[key] || 0) + Number(value || 0);
       }
-      if (results.length < MAX_RETURNED_RESULTS) {
-        results.push(...(evaluated.response.results || []).slice(0, MAX_RETURNED_RESULTS - results.length));
+      const pageUnsat = Array.isArray(evaluated.response.unsatisfiableCriteria)
+        ? evaluated.response.unsatisfiableCriteria
+        : [];
+      const pageUnsatKeys = new Set();
+      for (const item of pageUnsat) {
+        const key = `${item.field}|${item.operator}|${canonicalJson(item.value ?? null)}`;
+        pageUnsatKeys.add(key);
+        if (!satisfiedKeys.has(key) && !unsatisfiableByKey.has(key)) unsatisfiableByKey.set(key, item);
       }
+      if ((evaluated.response.counts?.accepted || 0) > 0) {
+        for (const existingKey of [...unsatisfiableByKey.keys()]) {
+          if (!pageUnsatKeys.has(existingKey)) {
+            satisfiedKeys.add(existingKey);
+            unsatisfiableByKey.delete(existingKey);
+          }
+        }
+      }
+      results = sortHuntResults([...results, ...(evaluated.response.results || [])]).slice(0, MAX_RETURNED_RESULTS);
     }
     if (!evaluated) {
       evaluated = evaluateInventory(hunt, [], {
         now, previousBaseline, baselineLimit: Infinity, suppressEvents: initial,
       });
     }
+
+    const unsatisfiableCriteria = [...unsatisfiableByKey.values()];
+    const unsatisfiableCriteriaNote = unsatisfiableCriteria.length
+      ? 'One or more criteria could not be evaluated against any record in this inventory. A hunt with an unsatisfiable criterion cannot match, however often it runs.'
+      : null;
 
     const response = {
       ...evaluated.response,
@@ -784,6 +990,8 @@ function runHunt(id, listings, options = {}) {
       },
       results,
       resultsTruncated: (counts.accepted || 0) + (counts.rejected || 0) > results.length,
+      unsatisfiableCriteria,
+      unsatisfiableCriteriaNote,
       newEvents: initial ? [] : events.slice(0, MAX_RETURNED_EVENTS),
       eventsTruncated: !initial && events.length > MAX_RETURNED_EVENTS,
     };
@@ -830,11 +1038,13 @@ module.exports = {
   deleteHunt,
   evaluateInventory,
   evaluateListing,
+  explainListingMatch,
   getHunt,
   identityKey,
   listEvents,
   listHunts,
   runHunt,
+  sortHuntResults,
   summarizeBaseline,
   updateHunt,
   validateCriteria,

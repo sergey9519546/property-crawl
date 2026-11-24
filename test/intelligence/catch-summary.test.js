@@ -253,4 +253,37 @@ describe('presentListing — presentation-layer catch derivation', () => {
     assert.ok(presented.catchSummary === null || typeof presented.catchSummary === 'string');
     assert.ok(!String(presented.catchSummary).includes('SHERIFF'));
   });
+
+  test('ignores informational SENIOR FORECLOSURE / TAX SALE PRIORITY notes and picks highest-severity warning', () => {
+    const out = computeCatchSummary(
+      { openingBid: 100000, saleDate: '2027-01-15', occupancy: 'unoccupied', deposit: 'certified funds', estLow: 150000, estHigh: 200000 },
+      [
+        'SENIOR FORECLOSURE: 1st mortgage foreclosing wipes out junior deeds.',
+        'HOA SUPER-PRIORITY PAYOFF (N.J.S.A. 46:8B-21): Up to 6 months HOA dues survive.',
+        'BANKRUPTCY AUTOMATIC STAY ACTIVE (11 U.S.C. § 362): Foreclosure auction stayed by operation of law.',
+      ],
+      'CRITICAL',
+    );
+    assert.match(out, /Foreclosure auction stayed/);
+    assert.doesNotMatch(out, /1st mortgage foreclosing/);
+  });
+
+  test('presentListing exposes compact catchWarnings and titleRiskSummary from derivedFields', () => {
+    const presented = presentListing({
+      id: 'derived-catch:1',
+      source: 'civilview',
+      state: 'TX',
+      address: '5 Derived Way, Dallas, TX',
+      plaintiff: 'Oakridge Homeowners Association',
+      openingBid: 25000,
+      estLow: 180000,
+      estHigh: 220000,
+      saleDate: '2027-01-15',
+      occupancy: 'unoccupied',
+      deposit: 'certified funds',
+    });
+    assert.equal(presented.titleRiskSummary?.riskLevel, 'CRITICAL');
+    assert.ok(Array.isArray(presented.catchWarnings) && presented.catchWarnings.length > 0);
+    assert.match(presented.catchSummary, /1st mortgage recorded prior survives/i);
+  });
 });

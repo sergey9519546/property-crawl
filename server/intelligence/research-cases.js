@@ -300,7 +300,7 @@ function normalizeReconsideration(value) {
     if (!condition || typeof condition !== 'object' || Array.isArray(condition)) {
       throw new ResearchCaseError('RESEARCH_RECONSIDERATION_INVALID', `reconsideration.conditions[${index}] is invalid`);
     }
-    const operators = RECONSIDERATION_FIELDS[condition.field];
+    const operators = Object.hasOwn(RECONSIDERATION_FIELDS, condition.field) ? RECONSIDERATION_FIELDS[condition.field] : null;
     if (!operators || !operators.has(condition.operator)) {
       throw new ResearchCaseError('RESEARCH_RECONSIDERATION_INVALID', `reconsideration.conditions[${index}] field/operator is unsupported`);
     }
@@ -665,8 +665,9 @@ function updateCase(id, input, options = {}) {
     }
     item.revision += 1;
     item.updatedAt = timestamp;
-    item.reconsiderationRequired = false;
-    item.latestTrigger = null;
+    const preserveSecondLook = Boolean(options && options.preserveSecondLookTrigger === true && input.reconsiderationRequired === true && input.latestTrigger);
+    item.reconsiderationRequired = preserveSecondLook;
+    item.latestTrigger = preserveSecondLook ? structuredClone(input.latestTrigger) : null;
     item.history.unshift(historyEvent('decision_changed', item, timestamp, { previousState, currentState: item.state, reasonCodes }));
     item.history = item.history.slice(0, MAX_CASE_HISTORY);
     return { value: caseSummary(item) };

@@ -264,6 +264,7 @@ class CollectionCoordinator {
       for (const hunt of allEnabled) {
         if (!hunt.owner || (await accounts.get(hunt.owner))?.entitled) enabled.push(hunt);
       }
+      const seenListingIds = new Set(listings.map((item) => item?.id).filter(Boolean));
       if (!this.durableHunts && enabled.length > 0) {
         if (this.database?.isPg) {
           const discoveryQuery = require('../discovery/query'), baseQuery = discoveryQuery.queryFromUrl(new URL('http://localhost/api/listings?limit=1000'));
@@ -272,7 +273,14 @@ class CollectionCoordinator {
             inventory = await discoveryQuery.search(this.database, { ...baseQuery, cursor });
             const page = inventory?.listings;
             if (!Array.isArray(page)) throw new Error('Listing inventory is unavailable');
-            listings.push(...page.filter(item => safeSources.has(item.source) || !item.source));
+            listings.push(...page.filter((item) => {
+              if (!safeSources.has(item.source) && item.source) return false;
+              if (item?.id) {
+                if (seenListingIds.has(item.id)) return false;
+                seenListingIds.add(item.id);
+              }
+              return true;
+            }));
             cursor = inventory.page?.nextCursor || null;
           } while (cursor);
         } else {
@@ -282,7 +290,14 @@ class CollectionCoordinator {
             const page = Array.isArray(inventory) ? inventory : inventory?.listings;
             total = Array.isArray(inventory) ? page.length : Number(inventory?.total);
             if (!Array.isArray(page)) throw new Error('Listing inventory is unavailable');
-            listings.push(...page.filter(item => safeSources.has(item.source) || !item.source));
+            listings.push(...page.filter((item) => {
+              if (!safeSources.has(item.source) && item.source) return false;
+              if (item?.id) {
+                if (seenListingIds.has(item.id)) return false;
+                seenListingIds.add(item.id);
+              }
+              return true;
+            }));
             offset += page.length;
             if (!page.length || Array.isArray(inventory)) break;
           }
@@ -301,14 +316,16 @@ class CollectionCoordinator {
         if (entry?.hunt?.webhookUrl) {
           try {
             entry.evaluation.webhook = await notifyHuntWebhook(entry.hunt, entry.evaluation, this.webhookOptions || {});
-          } catch {
+          } catch (webhookErr) {
+            console.warn(`[CollectionCoordinator] Webhook notify failed for hunt ${entry.hunt.id}:`, webhookErr?.message || webhookErr);
             entry.evaluation.webhook = { delivery: 'unavailable', sent: false, reason: 'network' };
           }
         }
         if (entry?.hunt?.notifyEmail) {
           try {
             entry.evaluation.email = await notifyHuntEmail(entry.hunt, entry.evaluation, this.webhookOptions || {});
-          } catch {
+          } catch (mailErr) {
+            console.warn(`[CollectionCoordinator] Email notify failed for hunt ${entry.hunt.id}:`, mailErr?.message || mailErr);
             entry.evaluation.email = { delivery: 'unavailable', sent: false, reason: 'mail' };
           }
         }

@@ -21,3 +21,81 @@ test('durable API aggregates pages with one clock and whole-scan notObserved cou
  assert.equal(res.body.evaluation.results.length,500);assert.equal(res.body.evaluation.resultsTruncated,true);
  assert.equal(Object.keys(saved.baseline.records).length,1003);
 });
+
+test('durable API merges unsatisfiableCriteria across pages and sorts globally before slicing top 500', async () => {
+  const page1NoScore = Array.from({ length: 500 }, (_, i) => ({ ...listing(i), state: 'NV' }));
+  const huntUnsat = {
+    id: 'hunt_bbbbbbbbbbbbbbbbbbbbbbbb',
+    name: 'Unsat',
+    enabled: true,
+    version: 1,
+    criteria: { mode: 'all', rules: [{ field: 'dealScore', operator: 'gte', value: 70 }] },
+  };
+  let callUnsat = 0;
+  const durableUnsat = {
+    get: async () => huntUnsat,
+    baseline: async () => null,
+    saveEvaluation: async (_h, evaluated) => evaluated.response,
+  };
+  const handlerUnsat = createHuntsHandler({
+    database: { isPg: true },
+    durableStore: durableUnsat,
+    discoveryQuery: {
+      queryFromUrl: realQuery.queryFromUrl,
+      search: async () => {
+        const idx = callUnsat++;
+        return { listings: idx === 0 ? page1NoScore : [], page: { nextCursor: idx === 0 ? 'p2' : null } };
+      },
+    },
+    env: { DISCOVERY_MODE: 'advanced', SCRAPER_ADMIN_TOKEN: 'secret' },
+    now: () => '2026-09-07T20:00:00.000Z',
+  });
+  const resUnsat = response();
+  await handlerUnsat(
+    { method: 'POST', url: `/api/hunts/${huntUnsat.id}/evaluate`, headers: { authorization: 'Bearer secret' }, body: {} },
+    resUnsat,
+    new URL(`/api/hunts/${huntUnsat.id}/evaluate`, 'http://localhost'),
+  );
+  assert.equal(resUnsat.statusCode, 200);
+  assert.equal(resUnsat.body.evaluation.unsatisfiableCriteria.length, 1);
+  assert.equal(resUnsat.body.evaluation.unsatisfiableCriteria[0].field, 'dealScore');
+  assert.ok(resUnsat.body.evaluation.unsatisfiableCriteriaNote);
+
+  const page2Match = { ...listing(500), state: 'CA', openingBid: 50000 };
+  const huntRank = {
+    id: 'hunt_cccccccccccccccccccccccc',
+    name: 'Ranked CA',
+    enabled: true,
+    version: 1,
+    criteria: { mode: 'all', rules: [{ field: 'state', operator: 'eq', value: 'CA' }] },
+  };
+  let callRank = 0;
+  const handlerRank = createHuntsHandler({
+    database: { isPg: true },
+    durableStore: {
+      get: async () => huntRank,
+      baseline: async () => null,
+      saveEvaluation: async (_h, evaluated) => evaluated.response,
+    },
+    discoveryQuery: {
+      queryFromUrl: realQuery.queryFromUrl,
+      search: async () => {
+        const idx = callRank++;
+        return { listings: idx === 0 ? page1NoScore : [page2Match], page: { nextCursor: idx === 0 ? 'p2' : null } };
+      },
+    },
+    env: { DISCOVERY_MODE: 'advanced', SCRAPER_ADMIN_TOKEN: 'secret' },
+    now: () => '2026-09-07T20:00:00.000Z',
+  });
+  const resRank = response();
+  await handlerRank(
+    { method: 'POST', url: `/api/hunts/${huntRank.id}/evaluate`, headers: { authorization: 'Bearer secret' }, body: {} },
+    resRank,
+    new URL(`/api/hunts/${huntRank.id}/evaluate`, 'http://localhost'),
+  );
+  assert.equal(resRank.statusCode, 200);
+  assert.equal(resRank.body.evaluation.results.length, 500);
+  assert.equal(resRank.body.evaluation.resultsTruncated, true);
+  assert.equal(resRank.body.evaluation.results[0].listingId, page2Match.id);
+  assert.equal(resRank.body.evaluation.results[0].status, 'match');
+});

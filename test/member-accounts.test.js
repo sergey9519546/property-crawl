@@ -115,6 +115,32 @@ test('members only see their own hunts; the operator sees all', async () => {
   assert.equal((await call('PATCH', `/api/hunts/${id}`, { account: b, body: { enabled: false } })).status, 404);
   assert.equal((await call('DELETE', `/api/hunts/${id}`, { account: b })).status, 404);
   assert.ok((await call('GET', '/api/hunts')).body.items.some((hunt) => hunt.id === id));
+  // Analyst role must NOT see, mutate, evaluate, or delete acct_* member-owned hunts
+  const analystHeaders = { method: 'GET', url: new URL('/api/hunts', baseUrl) };
+  const callRole = (method, pathname, role, body) => new Promise((resolve, reject) => {
+    const payload = body === undefined ? null : JSON.stringify(body);
+    const req = http.request(new URL(pathname, baseUrl), {
+      method,
+      headers: {
+        authorization: `Bearer ${TOKEN}`,
+        'x-pp-role': role,
+        ...(payload ? { 'content-type': 'application/json', 'content-length': Buffer.byteLength(payload) } : {}),
+      },
+    }, (res) => {
+      let text = '';
+      res.setEncoding('utf8');
+      res.on('data', (chunk) => { text += chunk; });
+      res.on('end', () => resolve({ status: res.statusCode, body: text ? JSON.parse(text) : null }));
+    });
+    req.on('error', reject);
+    if (payload) req.write(payload);
+    req.end();
+  });
+  void analystHeaders;
+  assert.equal((await callRole('GET', '/api/hunts', 'analyst')).body.items.some((h) => h.id === id), false);
+  assert.equal((await callRole('GET', `/api/hunts/${id}`, 'analyst')).status, 404);
+  assert.equal((await callRole('PATCH', `/api/hunts/${id}`, 'analyst', { enabled: false })).status, 404);
+  assert.equal((await callRole('DELETE', `/api/hunts/${id}`, 'analyst')).status, 404);
   assert.equal((await call('GET', '/api/hunts', { account: 'not-an-account' })).status, 400);
 });
 

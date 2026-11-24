@@ -116,3 +116,118 @@ test('Federal Tax Lien Forensics: 26 U.S.C. § 7425 25-day notice and 120-day re
   assert.equal(irsEval.statutoryCitation, '26 U.S.C. § 7425(d)');
   assert.match(irsEval.warning, /120-day right of redemption/i);
 });
+
+test('Lien Waterfall Engine: NV NRS 116.3116 HOA super-priority extinguishes 1st mortgage while sub-priority leaves it surviving', () => {
+  const superPriority = computeLienWaterfall({
+    winningBid: 80000,
+    foreclosingLienType: 'hoa_assessment',
+    foreclosingLienAmount: 12000,
+    delinquentTaxesAmount: 0,
+    seniorMortgageAmount: 220000,
+    state: 'NV',
+    hoaSuperPriorityForeclosure: true,
+  });
+  assert.equal(superPriority.complete, true);
+  assert.equal(superPriority.totalSurvivingDebtOnProperty, 0);
+  assert.equal(superPriority.totalEffectiveAcquisitionCost, 80000);
+  assert.equal(superPriority.criticalAlert, null);
+  const extinguishedMtg = superPriority.items.find((i) => i.type === 'first_mortgage');
+  assert.ok(extinguishedMtg);
+  assert.equal(extinguishedMtg.remainingBalanceAgainstProperty, 0);
+  assert.equal(extinguishedMtg.status, 'partially_satisfied_from_proceeds');
+
+  // Even when 1st mortgage balance is unknown, NV super-priority acquisition cost is computable
+  const superNoSeniorInput = computeLienWaterfall({
+    winningBid: 50000,
+    foreclosingLienType: 'hoa_assessment',
+    foreclosingLienAmount: 50000,
+    delinquentTaxesAmount: 0,
+    seniorMortgageAmount: null,
+    state: 'NV',
+  });
+  assert.equal(superNoSeniorInput.complete, true);
+  assert.equal(superNoSeniorInput.totalSurvivingDebtOnProperty, 0);
+  assert.equal(superNoSeniorInput.totalEffectiveAcquisitionCost, 50000);
+
+  // Sub-priority / lender-tendered NV HOA foreclosure: 1st mortgage survives
+  const subPriority = computeLienWaterfall({
+    winningBid: 40000,
+    foreclosingLienType: 'hoa_assessment',
+    foreclosingLienAmount: 10000,
+    delinquentTaxesAmount: 0,
+    seniorMortgageAmount: 200000,
+    state: 'NV',
+    hoaSuperPriorityForeclosure: false,
+  });
+  assert.equal(subPriority.complete, true);
+  assert.equal(subPriority.totalSurvivingDebtOnProperty, 200000);
+  assert.equal(subPriority.totalEffectiveAcquisitionCost, 240000);
+  assert.match(subPriority.criticalAlert, /SURVIVES against the purchaser/i);
+});
+
+test('TitleRiskForensics UI contract: synced 22 HOA states, unknown default, taxes input, NV parity, empty state & IRS sim label', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const { HOA_SUPER_PRIORITY_RULES } = require('../server/intelligence/hoa-super-lien');
+  const trfSrc = fs.readFileSync(path.join(__dirname, '..', 'src/components/terminal/title-risk-forensics.tsx'), 'utf8');
+
+  // 1. Synced HOA_SUPER_PRIORITY_STATES (matches hoa-super-lien.js 22 states: includes VT, excludes DE and NH)
+  const setMatch = trfSrc.match(/const HOA_SUPER_PRIORITY_STATES = new Set\(\[([\s\S]*?)\]\);/);
+  assert.ok(setMatch, 'HOA_SUPER_PRIORITY_STATES set must exist');
+  const uiStates = new Set([...setMatch[1].matchAll(/"([A-Z]{2})"/g)].map((m) => m[1]));
+  assert.deepEqual([...uiStates].sort(), Object.keys(HOA_SUPER_PRIORITY_RULES).sort());
+  assert.equal(uiStates.has('VT'), true);
+  assert.equal(uiStates.has('DE'), false);
+  assert.equal(uiStates.has('NH'), false);
+
+  // 2. inferInitialLienType defaults to "unknown", classifies tax sales, never treats IRS as tax_deed
+  assert.match(trfSrc, /return "unknown";/);
+  assert.match(trfSrc, /tax\[_\\s-\]\*sale/);
+  assert.match(trfSrc, /!isIrsContext/);
+
+  // 3. Delinquent taxes input is wired into computeLienWaterfall
+  assert.match(trfSrc, /delinquentTaxesInput/);
+  assert.match(trfSrc, /delinquentTaxesAmount:\s*validDelinquentTaxes/);
+
+  // 4. NV HOA super-priority parity and no contradiction with t.trfJuniorTakesSubject
+  assert.match(trfSrc, /isNvHoaSuperPriority\s*\?\s*"9-month super-priority HOA foreclosure extinguishes prior 1st mortgage/);
+
+  // 5. Empty state & explicit IRS manual simulation copy
+  assert.match(trfSrc, /!stateCode\s*\?\s*"State Unknown"/);
+  assert.match(trfSrc, /Simulated IRS 120-day redemption sensitivity/);
+
+  // 6. Unpublished judgment is never fabricated from currentBid
+  assert.doesNotMatch(trfSrc, /currentJudgment\s*=.*\?\s*judgment\s*:\s*currentBid/);
+});
+
+test('Lien Waterfall & Title Engine: tax_deed extinguishes senior mortgage and lender plaintiff resists body-text tax/IRS overrides', () => {
+  const taxDeedWaterfall = computeLienWaterfall({
+    winningBid: 90000,
+    foreclosingLienType: 'tax_deed',
+    foreclosingLienAmount: 18000,
+    delinquentTaxesAmount: 0,
+    seniorMortgageAmount: 240000,
+    state: 'FL',
+  });
+  assert.equal(taxDeedWaterfall.complete, true);
+  assert.equal(taxDeedWaterfall.totalSurvivingDebtOnProperty, 0);
+  const foreclosingTax = taxDeedWaterfall.items.find((i) => i.isForeclosingLien);
+  assert.ok(foreclosingTax);
+  assert.equal(foreclosingTax.id, 'foreclosing-tax-01');
+  const extinguishedPrior = taxDeedWaterfall.items.find((i) => i.type === 'first_mortgage');
+  assert.ok(extinguishedPrior);
+  assert.equal(extinguishedPrior.isForeclosingLien, false);
+  assert.equal(extinguishedPrior.remainingBalanceAgainstProperty, 0);
+
+  assert.equal(
+    classifyForeclosingParty('Wells Fargo Bank, N.A.', 'Purchaser responsible for delinquent tax; notice served on IRS.'),
+    'FIRST_MORTGAGE',
+  );
+  const flHoaRisk = arbitrateTitleRisk({
+    plaintiff: 'Palm Beach Point Property Owners Association',
+    state: 'FL',
+    openingBid: 8500,
+  });
+  assert.equal(flHoaRisk.firstMortgageSurvives, true);
+  assert.equal(flHoaRisk.canProceedWithBid, false);
+});

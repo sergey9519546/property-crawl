@@ -557,7 +557,7 @@ async function repairLiveEnrichment(options = {}) {
                 senior_lien_risk AS "seniorLienRisk",
                 occupancy,
                 sale_date AS "saleDate",
-                deposit,
+                deposit_terms AS "deposit",
                 judgment_amount::float8 AS "judgment",
                 provenance
            FROM listings
@@ -569,7 +569,7 @@ async function repairLiveEnrichment(options = {}) {
               OR opening_bid IS NULL OR opening_bid <= 0
               OR sale_date IS NULL
               OR occupancy IS NULL
-              OR deposit IS NULL
+              OR deposit_terms IS NULL
               OR COALESCE(redemption_days, 0) > 0
               OR NULLIF(TRIM(COALESCE(senior_lien_risk, '')), '') IS NOT NULL
               OR (provenance ? 'titleWarnings')
@@ -588,10 +588,10 @@ async function repairLiveEnrichment(options = {}) {
           report.timedOut = true;
           return;
         }
-        let persistedTitleWarnings = Array.isArray(row?.provenance?.titleWarnings)
-          ? row.provenance.titleWarnings
-          : [];
-        let persistedRiskLevel = row?.provenance?.riskLevel || null;
+        let persistedTitleWarnings = Array.isArray(row?.provenance?.derivedFields?.catchWarnings)
+          ? row.provenance.derivedFields.catchWarnings
+          : (Array.isArray(row?.provenance?.titleWarnings) ? row.provenance.titleWarnings : []);
+        let persistedRiskLevel = row?.provenance?.derivedFields?.titleRiskLevel || row?.provenance?.riskLevel || null;
         if (persistedTitleWarnings.length === 0) {
           try {
             const tr = arbitrateTitleRisk(row);
@@ -616,9 +616,7 @@ async function repairLiveEnrichment(options = {}) {
         report.catchBackfilled += 1;
       });
     } catch (err) {
-      if (err?.code !== '42703') {
-        report.errors.push(`catchBackfill: ${err?.message || err}`);
-      }
+      report.errors.push(`catchBackfill: ${err?.message || err}`);
     }
   }
 

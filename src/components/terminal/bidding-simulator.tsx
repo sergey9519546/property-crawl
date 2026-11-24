@@ -52,8 +52,8 @@ export function BiddingSimulator({ listing, publishedUpsetEstimate }: BiddingSim
   const [customOpeningBid, setCustomOpeningBid] = useState<string>("");
   const [isImportingAssessor, setIsImportingAssessor] = useState(false);
   const [assessorError, setAssessorError] = useState<string | null>(null);
-  const [aiStrategy, setAiStrategy] = useState<string | null>(null);
-  const [loadingStrategy, setLoadingStrategy] = useState(false);
+  const [simulationBreakdown, setSimulationBreakdown] = useState<string | null>(null);
+  const [runningSimulation, setRunningSimulation] = useState(false);
   const [appliedPresetCitations, setAppliedPresetCitations] = useState<string[] | null>(null);
   const [isHomestead, setIsHomestead] = useState<boolean>(Boolean(listing.isHomestead));
   const [ltvPct, setLtvPct] = useState<number>(80);
@@ -211,21 +211,21 @@ export function BiddingSimulator({ listing, publishedUpsetEstimate }: BiddingSim
     const next = { ...scenario, [field]: value };
     setScenario(next);
     persistScenario(next, rehabBudget, targetMargin, customValuation, customOpeningBid);
-    setAiStrategy(null);
+    setSimulationBreakdown(null);
   };
 
   const updateCustomValuation = (val: string) => {
     if (val !== "" && (!/^\d*(?:\.\d{0,2})?$/.test(val) || Number(val) < 0)) return;
     setCustomValuation(val);
     persistScenario(scenario, rehabBudget, targetMargin, val, customOpeningBid);
-    setAiStrategy(null);
+    setSimulationBreakdown(null);
   };
 
   const updateCustomOpeningBid = (val: string) => {
     if (val !== "" && (!/^\d*(?:\.\d{0,2})?$/.test(val) || Number(val) < 0)) return;
     setCustomOpeningBid(val);
     persistScenario(scenario, rehabBudget, targetMargin, customValuation, val);
-    setAiStrategy(null);
+    setSimulationBreakdown(null);
   };
 
   // The bid-cost model and the max-allowable-offer calculation do not need the
@@ -279,7 +279,7 @@ export function BiddingSimulator({ listing, publishedUpsetEstimate }: BiddingSim
     setScenario(next);
     persistScenario(next, rehabBudget, targetMargin, customValuation);
     setAppliedPresetCitations([statutoryPreset.scheduleLabel, ...statutoryPreset.citations]);
-    setAiStrategy(null);
+    setSimulationBreakdown(null);
   };
   const hasIrsNoticeFlag = listing.source === "irs" || /(?:internal\s*revenue|federal\s*tax\s*lien|26\s*u\.?s\.?c\.?\s*§?\s*7425)/i.test(`${listing.seniorLienWarning || ""} ${listing.redemptionWarning || ""}`);
   const isTaxCandidate = isTaxSaleContext(listing);
@@ -412,12 +412,12 @@ export function BiddingSimulator({ listing, publishedUpsetEstimate }: BiddingSim
     const next = { ...scenario, buyersPremium: "0", sheriffPoundage: "0", transferTax: "0", delinquentTaxes: "0", settlementCosts: "0" };
     setScenario(next);
     persistScenario(next, rehabBudget, targetMargin, customValuation);
-    setAiStrategy(null);
+    setSimulationBreakdown(null);
   };
 
-  const handleRunAiStrategy = async () => {
+  const handleRunSimulation = () => {
     if (openingBid === null) return;
-    setLoadingStrategy(true);
+    setRunningSimulation(true);
 
     if (reverseScenario && cash.totalAcquisitionCost !== null) {
       const costLine = otherAcquisitionCosts === null
@@ -432,7 +432,7 @@ export function BiddingSimulator({ listing, publishedUpsetEstimate }: BiddingSim
       const valuationLabel = isCustomValuation
         ? `entered ARV assumption ${displayMoney(estimatedValue)} (investor assumption, not a publisher appraisal)`
         : `valuation midpoint ${displayMoney(estimatedValue)}`;
-      setAiStrategy([
+      setSimulationBreakdown([
         `1. Maximum Allowable Offer = ${valuationLabel} minus ${targetMargin}% target margin, ${displayMoney(rehabBudget)} rehab budget, and entered settlement costs.`,
         `2. Target purchase ceiling: ${displayMoney(reverseScenario.maxPurchasePrice)}. ${costLine} ${reductionLine}`,
         `3. Feasibility: ${feasibilityLine}`,
@@ -446,14 +446,14 @@ export function BiddingSimulator({ listing, publishedUpsetEstimate }: BiddingSim
         ? displayMoney(cash.cashDueAtSettlement)
         : "Unresolved until deposit and registration funds are entered";
       
-      setAiStrategy([
+      setSimulationBreakdown([
         `1. Acquisition Cost Model: Published opening amount is ${displayMoney(openingBid)}. Modeled total acquisition cost: ${totalCost} (with ${displayMoney(rehabBudget)} estimated rehab). Estimated cash to close: ${cashToClose}.`,
         `2. Statutory Redemption: ${listing.redemptionWarning || (publishedRedemption !== null ? `${publishedRedemption}-day statutory redemption period under ${listing.state || "state"} law.` : statutoryCarry.stateRedemptionDays > 0 ? `${statutoryCarry.stateRedemptionDays}-day statutory tax-sale redemption baseline under ${listing.state || "state"} law.` : "No statutory redemption period detected; verify clerk docket.")}`,
         `3. Title & Lien Risk: ${listing.seniorLienWarning || "No senior lien phrase detected. Certified title search must be performed before tender of cashier's check."}`,
         `4. Bidding Discipline: In distressed judicial auctions, opening amounts reflect petitioner debt or upset statutory minimums, not property value. Ensure rehab plus holding costs remain under 70% of verified local tax assessor or CMA value.`,
       ].join("\n\n"));
     }
-    setLoadingStrategy(false);
+    setRunningSimulation(false);
   };
 
   return (
@@ -1106,10 +1106,10 @@ export function BiddingSimulator({ listing, publishedUpsetEstimate }: BiddingSim
       <div className="space-y-2.5 rounded-xl border border-line bg-paper p-4 shadow-sm">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-ink"><Sparkles className="h-3.5 w-3.5 fill-ink-3 text-ink-3" /><span>Deterministic Scenario Breakdown</span></div>
-          <button disabled={openingBid === null || loadingStrategy} onClick={handleRunAiStrategy} className="rounded-lg bg-ink px-2.5 py-1 text-xs font-bold text-white shadow-sm transition hover:bg-ink-2 disabled:cursor-not-allowed disabled:opacity-40">{aiStrategy ? "Re-run explanation" : "Explain scenario & risks"}</button>
+          <button disabled={openingBid === null || runningSimulation} onClick={handleRunSimulation} className="rounded-lg bg-ink px-2.5 py-1 text-xs font-bold text-white shadow-sm transition hover:bg-ink-2 disabled:cursor-not-allowed disabled:opacity-40">{simulationBreakdown ? "Re-run explanation" : "Explain scenario & risks"}</button>
         </div>
-        {loadingStrategy && <p className="animate-pulse text-xs text-ink-3">Checking the entered scenario...</p>}
-        {aiStrategy && <div className="whitespace-pre-line border-t border-line pt-2 text-xs leading-relaxed text-ink-2">{aiStrategy}</div>}
+        {runningSimulation && <p className="animate-pulse text-xs text-ink-3">Checking the entered scenario...</p>}
+        {simulationBreakdown && <div className="whitespace-pre-line border-t border-line pt-2 text-xs leading-relaxed text-ink-2">{simulationBreakdown}</div>}
       </div>
     </div>
   );

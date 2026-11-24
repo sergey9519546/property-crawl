@@ -483,7 +483,7 @@ function applySecondLookReconsideration(caseId, freshListing, options = {}) {
     },
   };
 
-  const updatedResult = updateCase(caseId, updatePayload, options);
+  const updatedResult = updateCase(caseId, updatePayload, { ...options, preserveSecondLookTrigger: true });
 
   return {
     triggered: true,

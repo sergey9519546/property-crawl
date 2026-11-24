@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const db = require('./db/client');
 const { createApiRatePolicy } = require('./security/api-rate-policy');
+const { createTieredRateLimiter } = require('./middleware/rate-limiter');
 const handleListings = require('./routes/listings');
 const handleParse = require('./routes/parse');
 const handleEnrich = require('./routes/enrich');
@@ -51,6 +52,15 @@ process.on('unhandledRejection', (reason, promise) => {
 
 const PORT = process.env.PORT || 3000;
 const configuredApiLimit = Number(process.env.PROPERTY_API_RATE_LIMIT);
+const sharedApiLimiter = createTieredRateLimiter({
+  windowMs: 60000,
+  publicReadLimit: Number.isInteger(configuredApiLimit) && configuredApiLimit >= 1 && configuredApiLimit <= 10000 ? configuredApiLimit : 120,
+  mediaLimit: Number.isInteger(configuredApiLimit) && configuredApiLimit >= 1 && configuredApiLimit <= 10000 ? configuredApiLimit : 120,
+  readinessLimit: Number.isInteger(configuredApiLimit) && configuredApiLimit >= 1 && configuredApiLimit <= 10000 ? configuredApiLimit : 120,
+  generalLimit: Number.isInteger(configuredApiLimit) && configuredApiLimit >= 1 && configuredApiLimit <= 10000 ? configuredApiLimit : 120,
+  sensitiveLimit: Number.isInteger(configuredApiLimit) && configuredApiLimit >= 500 ? configuredApiLimit : 20,
+  database: db,
+});
 const apiLimiter = createApiRatePolicy({
   windowMs: 60000,
   maxRequests: Number.isInteger(configuredApiLimit) && configuredApiLimit >= 1 && configuredApiLimit <= 10000 ? configuredApiLimit : 120,
@@ -260,7 +270,14 @@ async function handleRequest(req, res) {
     // Rejected requests end synchronously without calling next(). Do not leave
     // an unresolved Promise/handler behind on every throttled request.
     let allowed = false;
-    apiLimiter(req, res, () => { allowed = true; });
+    if (sharedApiLimiter.hasSharedStore()) {
+      await new Promise((resolve) => {
+        Promise.resolve(sharedApiLimiter.middlewareAsync()(req, res, () => { allowed = true; resolve(); }))
+          .then(resolve, resolve);
+      });
+    } else {
+      apiLimiter(req, res, () => { allowed = true; });
+    }
     if (!allowed) return;
 
     await parseJsonBody(req);
@@ -827,6 +844,9 @@ if (require.main === module) {
  * This is the central "connect the database" point for operator surfaces.
  */
 function wireStoresAfterVerify(database) {
+  if (typeof sharedApiLimiter.setDatabase === 'function') {
+    sharedApiLimiter.setDatabase(database);
+  }
   try {
     const docReview = require('./routes/document-review');
     if (typeof docReview._resetForTests === 'function' && database && database.pool) {

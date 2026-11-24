@@ -106,6 +106,53 @@ test('catchSummary round-trips through PostgreSQL (single + bulk)', { timeout: 1
       });
       const clean = await db.getListingById('catch:pg-clean');
       assert.equal(clean.catchSummary, null);
+
+      // Re-scrape / enrichment clearing a previously flagged listing must NOT stale-latch catch_summary
+      await db.createListing({
+        id: 'catch:pg-single',
+        source: 'treasury',
+        state: 'FL',
+        county: 'Hillsborough',
+        city: 'Tampa',
+        address: '1 Single Way, Tampa, FL',
+        openingBid: 100000,
+        estLow: 200000,
+        estHigh: 250000,
+        saleDate: '2027-01-15',
+        occupancy: 'unoccupied',
+        deposit: 'certified funds',
+        redemptionDays: 0,
+        seniorLienRisk: 'low',
+        provenance: {
+          observed: true,
+          origin: 'live',
+          derivedFields: { catchWarnings: [] },
+        },
+      });
+      const cleared = await db.getListingById('catch:pg-single');
+      assert.equal(cleared.catchSummary, null, 'updating a flagged row to clean must clear stale catch_summary');
+      assert.deepEqual(cleared.provenance?.derivedFields?.catchWarnings, []);
+
+      // Critical title-risk plaintiff persists compact catchWarnings + catchSummary
+      await db.createListing({
+        id: 'catch:pg-hoa-tx',
+        source: 'trustee',
+        state: 'TX',
+        county: 'Dallas',
+        city: 'Dallas',
+        address: '9 Oakridge Way, Dallas, TX',
+        plaintiff: 'Oakridge Homeowners Association',
+        openingBid: 25000,
+        estLow: 200000,
+        estHigh: 250000,
+        saleDate: '2027-03-15',
+        occupancy: 'unoccupied',
+        deposit: 'certified funds',
+      });
+      const hoaTx = await db.getListingById('catch:pg-hoa-tx');
+      assert.match(hoaTx.catchSummary, /1st mortgage recorded prior survives/i);
+      assert.equal(hoaTx.provenance?.derivedFields?.titleRiskLevel, 'CRITICAL');
+      assert.ok(Array.isArray(hoaTx.provenance?.derivedFields?.catchWarnings) && hoaTx.provenance.derivedFields.catchWarnings.length > 0);
     } finally {
       await embedded.pool.end().catch(() => {});
     }

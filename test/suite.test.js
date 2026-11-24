@@ -277,7 +277,7 @@ test('PropertyDrawer retains AI LOI/Memo generators without a client AI model pi
 
 test('BiddingSimulator explains an explicit reverse-price scenario without a client AI SDK', () => {
   const bidsimContent = fs.readFileSync(path.join(root, 'src/components/terminal/bidding-simulator.tsx'), 'utf8');
-  assert.ok(bidsimContent.includes('handleRunAiStrategy'), 'handleRunAiStrategy missing from bidding-simulator.tsx');
+  assert.ok(bidsimContent.includes('handleRunSimulation'), 'handleRunSimulation missing from bidding-simulator.tsx');
   assert.ok(!bidsimContent.includes('claude-3-5-sonnet'), 'claude-3-5-sonnet must not appear in bidding-simulator.tsx');
   assert.ok(!bidsimContent.includes('puter.ai.chat'), 'puter.ai.chat must not appear in bidding-simulator.tsx');
   assert.ok(bidsimContent.includes('computeTargetPriceScenario'), 'reverse target-price calculation missing from bidding-simulator.tsx');

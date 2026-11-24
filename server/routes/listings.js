@@ -133,11 +133,45 @@ function presentListing(listing) {
   // as fresh rows. Same reasoning as `triage` above: a presentation-layer
   // derivation, identical across the in-memory and Postgres paths, $0 and
   // deterministic. A persisted value always wins.
+  const explicitWarnings = Array.isArray(presented.provenance?.titleWarnings)
+    ? presented.provenance.titleWarnings
+    : (Array.isArray(presented.titleWarnings) ? presented.titleWarnings : []);
+  const derivedWarnings = Array.isArray(presented.provenance?.derivedFields?.catchWarnings)
+    ? presented.provenance.derivedFields.catchWarnings
+    : [];
+  let titleWarnings = explicitWarnings.length > 0 ? explicitWarnings : derivedWarnings;
+  let riskLevel = presented.provenance?.riskLevel
+    || presented.provenance?.derivedFields?.titleRiskLevel
+    || presented.riskLevel
+    || null;
+  if (titleWarnings.length === 0 && !riskLevel) {
+    try {
+      const { arbitrateTitleRisk } = require('../intelligence/title-risk-engine');
+      // Never read raw notice at presentation time (pinned by catch-summary.test.js).
+      const tr = arbitrateTitleRisk({ ...presented, raw: '', rawNotice: '' });
+      if (tr?.riskLevel === 'CRITICAL' || tr?.riskLevel === 'HIGH') {
+        if (Array.isArray(tr.titleWarnings)) titleWarnings = tr.titleWarnings;
+        riskLevel = tr.riskLevel;
+      } else if (tr?.riskLevel) {
+        riskLevel = tr.riskLevel;
+      }
+    } catch {
+      // Fail soft to listing-level signals
+    }
+  }
+  const actionableCatchWarnings = titleWarnings
+    .filter((w) => typeof w === 'string' && w.trim() && !/^(?:SENIOR FORECLOSURE|TAX SALE PRIORITY):/i.test(w.trim()))
+    .slice(0, 6);
+  if (actionableCatchWarnings.length > 0) {
+    presented.catchWarnings = actionableCatchWarnings;
+  }
+  if (riskLevel) {
+    presented.titleRiskSummary = {
+      riskLevel,
+      actionableCount: actionableCatchWarnings.length,
+    };
+  }
   if (!presented.catchSummary) {
-    const titleWarnings = Array.isArray(presented.provenance?.titleWarnings)
-      ? presented.provenance.titleWarnings
-      : (Array.isArray(presented.titleWarnings) ? presented.titleWarnings : []);
-    const riskLevel = presented.provenance?.riskLevel || presented.riskLevel || null;
     presented.catchSummary = computeCatchSummary(presented, titleWarnings, riskLevel) ?? null;
   }
   const hudSafmr = listing.hudSafmr || (listing.zip ? getHudSafmrBenchmark({ zip: listing.zip, bedrooms: listing.beds ?? 2 }) : null);

@@ -29,8 +29,9 @@ const { evaluateIrsNoticeRule } = require('./irs-notice');
 /**
  * Classifies the foreclosing plaintiff party type
  */
-function classifyForeclosingParty(plaintiff = '', noticeText = '') {
-  const combined = `${plaintiff} ${noticeText}`.toLowerCase();
+function classifyPartyText(text) {
+  const combined = String(text || '').toLowerCase();
+  if (!combined.trim()) return 'UNKNOWN';
 
   // 1a. Federal IRS Tax Lien (governed by 26 U.S.C. § 6323; does not prime prior recorded private mortgages)
   if (/(?:internal\s*revenue|\birs\b)/i.test(combined)) {
@@ -69,6 +70,12 @@ function classifyForeclosingParty(plaintiff = '', noticeText = '') {
   }
 
   return 'UNKNOWN';
+}
+
+function classifyForeclosingParty(plaintiff = '', noticeText = '') {
+  const fromPlaintiff = classifyPartyText(plaintiff);
+  if (fromPlaintiff !== 'UNKNOWN') return fromPlaintiff;
+  return classifyPartyText(noticeText);
 }
 
 /**
@@ -277,6 +284,7 @@ function arbitrateTitleRisk(listing = {}, rawNoticeText = '') {
     } else if (hoaEval.isSuperPriorityState) {
       firstMortgageSurvives = true;
       riskLevel = 'HIGH';
+      canProceedWithBid = false;
       warnings.push(...hoaEval.warningDetails);
       warnings.push(`HOA SUPER-PRIORITY: Under ${hoaEval.statute}, common assessment super-priority protects up to ${hoaEval.statutoryCapMonths} months of delinquent assessments but does NOT extinguish prior recorded 1st mortgage/deed of trust. Senior mortgage survives sale in full.`);
     } else {

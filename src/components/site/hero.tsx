@@ -176,7 +176,7 @@ export function Hero() {
       {/* Arcade panel: rounded rectangle, inset 16px, #F9FAFB, overflow hidden */}
       <div
         aria-hidden
-        className="absolute inset-4 z-0 overflow-hidden rounded-card border border-line bg-[#F5F6F7]"
+        className="absolute inset-4 z-0 overflow-hidden rounded-card border border-line bg-paper"
       >
         {/* Fallback static image while shader loads */}
         <div
@@ -200,7 +200,7 @@ export function Hero() {
         </motion.div>
 
         {/* Cadastral plat survey grid overlay */}
-        <div aria-hidden className="pointer-events-none absolute inset-0 z-[2] bg-[radial-gradient(#181529_0.75px,transparent_0.75px)] [background-size:20px_20px] opacity-15" />
+        <div aria-hidden className="pointer-events-none absolute inset-0 z-[2] bg-[radial-gradient(var(--color-ink)_0.75px,transparent_0.75px)] [background-size:20px_20px] opacity-15" />
       </div>
 
       {/* Content */}
@@ -217,7 +217,7 @@ export function Hero() {
         >
         <motion.h1
           aria-label={h.headline}
-          className="text-display font-semibold tracking-[-0.02em] text-ink sm:text-[48px] sm:leading-[52px]"
+          className="text-display font-semibold tracking-[-0.02em] text-ink"
           style={{ margin: 0, maxWidth: 620 }}
         >
           <span aria-hidden className="flex flex-wrap justify-center gap-x-[0.25em]">
@@ -332,7 +332,7 @@ export function Hero() {
               id="hero-address-suggestions"
               role="listbox"
               aria-label={h.suggestionsAria}
-              className="absolute left-0 right-0 top-[calc(100%+8px)] overflow-hidden rounded-card border border-white/80 bg-white/95 p-1.5 text-left shadow-[0_18px_48px_rgba(15,23,42,0.2)] backdrop-blur-xl"
+              className="absolute left-0 right-0 top-[calc(100%+8px)] overflow-hidden rounded-card border border-white/80 bg-white/95 p-1.5 text-left shadow-raised backdrop-blur-xl"
             >
               {suggestions.map((suggestion, index) => (
                 <li

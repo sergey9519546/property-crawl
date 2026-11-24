@@ -28,17 +28,96 @@ function createHuntsHandler(dependencies = {}) {
     return null;
   }
   async function evaluateDurableInventory(durable, hunt) {
-    let baseline=await durable.baseline(hunt.id),evaluated=null,cursor=null;
-    const previousBaseline=baseline,observedKeys=new Set();
-    const initial=!baseline,events=[],results=[];
-    const evaluatedAt=now()||new Date().toISOString();
-    const counts={accepted:0,rejected:0,match:0,unknown:0,noMatch:0,notObserved:0,olderIgnored:0,newMatch:0,materialChange:0,noLongerMatches:0,evaluationUnknown:0};
-    const baseQuery=discovery.queryFromUrl(new URL('http://localhost/api/listings?limit=1000'));
-    do{const inventory=await discovery.search(database,{...baseQuery,cursor});const page=inventory?.listings;if(!Array.isArray(page))throw new Error('Listing inventory is unavailable');for(const listing of page){const recordId=listing?.provenance?.recordId;if(listing?.source&&recordId)observedKeys.add(hunts.identityKey(listing.source,String(recordId)));}evaluated=hunts.evaluateInventory(hunt,page,{now:evaluatedAt,previousBaseline:baseline,baselineLimit:Infinity,suppressEvents:initial});baseline=evaluated.baseline;events.push(...evaluated.events);for(const [key,value]of Object.entries(evaluated.response.counts||{}))if(!['notObserved','newMatch','materialChange','noLongerMatches','evidenceUnknown'].includes(key))counts[key]=(counts[key]||0)+Number(value||0);if(results.length<500)results.push(...(evaluated.response.results||[]).slice(0,500-results.length));cursor=inventory.page?.nextCursor||null;}while(cursor);
-    if(!evaluated)evaluated=hunts.evaluateInventory(hunt,[],{now:evaluatedAt,previousBaseline:baseline,baselineLimit:Infinity,suppressEvents:initial});
-    counts.notObserved=Object.keys(previousBaseline?.records||{}).filter((key)=>!observedKeys.has(key)).length;counts.newMatch=events.filter((event)=>event.type==='new_match').length;counts.materialChange=events.filter((event)=>event.type==='material_change').length;counts.noLongerMatches=events.filter((event)=>event.type==='no_longer_matches').length;counts.evidenceUnknown=events.filter((event)=>event.type==='evaluation_unknown').length;
-    evaluated.events=events;evaluated.response={...evaluated.response,evaluatedAt,baselineCreated:initial,counts,results,resultsTruncated:counts.accepted+counts.rejected>results.length,newEvents:events.slice(0,200),eventsTruncated:events.length>200};
-    return durable.saveEvaluation(hunt,evaluated);
+    let baseline = await durable.baseline(hunt.id);
+    let evaluated = null;
+    let cursor = null;
+    const previousBaseline = baseline;
+    const observedKeys = new Set();
+    const initial = !baseline;
+    const events = [];
+    let topResults = [];
+    const unsatisfiableByKey = new Map();
+    const satisfiedKeys = new Set();
+    const evaluatedAt = now() || new Date().toISOString();
+    const counts = {
+      inventory: 0, accepted: 0, rejected: 0, match: 0, unknown: 0, noMatch: 0,
+      notObserved: 0, olderIgnored: 0, newMatch: 0, materialChange: 0, noLongerMatches: 0, evidenceUnknown: 0,
+    };
+    const baseQuery = discovery.queryFromUrl(new URL('http://localhost/api/listings?limit=1000'));
+    do {
+      const inventory = await discovery.search(database, { ...baseQuery, cursor });
+      const page = inventory?.listings;
+      if (!Array.isArray(page)) throw new Error('Listing inventory is unavailable');
+      for (const listing of page) {
+        const recordId = listing?.provenance?.recordId;
+        if (listing?.source && recordId) observedKeys.add(hunts.identityKey(listing.source, String(recordId)));
+      }
+      evaluated = hunts.evaluateInventory(hunt, page, {
+        now: evaluatedAt,
+        previousBaseline: baseline,
+        baselineLimit: Infinity,
+        suppressEvents: initial,
+      });
+      baseline = evaluated.baseline;
+      events.push(...evaluated.events);
+      for (const [key, value] of Object.entries(evaluated.response.counts || {})) {
+        if (!['notObserved', 'newMatch', 'materialChange', 'noLongerMatches', 'evidenceUnknown'].includes(key)) {
+          counts[key] = (counts[key] || 0) + Number(value || 0);
+        }
+      }
+      const pageUnsat = Array.isArray(evaluated.response.unsatisfiableCriteria)
+        ? evaluated.response.unsatisfiableCriteria
+        : [];
+      const pageUnsatKeys = new Set();
+      for (const item of pageUnsat) {
+        const key = `${item.field}|${item.operator}|${hunts.canonicalJson(item.value ?? null)}`;
+        pageUnsatKeys.add(key);
+        if (!satisfiedKeys.has(key) && !unsatisfiableByKey.has(key)) {
+          unsatisfiableByKey.set(key, item);
+        }
+      }
+      if ((evaluated.response.counts?.accepted || 0) > 0) {
+        for (const existingKey of [...unsatisfiableByKey.keys()]) {
+          if (!pageUnsatKeys.has(existingKey)) {
+            satisfiedKeys.add(existingKey);
+            unsatisfiableByKey.delete(existingKey);
+          }
+        }
+      }
+      topResults = hunts.sortHuntResults([...topResults, ...(evaluated.response.results || [])]).slice(0, hunts.MAX_RETURNED_RESULTS);
+      cursor = inventory.page?.nextCursor || null;
+    } while (cursor);
+    if (!evaluated) {
+      evaluated = hunts.evaluateInventory(hunt, [], {
+        now: evaluatedAt,
+        previousBaseline: baseline,
+        baselineLimit: Infinity,
+        suppressEvents: initial,
+      });
+    }
+    counts.notObserved = Object.keys(previousBaseline?.records || {}).filter((key) => !observedKeys.has(key)).length;
+    counts.newMatch = events.filter((event) => event.type === 'new_match').length;
+    counts.materialChange = events.filter((event) => event.type === 'material_change').length;
+    counts.noLongerMatches = events.filter((event) => event.type === 'no_longer_matches').length;
+    counts.evidenceUnknown = events.filter((event) => event.type === 'evaluation_unknown').length;
+    const unsatisfiableCriteria = [...unsatisfiableByKey.values()];
+    const unsatisfiableCriteriaNote = unsatisfiableCriteria.length
+      ? 'One or more criteria could not be evaluated against any record in this inventory. A hunt with an unsatisfiable criterion cannot match, however often it runs.'
+      : null;
+    evaluated.events = events;
+    evaluated.response = {
+      ...evaluated.response,
+      evaluatedAt,
+      baselineCreated: initial,
+      counts,
+      results: topResults,
+      resultsTruncated: counts.accepted + counts.rejected > topResults.length,
+      unsatisfiableCriteria,
+      unsatisfiableCriteriaNote,
+      newEvents: events.slice(0, hunts.MAX_RETURNED_EVENTS),
+      eventsTruncated: events.length > hunts.MAX_RETURNED_EVENTS,
+    };
+    return durable.saveEvaluation(hunt, evaluated);
   }
 
   return async function handleHunts(req, res, urlInput) {
@@ -60,7 +139,7 @@ function createHuntsHandler(dependencies = {}) {
     const isAnalystScope = !owner && String(req.headers['x-pp-role'] || '').toLowerCase() === 'analyst';
     const visible = (hunt) => {
       if (owner) return Boolean(hunt && hunt.owner === owner);
-      if (isAnalystScope) return !(hunt && hunt.owner && String(hunt.owner).startsWith('account:'));
+      if (isAnalystScope) return !(hunt && hunt.owner);
       return true;
     };
 

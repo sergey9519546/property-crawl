@@ -236,11 +236,11 @@ export const enMessages = {
       originalNotice: "Original notice",
       disclaimer: "Built only from what the listing publishes. Title, liens and condition still need your own check.",
       mitigations: {
-        occupied: "Mitigation: Budget $4,000–$7,500 legal carry and writ of possession reserve.",
-        redemption: "Mitigation: Check county court docket for former owner notice filing window.",
+        occupied: "Mitigation: Confirm occupancy status and budget for potential eviction/writ-of-possession legal carry.",
+        redemption: "Mitigation: Confirm the statutory redemption window and notice requirements in the official sale terms.",
         lien: "Mitigation: Run preliminary title / abstract search before certified check deposit.",
         deposit: "Mitigation: Verify acceptable payment instrument (wire vs. cashier's check).",
-        stale: "Mitigation: Confirm listing with court clerk docket 24h prior to sale.",
+        stale: "Mitigation: Confirm the sale is still active on the publisher's official source page before bidding.",
       },
     },
     storyteller: {

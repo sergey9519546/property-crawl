@@ -60,3 +60,32 @@ test("uses federal disposition copy and suppresses state redemption on federal R
   assert.match(all, /federal disposition feed/i);
   assert.doesNotMatch(all, /until the sale|redemption rule/i);
 });
+
+test("filters informational SENIOR FORECLOSURE / TAX SALE PRIORITY notes from flags into notes", () => {
+  const out = listingCatch(
+    { openingBid: 100000, estLow: 150000, estHigh: 180000, occupancy: "Vacant", deposit: "$5,000", saleDate: "2027-01-15", seniorLienRisk: "low" },
+    [
+      "SENIOR FORECLOSURE: 1st mortgage foreclosing wipes out junior deeds.",
+      "TAX SALE PRIORITY: Property tax foreclosures generally prime all private mortgages.",
+    ],
+  );
+  assert.deepEqual(out.flags, []);
+  assert.ok(out.notes.some((n) => /1st mortgage foreclosing wipes out junior deeds/i.test(n)));
+  assert.ok(out.notes.some((n) => /Property tax foreclosures generally prime/i.test(n)));
+});
+
+test("retains all critical/high warnings sorted by severity instead of dropping a 3rd critical catch", () => {
+  const out = listingCatch(
+    { openingBid: 100000, estLow: 150000, estHigh: 180000, occupancy: "Vacant", deposit: "$5,000", saleDate: "2027-01-15", seniorLienRisk: "low" },
+    [
+      "HOA SUPER-PRIORITY PAYOFF (N.J.S.A. 46:8B-21): Senior mortgage does not extinguish 6 months of dues.",
+      "PACE ASSESSMENT SUPER-PRIORITY: Clean energy assessment survives foreclosure.",
+      "BANKRUPTCY AUTOMATIC STAY ACTIVE (11 U.S.C. § 362(a)): Sale is stayed by federal bankruptcy court.",
+      "CRITICAL TITLE DEFECT: Mechanic's lien foreclosure — senior 1st mortgage survives.",
+    ],
+  );
+  assert.equal(out.flags.length, 4);
+  assert.match(out.flags[0], /Sale is stayed|senior 1st mortgage survives/i);
+  assert.ok(out.flags.some((f) => /Clean energy assessment survives/i.test(f)));
+  assert.ok(out.flags.some((f) => /6 months of dues/i.test(f)));
+});

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useId, useState } from "react";
-import { AlertOctagon, Layers, Scale, ShieldAlert, ShieldCheck } from "lucide-react";
+import { AlertOctagon, Layers, Scale, ShieldCheck } from "lucide-react";
 import { computeLienWaterfall, LienWaterfallResult } from "@/lib/underwriting";
 import { displayMoney } from "@/lib/listing-display";
 import { useLocale } from "@/components/i18n/locale-provider";
@@ -18,15 +18,17 @@ export interface TitleRiskForensicsProps {
 }
 
 type ForeclosingLienType =
+  | "unknown"
   | "first_mortgage"
   | "second_mortgage"
   | "hoa_assessment"
   | "tax_deed"
   | "mechanic_lien";
 
+// Authoritative parity with server/intelligence/hoa-super-lien.js (22 jurisdictions)
 const HOA_SUPER_PRIORITY_STATES = new Set([
-  "AL", "AK", "CO", "CT", "DE", "DC", "FL", "HI", "IL", "MD",
-  "MA", "MN", "MO", "NV", "NH", "NJ", "NY", "OR", "PA", "RI", "TN", "WA", "WV"
+  "AL", "AK", "CO", "CT", "DC", "FL", "HI", "IL", "MA", "MD",
+  "MN", "MO", "NJ", "NV", "NY", "OR", "PA", "RI", "TN", "VT", "WA", "WV"
 ]);
 
 function inferInitialLienType(
@@ -34,20 +36,43 @@ function inferInitialLienType(
   warning?: string | null,
   source?: string | null
 ): ForeclosingLienType {
-  const combined = `${plaintiff || ""} ${warning || ""} ${source || ""}`.toLowerCase();
-  if (/(?:second\s*mortgage|2nd\s*mortgage|junior\s*mortgage|heloc|equity\s*line)/i.test(combined)) {
+  const plaintiffText = String(plaintiff || "").trim();
+  const rawWarning = String(warning || "").trim();
+  const safeWarning = /^(?:no\s+junior|no\s+senior|no_title_conclusion|unconfirmed)/i.test(rawWarning)
+    ? ""
+    : rawWarning;
+  const sourceText = String(source || "").trim();
+  const combined = `${plaintiffText} ${safeWarning} ${sourceText}`.toLowerCase();
+
+  const foreclosingContext = combined.replace(
+    /(?:omitted|unjoined)\s+(?:junior|subordinate)\s+(?:mortgagee?|deed|lien(?:holder)?|defendant|party)/gi,
+    ""
+  );
+  if (/(?:second\s*(?:mortgage|(?:trust\s*)?deed)|2nd\s*(?:mortgage|(?:trust\s*)?deed)|junior\s*(?:mortgage|deed|lien)|\bheloc\b|(?:home\s+)?equity\s*line|subordinate\s*(?:deed|mortgage|lien))/i.test(foreclosingContext)) {
     return "second_mortgage";
   }
-  if (/(?:mechanic'?s?\s*lien|construction\s*lien|materialm[ae]n)/i.test(combined)) {
+  if (/(?:mechanic'?s?\s*lien|construction\s*lien|materialm[ae]n'?s?\s*lien|contractor'?s?\s*lien|claim\s*of\s*lien)/i.test(combined)) {
     return "mechanic_lien";
   }
-  if (/(?:homeowners?\s*association|condominium\s*association|\bhoa\b|master\s*association)/i.test(combined)) {
+  if (/(?:homeowners?\s*association|condominium\s*association|\bhoa\b|condo\s*owners|master\s*association|community\s*association|property\s*owners\s*association)/i.test(combined)) {
     return "hoa_assessment";
   }
-  if (/(?:tax\s*collector|county\s*treasurer|tax\s*lien|tax\s*deed|ad\s*valorem)/i.test(combined) || source === "tax_deed") {
+  // Federal IRS tax lien foreclosures do not prime prior recorded private mortgages;
+  // do not classify IRS seizures as super-priority ad valorem tax deeds.
+  const isIrsContext = /(?:internal\s*revenue|\birs\b|federal\s*tax\s*lien)/i.test(combined) || sourceText.toLowerCase() === "irs";
+  if (!isIrsContext && /(?:tax\s*collector|county\s*treasurer|tax\s*lien|tax\s*deed|tax[_\s-]*sale|delinquent\s*tax|ad\s*valorem)/i.test(combined)) {
     return "tax_deed";
   }
-  return "first_mortgage";
+  // Only classify as first_mortgage when the published plaintiff itself matches
+  // a known mortgage/institutional lender pattern (never infer from source="trustee" alone).
+  if (
+    plaintiffText &&
+    !isIrsContext &&
+    /(?:first\s*(?:mortgage|(?:trust\s*)?deed)|1st\s*(?:mortgage|(?:trust\s*)?deed)|mortgage|bank|fannie|freddie|wells\s*fargo|jpmorgan|chase|citibank|truist|pnc|us\s*bank|loan\s*service|trustee|nationstar|mr\s*cooper|freedom\s*mortgage|rocket|caliber|quicken)/i.test(plaintiffText)
+  ) {
+    return "first_mortgage";
+  }
+  return "unknown";
 }
 
 export function TitleRiskForensics({
@@ -64,20 +89,32 @@ export function TitleRiskForensics({
   const money = (value: number) => (locale === "en" ? displayMoney(value) : formatUsd(locale, value));
 
   const seniorDebtInputId = useId();
+  const delinquentTaxesInputId = useId();
   const assumedBidInputId = useId();
+
+  const stateCode = String(state || "").trim().toUpperCase();
+  const detectedIrsFromRecord = React.useMemo(() => {
+    const combined = `${seniorLienWarning || ""} ${source || ""}`.toLowerCase();
+    return /(?:internal\s*revenue|\birs\b|federal\s*tax\s*lien|26\s*u\.?s\.?c\.?\s*§?\s*7425)/i.test(combined) || source === "irs";
+  }, [seniorLienWarning, source]);
+
   const [foreclosingType, setForeclosingType] = useState<ForeclosingLienType>(() =>
     inferInitialLienType(plaintiff, seniorLienWarning, source)
   );
+  const [nvSuperPriorityMode, setNvSuperPriorityMode] = useState<boolean>(true);
   const [assumedSeniorDebt, setAssumedSeniorDebt] = useState<string>("");
+  const [delinquentTaxesInput, setDelinquentTaxesInput] = useState<string>("");
   const [assumedBidInput, setAssumedBidInput] = useState<string>("");
-  const [hasIrsLienOverride, setHasIrsLienOverride] = useState<boolean>(() => {
-    const combined = `${seniorLienWarning || ""} ${source || ""}`.toLowerCase();
-    return /(?:internal\s*revenue|\birs\b|federal\s*tax\s*lien|26\s*u\.?s\.?c\.?\s*§?\s*7425)/i.test(combined) || source === "irs";
-  });
+  const [hasIrsLienOverride, setHasIrsLienOverride] = useState<boolean>(detectedIrsFromRecord);
 
   const parsedSeniorDebt = assumedSeniorDebt.trim() ? Number(assumedSeniorDebt) : null;
   const validSeniorDebt = typeof parsedSeniorDebt === "number" && Number.isFinite(parsedSeniorDebt) && parsedSeniorDebt >= 0
     ? parsedSeniorDebt
+    : null;
+
+  const parsedTaxes = delinquentTaxesInput.trim() ? Number(delinquentTaxesInput) : null;
+  const validDelinquentTaxes = typeof parsedTaxes === "number" && Number.isFinite(parsedTaxes) && parsedTaxes >= 0
+    ? parsedTaxes
     : null;
 
   const publishedOpeningBid = typeof openingBid === "number" && Number.isFinite(openingBid) && openingBid > 0 ? openingBid : null;
@@ -86,35 +123,36 @@ export function TitleRiskForensics({
     ? parsedAssumedBid
     : null;
   const currentBid = publishedOpeningBid ?? validAssumedBid;
-  const currentJudgment = typeof judgment === "number" && Number.isFinite(judgment) && judgment > 0 ? judgment : currentBid;
+  const currentJudgment = typeof judgment === "number" && Number.isFinite(judgment) && judgment > 0 ? judgment : null;
+
+  const isNvHoaSuperPriority = foreclosingType === "hoa_assessment" && stateCode === "NV" && nvSuperPriorityMode;
+  const isJunior =
+    foreclosingType === "second_mortgage" ||
+    foreclosingType === "mechanic_lien" ||
+    (foreclosingType === "hoa_assessment" && !isNvHoaSuperPriority);
 
   const waterfall: LienWaterfallResult | null = currentBid !== null
     ? computeLienWaterfall({
         winningBid: currentBid,
         foreclosingLienType: foreclosingType,
-        foreclosingLienAmount: currentJudgment ?? 0,
+        foreclosingLienAmount: currentJudgment,
+        delinquentTaxesAmount: validDelinquentTaxes,
         seniorMortgageAmount: validSeniorDebt,
-        state,
+        state: stateCode,
+        hoaSuperPriorityForeclosure: isNvHoaSuperPriority,
       })
     : null;
 
-  const isJunior = foreclosingType === "second_mortgage" || foreclosingType === "mechanic_lien" || foreclosingType === "hoa_assessment";
-  const isSuperPriorityState = HOA_SUPER_PRIORITY_STATES.has(state.toUpperCase());
+  const isSuperPriorityState = Boolean(stateCode && HOA_SUPER_PRIORITY_STATES.has(stateCode));
 
-  // Determine overall risk level
-  let calculatedRisk: "CRITICAL" | "HIGH" | "LOW" = "LOW";
-  if (isJunior) {
-    if (foreclosingType === "hoa_assessment" && state.toUpperCase() === "NV") {
-      calculatedRisk = "HIGH";
-    } else {
-      calculatedRisk = "CRITICAL";
-    }
-  } else if (hasIrsLienOverride) {
-    calculatedRisk = "HIGH";
-  } else if (seniorLienRisk?.toLowerCase() === "critical") {
+  // Determine overall risk level aligned with server/intelligence/title-risk-engine.js
+  let calculatedRisk: "CRITICAL" | "HIGH" | "MODERATE" | "LOW" = "LOW";
+  if (isJunior || seniorLienRisk?.toLowerCase() === "critical") {
     calculatedRisk = "CRITICAL";
-  } else if (seniorLienRisk?.toLowerCase() === "high") {
+  } else if (isNvHoaSuperPriority || hasIrsLienOverride || seniorLienRisk?.toLowerCase() === "high") {
     calculatedRisk = "HIGH";
+  } else if (foreclosingType === "unknown" || seniorLienRisk?.toLowerCase() === "moderate") {
+    calculatedRisk = "MODERATE";
   }
 
   return (
@@ -132,10 +170,18 @@ export function TitleRiskForensics({
                 ? "bg-catch-wash text-catch-ink border-catch/40"
                 : calculatedRisk === "HIGH"
                 ? "bg-catch-wash text-catch-ink border-catch/30"
+                : calculatedRisk === "MODERATE"
+                ? "bg-catch-wash text-catch-ink border-catch/25"
                 : "bg-paper text-ink-2 border-line"
             }`}
           >
-            {calculatedRisk === "CRITICAL" ? t.trfCriticalBadge : calculatedRisk === "HIGH" ? t.trfHighBadge : t.trfStandardBadge}
+            {calculatedRisk === "CRITICAL"
+              ? t.trfCriticalBadge
+              : calculatedRisk === "HIGH"
+              ? t.trfHighBadge
+              : calculatedRisk === "MODERATE"
+              ? "Verification Required"
+              : t.trfStandardBadge}
           </span>
         </div>
       </div>
@@ -144,7 +190,7 @@ export function TitleRiskForensics({
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="rounded-lg border border-line bg-paper p-2.5 space-y-1">
           <span className="font-semibold text-ink-3 uppercase block text-xs">{t.trfPetitionerLabel}</span>
-          <p className="font-bold text-ink truncate text-xs">{plaintiff || t.trfPetitionerFallback}</p>
+          <p className="font-bold text-ink truncate text-xs">{plaintiff || "Not published — unverified lien position"}</p>
           {judgment && judgment > 0 && (
             <p className="text-xs text-ink-2">{interpolate(t.trfJudgmentDebt, { amount: money(judgment) })}</p>
           )}
@@ -152,16 +198,24 @@ export function TitleRiskForensics({
         <div className="rounded-lg border border-line bg-paper p-2.5 space-y-1">
           <span className="font-semibold text-ink-3 uppercase block text-xs">{t.trfSurvivalRuleLabel}</span>
           <p className="font-bold text-ink text-xs">
-            {foreclosingType === "first_mortgage"
+            {foreclosingType === "unknown"
+              ? "Unconfirmed Lien Position — Title Search Required"
+              : foreclosingType === "first_mortgage"
               ? t.trfWipesJunior
               : foreclosingType === "tax_deed"
               ? t.trfTaxPrimes
-              : foreclosingType === "hoa_assessment" && state.toUpperCase() === "NV"
+              : isNvHoaSuperPriority
               ? t.trfNvHoaPrimes
               : t.trfSeniorSurvives}
           </p>
           <p className="text-xs text-ink-3">
-            {isJunior ? t.trfJuniorTakesSubject : t.trfSubordinateWiped}
+            {foreclosingType === "unknown"
+              ? "Foreclosing lien priority cannot be verified from the published plaintiff record; prior encumbrances may survive."
+              : isNvHoaSuperPriority
+              ? "9-month super-priority HOA foreclosure extinguishes prior 1st mortgage (SFR Investments Pool 1; verify no prior lender super-priority tender)."
+              : isJunior
+              ? t.trfJuniorTakesSubject
+              : t.trfSubordinateWiped}
           </p>
         </div>
       </div>
@@ -172,8 +226,9 @@ export function TitleRiskForensics({
           <span className="font-bold text-ink">{t.trfSimulateLabel}</span>
           <span className="text-xs text-ink-3">{t.trfSimulateHint}</span>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-1.5">
           {[
+            { id: "unknown" as const, label: "Unknown / Unverified" },
             { id: "first_mortgage" as const, label: t.trfTypeFirst },
             { id: "second_mortgage" as const, label: t.trfTypeSecond },
             { id: "hoa_assessment" as const, label: t.trfTypeHoa },
@@ -193,6 +248,67 @@ export function TitleRiskForensics({
               {type.label}
             </button>
           ))}
+        </div>
+      </div>
+
+      {/* Nevada NRS 116.3116 Super-Priority vs Sub-Priority Mode Toggle */}
+      {foreclosingType === "hoa_assessment" && stateCode === "NV" && (
+        <div className="rounded-lg border border-line bg-paper p-3 space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="font-bold text-ink text-xs">Nevada NRS 116.3116 HOA Foreclosure Scope</span>
+            <span className="text-xs text-ink-3">SFR Investments Pool 1 vs. lender tender / sub-priority dues</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+            <button
+              type="button"
+              onClick={() => setNvSuperPriorityMode(true)}
+              className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition text-left ${
+                nvSuperPriorityMode
+                  ? "bg-ink text-white border-ink shadow-xs"
+                  : "bg-card text-ink-2 border-line hover:border-ink/30"
+              }`}
+            >
+              Super-Priority (9-mo assessments prime 1st mortgage)
+            </button>
+            <button
+              type="button"
+              onClick={() => setNvSuperPriorityMode(false)}
+              className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition text-left ${
+                !nvSuperPriorityMode
+                  ? "bg-ink text-white border-ink shadow-xs"
+                  : "bg-card text-ink-2 border-line hover:border-ink/30"
+              }`}
+            >
+              Sub-Priority / Lender-Tendered (1st mortgage survives)
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Delinquent Property Taxes Input (Zero-Fabrication) */}
+      <div className="rounded-lg border border-line bg-paper p-3 space-y-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <label htmlFor={delinquentTaxesInputId} className="font-bold text-ink text-xs">
+            Delinquent Property Taxes ($):
+          </label>
+          <span className="text-xs text-ink-3">
+            {validDelinquentTaxes === null
+              ? "Unknown / blank (leave blank until tax roll verified, or enter 0 if clear)"
+              : `Supplied tax arrears: ${money(validDelinquentTaxes)}`}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-bold text-ink-2">$</span>
+          <input
+            id={delinquentTaxesInputId}
+            type="number"
+            min="0"
+            step="250"
+            placeholder="Unknown — enter 0 if verified clear, or tax arrears"
+            value={delinquentTaxesInput}
+            onChange={(e) => setDelinquentTaxesInput(e.target.value)}
+            className="w-full rounded-md border border-line bg-card px-3 py-1.5 text-xs text-ink font-semibold focus:outline-hidden focus:ring-1 focus:ring-ink"
+          />
         </div>
       </div>
 
@@ -303,9 +419,9 @@ export function TitleRiskForensics({
       <div className="space-y-2 pt-1">
         <span className="font-bold text-ink text-xs block">{t.trfFederalDefensesLabel}</span>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          {/* IRS Federal Tax Lien Badge */}
+          {/* IRS Federal Tax Lien Badge & Sensitivity Toggle */}
           <div className="rounded-lg border border-line bg-paper p-2.5 space-y-1">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2">
               <span className="font-bold text-ink text-xs">{t.trfIrsLienTitle}</span>
               <button
                 type="button"
@@ -316,28 +432,44 @@ export function TitleRiskForensics({
                     : "bg-card text-ink-3 border-line"
                 }`}
               >
-                {hasIrsLienOverride ? t.trfIrsDetected : t.trfNoIrsLien}
+                {hasIrsLienOverride
+                  ? detectedIrsFromRecord
+                    ? t.trfIrsDetected
+                    : "Simulated IRS 120d"
+                  : detectedIrsFromRecord
+                  ? "IRS Check Suppressed (Sim)"
+                  : "Simulate IRS 120d"}
               </button>
             </div>
             <p className="text-xs text-ink-3 leading-tight">
-              {hasIrsLienOverride ? t.trfIrsDetectedDesc : t.trfNoIrsDesc}
+              {hasIrsLienOverride
+                ? detectedIrsFromRecord
+                  ? t.trfIrsDetectedDesc
+                  : "Simulated IRS 120-day redemption sensitivity: models 26 U.S.C. § 7425 notice survival and 120-day redemption risk (no IRS lien detected in published record)."
+                : detectedIrsFromRecord
+                ? "Recorded notice flagged an IRS tax lien signal; currently suppressed for manual sensitivity modeling only."
+                : t.trfNoIrsDesc}
             </p>
           </div>
 
           {/* HOA Super-Priority Badge */}
           <div className="rounded-lg border border-line bg-paper p-2.5 space-y-1">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2">
               <span className="font-bold text-ink text-xs">{t.trfHoaTitle}</span>
               <span className={`px-2 py-0.5 rounded text-xs font-bold border ${
                 isSuperPriorityState
                   ? "bg-catch-wash text-catch-ink border-catch/30"
                   : "bg-card text-ink-3 border-line"
               }`}>
-                {interpolate(isSuperPriorityState ? t.trfHoaSuperBadge : t.trfHoaStandardBadge, { state })}
+                {!stateCode
+                  ? "State Unknown"
+                  : interpolate(isSuperPriorityState ? t.trfHoaSuperBadge : t.trfHoaStandardBadge, { state: stateCode })}
               </span>
             </div>
             <p className="text-xs text-ink-3 leading-tight">
-              {interpolate(isSuperPriorityState ? t.trfHoaSuperDesc : t.trfHoaStandardDesc, { state })}
+              {!stateCode
+                ? "State code not published — confirm whether applicable state law grants HOA assessments super-priority over senior mortgages."
+                : interpolate(isSuperPriorityState ? t.trfHoaSuperDesc : t.trfHoaStandardDesc, { state: stateCode })}
             </p>
           </div>
         </div>

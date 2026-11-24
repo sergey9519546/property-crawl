@@ -11,7 +11,8 @@
  */
 
 const crypto = require('node:crypto');
-const { listHunts, evaluateInventory } = require('../intelligence/hunts');
+const { listHunts, evaluateInventory, sortHuntResults, MAX_RETURNED_RESULTS } = require('../intelligence/hunts');
+const { loadStore, mutateStore, MAX_EVENTS } = require('../intelligence/hunt-store');
 const { sendHuntDigest } = require('./resend-client');
 
 function formatCurrency(amount) {
@@ -41,9 +42,11 @@ function evaluatePriceDrop(listing, baselineRecord) {
     : null;
   const previousBid = typeof baselineRecord.openingBid === 'number' && Number.isFinite(baselineRecord.openingBid)
     ? baselineRecord.openingBid
-    : (typeof baselineRecord.clauseResults?.openingBid?.value === 'number'
-        ? baselineRecord.clauseResults.openingBid.value
-        : null);
+    : (typeof baselineRecord.snapshot?.openingBid === 'number' && Number.isFinite(baselineRecord.snapshot.openingBid)
+        ? baselineRecord.snapshot.openingBid
+        : (typeof baselineRecord.clauseResults?.openingBid?.value === 'number'
+            ? baselineRecord.clauseResults.openingBid.value
+            : null));
 
   if (currentBid === null || previousBid === null) return null;
   if (currentBid < previousBid) {
@@ -88,7 +91,8 @@ function generateInvestorDigestReport({ hunt, evaluation, listings = [], options
     matchedListings.push(listing);
 
     // Check for price drop if prior baseline record exists
-    const prior = evaluation?.baseline?.records?.[record.identityKey];
+    const prior = evaluation?.previousBaseline?.records?.[record.identityKey]
+      || evaluation?.baseline?.records?.[record.identityKey];
     if (prior) {
       const drop = evaluatePriceDrop(listing, prior);
       if (drop) priceDrops.push(drop);
@@ -96,8 +100,9 @@ function generateInvestorDigestReport({ hunt, evaluation, listings = [], options
   }
 
   // Format Markdown report
+  const escapeMdCell = (val) => String(val ?? '').replace(/[\r\n]+/g, ' ').replace(/([|\\[\]])/g, '\\$1');
   const markdownLines = [
-    `# Institutional Deal Alert Digest: ${huntName}`,
+    `# Institutional Deal Alert Digest: ${escapeMdCell(huntName)}`,
     `**Evaluation Timestamp:** ${evaluatedAt} | **Hunt ID:** \`${huntId}\` | **Total New Matches:** ${matchedListings.length}`,
     '',
     '## Target Matches Summary',
@@ -111,7 +116,7 @@ function generateInvestorDigestReport({ hunt, evaluation, listings = [], options
     const score = item.dealScore != null ? `${item.dealScore}/99` : 'Unrated';
     const date = item.saleDate || item.auctionDate || 'Scheduled date pending';
     const link = `[View Dossier](${appUrl}/listings/${encodeURIComponent(String(item.id))})`;
-    markdownLines.push(`| ${item.address || 'Address Unspecified'} | ${loc} | ${bid} | ${score} | ${date} | ${link} |`);
+    markdownLines.push(`| ${escapeMdCell(item.address || 'Address Unspecified')} | ${escapeMdCell(loc)} | ${escapeMdCell(bid)} | ${escapeMdCell(score)} | ${escapeMdCell(date)} | ${link} |`);
   }
 
   if (priceDrops.length > 0) {
@@ -131,11 +136,12 @@ function generateInvestorDigestReport({ hunt, evaluation, listings = [], options
   const matchRowsHtml = matchedListings.map((item) => {
     const addr = escapeHtml(item.address || 'Address Not Published');
     const loc = escapeHtml([item.county ? `${item.county} Co.` : '', item.state].filter(Boolean).join(', ') || 'N/A');
-    const score = item.dealScore != null ? Number(item.dealScore) : null;
+    const rawScore = item.dealScore != null && item.dealScore !== '' ? Number(item.dealScore) : NaN;
+    const score = Number.isFinite(rawScore) ? rawScore : null;
     const badge = score !== null ? `${score}/99` : '—';
     const scoreColor = score && score >= 80 ? '#059669' : score && score >= 65 ? '#2563eb' : '#d97706';
     const bid = formatCurrency(item.openingBid);
-    const link = `${appUrl}/listings/${encodeURIComponent(String(item.id))}`;
+    const link = escapeHtml(`${appUrl}/listings/${encodeURIComponent(String(item.id))}`);
     return `<tr style="border-bottom:1px solid #1e293b;">
       <td style="padding:12px 8px;font-size:13px;color:#ffffff;font-weight:500;">
         <a href="${link}" style="color:#60a5fa;text-decoration:none;">${addr}</a>
@@ -237,11 +243,12 @@ async function dispatchInvestorAlertDigest({ recipient, hunt, evaluation, listin
     };
   }
 
+  const safeSubjectName = String(hunt?.name || 'Target Watchlist').replace(/[\r\n]+/g, ' ').trim() || 'Target Watchlist';
   const deliveryResult = await sendHuntDigest({
     to: recipient,
-    huntName: hunt.name,
+    huntName: safeSubjectName,
     matches: report.matchedListings,
-    subject: `[PropertyCrawl] Deal Alert Digest: ${hunt.name || 'Target Watchlist'}`,
+    subject: `[PropertyCrawl] Deal Alert Digest: ${safeSubjectName}`,
     html: report.html,
     text: report.text || report.markdown,
     ...options,
@@ -259,31 +266,133 @@ async function dispatchInvestorAlertDigest({ recipient, hunt, evaluation, listin
  * Evaluates all hunts in store against the provided inventory and dispatches digests.
  */
 async function runAllHuntDigests({ listings = [], options = {} }) {
-  const hunts = listHunts({}, options);
+  const env = options.env || process.env;
+  let durableStore = options.durableStore || null;
+  if (!durableStore && options.database?.isPg && env.DISCOVERY_MODE === 'advanced') {
+    durableStore = require('../discovery/hunt-store').createPgHuntStore(options.database);
+  }
+
+  const fileStore = durableStore ? null : loadStore(options.filePath);
+  const hunts = durableStore ? await durableStore.list() : listHunts(options);
   const results = [];
   let totalMatches = 0;
   let totalPriceDrops = 0;
   let digestsDispatched = 0;
 
+  const evaluatePaged = (hunt, previousBaseline) => {
+    const pageSize = 1000;
+    const total = Array.isArray(listings) ? listings.length : 0;
+    if (total <= pageSize) {
+      return evaluateInventory(hunt, listings, {
+        ...options,
+        previousBaseline,
+        baselineLimit: durableStore ? Infinity : options.baselineLimit,
+      });
+    }
+    const initial = !previousBaseline || previousBaseline.huntVersion !== hunt.version;
+    let evaluated = null;
+    const events = [];
+    let mergedResults = [];
+    for (let offset = 0; offset < total; offset += pageSize) {
+      const page = listings.slice(offset, offset + pageSize);
+      evaluated = evaluateInventory(hunt, page, {
+        ...options,
+        previousBaseline: evaluated ? evaluated.baseline : previousBaseline,
+        baselineLimit: Infinity,
+        suppressEvents: initial,
+      });
+      events.push(...evaluated.events);
+      mergedResults = sortHuntResults([...mergedResults, ...(evaluated.response.results || [])]).slice(0, MAX_RETURNED_RESULTS);
+    }
+    evaluated.events = events;
+    evaluated.response = {
+      ...evaluated.response,
+      baselineCreated: initial,
+      results: mergedResults,
+    };
+    return evaluated;
+  };
+
   for (const hunt of hunts) {
+    if (!hunt || !hunt.enabled) {
+      results.push({
+        huntId: hunt?.id || null,
+        huntName: hunt?.name || null,
+        skipped: true,
+        reason: 'HUNT_DISABLED',
+        matchedCount: 0,
+        priceDropsCount: 0,
+        dispatchResult: { delivered: false, reason: 'HUNT_DISABLED' },
+      });
+      continue;
+    }
+
     try {
-      const evaluation = evaluateInventory(hunt, listings, options);
-      const evalPayload = { ...evaluation.response, baseline: evaluation.baseline };
+      const previousBaseline = options.previousBaseline !== undefined
+        ? options.previousBaseline
+        : durableStore
+          ? await durableStore.baseline(hunt.id)
+          : (fileStore?.baselines?.[hunt.id] || null);
+
+      const evaluation = evaluatePaged(hunt, previousBaseline);
+
+      if (options.persistBaseline !== false) {
+        if (durableStore && typeof durableStore.saveEvaluation === 'function') {
+          await durableStore.saveEvaluation(hunt, evaluation);
+        } else if (!durableStore) {
+          mutateStore(options.filePath, (store) => {
+            const target = store.hunts.find((item) => item.id === hunt.id);
+            if (!target || Number(target.version) !== Number(hunt.version)) return { changed: false };
+            store.baselines[hunt.id] = evaluation.baseline;
+            const existing = new Set(store.events.map((event) => event.id));
+            store.events = [
+              ...(evaluation.events || []).filter((event) => !existing.has(event.id)),
+              ...store.events,
+            ]
+              .sort((a, b) => b.detectedAt.localeCompare(a.detectedAt))
+              .slice(0, MAX_EVENTS);
+            return { value: true };
+          }, { now: evaluation.response.evaluatedAt });
+        }
+      }
+
+      const evalPayload = {
+        ...evaluation.response,
+        baseline: evaluation.baseline,
+        previousBaseline,
+      };
       const report = generateInvestorDigestReport({ hunt, evaluation: evalPayload, listings, options });
 
       totalMatches += report.matchedCount;
       totalPriceDrops += report.priceDropsCount;
 
+      const recipient = (typeof hunt.notifyEmail === 'string' && hunt.notifyEmail.trim())
+        || (typeof options.recipientEmail === 'string' && options.recipientEmail.trim())
+        || null;
+
       let dispatchResult = null;
-      if (options.recipientEmail) {
-        dispatchResult = await dispatchInvestorAlertDigest({
-          recipient: options.recipientEmail,
-          hunt,
-          evaluation: evalPayload,
-          listings,
-          options,
-        });
-        if (dispatchResult.delivered) digestsDispatched++;
+      if (!recipient) {
+        dispatchResult = { delivered: false, reason: 'NO_RECIPIENT', report };
+      } else {
+        const actionableEvents = (evaluation.events || []).filter(
+          (event) => event && (event.type === 'new_match' || event.type === 'material_change'),
+        );
+        const hasActionableChanges = evaluation.response.baselineCreated
+          || actionableEvents.length > 0
+          || report.priceDropsCount > 0;
+
+        if (!hasActionableChanges && !options.forceDispatch) {
+          dispatchResult = { delivered: false, reason: 'NO_NEW_CHANGES', report };
+        } else {
+          dispatchResult = await dispatchInvestorAlertDigest({
+            recipient,
+            hunt,
+            evaluation: evalPayload,
+            listings,
+            options,
+          });
+          if (dispatchResult.delivered) digestsDispatched++;
+        }
       }
 
       results.push({

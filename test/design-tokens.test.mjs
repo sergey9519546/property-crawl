@@ -11,12 +11,11 @@ import test from 'node:test';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 
-// Not migrated on purpose: the shadcn library (themed through CSS variables in
-// globals.css) and the hero and its map (kept by the owner).
+// Not migrated on purpose: the shadcn library (themed through CSS variables in globals.css;
+// chart.tsx, checkbox.tsx, tooltip.tsx carry 2px/4px primitive radii).
+// Kept minimal; hero.tsx and deal-discovery-map.tsx migrated onto canonical tokens.
 const LEGACY = [
   /^src\/components\/ui\//,
-  /^src\/components\/site\/hero\.tsx$/,
-  /^src\/components\/site\/deal-discovery-map\.tsx$/,
 ];
 
 // Lower these when the debt shrinks; never raise them. Use text-display/title/

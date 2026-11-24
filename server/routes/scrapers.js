@@ -490,7 +490,21 @@ function createScrapersHandler(dependencies = {}) {
           const { listCases, getCase } = require('../intelligence/research-cases');
           const { applySecondLookReconsideration } = require('../intelligence/second-look');
           const targetId = body.caseId ? String(body.caseId).trim() : null;
-          const allCases = targetId ? [getCase(targetId)?.case || getCase(targetId)].filter(Boolean) : listCases({ limit: 200 });
+          let allCases = [];
+          if (targetId) {
+            allCases = [getCase(targetId)?.case || getCase(targetId)].filter(Boolean);
+          } else {
+            let offset = 0;
+            let total = Infinity;
+            while (offset < total) {
+              const page = listCases({ limit: 200, offset, state: 'pass' });
+              const items = Array.isArray(page?.items) ? page.items : [];
+              total = Number.isFinite(Number(page?.total)) ? Number(page.total) : items.length;
+              allCases.push(...items);
+              if (items.length === 0) break;
+              offset += items.length;
+            }
+          }
           const results = [];
           let triggered = 0;
           let errors = 0;
@@ -530,6 +544,9 @@ function createScrapersHandler(dependencies = {}) {
           const report = await runAllHuntDigests({
             listings,
             options: {
+              database,
+              durableStore: dependencies.durableStore,
+              filePath: dependencies.filePath,
               env,
               recipientEmail: body.recipientEmail || env.OPERATOR_EMAIL || null,
               forceDispatch: Boolean(body.forceDispatch),

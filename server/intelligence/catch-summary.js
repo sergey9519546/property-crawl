@@ -49,6 +49,20 @@ function optText(value) {
   return t && !/^(?:—|unknown|n\/a)$/i.test(t) ? t : null;
 }
 
+function isInformationalTitleNote(warning) {
+  return /^(?:SENIOR FORECLOSURE|TAX SALE PRIORITY):/i.test(String(warning || '').trim());
+}
+
+function titleWarningSeverity(warning) {
+  const upper = String(warning || '').toUpperCase();
+  if (/CRITICAL TITLE DEFECT|BANKRUPTCY AUTOMATIC STAY|CONDEMN|DEMOLITION/.test(upper)) return 1;
+  if (/FEDERAL TAX LIEN|\bIRS\b|26 U\.S\.C\.|DEFECTIVE JOINDER|OMITTED PARTY/.test(upper)) return 2;
+  if (/PACE ASSESSMENT|MUNICIPAL|HOA SUPER-PRIORITY|CODE ENFORCEMENT/.test(upper)) return 3;
+  if (/UNCONFIRMED LIEN PRIORITY|NORTH CAROLINA 10-DAY UPSET BID/.test(upper)) return 4;
+  if (/STATUTORY REDEMPTION/.test(upper)) return 5;
+  return 6;
+}
+
 /**
  * @param {object|null} [listing] - normalized listing row (null tolerated)
  * @param {string[]} [titleWarnings] - from arbitrateTitleRisk().titleWarnings
@@ -67,14 +81,18 @@ function computeCatchSummary(listing = {}, titleWarnings = [], riskLevel = null)
   const deposit = optText(record.deposit);
   const judgment = optNum(record.judgment);
 
-  // 1. Critical/High title risk — strip "LABEL: " prefix, keep the sentence
+  // 1. Critical/High title risk — exclude purely informational priority notes,
+  // sort by severity, strip "LABEL: " prefix, and keep the highest-severity sentence.
   if ((riskLevel === 'CRITICAL' || riskLevel === 'HIGH') && titleWarnings.length > 0) {
-    const first = titleWarnings.find(w =>
+    const actionable = titleWarnings
+      .filter((w) => typeof w === 'string' && w.trim() && !isInformationalTitleNote(w))
+      .sort((a, b) => titleWarningSeverity(a) - titleWarningSeverity(b));
+    const first = actionable.find(w =>
       !/^STATUTORY REDEMPTION/.test(w) &&
       !/^HOA SUPER-PRIORITY/.test(w)
-    ) || titleWarnings[0];
+    ) || actionable[0];
     if (first) {
-      const stripped = first.replace(/^[A-Z0-9][A-Z0-9 ''–-]*:\s*/, '').trim();
+      const stripped = first.replace(/^[A-Z0-9][A-Z0-9 ''\u2013\u2014\/().§-]*:\s*/, '').trim();
       const truncated = stripped.length > 155 ? stripped.slice(0, 152) + '…' : stripped;
       return truncated;
     }
@@ -82,7 +100,7 @@ function computeCatchSummary(listing = {}, titleWarnings = [], riskLevel = null)
 
   const sourceKey = String(record.source || '').trim().toLowerCase();
   const hasFederalTaxLien = /internal revenue|federal tax lien/i.test(`${record.seniorLienRisk || ''} ${titleWarnings.join(' ')}`);
-  const isFederalReo = ['hud', 'gsa', 'usda', 'fannie', 'freddie', 'fdic'].includes(sourceKey) && !hasFederalTaxLien;
+  const isFederalReo = ['hud', 'gsa', 'usda', 'fannie', 'freddie', 'fdic', 'va'].includes(sourceKey) && !hasFederalTaxLien;
 
   // 2. Statutory redemption (suppressed for federal/agency REO unless IRS lien applies)
   if (!isFederalReo && redemption !== null && redemption > 0) {
@@ -106,7 +124,8 @@ function computeCatchSummary(listing = {}, titleWarnings = [], riskLevel = null)
     return 'No opening amount published — price unknown until sale day; confirm before bidding.';
   }
 
-  const isNominalBid = bid > 0 && bid <= 500 && (estLow === null || estHigh === null);
+  const hasPublishedRange = estLow !== null && estHigh !== null && estLow > 0 && estHigh >= estLow;
+  const isNominalBid = bid > 0 && bid <= 500 && !hasPublishedRange;
   const bidLead = isNominalBid ? `Nominal ${money(bid)} starting bid (reserve undisclosed)` : `Opening bid ${money(bid)}`;
 
   // 5. No sale date
@@ -120,7 +139,7 @@ function computeCatchSummary(listing = {}, titleWarnings = [], riskLevel = null)
       ? `${bidLead}, sale ${saleDate}. Occupancy not disclosed — budget for eviction.`
       : `${bidLead}, sale ${saleDate}. Occupancy not disclosed — assume no interior access and budget for possible eviction.`;
   }
-  if (/occupied/i.test(occupancy) && !/unoccupied/i.test(occupancy)) {
+  if (/occupied/i.test(occupancy) && !/\b(?:un|not|non[- ]?)occupied\b/i.test(occupancy)) {
     return isNominalBid
       ? `${bidLead}, sale ${saleDate}. Reported ${occupancy.toLowerCase()} — no interior access.`
       : `${bidLead}, sale ${saleDate}. Reported ${occupancy.toLowerCase()} — expect no interior access and possible eviction cost.`;

@@ -437,11 +437,16 @@ function prepareListingForPersistence(listing = {}) {
   normalized.triage = computeTriage(normalized);
   // Deterministic "Here's the Catch" one-liner — $0, computed from fields already
   // present on the normalized record. Title warnings are sourced from the existing
-  // arbitrateTitleRisk result when available in provenance; fall back to empty.
-  let persistedTitleWarnings = Array.isArray(normalized.provenance?.titleWarnings)
+  // arbitrateTitleRisk result when available in provenance; otherwise derived
+  // deterministically and persisted in derivedFields for grid/CatchReveal parity.
+  const explicitTitleWarnings = Array.isArray(normalized.provenance?.titleWarnings)
     ? normalized.provenance.titleWarnings
     : (Array.isArray(listing.titleWarnings) ? listing.titleWarnings : []);
-  let persistedRiskLevel = normalized.provenance?.riskLevel || listing.riskLevel || null;
+  let persistedTitleWarnings = explicitTitleWarnings;
+  let persistedRiskLevel = normalized.provenance?.riskLevel
+    || listing.riskLevel
+    || normalized.provenance?.derivedFields?.titleRiskLevel
+    || null;
   if (persistedTitleWarnings.length === 0) {
     try {
       const { arbitrateTitleRisk } = require('../intelligence/title-risk-engine');
@@ -455,6 +460,27 @@ function prepareListingForPersistence(listing = {}) {
     } catch {
       // Fall back to listing-level signals only
     }
+  }
+  const isActionableCatchWarning = (w) =>
+    typeof w === 'string' && w.trim() && !/^(?:SENIOR FORECLOSURE|TAX SALE PRIORITY):/i.test(w.trim());
+  const shouldStoreCatchWarnings = explicitTitleWarnings.length > 0
+    || persistedRiskLevel === 'CRITICAL'
+    || persistedRiskLevel === 'HIGH';
+  const compactCatchWarnings = shouldStoreCatchWarnings
+    ? persistedTitleWarnings
+        .filter(isActionableCatchWarning)
+        .slice(0, 6)
+        .map((w) => (w.length > 220 ? `${w.slice(0, 217)}...` : w))
+    : [];
+  if ((normalized.provenance && typeof normalized.provenance === 'object') || compactCatchWarnings.length > 0 || persistedRiskLevel === 'CRITICAL' || persistedRiskLevel === 'HIGH') {
+    normalized.provenance = {
+      ...(normalized.provenance || {}),
+      derivedFields: {
+        ...(normalized.provenance?.derivedFields || {}),
+        catchWarnings: compactCatchWarnings,
+        titleRiskLevel: persistedRiskLevel,
+      },
+    };
   }
   normalized.catchSummary = computeCatchSummary(normalized, persistedTitleWarnings, persistedRiskLevel);
   return normalized;
@@ -2552,7 +2578,7 @@ class DatabaseClient {
         transaction_outcome = COALESCE(EXCLUDED.transaction_outcome, listings.transaction_outcome),
         has_documents = COALESCE(EXCLUDED.has_documents, listings.has_documents),
         parcel_key = COALESCE(EXCLUDED.parcel_key, listings.parcel_key),
-        catch_summary = COALESCE(EXCLUDED.catch_summary, listings.catch_summary),
+        catch_summary = EXCLUDED.catch_summary,
         updated_at = NOW()
       WHERE EXCLUDED.source_observed_at IS NULL
          OR listings.source_observed_at IS NULL
@@ -2740,7 +2766,7 @@ class DatabaseClient {
         transaction_outcome = COALESCE(EXCLUDED.transaction_outcome, listings.transaction_outcome),
         has_documents = COALESCE(EXCLUDED.has_documents, listings.has_documents),
         parcel_key = COALESCE(EXCLUDED.parcel_key, listings.parcel_key),
-        catch_summary = COALESCE(EXCLUDED.catch_summary, listings.catch_summary),
+        catch_summary = EXCLUDED.catch_summary,
         updated_at = NOW()
       WHERE EXCLUDED.source_observed_at IS NULL
          OR listings.source_observed_at IS NULL

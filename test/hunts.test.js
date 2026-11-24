@@ -400,5 +400,64 @@ test('createHunt and updateHunt reject non-HTTPS or private/loopback webhookUrl 
   assert.equal(valid.webhookUrl, 'https://hooks.example.com/notify');
 });
 
+test('rule criteria supports distressStage (string or string[]) and minQuality / qualityScore (0..100) with explainListingMatch', () => {
+  const valid = hunts.validateHuntInput({
+    name: 'Stage and quality rules',
+    criteria: {
+      mode: 'all',
+      rules: [
+        { field: 'distressStage', operator: 'in', value: ['pre-foreclosure', 'SCHEDULED_AUCTION'] },
+        { field: 'minQuality', operator: 'gte', value: 65 },
+      ],
+    },
+  });
+  assert.equal(valid.isValid, true);
+  assert.deepEqual(valid.value.criteria.rules[0].value, ['pre_foreclosure', 'scheduled']);
+
+  const eqArray = hunts.validateHuntInput({
+    name: 'Eq array distressStage',
+    criteria: {
+      mode: 'all',
+      rules: [
+        { field: 'distressStage', operator: 'eq', value: ['reo', 'tax_sale'] },
+        { field: 'qualityScore', operator: 'between', value: [50, 95] },
+      ],
+    },
+  });
+  assert.equal(eqArray.isValid, true);
+
+  assert.equal(hunts.validateHuntInput({
+    name: 'Bad minQuality',
+    criteria: { mode: 'all', rules: [{ field: 'minQuality', operator: 'gte', value: 120 }] },
+  }).isValid, false);
+  assert.equal(hunts.validateHuntInput({
+    name: 'Bad distressStage',
+    criteria: { mode: 'all', rules: [{ field: 'distressStage', operator: 'eq', value: 'nonexistent_stage' }] },
+  }).isValid, false);
+
+  const hunt = { criteria: valid.value.criteria };
+  const matchViaLifecycleStage = hunts.explainListingMatch(
+    listing({
+      lifecycleStage: 'PRE_FORECLOSURE',
+      qualityScore: 72,
+    }),
+    hunt,
+    { now: NOW },
+  );
+  assert.equal(matchViaLifecycleStage.matched, true);
+  assert.equal(matchViaLifecycleStage.status, 'match');
+  assert.equal(matchViaLifecycleStage.clauseResults[0].actual, 'pre_foreclosure');
+  assert.equal(matchViaLifecycleStage.clauseResults[1].actual, 72);
+
+  const failViaLowQuality = hunts.explainListingMatch(
+    listing({ stage: 'scheduled', qualityScore: 40 }),
+    hunt,
+    { now: NOW },
+  );
+  assert.equal(failViaLowQuality.matched, false);
+  assert.equal(failViaLowQuality.status, 'no_match');
+  assert.match(failViaLowQuality.explanation, /minQuality/);
+});
+
 
 

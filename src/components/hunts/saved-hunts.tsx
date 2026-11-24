@@ -9,12 +9,14 @@ import {
   Crosshair,
   ExternalLink,
   Loader2,
+  Pencil,
   Plus,
+  Trash2,
   X,
 } from "lucide-react";
 import { useWorkspaceSession } from "@/components/workspace/workspace-shell";
 import { useLocale } from "@/components/i18n/locale-provider";
-import { compileHuntQuery } from "@/lib/hunt-query";
+import { compileHuntQuery, formatIsoDate } from "@/lib/hunt-query";
 
 type Rule = { field: string; operator: string; value?: string | number };
 type Hunt = {
@@ -78,19 +80,20 @@ type Evaluation = {
   webhook?: { delivery: string; sent: boolean; reason?: string };
   email?: { delivery: string; sent: boolean; reason?: string };
 };
+
 const fields = [
   ["state", "State", "text"],
-  ["source", "Source key", "text"],
+  ["source", "Listing source", "text"],
   ["county", "County", "text"],
   ["propType", "Property type", "text"],
-  ["status", "Published status", "text"],
-  ["auctionProgram", "Publisher program", "text"],
-  ["lifecycleStatus", "Publisher lifecycle", "text"],
-  ["occupancy", "Occupancy / access", "text"],
-  ["sourceObservedAt", "Observation time", "date"],
-  ["openingBid", "Published opening bid", "number"],
-  ["sqft", "Reported building area", "number"],
-  ["saleDate", "Published sale date", "date"],
+  ["status", "Sale status", "text"],
+  ["auctionProgram", "Auction program", "text"],
+  ["lifecycleStatus", "Sale stage", "text"],
+  ["occupancy", "Occupancy", "text"],
+  ["sourceObservedAt", "Last updated", "date"],
+  ["openingBid", "Opening bid", "number"],
+  ["sqft", "Square footage", "number"],
+  ["saleDate", "Sale date", "date"],
 ];
 const operators: Record<string, [string, string][]> = {
   text: [
@@ -113,6 +116,19 @@ const operators: Record<string, [string, string][]> = {
     ["unknown", "is unknown"],
   ],
 };
+const evidenceLabels: Record<string, string> = {
+  publisher_reported: "Listing record",
+  observation_metadata: "Update timing",
+  derived_from_listing_values: "Calculated from listing",
+  derived_unverified: "Unverified estimate",
+  canonical_discovery_query: "Saved Discover filter",
+};
+const eventTypeLabels: Record<string, string> = {
+  new_match: "New match",
+  material_change: "Updated listing",
+  no_longer_matches: "No longer matches",
+  evaluation_unknown: "Missing details",
+};
 const label = (value: string) =>
   fields.find(([field]) => field === value)?.[1] || value.replaceAll("_", " ");
 const display = (value: unknown) =>
@@ -123,13 +139,30 @@ const display = (value: unknown) =>
       : sourceDisplayText(String(value));
 const discoveryFilterLabels: Record<string, string> = {
   q: "Search", state: "State", county: "County", source: "Source", type: "Property type",
-  program: "Program", lifecycle: "Lifecycle", saleFrom: "Sale from", saleTo: "Sale through",
+  program: "Program", lifecycle: "Sale stage", saleFrom: "Sale from", saleTo: "Sale through",
   maxBid: "Maximum bid", minScore: "Minimum score", minEquity: "Minimum equity",
   occupancy: "Occupancy", freshness: "Freshness", hasDocuments: "Documents",
-  seniorLien: "Senior lien", redemption: "Redemption",
+  hasPhoto: "Photos", seniorLien: "Senior lien", redemption: "Redemption",
+  distressStage: "Sale type", minQuality: "Minimum listing detail",
+  excludeTerminal: "Active sales only", isNew: "New listings",
+  priceDropped: "Price drops", stale: "Stale records", occupancyKnown: "Occupancy known",
 };
 const inputClass =
   "w-full rounded-lg border border-line-strong bg-card px-3 py-2.5 text-sm outline-ink";
+
+const addUtcDays = (days: number) => {
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() + days);
+  return formatIsoDate(date);
+};
+
+const normalizeSubmittedRules = (items: Rule[]) =>
+  items.map((rule) =>
+    ["known", "unknown"].includes(rule.operator)
+      ? { field: rule.field, operator: rule.operator }
+      : rule,
+  );
+
 const huntTemplates: {
   name: string;
   description: string;
@@ -148,9 +181,9 @@ const huntTemplates: {
     rules: () => [{ field: "saleDate", operator: "known" }],
   },
   {
-    name: "Program and lifecycle review",
+    name: "Program and sale-stage review",
     description:
-      "Keep publisher-program records whose lifecycle facts can be reviewed.",
+      "Track properties that list an auction program and sale stage.",
     rules: () => [
       { field: "auctionProgram", operator: "known" },
       { field: "lifecycleStatus", operator: "known" },
@@ -158,35 +191,153 @@ const huntTemplates: {
   },
   {
     name: "Approaching published sale",
-    description: "Find published deadlines within the next 14 days.",
-    rules: () => {
-      const date = new Date();
-      date.setUTCDate(date.getUTCDate() + 14);
-      return [
-        {
-          field: "saleDate",
-          operator: "on_or_before",
-          value: date.toISOString().slice(0, 10),
-        },
-      ];
-    },
+    description: "Find upcoming auction dates within the next 14 days.",
+    rules: () => [
+      {
+        field: "saleDate",
+        operator: "on_or_after",
+        value: formatIsoDate(),
+      },
+      {
+        field: "saleDate",
+        operator: "on_or_before",
+        value: addUtcDays(14),
+      },
+    ],
   },
   {
-    name: "Building-area review",
+    name: "Square-footage review",
     description:
-      "Find records with an area to compare against parcel evidence in the case dossier.",
+      "Find properties with reported square footage to compare against county parcel records.",
     rules: () => [{ field: "sqft", operator: "known" }],
   },
   {
     name: "Alachua Second Chance",
     description:
-      "Draft the county and explicit public-availability criteria for reviewed records.",
+      "Track Alachua County properties marked available for public sale.",
     rules: () => [
       { field: "county", operator: "eq", value: "Alachua" },
       { field: "status", operator: "eq", value: "available_for_public" },
     ],
   },
 ];
+
+function RuleBuilderFields({
+  rules,
+  onChange,
+  idPrefix,
+}: {
+  rules: Rule[];
+  onChange: (next: Rule[]) => void;
+  idPrefix: string;
+}) {
+  function updateRule(index: number, change: Partial<Rule>) {
+    onChange(rules.map((rule, i) => (i === index ? { ...rule, ...change } : rule)));
+  }
+
+  return (
+    <>
+      <div className="mt-4 space-y-3">
+        {rules.map((rule, index) => {
+          const type = fields.find(([field]) => field === rule.field)?.[2] || "text";
+          return (
+            <fieldset
+              key={`${idPrefix}-${index}`}
+              className="space-y-2 rounded-control border border-line p-3"
+            >
+              <legend className="px-1 text-label font-semibold">
+                Criterion {index + 1}
+              </legend>
+              <div className="flex gap-2">
+                <select
+                  aria-label={`${idPrefix} criterion ${index + 1} field`}
+                  value={rule.field}
+                  onChange={(event) => {
+                    const nextType =
+                      fields.find(([field]) => field === event.target.value)?.[2] || "text";
+                    updateRule(index, {
+                      field: event.target.value,
+                      operator: operators[nextType][0][0],
+                      value: nextType === "number" ? 100000 : "",
+                    });
+                  }}
+                  className={inputClass}
+                >
+                  {fields.map(([field, title]) => (
+                    <option key={field} value={field}>
+                      {title}
+                    </option>
+                  ))}
+                </select>
+                {rules.length > 1 && (
+                  <button
+                    type="button"
+                    aria-label={`Remove ${idPrefix.toLowerCase()} criterion ${index + 1}`}
+                    onClick={() => onChange(rules.filter((_, i) => i !== index))}
+                  >
+                    <X size={16} />
+                  </button>
+                )}
+              </div>
+              <select
+                aria-label={`${idPrefix} criterion ${index + 1} operator`}
+                value={rule.operator}
+                onChange={(event) =>
+                  updateRule(index, { operator: event.target.value })
+                }
+                className={inputClass}
+              >
+                {operators[type].map(([operator, title]) => (
+                  <option key={operator} value={operator}>
+                    {title}
+                  </option>
+                ))}
+              </select>
+              {!["known", "unknown"].includes(rule.operator) && (
+                <input
+                  aria-label={`${idPrefix} criterion ${index + 1} value`}
+                  required
+                  type={type}
+                  step={type === "number" ? "any" : undefined}
+                  value={rule.value ?? ""}
+                  placeholder={
+                    rule.field === "source"
+                      ? "e.g. gsa"
+                      : rule.field === "state"
+                        ? "e.g. FL"
+                        : "Value"
+                  }
+                  onChange={(event) =>
+                    updateRule(index, {
+                      value:
+                        type === "number" && event.target.value !== ""
+                          ? Number(event.target.value)
+                          : event.target.value,
+                    })
+                  }
+                  className={inputClass}
+                />
+              )}
+            </fieldset>
+          );
+        })}
+      </div>
+      <button
+        type="button"
+        disabled={rules.length >= 20}
+        onClick={() =>
+          onChange([
+            ...rules,
+            { field: "openingBid", operator: "lte", value: 150000 },
+          ])
+        }
+        className="mt-3 flex items-center gap-1 text-xs font-semibold disabled:opacity-50"
+      >
+        <Plus size={14} /> Add criterion
+      </button>
+    </>
+  );
+}
 
 export function SavedHunts() {
   const { messages: m } = useLocale();
@@ -196,14 +347,25 @@ export function SavedHunts() {
   const [selected, setSelected] = useState<Hunt | null>(null);
   const [evaluation, setEvaluation] = useState<Evaluation | null>(null);
   const [events, setEvents] = useState<Event[]>([]);
+  const [eventsError, setEventsError] = useState("");
   const [inbox, setInbox] = useState<(Event & { huntName: string })[]>([]);
+  const [inboxError, setInboxError] = useState("");
   const [name, setName] = useState("My overlooked-property hunt");
   const [webhookUrl, setWebhookUrl] = useState("");
   const [notifyEmail, setNotifyEmail] = useState("");
+  const [emailTouched, setEmailTouched] = useState(false);
   const [mode, setMode] = useState<"all" | "any">("all");
   const [rules, setRules] = useState<Rule[]>([
     { field: "state", operator: "eq", value: "FL" },
   ]);
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editWebhookUrl, setEditWebhookUrl] = useState("");
+  const [editNotifyEmail, setEditNotifyEmail] = useState("");
+  const [editEnabled, setEditEnabled] = useState(true);
+  const [editMode, setEditMode] = useState<"all" | "any">("all");
+  const [editRules, setEditRules] = useState<Rule[]>([]);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -212,11 +374,48 @@ export function SavedHunts() {
     "Vacant land in Alachua County under $150k within 30 days",
   );
   const [missingDependencies, setMissingDependencies] = useState<string[]>([]);
+  const [queryWarnings, setQueryWarnings] = useState<string[]>([]);
   const selectedSectionRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    if (!emailTouched && !notifyEmail && session.member?.email) {
+      setNotifyEmail(session.member.email);
+    }
+  }, [emailTouched, notifyEmail, session.member?.email]);
+
+  function applySelectedHunt(huntDetail: Hunt | null, recentEvents: Event[] = []) {
+    setSelected(huntDetail);
+    setEvaluation(null);
+    setEvents(recentEvents);
+    setEventsError("");
+    setEditing(false);
+    setConfirmDelete(false);
+    if (!huntDetail) {
+      setEditName("");
+      setEditWebhookUrl("");
+      setEditNotifyEmail("");
+      setEditEnabled(true);
+      setEditMode("all");
+      setEditRules([]);
+      return;
+    }
+    setEditName(huntDetail.name || "");
+    setEditWebhookUrl(huntDetail.webhookUrl || "");
+    setEditNotifyEmail(huntDetail.notifyEmail || "");
+    setEditEnabled(huntDetail.enabled);
+    if ("rules" in huntDetail.criteria && Array.isArray(huntDetail.criteria.rules)) {
+      setEditMode(huntDetail.criteria.mode ?? "all");
+      setEditRules(huntDetail.criteria.rules.map((rule) => ({ ...rule })));
+    } else {
+      setEditMode("all");
+      setEditRules([]);
+    }
+  }
+
   async function api(path = "", method = "GET", body?: unknown) {
     if (!session.memberTools) {
       session.requestUnlock();
-      throw new Error("Unlock the private workspace to use saved hunts.");
+      throw new Error("Sign in as an active member or unlock the workspace to use saved hunts.");
     }
     const response = await fetch(`/api/hunts${path}`, {
       method,
@@ -230,55 +429,101 @@ export function SavedHunts() {
       throw new Error(data.details?.[0] || data.error || `The hunt could not be completed (HTTP ${response.status})`);
     return data;
   }
+
+  async function loadInbox(items: Hunt[]) {
+    if (!items.length) {
+      setInbox([]);
+      setInboxError("");
+      return;
+    }
+    const failedHunts: string[] = [];
+    const batches = await Promise.all(
+      items.map(async (hunt) => {
+        try {
+          const response = await fetch(
+            `/api/hunts/${encodeURIComponent(hunt.id)}/events?limit=25`,
+            { credentials: "same-origin", cache: "no-store" },
+          );
+          if (!response.ok) {
+            failedHunts.push(hunt.name);
+            return [];
+          }
+          const history = await response.json().catch(() => null);
+          if (!history || !Array.isArray(history.items)) {
+            failedHunts.push(hunt.name);
+            return [];
+          }
+          return history.items.map((event: Event) => ({
+            ...event,
+            huntName: hunt.name,
+          }));
+        } catch {
+          failedHunts.push(hunt.name);
+          return [];
+        }
+      }),
+    );
+    if (failedHunts.length === items.length) {
+      setInboxError("Recent change events could not be loaded. Try refreshing hunts.");
+    } else if (failedHunts.length > 0) {
+      setInboxError(
+        `Could not load change events for: ${failedHunts.slice(0, 3).join(", ")}${failedHunts.length > 3 ? ` (+${failedHunts.length - 3} more)` : ""}.`,
+      );
+    } else {
+      setInboxError("");
+    }
+    setInbox(
+      batches
+        .flat()
+        .sort((a, b) =>
+          String(b.observedAt).localeCompare(String(a.observedAt)),
+        )
+        .slice(0, 50),
+    );
+  }
+
+  async function refreshAll(preferredHuntId?: string | null) {
+    const data = await api();
+    const items: Hunt[] = Array.isArray(data.items) ? data.items : [];
+    setHunts(items);
+    const targetId = preferredHuntId ?? selected?.id ?? null;
+    if (targetId) {
+      const target = items.find((hunt) => hunt.id === targetId);
+      if (target) {
+        const detail = await api(`/${target.id}`);
+        applySelectedHunt(detail.hunt, detail.recentEvents || []);
+      } else {
+        applySelectedHunt(null, []);
+      }
+    }
+    await loadInbox(items);
+    setConnected(true);
+    return items;
+  }
+
   useEffect(() => {
     if (!session.memberTools) {
       setConnected(false);
       setHunts([]);
-      setSelected(null);
+      setInbox([]);
+      setInboxError("");
+      applySelectedHunt(null, []);
       return;
     }
     void run(async () => {
-      const data = await api();
-      setHunts(data.items);
       const requestedId = new URLSearchParams(window.location.search).get("hunt");
-      const requested = data.items.find((hunt: Hunt) => hunt.id === requestedId);
-      if (requested) {
-        const detail = await api(`/${requested.id}`);
-        setSelected(detail.hunt);
-        setEvaluation(null);
-        setEvents(detail.recentEvents || []);
+      await refreshAll(requestedId);
+      if (requestedId) {
         requestAnimationFrame(() => {
           selectedSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
           selectedSectionRef.current?.focus({ preventScroll: true });
         });
       }
-      const batches = await Promise.all(
-        data.items.map(async (hunt: Hunt) => {
-          const response = await fetch(
-            `/api/hunts/${encodeURIComponent(hunt.id)}/events?limit=25`,
-            { credentials: "same-origin", cache: "no-store" },
-          );
-          if (!response.ok) return [];
-          const history = await response.json();
-          return (history.items || []).map((event: Event) => ({
-            ...event,
-            huntName: hunt.name,
-          }));
-        }),
-      );
-      setInbox(
-        batches
-          .flat()
-          .sort((a, b) =>
-            String(b.observedAt).localeCompare(String(a.observedAt)),
-          )
-          .slice(0, 50),
-      );
-      setConnected(true);
     });
-    // `api` and `run` are stable function declarations over current session state.
+    // `api`, `run`, and `refreshAll` read current session state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.memberTools]);
+
   async function run(work: () => Promise<void>) {
     setBusy(true);
     setError("");
@@ -293,18 +538,12 @@ export function SavedHunts() {
       setBusy(false);
     }
   }
+
   async function openHunt(hunt: Hunt) {
     const detail = await api(`/${hunt.id}`);
-    setSelected(detail.hunt);
-    setWebhookUrl(detail.hunt?.webhookUrl || "");
-    setEvaluation(null);
-    setEvents(detail.recentEvents || []);
+    applySelectedHunt(detail.hunt, detail.recentEvents || []);
   }
-  function updateRule(index: number, change: Partial<Rule>) {
-    setRules(
-      rules.map((rule, i) => (i === index ? { ...rule, ...change } : rule)),
-    );
-  }
+
   const results =
     evaluation?.results.filter(
       (result) => filter === "all" || result.status === filter,
@@ -326,39 +565,62 @@ export function SavedHunts() {
         </p>
         <div className="mt-8 flex max-w-xl items-center justify-between gap-4 rounded-card border border-line bg-card p-5">
           <div>
-            <p className="text-sm font-semibold">{session.member?.entitled && !session.authenticated ? `Your hunts · ${session.member.email}` : "Hunts"}</p>
+            <p className="text-sm font-semibold">
+              {session.member?.entitled && !session.authenticated
+                ? `Your hunts · ${session.member.email}`
+                : session.member && !session.memberTools
+                  ? `Member account · ${session.member.email}`
+                  : "Hunts"}
+            </p>
             <p className="mt-1 text-xs leading-5 text-ink-3">
-              {session.memberTools
-                ? "Hunts re-run after every collection and email you when a match appears or changes."
-                : session.member
-                  ? "Hunts need an active membership. Subscribe from your account page."
-                  : "Sign in as a member, or unlock with the operator key, to save hunts."}
+              {session.loading
+                ? "Checking your workspace session..."
+                : session.memberTools
+                  ? "Hunts re-run after every collection and email you when a match appears or changes."
+                  : session.member
+                    ? "Your account does not have an active membership yet. Upgrade on our pricing page to save and monitor hunts."
+                    : "Sign in with a member account to save hunts, compare source updates, and receive email alerts."}
             </p>
           </div>
-          {session.memberTools ? (
+          {session.loading ? null : session.memberTools ? (
             <button
+              type="button"
               disabled={busy}
               onClick={() =>
                 void run(async () => {
-                  const data = await api();
-                  setHunts(data.items);
-                  setConnected(true);
-                  setMessage("Saved hunts refreshed.");
+                  await refreshAll();
+                  setMessage("Saved hunts and change inbox refreshed.");
                 })
               }
-              className="shrink-0 rounded-lg border border-line-strong px-4 py-2 text-xs font-semibold"
+              className="shrink-0 rounded-lg border border-line-strong px-4 py-2 text-xs font-semibold disabled:opacity-50"
             >
               {m.workspacePages.huntsRefreshBtn}
             </button>
+          ) : session.member ? (
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <Link
+                href="/pricing"
+                className="rounded-control bg-ink px-4 py-2 text-xs font-semibold text-white hover:bg-ink-2"
+              >
+                View plans
+              </Link>
+              <Link
+                href="/account"
+                className="rounded-control border border-line-strong bg-card px-4 py-2 text-xs font-semibold text-ink-2 hover:bg-paper"
+              >
+                Account
+              </Link>
+            </div>
           ) : (
             <div className="flex shrink-0 flex-wrap items-center gap-2">
               <Link
-                href="/account"
+                href="/sign-in"
                 className="rounded-control bg-ink px-4 py-2 text-xs font-semibold text-white hover:bg-ink-2"
               >
                 {m.workspacePages.huntsMemberBtn}
               </Link>
               <button
+                type="button"
                 onClick={session.requestUnlock}
                 className="rounded-control border border-line-strong bg-card px-4 py-2 text-xs font-semibold text-ink-2 hover:bg-paper"
               >
@@ -381,6 +643,75 @@ export function SavedHunts() {
             {message}
           </p>
         )}
+        {!session.loading && !session.memberTools && (
+          <section className="mt-8 rounded-card border border-line bg-card p-6 sm:p-8">
+            <h2 className="text-xl font-semibold">
+              {session.member
+                ? "Membership required for saved hunts"
+                : "Sign in to manage saved hunts"}
+            </h2>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-3">
+              {session.member
+                ? "Saved hunts continuously check new county, sheriff, and federal listings against your bid, location, and sale-date criteria and notify you by email or webhook."
+                : "Create or sign in to a member account to save up to 20 custom property hunts, review change history, and receive automated alerts."}
+            </p>
+            <div className="mt-5 flex flex-wrap gap-3">
+              {session.member ? (
+                <>
+                  <Link
+                    href="/pricing"
+                    className="inline-flex items-center gap-2 rounded-control bg-ink px-4 py-2.5 text-sm font-semibold text-white hover:bg-ink-2"
+                  >
+                    Upgrade membership <ArrowRight size={15} />
+                  </Link>
+                  <Link
+                    href="/listings"
+                    className="inline-flex items-center gap-2 rounded-control border border-line-strong bg-paper px-4 py-2.5 text-sm font-semibold text-ink-2 hover:bg-card"
+                  >
+                    Browse listings free
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <Link
+                    href="/sign-in"
+                    className="inline-flex items-center gap-2 rounded-control bg-ink px-4 py-2.5 text-sm font-semibold text-white hover:bg-ink-2"
+                  >
+                    {m.workspacePages.huntsMemberBtn} <ArrowRight size={15} />
+                  </Link>
+                  <Link
+                    href="/pricing"
+                    className="inline-flex items-center gap-2 rounded-control border border-line-strong bg-paper px-4 py-2.5 text-sm font-semibold text-ink-2 hover:bg-card"
+                  >
+                    View plans
+                  </Link>
+                </>
+              )}
+            </div>
+          </section>
+        )}
+        {session.memberTools && !connected && (
+          <section className="mt-8 rounded-card border border-line bg-card p-6">
+            {error ? (
+              <>
+                <h2 className="text-lg font-semibold">Saved hunts could not be loaded</h2>
+                <p className="mt-2 text-sm text-ink-3">{error}</p>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void run(async () => { await refreshAll(); })}
+                  className="mt-4 rounded-control bg-ink px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                >
+                  Retry
+                </button>
+              </>
+            ) : (
+              <p className="flex items-center gap-2 text-sm text-ink-3">
+                <Loader2 size={16} className="animate-spin" /> Loading your saved hunts...
+              </p>
+            )}
+          </section>
+        )}
         {connected && (
           <section
             className="mt-6 rounded-card border border-line bg-paper p-5"
@@ -399,6 +730,14 @@ export function SavedHunts() {
                 {inbox.length} events
               </span>
             </div>
+            {inboxError && (
+              <p
+                role="alert"
+                className="mt-3 rounded-lg bg-catch-wash p-3 text-xs leading-5 text-catch-ink"
+              >
+                {inboxError}
+              </p>
+            )}
             {inbox.length ? (
               <div className="mt-4 grid gap-2 md:grid-cols-2">
                 {inbox.slice(0, 8).map((event) => (
@@ -411,7 +750,7 @@ export function SavedHunts() {
                       {sourceDisplayText(event.address || event.listingId)}
                     </strong>
                     <span className="mt-1 block text-xs text-ink-3">
-                      {event.huntName} · {event.type.replaceAll("_", " ")} ·{" "}
+                      {event.huntName} · {eventTypeLabels[event.type] || event.type.replaceAll("_", " ")} ·{" "}
                       {new Date(event.observedAt).toLocaleString()}
                     </span>
                     <span className="mt-2 block text-xs text-ink-2">
@@ -422,8 +761,9 @@ export function SavedHunts() {
               </div>
             ) : (
               <p className="mt-3 text-sm text-ink-3">
-                No hunt matches or updates yet. A first run establishes a baseline;
-                later source observations can create explainable changes.
+                No matching properties or updates yet. Run a hunt once to set a
+                baseline, then check again after new listings arrive to see what
+                changed.
               </p>
             )}
           </section>
@@ -457,10 +797,13 @@ export function SavedHunts() {
                       setRules(compiled.criteria.rules);
                     }
                     setMissingDependencies(compiled.missingDependencies);
+                    setQueryWarnings(compiled.warnings);
                     setMessage(
                       compiled.criteria.rules.length
-                        ? "We turned your description into editable criteria below. Review every field before saving."
-                        : "No matching filter rule was recognized. See the missing data note below.",
+                        ? compiled.warnings.length
+                          ? "We turned the recognized parts of your description into editable criteria below. Review the unrecognized terms note before saving."
+                          : "We turned your description into editable criteria below. Review every field before saving."
+                        : "No matching filter rule was recognized. See the note below.",
                     );
                   }}
                   className="shrink-0 rounded-lg bg-ink px-4 py-2 text-xs font-semibold text-white"
@@ -469,13 +812,21 @@ export function SavedHunts() {
                 </button>
               </div>
             </div>
-            {missingDependencies.length > 0 && (
-              <p className="mt-3 rounded-lg bg-catch-wash p-3 text-xs leading-5 text-catch-ink">
-                Missing data: {missingDependencies.join("; ")}. These requests
-                remain unsupported until that evidence is connected.
+            {queryWarnings.length > 0 && (
+              <p
+                role="status"
+                className="mt-3 rounded-lg bg-catch-wash p-3 text-xs leading-5 text-catch-ink"
+              >
+                {queryWarnings.join(" ")}
               </p>
             )}
-            <div className="mt-4 grid gap-2 md:grid-cols-5">
+            {missingDependencies.length > 0 && (
+              <p className="mt-3 rounded-lg bg-catch-wash p-3 text-xs leading-5 text-catch-ink">
+                Unsupported request: {missingDependencies.join("; ")}. Those
+                fields are not yet available as automated hunt filters.
+              </p>
+            )}
+            <div className="mt-4 grid gap-2 sm:grid-cols-2 md:grid-cols-3">
               {huntTemplates.map((template) => (
                 <button
                   key={template.name}
@@ -485,6 +836,7 @@ export function SavedHunts() {
                     setMode("all");
                     setRules(template.rules());
                     setMissingDependencies([]);
+                    setQueryWarnings([]);
                     setMessage(
                       `${template.name} loaded. Edit the criteria, then save it.`,
                     );
@@ -516,19 +868,13 @@ export function SavedHunts() {
                       notifyEmail: notifyEmail.trim() || undefined,
                       criteria: {
                         mode,
-                        rules: rules.map((rule) =>
-                          ["known", "unknown"].includes(rule.operator)
-                            ? { field: rule.field, operator: rule.operator }
-                            : rule,
-                        ),
+                        rules: normalizeSubmittedRules(rules),
                       },
                     });
                     setHunts((items) => [data.hunt, ...items]);
-                    setSelected(data.hunt);
-                    setEvaluation(null);
-                    setEvents([]);
+                    applySelectedHunt(data.hunt, []);
                     setMessage(
-                      "Hunt saved. Run it to establish the first comparison.",
+                      "Hunt saved. Click Check for changes to run the first comparison.",
                     );
                   });
                 }}
@@ -551,7 +897,10 @@ export function SavedHunts() {
                     placeholder="you@example.com"
                     maxLength={254}
                     value={notifyEmail}
-                    onChange={(event) => setNotifyEmail(event.target.value)}
+                    onChange={(event) => {
+                      setEmailTouched(true);
+                      setNotifyEmail(event.target.value);
+                    }}
                     className={`${inputClass} mt-2`}
                   />
                 </label>
@@ -579,113 +928,14 @@ export function SavedHunts() {
                     <option value="any">Any criterion</option>
                   </select>
                 </label>
-                <div className="mt-4 space-y-3">
-                  {rules.map((rule, index) => {
-                    const type =
-                      fields.find(([field]) => field === rule.field)?.[2] ||
-                      "text";
-                    return (
-                      <fieldset
-                        key={index}
-                        className="space-y-2 rounded-control border border-line p-3"
-                      >
-                        <legend className="px-1 text-label font-semibold">
-                          Criterion {index + 1}
-                        </legend>
-                        <div className="flex gap-2">
-                          <select
-                            aria-label={`Criterion ${index + 1} field`}
-                            value={rule.field}
-                            onChange={(event) => {
-                              const nextType =
-                                fields.find(
-                                  ([field]) => field === event.target.value,
-                                )?.[2] || "text";
-                              updateRule(index, {
-                                field: event.target.value,
-                                operator: operators[nextType][0][0],
-                                value: nextType === "number" ? 100000 : "",
-                              });
-                            }}
-                            className={inputClass}
-                          >
-                            {fields.map(([field, title]) => (
-                              <option key={field} value={field}>
-                                {title}
-                              </option>
-                            ))}
-                          </select>
-                          {rules.length > 1 && (
-                            <button
-                              type="button"
-                              aria-label={`Remove criterion ${index + 1}`}
-                              onClick={() =>
-                                setRules(rules.filter((_, i) => i !== index))
-                              }
-                            >
-                              <X size={16} />
-                            </button>
-                          )}
-                        </div>
-                        <select
-                          aria-label={`Criterion ${index + 1} operator`}
-                          value={rule.operator}
-                          onChange={(event) =>
-                            updateRule(index, { operator: event.target.value })
-                          }
-                          className={inputClass}
-                        >
-                          {operators[type].map(([operator, title]) => (
-                            <option key={operator} value={operator}>
-                              {title}
-                            </option>
-                          ))}
-                        </select>
-                        {!["known", "unknown"].includes(rule.operator) && (
-                          <input
-                            aria-label={`Criterion ${index + 1} value`}
-                            required
-                            type={type}
-                            step={type === "number" ? "any" : undefined}
-                            value={rule.value ?? ""}
-                            placeholder={
-                              rule.field === "source"
-                                ? "e.g. gsa"
-                                : rule.field === "state"
-                                  ? "e.g. FL"
-                                  : "Value"
-                            }
-                            onChange={(event) =>
-                              updateRule(index, {
-                                value:
-                                  type === "number" && event.target.value !== ""
-                                    ? Number(event.target.value)
-                                    : event.target.value,
-                              })
-                            }
-                            className={inputClass}
-                          />
-                        )}
-                      </fieldset>
-                    );
-                  })}
-                </div>
-                <button
-                  type="button"
-                  disabled={rules.length >= 20}
-                  onClick={() =>
-                    setRules([
-                      ...rules,
-                      { field: "openingBid", operator: "lte", value: 150000 },
-                    ])
-                  }
-                  className="mt-3 flex items-center gap-1 text-xs font-semibold disabled:opacity-50"
-                >
-                  <Plus size={14} /> Add criterion
-                </button>
+                <RuleBuilderFields
+                  rules={rules}
+                  onChange={setRules}
+                  idPrefix="Create"
+                />
                 <p className="mt-4 text-xs leading-5 text-ink-3">
-                  Missing facts stay unknown. Only source-observed records enter
-                  the hunt; a missing record never means sold.
+                  Only listings backed by observed public records are matched;
+                  missing fields stay unknown instead of being guessed.
                 </p>
                 <button
                   disabled={busy}
@@ -696,12 +946,13 @@ export function SavedHunts() {
               </form>
               <div>
                 <h2 className="mb-3 text-sm font-semibold">
-                  Your hunts · {hunts.length}
+                  Your hunts · {hunts.length} / 20
                 </h2>
                 <div className="space-y-2">
                   {hunts.map((hunt) => (
                     <button
                       key={hunt.id}
+                      type="button"
                       disabled={busy}
                       onClick={() => void run(() => openHunt(hunt))}
                       className={`w-full rounded-control border p-4 text-left ${selected?.id === hunt.id ? "border-ink bg-paper" : "border-line bg-card"}`}
@@ -727,14 +978,14 @@ export function SavedHunts() {
               ref={selectedSectionRef}
               tabIndex={-1}
               className="rounded-card border border-line bg-card p-5 sm:p-7"
-              aria-label="Hunt evidence"
+              aria-label="Hunt details and results"
             >
               {selected ? (
                 <>
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     <div>
                       <p className="text-label font-bold uppercase tracking-widest text-ink">
-                        Evidence search · Version {selected.version}
+                        Saved hunt · Version {selected.version}
                       </p>
                       <h2 className="mt-2 text-2xl font-semibold">
                         {selected.name}
@@ -757,50 +1008,264 @@ export function SavedHunts() {
                           : `${selected.criteria.mode === "all" ? "Every" : "Any"} criterion must match.`}
                       </p>
                     </div>
-                    <button
-                      disabled={busy || !selected.enabled}
-                      onClick={() =>
-                        void run(async () => {
-                          const data = await api(
-                            `/${selected.id}/evaluate`,
-                            "POST",
-                            {},
-                          );
-                          setEvaluation(data.evaluation);
-                          const history = await api(`/${selected.id}/events`);
-                          setEvents(history.items);
-                          const base = data.evaluation.baselineCreated
-                            ? "First comparison saved. Future runs can identify new matches and changes."
-                            : "Hunt evaluated against collected source evidence.";
-                          const hook = data.evaluation.webhook;
-                          const delivery = !hook || hook.delivery === "skipped"
-                            ? ""
-                            : hook.sent
-                              ? " The webhook accepted this notice."
-                              : hook.delivery === "refused"
-                                ? " The webhook address is not a public https endpoint, so nothing was sent."
-                                : " The webhook did not accept the notice.";
-                          const mail = data.evaluation.email;
-                          const mailNote = !mail || mail.delivery === "skipped"
-                            ? ""
-                            : mail.sent
-                              ? " Alert email sent."
-                              : mail.delivery === "local"
-                                ? " Alert email queued to the local outbox (RESEND_API_KEY is not set)."
-                                : " The alert email could not be sent.";
-                          setMessage(`${base}${delivery}${mailNote}`);
-                        })
-                      }
-                      className="flex items-center gap-2 rounded-lg bg-ink px-4 py-3 text-xs font-semibold text-white disabled:opacity-50"
-                    >
-                      {busy ? (
-                        <Loader2 size={15} className="animate-spin" />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={busy || !selected.enabled}
+                        onClick={() =>
+                          void run(async () => {
+                            const data = await api(
+                              `/${selected.id}/evaluate`,
+                              "POST",
+                              {},
+                            );
+                            setEvaluation(data.evaluation);
+                            try {
+                              const history = await api(`/${selected.id}/events`);
+                              setEvents(history.items || []);
+                              setEventsError("");
+                            } catch (caught) {
+                              setEventsError(
+                                caught instanceof Error
+                                  ? caught.message
+                                  : "Could not refresh change events for this hunt.",
+                              );
+                            }
+                            await loadInbox(hunts);
+                            const base = data.evaluation.baselineCreated
+                              ? "Baseline saved. Future checks will highlight new matches and price or date changes."
+                              : "Check complete against current property records.";
+                            const hook = data.evaluation.webhook;
+                            const delivery = !hook || hook.delivery === "skipped"
+                              ? ""
+                              : hook.sent
+                                ? " The webhook accepted this notice."
+                                : hook.delivery === "refused"
+                                  ? " The webhook address is not a public https endpoint, so nothing was sent."
+                                  : " The webhook did not accept the notice.";
+                            const mail = data.evaluation.email;
+                            const mailNote = !mail || mail.delivery === "skipped"
+                              ? ""
+                              : mail.sent
+                                ? " Alert email sent."
+                                : mail.delivery === "local"
+                                  ? " Alert email queued to the local outbox (RESEND_API_KEY is not set)."
+                                  : " The alert email could not be sent.";
+                            setMessage(`${base}${delivery}${mailNote}`);
+                          })
+                        }
+                        className="flex items-center gap-2 rounded-lg bg-ink px-4 py-3 text-xs font-semibold text-white disabled:opacity-50"
+                      >
+                        {busy ? (
+                          <Loader2 size={15} className="animate-spin" />
+                        ) : (
+                          <Crosshair size={15} />
+                        )}
+                        Check for changes
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => {
+                          setConfirmDelete(false);
+                          setEditing((prev) => {
+                            if (!prev && selected) {
+                              setEditName(selected.name || "");
+                              setEditWebhookUrl(selected.webhookUrl || "");
+                              setEditNotifyEmail(selected.notifyEmail || "");
+                              setEditEnabled(selected.enabled);
+                              if ("rules" in selected.criteria && Array.isArray(selected.criteria.rules)) {
+                                setEditMode(selected.criteria.mode ?? "all");
+                                setEditRules(selected.criteria.rules.map((rule) => ({ ...rule })));
+                              }
+                            }
+                            return !prev;
+                          });
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-line-strong px-3 py-3 text-xs font-semibold text-ink-2 hover:bg-paper disabled:opacity-50"
+                      >
+                        <Pencil size={14} /> {editing ? "Close editor" : "Edit"}
+                      </button>
+                      {!confirmDelete ? (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => {
+                            setEditing(false);
+                            setConfirmDelete(true);
+                          }}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-line-strong px-3 py-3 text-xs font-semibold text-catch-ink hover:bg-catch-wash disabled:opacity-50"
+                        >
+                          <Trash2 size={14} /> Delete
+                        </button>
                       ) : (
-                        <Crosshair size={15} />
+                        <div className="flex items-center gap-1.5 rounded-lg border border-catch/40 bg-catch-wash px-2.5 py-1.5">
+                          <span className="text-xs font-semibold text-catch-ink">
+                            Delete hunt?
+                          </span>
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() =>
+                              void run(async () => {
+                                const deletedId = selected.id;
+                                await api(`/${deletedId}`, "DELETE");
+                                const remaining = hunts.filter((item) => item.id !== deletedId);
+                                setHunts(remaining);
+                                applySelectedHunt(null, []);
+                                await loadInbox(remaining);
+                                setMessage("Hunt deleted.");
+                              })
+                            }
+                            className="rounded bg-ink px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                          >
+                            Confirm delete
+                          </button>
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => setConfirmDelete(false)}
+                            className="rounded px-2 py-1.5 text-xs font-semibold text-ink-2 hover:bg-card"
+                          >
+                            Cancel
+                          </button>
+                        </div>
                       )}
-                      Check for changes
-                    </button>
+                    </div>
                   </div>
+                  {editing && (
+                    <form
+                      className="mt-5 rounded-control border border-line bg-paper p-4"
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        void run(async () => {
+                          const payload: Record<string, unknown> = {
+                            name: editName,
+                            enabled: editEnabled,
+                            notifyEmail: editNotifyEmail.trim(),
+                            webhookUrl: editWebhookUrl.trim(),
+                          };
+                          if (!("discoveryFilters" in selected.criteria)) {
+                            payload.criteria = {
+                              mode: editMode,
+                              rules: normalizeSubmittedRules(editRules),
+                            };
+                          }
+                          const data = await api(`/${selected.id}`, "PATCH", payload);
+                          const updated: Hunt = data.hunt;
+                          const versionChanged = updated.version !== selected.version;
+                          setHunts((items) =>
+                            items.map((item) => (item.id === updated.id ? updated : item)),
+                          );
+                          setSelected(updated);
+                          setEditName(updated.name || "");
+                          setEditNotifyEmail(updated.notifyEmail || "");
+                          setEditWebhookUrl(updated.webhookUrl || "");
+                          setEditEnabled(updated.enabled);
+                          if ("rules" in updated.criteria && Array.isArray(updated.criteria.rules)) {
+                            setEditMode(updated.criteria.mode ?? "all");
+                            setEditRules(updated.criteria.rules.map((rule) => ({ ...rule })));
+                          }
+                          if (versionChanged) {
+                            setEvaluation(null);
+                          }
+                          setEditing(false);
+                          setMessage(
+                            versionChanged
+                              ? "Hunt updated. Run Check for changes to rebuild the baseline for the new criteria."
+                              : "Hunt updated.",
+                          );
+                        });
+                      }}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <h3 className="text-sm font-semibold">Edit hunt</h3>
+                        <label className="inline-flex items-center gap-2 text-xs font-semibold">
+                          <input
+                            type="checkbox"
+                            checked={editEnabled}
+                            onChange={(event) => setEditEnabled(event.target.checked)}
+                          />
+                          Enabled
+                        </label>
+                      </div>
+                      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                        <label className="block text-xs font-semibold">
+                          Name
+                          <input
+                            required
+                            maxLength={80}
+                            value={editName}
+                            onChange={(event) => setEditName(event.target.value)}
+                            className={`${inputClass} mt-1.5`}
+                          />
+                        </label>
+                        <label className="block text-xs font-semibold">
+                          Email alerts
+                          <input
+                            type="email"
+                            placeholder="you@example.com"
+                            maxLength={254}
+                            value={editNotifyEmail}
+                            onChange={(event) => setEditNotifyEmail(event.target.value)}
+                            className={`${inputClass} mt-1.5`}
+                          />
+                        </label>
+                      </div>
+                      <label className="mt-3 block text-xs font-semibold">
+                        Webhook URL
+                        <input
+                          type="url"
+                          placeholder="https://example.com/api/webhooks/property-alerts"
+                          maxLength={256}
+                          value={editWebhookUrl}
+                          onChange={(event) => setEditWebhookUrl(event.target.value)}
+                          className={`${inputClass} mt-1.5`}
+                        />
+                      </label>
+                      {"discoveryFilters" in selected.criteria ? (
+                        <p className="mt-3 text-xs text-ink-3">
+                          Criteria for this hunt come from saved Discover filters. You can update its name, status, or alert destinations here.
+                        </p>
+                      ) : (
+                        <>
+                          <label className="mt-3 block text-xs font-semibold">
+                            Match
+                            <select
+                              value={editMode}
+                              onChange={(event) => setEditMode(event.target.value as "all" | "any")}
+                              className={`${inputClass} mt-1.5`}
+                            >
+                              <option value="all">Every criterion</option>
+                              <option value="any">Any criterion</option>
+                            </select>
+                          </label>
+                          <RuleBuilderFields
+                            rules={editRules}
+                            onChange={setEditRules}
+                            idPrefix="Edit"
+                          />
+                        </>
+                      )}
+                      <div className="mt-4 flex flex-wrap justify-end gap-2">
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => setEditing(false)}
+                          className="rounded-lg border border-line-strong bg-card px-3 py-2 text-xs font-semibold text-ink-2"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={busy}
+                          className="rounded-lg bg-ink px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                        >
+                          Save changes
+                        </button>
+                      </div>
+                    </form>
+                  )}
                   <div className="mt-5 flex flex-wrap gap-2">
                     {"discoveryFilters" in selected.criteria
                       ? Object.entries(selected.criteria.discoveryFilters ?? {}).map(([key, value]) => (
@@ -823,6 +1288,7 @@ export function SavedHunts() {
                     )}
                   </div>
                   <button
+                    type="button"
                     disabled={busy}
                     onClick={() =>
                       void run(async () => {
@@ -830,6 +1296,7 @@ export function SavedHunts() {
                           enabled: !selected.enabled,
                         });
                         setSelected(data.hunt);
+                        setEditEnabled(data.hunt.enabled);
                         setHunts(
                           hunts.map((hunt) =>
                             hunt.id === data.hunt.id ? data.hunt : hunt,
@@ -842,15 +1309,15 @@ export function SavedHunts() {
                     {selected.enabled ? "Pause this hunt" : "Enable this hunt"}
                   </button>
                   <p className="mt-3 text-xs leading-5 text-ink-3">
-                    Enabled searches are also checked as new source collections finish.
+                    Enabled hunts also run automatically whenever new property updates are collected.
                   </p>
                   {evaluation ? (
                     <>
                       <div className="mt-6 grid grid-cols-3 gap-3">
                         {[
                           ["match", "Matches"],
-                          ["unknown", "Need evidence"],
-                          ["noMatch", "Do not match"],
+                          ["unknown", "Missing details"],
+                          ["noMatch", "Did not match"],
                         ].map(([key, title]) => (
                           <div
                             key={key}
@@ -866,11 +1333,10 @@ export function SavedHunts() {
                         ))}
                       </div>
                       <p className="mt-3 text-xs leading-5 text-ink-3">
-                        {evaluation.counts.accepted} validated records
-                        evaluated. {evaluation.counts.rejected || 0} unverified
-                        records excluded. {evaluation.counts.notObserved || 0}{" "}
-                        earlier records were not observed in this run; no sale
-                        or disappearance is inferred.
+                        {evaluation.counts.accepted} verified listings checked.{" "}
+                        {evaluation.counts.rejected || 0} incomplete records skipped.{" "}
+                        {evaluation.counts.notObserved || 0} previously matched
+                        listings were not in the latest update.
                       </p>
                       {evaluation.rankingNote ? (
                         <p className="mt-2 text-label leading-5 text-ink-3">
@@ -909,8 +1375,8 @@ export function SavedHunts() {
                           onChange={(event) => setFilter(event.target.value)}
                         >
                           <option value="match">Matches</option>
-                          <option value="unknown">Need evidence</option>
-                          <option value="no_match">Do not match</option>
+                          <option value="unknown">Missing details</option>
+                          <option value="no_match">Did not match</option>
                           <option value="all">All returned results</option>
                         </select>
                       </label>
@@ -947,25 +1413,29 @@ export function SavedHunts() {
                                 <span
                                   className={`rounded-control px-2 py-1 text-label font-semibold ${result.status === "match" ? "bg-line" : result.status === "unknown" ? "bg-catch-wash text-catch-ink" : "bg-paper text-ink-3"}`}
                                 >
-                                  {result.status.replaceAll("_", " ")}
+                                  {result.status === "no_match"
+                                    ? "did not match"
+                                    : result.status === "unknown"
+                                      ? "missing details"
+                                      : result.status.replaceAll("_", " ")}
                                 </span>
                               </div>
                             </div>
                             <p className="mt-2 text-xs text-ink-3">
-                              {sourceDisplayText(result.sourceId)} · Observed{" "}
+                              {sourceDisplayText(result.sourceId)} · Updated{" "}
                               {new Date(result.observedAt).toLocaleString()}
                             </p>
                             {result.status === "match" && result.relevance ? (
                               <p className="mt-2 text-label leading-5 text-ink-3">
-                                Triage rank uses criterion closeness, evidence quality
+                                Triage rank uses criterion closeness, listing detail
                                 {result.relevance.researchQualityScore != null
                                   ? ` (${result.relevance.researchQualityScore}/100)`
                                   : ""}
                                 {result.relevance.urgency
-                                  ? `, sale urgency (${result.relevance.urgency.replaceAll("_", " ")})`
+                                  ? `, sale timing (${result.relevance.urgency.replaceAll("_", " ")})`
                                   : ""}
                                 {result.relevance.dealScoreBand
-                                  ? `, and modeled Deal Score band (${result.relevance.dealScoreBand})`
+                                  ? `, and Deal Score band (${result.relevance.dealScoreBand})`
                                   : ""}
                                 . Not an appraisal or legal verification.
                               </p>
@@ -1000,17 +1470,19 @@ export function SavedHunts() {
                                   >
                                     <p className="text-xs font-semibold">
                                       {label(clause.field)} ·{" "}
-                                      {clause.status.replaceAll("_", " ")}
+                                      {clause.status === "no_match"
+                                        ? "did not match"
+                                        : clause.status === "unknown"
+                                          ? "missing details"
+                                          : clause.status.replaceAll("_", " ")}
                                     </p>
                                     <p className="mt-1 text-xs leading-5 text-ink-3">
                                       {sourceDisplayText(clause.reason)}
                                     </p>
                                     <p className="mt-1 text-label text-ink-3">
-                                      Observed value: {display(clause.actual)} ·{" "}
-                                      {clause.evidenceClass.replaceAll(
-                                        "_",
-                                        " ",
-                                      )}
+                                      Recorded value: {display(clause.actual)} ·{" "}
+                                      {evidenceLabels[clause.evidenceClass] ||
+                                        clause.evidenceClass.replaceAll("_", " ")}
                                     </p>
                                   </div>
                                 ))}
@@ -1021,7 +1493,7 @@ export function SavedHunts() {
                                 href={`/listings/${encodeURIComponent(result.listingId)}`}
                                 className="inline-flex items-center gap-1 text-xs font-semibold"
                               >
-                                Open evidence dossier <ArrowRight size={12} />
+                                View property dossier <ArrowRight size={12} />
                               </Link>
                               {result.sourceUrl ? (
                                 <a
@@ -1030,7 +1502,7 @@ export function SavedHunts() {
                                   rel="noreferrer"
                                   className="inline-flex items-center gap-1 text-xs underline"
                                 >
-                                  Publisher record <ExternalLink size={12} />
+                                  Official listing <ExternalLink size={12} />
                                 </a>
                               ) : null}
                             </div>
@@ -1038,31 +1510,38 @@ export function SavedHunts() {
                         ))}
                         {!results.length && (
                           <p className="rounded-control bg-paper p-5 text-sm leading-6 text-ink-3">
-                            No returned results in this category. Try another
-                            filter or collect more source evidence.
+                            No properties in this category yet. Try switching the
+                            result filter above or broadening your criteria.
                           </p>
                         )}
                       </div>
                       {evaluation.resultsTruncated && (
                         <p className="mt-3 text-xs text-ink-2">
-                          The result display is bounded. Counts cover the full
-                          accepted inventory; narrow this hunt to inspect more
-                          of its matches.
+                          Showing the top results. Counts cover all verified
+                          listings; narrow this hunt to inspect more matches.
                         </p>
                       )}
                     </>
                   ) : (
                     <div className="mt-6 rounded-control bg-paper p-6">
-                      <h3 className="font-semibold">Start with a comparison</h3>
+                      <h3 className="font-semibold">Run your first check</h3>
                       <p className="mt-2 text-sm leading-6 text-ink-3">
-                        Run this hunt to inspect the available evidence and save
-                        a comparison point. Future runs separate newly matching
-                        records, changed facts, and records that no longer fit.
+                        Run this hunt once to save a baseline. Later runs will
+                        highlight newly listed properties, price or date changes,
+                        and listings that no longer qualify.
                       </p>
                     </div>
                   )}
                   <div className="mt-8 border-t border-line pt-6">
                     <h3 className="text-lg font-semibold">What changed</h3>
+                    {eventsError && (
+                      <p
+                        role="alert"
+                        className="mt-3 rounded-lg bg-catch-wash p-3 text-xs leading-5 text-catch-ink"
+                      >
+                        {eventsError}
+                      </p>
+                    )}
                     {events.length ? (
                       <div className="mt-4 space-y-3">
                         {events.slice(0, 30).map((event) => (
@@ -1071,7 +1550,7 @@ export function SavedHunts() {
                             className="rounded-control bg-paper p-4"
                           >
                             <p className="text-xs font-semibold">
-                              {event.type.replaceAll("_", " ")} ·{" "}
+                              {eventTypeLabels[event.type] || event.type.replaceAll("_", " ")} ·{" "}
                               {event.listingId ? (
                                 <Link href={`/listings/${encodeURIComponent(event.listingId)}?returnTo=${encodeURIComponent("/hunts")}`} className="underline underline-offset-2 hover:text-ink-2">
                                   {sourceDisplayText(event.address || event.listingId)}
@@ -1088,9 +1567,9 @@ export function SavedHunts() {
                       </div>
                     ) : (
                       <p className="mt-3 text-sm leading-6 text-ink-3">
-                        No comparison events yet. A first run establishes the
-                        baseline; later runs require changed evidence before
-                        reporting a change.
+                        No change events yet. Run your first check to set a
+                        baseline; future runs will record new matches and
+                        updates here.
                       </p>
                     )}
                     <p className="mt-4 text-xs leading-5 text-ink-3">
@@ -1105,8 +1584,8 @@ export function SavedHunts() {
                     Make the search yours.
                   </h2>
                   <p className="mt-3 max-w-md text-sm leading-7 text-ink-3">
-                    Create a hunt or open a saved one. Every match will show the
-                    source observation and a reason for each criterion.
+                    Create a hunt or open a saved one. Every match shows the
+                    listing details and why each criterion matched.
                   </p>
                 </div>
               )}

@@ -70,7 +70,9 @@ function pinnedFetch(url, records, { method, headers, body, signal }) {
       headers: { ...(headers ?? {}), host: url.hostname },
       agent: false,
       lookup: (_hostname, _options, callback) => {
-        callback(null, records.map((record) => ({ address: record.address, family: record.family })));
+        const mapped = records.map((record) => ({ address: record.address, family: record.family }));
+        if (_options?.all) return callback(null, mapped);
+        return callback(null, mapped[0].address, mapped[0].family);
       },
     };
     if (isHttps) requestOptions.servername = url.hostname;
@@ -82,7 +84,13 @@ function pinnedFetch(url, records, { method, headers, body, signal }) {
         responseHeaders[String(key).toLowerCase()] = value;
       }
       const chunks = [];
-      res.on('data', (chunk) => chunks.push(chunk));
+      let totalBytes = 0;
+      const MAX_RESPONSE_BYTES = 65536;
+      res.on('data', (chunk) => {
+        if (totalBytes >= MAX_RESPONSE_BYTES) return;
+        totalBytes += chunk.length;
+        chunks.push(chunk.length > MAX_RESPONSE_BYTES ? chunk.subarray(0, MAX_RESPONSE_BYTES) : chunk);
+      });
       res.on('end', () => {
         if (settled) return;
         settled = true;

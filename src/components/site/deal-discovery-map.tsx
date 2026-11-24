@@ -66,7 +66,7 @@ type WindowKind =
 type FeedStatus = "loading" | "ready" | "empty" | "error";
 
 const CLEVELAND_CENTER: [number, number] = [-81.6944, 41.4993];
-const PIN_COLORS = ["#0F172A", "#1D4ED8", "#0F766E", "#7C3AED", "#B45309"];
+const PIN_COLORS = ["#181529", "#1D4ED8", "#0F766E", "#7C3AED", "#B45309"];
 
 function finite(value: unknown): number | null {
   const n = typeof value === "number" ? value : Number(value);
@@ -720,10 +720,10 @@ export function DealDiscoveryMap() {
       data-scan-state={scanState}
       role="region"
       aria-label={interpolate(t.ddmRegionAria, { window: windowLabel.toLowerCase() })}
-      className="opportunity-atlas relative w-full overflow-hidden rounded-[18px] border border-[#D9E2EC] bg-[#EAF1F6]"
+      className="opportunity-atlas relative w-full overflow-hidden rounded-card border border-line bg-paper"
     >
       <div className="opportunity-atlas__map relative h-[390px] overflow-hidden sm:h-[480px] lg:h-[620px]">
-        <div aria-hidden="true" className="opportunity-atlas__fallback-map absolute inset-0 z-0 overflow-hidden bg-[#E8EDF1]">
+        <div aria-hidden="true" className="opportunity-atlas__fallback-map absolute inset-0 z-0 overflow-hidden bg-paper">
           {isClevelandWindow ? (
             <div className="absolute left-1/2 top-1/2 grid aspect-[5/3] min-h-full min-w-full -translate-x-1/2 -translate-y-1/2 grid-cols-5 grid-rows-3">
               {FALLBACK_MAP_TILES.map(([x, y]) => (
@@ -756,7 +756,7 @@ export function DealDiscoveryMap() {
         {mapUnavailable ? (
           <div
             role="status"
-            className="absolute left-3 top-[72px] z-20 rounded-xl border border-white/80 bg-white/90 px-3 py-2 text-xs font-semibold text-[#475569] shadow-sm backdrop-blur sm:left-5"
+            className="absolute left-3 top-[72px] z-20 rounded-control border border-white/80 bg-white/90 px-3 py-2 text-xs font-semibold text-ink-3 shadow-sm backdrop-blur sm:left-5"
           >
             {t.ddmTilesDownBanner}
           </div>
@@ -809,14 +809,14 @@ export function DealDiscoveryMap() {
 
         <div className="absolute left-3 right-3 top-3 z-30 flex items-center justify-between gap-3 lg:right-[384px] sm:left-5 sm:top-5">
           <div className="flex min-w-0 items-center gap-2 rounded-xl border border-white/85 bg-white/92 px-3 py-2 shadow-[0_8px_26px_rgba(15,23,42,0.1)] backdrop-blur-md">
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-slate-100 text-slate-900">
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-paper text-ink">
               <MapPinned className="h-4 w-4" aria-hidden />
             </span>
             <div className="min-w-0">
-              <p className="truncate text-xs font-extrabold uppercase tracking-[0.12em] text-slate-900">
+              <p className="truncate text-xs font-extrabold uppercase tracking-[0.12em] text-ink">
                 {t.ddmMapPreviewTag}
               </p>
-              <p className="truncate text-xs font-semibold text-[#111827]">
+              <p className="truncate text-xs font-semibold text-ink">
                 {deals.length ? interpolate(t.ddmPublishedInWin, { count: deals.length, window: windowLabel.toLowerCase() }) : windowLabel}
               </p>
             </div>
@@ -830,7 +830,7 @@ export function DealDiscoveryMap() {
                 ? t.ddmMotionDisabledAria
                 : t.ddmReplayAria
             }
-            className="opportunity-replay inline-flex h-11 shrink-0 items-center gap-2 rounded-xl border border-white/85 bg-white/92 px-3 text-xs font-bold text-[#111827] shadow-[0_8px_26px_rgba(15,23,42,0.1)] backdrop-blur-md disabled:cursor-default disabled:opacity-70"
+            className="opportunity-replay inline-flex h-11 shrink-0 items-center gap-2 rounded-control border border-white/85 bg-white/92 px-3 text-xs font-bold text-ink shadow-card backdrop-blur-md disabled:cursor-default disabled:opacity-70"
           >
             {shouldReduceMotion ? (
               <Crosshair className="h-3.5 w-3.5" aria-hidden />
@@ -843,7 +843,7 @@ export function DealDiscoveryMap() {
           </button>
         </div>
 
-        <div className="absolute bottom-3 left-3 z-20 hidden items-center gap-2 rounded-lg border border-white/80 bg-white/86 px-2.5 py-2 text-xs font-semibold text-[#475569] shadow-sm backdrop-blur md:flex lg:bottom-5 lg:left-5">
+        <div className="absolute bottom-3 left-3 z-20 hidden items-center gap-2 rounded-lg border border-white/80 bg-white/86 px-2.5 py-2 text-xs font-semibold text-ink-3 shadow-sm backdrop-blur md:flex lg:bottom-5 lg:left-5">
           {t.ddmLegendPin}
         </div>
       </div>
@@ -853,14 +853,14 @@ export function DealDiscoveryMap() {
         data-testid="storyteller-map-preview"
         data-opportunity-detail="true"
         aria-label={interpolate(t.ddmSelectedOppAria, { address: shown.address })}
-        className="opportunity-inspector relative z-40 border-t border-[#E2E8F0] bg-white p-4 sm:p-5 lg:absolute lg:bottom-4 lg:right-4 lg:top-4 lg:w-[352px] lg:overflow-y-auto lg:rounded-2xl lg:border lg:border-white/90 lg:bg-white/94 lg:shadow-[0_22px_70px_rgba(15,23,42,0.18)] lg:backdrop-blur-xl"
+        className="opportunity-inspector relative z-40 border-t border-line bg-card p-4 sm:p-5 lg:absolute lg:bottom-4 lg:right-4 lg:top-4 lg:w-[352px] lg:overflow-y-auto lg:rounded-2xl lg:border lg:border-white/90 lg:bg-card/95 lg:shadow-raised lg:backdrop-blur-xl"
       >
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <p className="text-xs font-extrabold uppercase tracking-[0.13em] text-slate-900">
+            <p className="text-xs font-extrabold uppercase tracking-[0.13em] text-ink">
               {sourceDisplayText(shown.source)}
             </p>
-            <h3 className="mt-1 truncate text-xl font-bold tracking-[-0.02em] text-[#111827]">
+            <h3 className="mt-1 truncate text-xl font-bold tracking-[-0.02em] text-ink">
               {shown.id ? (
                 <Link href={`/listings/${encodeURIComponent(shown.id)}`} className="hover:underline underline-offset-4">
                   {shown.address}
@@ -869,7 +869,7 @@ export function DealDiscoveryMap() {
                 shown.address
               )}
             </h3>
-            <p className="mt-1 text-xs font-medium text-[#5B6472]">
+            <p className="mt-1 text-xs font-medium text-ink-3">
               {shown.area}
             </p>
           </div>
@@ -878,7 +878,7 @@ export function DealDiscoveryMap() {
           </span>
         </div>
 
-        <p className="mt-4 rounded-xl bg-[#F8FAFC] px-3.5 py-3 text-xs font-medium leading-[1.45] text-[#475569]">
+        <p className="mt-4 rounded-control bg-paper px-3.5 py-3 text-xs font-medium leading-[1.45] text-ink-2">
           {shown.signal}. {shown.insight}
         </p>
 
@@ -895,12 +895,12 @@ export function DealDiscoveryMap() {
           {shown.id ? t.ddmOpenListing : t.ddmOpenFeed} <ArrowRight className="h-3.5 w-3.5" aria-hidden />
         </a>
 
-        <div className="mt-5 border-t border-[#E8EDF3] pt-4">
+        <div className="mt-5 border-t border-line pt-4">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-extrabold uppercase tracking-[0.12em] text-[#5B6472]">
+            <p className="text-xs font-extrabold uppercase tracking-[0.12em] text-ink-3">
               {t.ddmNextOpps}
             </p>
-            <span className="text-xs font-semibold text-[#5B6472]">
+            <span className="text-xs font-semibold text-ink-3">
               {t.ddmFeedOrder}
             </span>
           </div>
@@ -921,14 +921,14 @@ export function DealDiscoveryMap() {
                     style={{ backgroundColor: deal.color }}
                   />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-xs font-bold text-[#111827]">
+                    <span className="block truncate text-xs font-bold text-ink">
                       {deal.address}
                     </span>
-                    <span className="block truncate text-xs font-medium text-[#5B6472]">
+                    <span className="block truncate text-xs font-medium text-ink-3">
                       {sourceDisplayText(deal.source)}
                     </span>
                   </span>
-                  <span className="text-xs font-extrabold tabular-nums text-[#334155]">
+                  <span className="text-xs font-extrabold tabular-nums text-ink-2">
                     {pinText(deal.score)}
                   </span>
                 </button>
@@ -955,8 +955,8 @@ function OpportunityStat({
   green?: boolean;
 }) {
   return (
-    <div className="rounded-xl bg-[#F3F6F9] px-2 py-2.5">
-      <p className="text-xs font-bold uppercase tracking-[0.08em] text-[#5B6472]">
+    <div className="rounded-control bg-paper px-2 py-2.5">
+      <p className="text-xs font-bold uppercase tracking-[0.08em] text-ink-3">
         {label}
       </p>
       <p

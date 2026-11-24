@@ -493,3 +493,97 @@ test('second-look prevents isJuniorLien inside priceChange from bypassing failin
   assert.equal(evalResult.shouldTrigger, false);
   assert.ok(evalResult.alerts.includes('JUNIOR_LIEN_SURVIVING_MORTGAGE'));
 });
+
+test('applySecondLookReconsideration preserves reconsiderationRequired and latestTrigger, and action=second-look scans paginated pass cases', async () => {
+  const { applySecondLookReconsideration } = require('../server/intelligence/second-look');
+  const { createCase, updateCase, getCase, listCases } = require('../server/intelligence/research-cases');
+  const { createScrapersHandler } = require('../server/routes/scrapers');
+  const { Writable } = require('node:stream');
+
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'second-look-persist-'));
+  const filePath = path.join(tmpDir, 'research-cases.json');
+  try {
+    const sampleListing = {
+      id: 'CIV-NJ-TEST-SL-1',
+      source: 'civilview',
+      state: 'NJ',
+      county: 'Bergen',
+      city: 'Hackensack',
+      address: '10 Test Way, Hackensack, NJ 07601',
+      propType: 'Single Family',
+      status: 'scheduled',
+      openingBid: 100000,
+      saleDate: '2026-10-01',
+      raw: 'Source record 99999',
+      sourceUrl: 'https://salesweb.civilview.com/Sales/SaleDetails?PropertyId=99999',
+      sourceObservedAt: '2026-09-01T12:00:00.000Z',
+      provenance: {
+        origin: 'live',
+        observed: true,
+        recordKind: 'source_record',
+        publisher: 'CivilView',
+        recordId: '99999',
+        observedAt: '2026-09-01T12:00:00.000Z',
+      },
+    };
+    const created = createCase({ listing: sampleListing, origin: { type: 'manual' } }, { filePath }).case;
+    const passed = updateCase(created.id, {
+      state: 'pass',
+      expectedRevision: created.revision,
+      reasonCodes: ['opening_bid_too_high'],
+      reconsideration: { mode: 'any', conditions: [{ field: 'openingBid', operator: 'changed' }] },
+    }, { filePath });
+
+    assert.throws(
+      () => updateCase(created.id, {
+        state: 'pass',
+        expectedRevision: passed.revision,
+        reasonCodes: ['opening_bid_too_high'],
+        reconsideration: { mode: 'any', conditions: [{ field: 'toString', operator: 'eq', value: 'x' }] },
+      }, { filePath }),
+      (err) => err && err.name === 'ResearchCaseError',
+    );
+
+    const droppedListing = { ...sampleListing, openingBid: 75000, sourceObservedAt: '2026-09-10T12:00:00.000Z' };
+    const outcome = applySecondLookReconsideration(created.id, droppedListing, { filePath });
+    assert.equal(outcome.triggered, true);
+
+    const reloaded = getCase(created.id, { filePath }).case;
+    assert.equal(reloaded.state, 'inbox');
+    assert.equal(reloaded.reconsiderationRequired, true);
+    assert.ok(reloaded.latestTrigger && reloaded.latestTrigger.type === 'second_look_event');
+
+    // Verify action=second-look route iterates listCases().items without crashing when no caseId is supplied
+    const origPath = process.env.PROPERTY_RESEARCH_CASES_PATH;
+    process.env.PROPERTY_RESEARCH_CASES_PATH = filePath;
+    try {
+      const handler = createScrapersHandler({
+        env: { ...process.env, SCRAPER_ADMIN_TOKEN: 'sl-token' },
+        database: { async getListingById() { return droppedListing; } },
+      });
+      let status = 200;
+      let payload = null;
+      const req = {
+        method: 'POST',
+        url: '/api/scrapers/run?action=second-look',
+        headers: { authorization: 'Bearer sl-token' },
+        body: {},
+      };
+      const res = {
+        status(code) { status = code; return this; },
+        json(obj) { payload = obj; return this; },
+        setHeader() {},
+      };
+      await handler(req, res, new URL('http://localhost/api/scrapers/run?action=second-look'));
+      assert.equal(status, 200);
+      assert.equal(payload.status, 'completed');
+      assert.equal(payload.action, 'second-look');
+      assert.ok(listCases({}, { filePath }).items.length >= 1);
+    } finally {
+      if (origPath === undefined) delete process.env.PROPERTY_RESEARCH_CASES_PATH;
+      else process.env.PROPERTY_RESEARCH_CASES_PATH = origPath;
+    }
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});

@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { AlertTriangle, ArrowRight, Check, ExternalLink, Eye, RefreshCw } from "lucide-react";
-import { listingCatch } from "@/lib/listing-catch";
+import { listingCatch, type ListingCatch } from "@/lib/listing-catch";
 import { safeImageUrl } from "@/lib/listing-display";
 import { getExactSourceListingUrl } from "@/lib/listing-links";
 import { formatCountyDisplayName } from "@/lib/county-seo";
@@ -24,6 +24,15 @@ type Listing = Parameters<typeof listingCatch>[0] & {
   sourceUrl?: string | null;
   photo?: string | null;
   propType?: string | null;
+  catchSummary?: string | null;
+  catchWarnings?: string[];
+  titleRiskSummary?: { riskLevel?: string; actionableCount?: number } | null;
+  provenance?: {
+    recordId?: string | number | null;
+    derivedFields?: {
+      catchWarnings?: string[];
+    };
+  } | null;
 };
 
 const SOURCE_NAMES: Record<string, string> = {
@@ -55,6 +64,30 @@ function getMitigationHeuristic(flag: string, m: Messages["home"]["catchReveal"]
   return null;
 }
 
+function buildCatchForReveal(listing: Listing): ListingCatch {
+  const warnings = Array.isArray(listing.catchWarnings)
+    ? listing.catchWarnings
+    : Array.isArray(listing.provenance?.derivedFields?.catchWarnings)
+    ? listing.provenance.derivedFields.catchWarnings
+    : [];
+  const base = listingCatch(listing, warnings);
+  const persistedCatch = typeof listing.catchSummary === "string" && listing.catchSummary.trim()
+    ? listing.catchSummary.trim()
+    : null;
+  if (!persistedCatch) return base;
+
+  const isSevereTitleCatch = listing.titleRiskSummary?.riskLevel === "CRITICAL" || listing.titleRiskSummary?.riskLevel === "HIGH";
+  const prefix = persistedCatch.slice(0, 28).toLowerCase();
+  const alreadyCovered = base.flags.some((f) => f.toLowerCase().includes(prefix));
+  if (base.flags.length === 0 || (warnings.length === 0 && isSevereTitleCatch && !alreadyCovered)) {
+    return {
+      flags: [persistedCatch, ...base.flags],
+      notes: base.notes,
+    };
+  }
+  return base;
+}
+
 /**
  * The homepage's proof moment: a real, current listing shown the way a sale
  * posts it (price first), and then the catch our rules found in it.
@@ -64,10 +97,12 @@ export function CatchReveal() {
   const { locale, messages, plural } = useLocale();
   const cr = messages.home.catchReveal;
   const [listings, setListings] = React.useState<Listing[]>([]);
-  const [status, setStatus] = React.useState<"loading" | "ready" | "error">("loading");
+  const [status, setStatus] = React.useState<"loading" | "ready" | "empty" | "error">("loading");
   const [index, setIndex] = React.useState(0);
   const [revealed, setRevealed] = React.useState(false);
   const [showAerial, setShowAerial] = React.useState(false);
+  const [photoError, setPhotoError] = React.useState(false);
+  const [aerialError, setAerialError] = React.useState(false);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -77,7 +112,7 @@ export function CatchReveal() {
         if (cancelled) return;
         const rows = (data.listings ?? []).filter((l) => l?.id && l.address);
         setListings(rows);
-        setStatus(rows.length ? "ready" : "error");
+        setStatus(rows.length ? "ready" : "empty");
       })
       .catch(() => !cancelled && setStatus("error"));
     return () => {
@@ -86,14 +121,23 @@ export function CatchReveal() {
   }, []);
 
   const listing = listings[index] ?? null;
+  React.useEffect(() => {
+    setPhotoError(false);
+    setAerialError(false);
+  }, [listing?.id]);
+
   const exactSourceUrl = listing ? getExactSourceListingUrl(listing, SOURCES[String(listing.source)]?.websiteUrl) : null;
-  const found = listing ? listingCatch(listing) : null;
+  const found = listing ? buildCatchForReveal(listing) : null;
   const photo = listing ? safeImageUrl(listing.photo) : undefined;
+  const showingPhoto = Boolean(photo && !photoError);
+  const showingAerial = Boolean(!showingPhoto && showAerial && listing?.id && !aerialError);
   const place = listing ? [listing.county ? formatCountyDisplayName(String(listing.county)) : null, listing.state].filter(Boolean).join(", ") : "";
 
   const next = () => {
     setRevealed(false);
     setShowAerial(false);
+    setPhotoError(false);
+    setAerialError(false);
     setIndex((i) => (listings.length ? (i + 1) % listings.length : 0));
   };
 
@@ -109,17 +153,21 @@ export function CatchReveal() {
           <article className="overflow-hidden rounded-card border border-line bg-card shadow-raised">
             <div className="relative h-48 w-full overflow-hidden bg-paper">
               <div aria-hidden="true" className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url("${getPropertyPlaceholder(listing?.propType, { address: listing?.address, source: listing?.source }).imageSrc}")` }} />
-              {photo ? (
+              {showingPhoto && photo ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={photo} alt="" loading="lazy" referrerPolicy="no-referrer" className="relative h-full w-full object-cover" onError={(e) => { e.currentTarget.style.display = "none"; }} />
-              ) : showAerial && listing?.id ? (
+                <img src={photo} alt="" loading="lazy" referrerPolicy="no-referrer" className="relative h-full w-full object-cover" onError={() => setPhotoError(true)} />
+              ) : showingAerial && listing?.id ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={`/api/property-image?listingId=${encodeURIComponent(listing.id)}&mode=aerial`} alt={`Aerial parcel view for ${listing.address || ""}`} loading="lazy" className="relative h-full w-full object-cover" onError={(e) => { e.currentTarget.style.display = "none"; }} />
+                <img src={`/api/property-image?listingId=${encodeURIComponent(listing.id)}&mode=aerial`} alt={`Aerial parcel view for ${listing.address || ""}`} loading="lazy" className="relative h-full w-full object-cover" onError={() => setAerialError(true)} />
               ) : null}
               <span className="absolute left-4 top-4 rounded-full bg-card/90 px-3 py-1 text-label font-semibold text-ink shadow-sm backdrop-blur">
-                {photo ? cr.whatPostsBadge : showAerial ? `${cr.whatPostsBadge} · Aerial parcel view` : `${getPropertyPlaceholder(listing?.propType, { address: listing?.address, source: listing?.source }).typeLabel} · Placeholder`}
+                {showingPhoto
+                  ? cr.whatPostsBadge
+                  : showingAerial
+                  ? `${cr.whatPostsBadge} · Aerial parcel view`
+                  : `${getPropertyPlaceholder(listing?.propType, { address: listing?.address, source: listing?.source }).typeLabel} · Placeholder${aerialError ? " (aerial unavailable)" : ""}`}
               </span>
-              {!photo && !showAerial && listing?.id ? (
+              {!showingPhoto && !showAerial && !aerialError && listing?.id ? (
                 <button
                   type="button"
                   onClick={() => setShowAerial(true)}
@@ -158,6 +206,11 @@ export function CatchReveal() {
                     </div>
                   </div>
                 </>
+              ) : status === "empty" ? (
+                <p className="text-body text-ink-2">
+                  No active public-sale listings are currently loaded.{" "}
+                  <Link href="/listings" className="font-semibold text-ink underline underline-offset-4">{cr.searchInstead}</Link>.
+                </p>
               ) : (
                 <p className="text-body text-ink-2">
                   {cr.loadError}{" "}
@@ -181,7 +234,11 @@ export function CatchReveal() {
             {!revealed ? (
               <div className="flex flex-1 flex-col items-start justify-center py-8">
                 <p className="text-title font-semibold leading-snug text-ink">
-                  {found ? plural(found.flags.length, cr.checksCount) : cr.defaultHeadline}
+                  {found
+                    ? found.flags.length > 0
+                      ? plural(found.flags.length, cr.checksCount)
+                      : messages.detailUi.catchHeadlineNone
+                    : cr.defaultHeadline}
                 </p>
                 <p className="mt-2 max-w-[400px] text-body text-ink-3">
                   {cr.unshownSub}
@@ -197,6 +254,11 @@ export function CatchReveal() {
               </div>
             ) : found ? (
               <div className="mt-5 flex-1">
+                {found.flags.length === 0 ? (
+                  <p className="mb-3 rounded-control border border-line bg-card/80 px-3 py-2 text-body font-medium text-ink">
+                    {messages.detailUi.catchHeadlineNone}
+                  </p>
+                ) : null}
                 <ol className="space-y-3">
                   {found.flags.map((flag, i) => {
                     const mitigation = getMitigationHeuristic(flag, cr.mitigations);

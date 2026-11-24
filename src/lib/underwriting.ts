@@ -1045,6 +1045,7 @@ export function computeLienWaterfall(params: {
   seniorMortgageAmount?: number | null;
   subordinateLiens?: Array<{ name: string; amount: number; type?: string }>;
   state?: string;
+  hoaSuperPriorityForeclosure?: boolean;
 }): LienWaterfallResult {
   const winningBid = Math.max(0, Number(params.winningBid) || 0);
   const balance = (value: unknown): number | null => typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
@@ -1053,10 +1054,16 @@ export function computeLienWaterfall(params: {
   const taxBalance = balance(params.delinquentTaxesAmount);
   const seniorBalance = balance(params.seniorMortgageAmount);
   const delinquentTaxes = taxBalance ?? 0; // Internal subtotal only; unknown totals are withheld below.
+  const stateCode = String(params.state || "").trim().toUpperCase();
+  const isNvHoaSuperPriority =
+    params.foreclosingLienType === "hoa_assessment" &&
+    stateCode === "NV" &&
+    params.hoaSuperPriorityForeclosure !== false;
   const seniorMortgage = params.foreclosingLienType === "first_mortgage" ? foreclosingAmount : seniorBalance ?? 0;
+  const isTaxDeedForeclosure = params.foreclosingLienType === "tax_deed";
   const isJuniorForeclosure = params.foreclosingLienType === "second_mortgage" ||
     params.foreclosingLienType === "heloc" ||
-    params.foreclosingLienType === "hoa_assessment" ||
+    (params.foreclosingLienType === "hoa_assessment" && !isNvHoaSuperPriority) ||
     params.foreclosingLienType === "mechanic_lien";
 
   const items: LienWaterfallItem[] = [];
@@ -1088,7 +1095,73 @@ export function computeLienWaterfall(params: {
     });
   }
 
-  if (seniorMortgage > 0) {
+  if (isNvHoaSuperPriority) {
+    if (foreclosingAmount > 0) {
+      const paidHoa = Math.min(availableProceeds, foreclosingAmount);
+      availableProceeds -= paidHoa;
+      const unpaidHoa = foreclosingAmount - paidHoa;
+      items.push({
+        id: "foreclosing-nv-hoa-01",
+        name: "Foreclosing HOA Super-Priority Lien (NV NRS 116.3116)",
+        type: "hoa_assessment",
+        amount: foreclosingAmount,
+        seniority: 2,
+        isForeclosingLien: true,
+        status: unpaidHoa === 0 ? "satisfied_from_proceeds" : "partially_satisfied_from_proceeds",
+        amountPaidFromProceeds: paidHoa,
+        remainingBalanceAgainstProperty: 0,
+      });
+    }
+    if (seniorMortgage > 0) {
+      const paidSenior = Math.min(availableProceeds, seniorMortgage);
+      availableProceeds -= paidSenior;
+      const unpaidSenior = seniorMortgage - paidSenior;
+      items.push({
+        id: "extinguished-senior-mtg-01",
+        name: "Prior First Mortgage (Extinguished by NV NRS 116.3116)",
+        type: "first_mortgage",
+        amount: seniorMortgage,
+        seniority: 3,
+        isForeclosingLien: false,
+        status: unpaidSenior === 0 ? "satisfied_from_proceeds" : (paidSenior > 0 ? "partially_satisfied_from_proceeds" : "extinguished_unpaid"),
+        amountPaidFromProceeds: paidSenior,
+        remainingBalanceAgainstProperty: 0,
+      });
+    }
+  } else if (isTaxDeedForeclosure) {
+    if (foreclosingAmount > 0 && delinquentTaxes === 0) {
+      const paidTaxDeed = Math.min(availableProceeds, foreclosingAmount);
+      availableProceeds -= paidTaxDeed;
+      const unpaidTaxDeed = foreclosingAmount - paidTaxDeed;
+      items.push({
+        id: "foreclosing-tax-01",
+        name: "Foreclosing Delinquent Property Tax Lien",
+        type: "super_priority_tax",
+        amount: foreclosingAmount,
+        seniority: 1,
+        isForeclosingLien: true,
+        status: unpaidTaxDeed === 0 ? "satisfied_from_proceeds" : "partially_satisfied_from_proceeds",
+        amountPaidFromProceeds: paidTaxDeed,
+        remainingBalanceAgainstProperty: 0,
+      });
+    }
+    if (seniorMortgage > 0) {
+      const paidSenior = Math.min(availableProceeds, seniorMortgage);
+      availableProceeds -= paidSenior;
+      const unpaidSenior = seniorMortgage - paidSenior;
+      items.push({
+        id: "extinguished-senior-mtg-01",
+        name: "Prior First Mortgage (Subordinate to Property Tax Lien)",
+        type: "first_mortgage",
+        amount: seniorMortgage,
+        seniority: 2,
+        isForeclosingLien: false,
+        status: unpaidSenior === 0 ? "satisfied_from_proceeds" : (paidSenior > 0 ? "partially_satisfied_from_proceeds" : "extinguished_unpaid"),
+        amountPaidFromProceeds: paidSenior,
+        remainingBalanceAgainstProperty: 0,
+      });
+    }
+  } else if (seniorMortgage > 0) {
     if (isJuniorForeclosure) {
       totalSurvivingDebt += seniorMortgage;
       criticalAlert = `CRITICAL WARNING: Junior ${params.foreclosingLienType.replace("_", " ").toUpperCase()} foreclosure. The senior 1st mortgage ($${seniorMortgage.toLocaleString()}) SURVIVES against the purchaser! Your true effective acquisition cost is your bid plus this surviving senior mortgage.`;
@@ -1159,7 +1232,7 @@ export function computeLienWaterfall(params: {
   }
 
   const complete = unknownReasons.length === 0;
-  const distributionComplete = complete && foreclosingBalance !== null;
+  const distributionComplete = complete && foreclosingBalance !== null && (!isNvHoaSuperPriority || availableProceeds === 0 || seniorBalance !== null);
   const surplusProceedsToBorrower = distributionComplete ? availableProceeds : null;
   const totalEffectiveAcquisitionCost = complete ? winningBid + totalSurvivingDebt : null;
 

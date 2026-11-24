@@ -230,3 +230,15 @@ test('runtime grid vs detail split strips sourceFacts/raw on grid while preservi
   assert.equal(Object.hasOwn(summary.body.listings[0], 'raw'), false);
   assert.equal(Object.hasOwn(summary.body, 'pipeline'), false);
 });
+
+test('CatchReveal avoids 0-flag phrasing, hardcoded cost estimates, image-error badge drift, and distinguishes empty vs error', () => {
+  const catchReveal = fs.readFileSync(path.join(ROOT, 'src', 'components', 'site', 'catch-reveal.tsx'), 'utf8');
+  const enMsgs = fs.readFileSync(path.join(ROOT, 'src', 'lib', 'i18n', 'messages', 'en.ts'), 'utf8');
+  assert.doesNotMatch(enMsgs, /\$4,000–\$7,500/);
+  assert.match(catchReveal, /"empty"/);
+  assert.match(catchReveal, /photoError/);
+  assert.match(catchReveal, /aerialError/);
+  assert.match(catchReveal, /catchHeadlineNone/);
+  assert.match(catchReveal, /catchSummary/);
+  assert.match(catchReveal, /catchWarnings/);
+});

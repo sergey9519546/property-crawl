@@ -21,7 +21,7 @@ export function SaveSearchButton({ filters }: { filters: DiscoveryFilters }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState(t.saveSearchDefaultName);
   const [webhookUrl, setWebhookUrl] = useState("");
-  const [notifyEmail, setNotifyEmail] = useState("");
+  const [notifyEmail, setNotifyEmail] = useState(() => session.member?.email || "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [savedId, setSavedId] = useState<string | null>(null);
@@ -36,7 +36,7 @@ export function SaveSearchButton({ filters }: { filters: DiscoveryFilters }) {
     setError("");
     setSavedId(null);
     setWebhookUrl("");
-    setNotifyEmail("");
+    setNotifyEmail((current) => current || session.member?.email || "");
     setOpen(true);
   }
 
