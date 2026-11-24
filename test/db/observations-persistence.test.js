@@ -12,9 +12,12 @@ const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const { test } = require('node:test');
 const {
+  compactPgObservations,
   loadObservationsForRecord,
   persistSourceObservations,
+  recordSourceRun,
   recomputeTriageForListings,
+  slimSnapshotForRawPayload,
   updateTriagePriority,
 } = require('../../server/db/observations-persistence');
 const { evaluateOpportunitySignals } = require('../../server/intelligence/signals');
@@ -225,4 +228,154 @@ test('recomputeTriageForListings refreshes persisted scores for advanced listing
   // Bounds and no-ops.
   assert.deepEqual(await recomputeTriageForListings(null, [listing]), { evaluated: 0, updated: 0 });
   assert.deepEqual(await recomputeTriageForListings(emptyPool, []), { evaluated: 0, updated: 0 });
+});
+
+test('slimSnapshotForRawPayload omits noticeExcerpt while preserving snapshot metadata and persistSourceObservations / recordSourceRun keep notice_excerpt column populated', async () => {
+  const fullSnap = snapshot({
+    source: 'civilview',
+    sourceUrl: 'https://salesweb.civilview.com/Sales/SaleDetails?PropertyId=2128964683',
+    state: 'NJ',
+    county: 'Bergen',
+    noticeExcerpt: 'SHERIFF SALE NOTICE '.repeat(500),
+  });
+
+  const slimmed = slimSnapshotForRawPayload(fullSnap);
+  assert.equal('noticeExcerpt' in slimmed, false, 'noticeExcerpt must be omitted from raw_payload clone');
+  assert.equal(slimmed.listingId, fullSnap.listingId);
+  assert.equal(slimmed.source, fullSnap.source);
+  assert.equal(slimmed.sourceUrl, fullSnap.sourceUrl);
+  assert.equal(slimmed.observedAt, fullSnap.observedAt);
+  assert.equal(slimmed.state, fullSnap.state);
+  assert.equal(slimmed.county, fullSnap.county);
+  assert.equal(slimmed.recordId, fullSnap.recordId);
+  assert.equal(slimmed.noticeSha256, fullSnap.noticeSha256);
+  assert.deepEqual(slimmed.fields, fullSnap.fields);
+
+  const pool = enrolledSourcePool({ rows: [], rowCount: 1 });
+  await persistSourceObservations(pool, 'civilview', [fullSnap]);
+  const insertCall = pool.calls.find((c) => /INSERT INTO source_observations/.test(c.text));
+  assert.ok(insertCall);
+  const noticeExcerptParam = insertCall.params[10];
+  const rawPayloadParam = JSON.parse(insertCall.params[12]);
+  assert.equal(noticeExcerptParam, fullSnap.noticeExcerpt, 'notice_excerpt column must remain populated');
+  assert.equal('noticeExcerpt' in rawPayloadParam, false, 'raw_payload JSON must not duplicate noticeExcerpt');
+  assert.equal(rawPayloadParam.sourceUrl, fullSnap.sourceUrl);
+  assert.equal(rawPayloadParam.state, 'NJ');
+  assert.equal(rawPayloadParam.county, 'Bergen');
+
+  // Verify pendingRollForward in recordSourceRun also slims raw_payload
+  const rawText = 'SHERIFF SALE NOTICE ROLL FORWARD';
+  const noticeSha = crypto.createHash('sha256').update(rawText).digest('hex');
+  const rollPool = fakePool((text) => {
+    if (/SELECT 1 FROM sources/i.test(text)) return { rows: [{ '?column?': 1 }], rowCount: 1 };
+    if (/max\(observed_at\)/i.test(text)) {
+      return { rows: [{ record_id: '2128964683', latest_observed_at: new Date('2026-10-02T00:00:00.000Z') }], rowCount: 1 };
+    }
+    if (/FROM source_observations/i.test(text)) {
+      return {
+        rows: [
+          {
+            id: 'obs-1', listing_id: 'CIV-NJ-7-2128964683', source_key: 'civilview', record_id: '2128964683',
+            observed_at: new Date('2026-10-01T00:00:00.000Z'), opening_bid: '100000', sale_date: '2026-10-01',
+            status: 'Status: Active - Postponed', deposit: '10% of bid', address: '19 West Park Avenue, Park Ridge, NJ 07656',
+            notice_sha256: noticeSha,
+          },
+          {
+            id: 'obs-2', listing_id: 'CIV-NJ-7-2128964683', source_key: 'civilview', record_id: '2128964683',
+            observed_at: new Date('2026-10-02T00:00:00.000Z'), opening_bid: '100000', sale_date: '2026-10-01',
+            status: 'Status: Active - Postponed', deposit: '10% of bid', address: '19 West Park Avenue, Park Ridge, NJ 07656',
+            notice_sha256: noticeSha,
+          },
+        ],
+        rowCount: 2,
+      };
+    }
+    if (/UPDATE source_observations/i.test(text)) return { rows: [], rowCount: 1 };
+    return { rows: [], rowCount: 1 };
+  });
+
+  await recordSourceRun(rollPool, 'civilview', {
+    listings: [{
+      id: 'CIV-NJ-7-2128964683',
+      source: 'civilview',
+      sourceUrl: 'https://salesweb.civilview.com/Sales/SaleDetails?PropertyId=2128964683',
+      state: 'NJ',
+      county: 'Bergen',
+      openingBid: 100000,
+      saleDate: '2026-10-01',
+      status: 'Status: Active - Postponed',
+      deposit: '10% of bid',
+      address: '19 West Park Avenue, Park Ridge, NJ 07656',
+      raw: rawText,
+      sourceObservedAt: '2026-10-03T00:00:00.000Z',
+      provenance: { origin: 'live', observed: true, publisher: 'CivilView', recordId: '2128964683', noticeSha256: noticeSha },
+    }],
+    error: null,
+    durationMs: 50,
+  }, { now: '2026-10-03T00:00:00.000Z' });
+
+  const rollUpdate = rollPool.calls.find((c) => /UPDATE source_observations/i.test(c.text));
+  assert.ok(rollUpdate);
+  const rolledPayload = JSON.parse(rollUpdate.params[2][0]);
+  assert.equal('noticeExcerpt' in rolledPayload, false, 'roll-forward raw_payload must omit noticeExcerpt');
+  assert.equal(rolledPayload.sourceUrl, 'https://salesweb.civilview.com/Sales/SaleDetails?PropertyId=2128964683');
+});
+
+test('compactPgObservations batches raw_payload noticeExcerpt stripping, runs VACUUM FULL, and falls back to VACUUM ANALYZE on error', async () => {
+  let slimCalls = 0;
+  const fullPool = fakePool((text) => {
+    if (/pg_total_relation_size/i.test(text)) {
+      return { rows: [{ total_bytes: slimCalls === 0 ? 262900000 : 42000000 }], rowCount: 1 };
+    }
+    if (/SELECT id, listing_id/i.test(text)) {
+      return { rows: [], rowCount: 0 };
+    }
+    if (/SET raw_payload = raw_payload - 'noticeExcerpt'/i.test(text)) {
+      slimCalls += 1;
+      return { rows: [], rowCount: slimCalls === 1 ? 2000 : 145 };
+    }
+    if (/VACUUM \(FULL, ANALYZE\) source_observations/i.test(text)) {
+      return { rows: [], rowCount: 0 };
+    }
+    return { rows: [], rowCount: 0 };
+  });
+
+  const report = await compactPgObservations(fullPool, {
+    apply: true,
+    slimPayloads: true,
+    vacuumFull: true,
+    source: 'civilview',
+  });
+
+  assert.equal(report.slimmedPayloads, 2145);
+  assert.equal(report.vacuumMode, 'full');
+  assert.equal(slimCalls, 2, 'must loop until batch rowCount < SLIM_BATCH (2000)');
+  const slimQuery = fullPool.calls.find((c) => /SET raw_payload = raw_payload - 'noticeExcerpt'/.test(c.text));
+  assert.ok(slimQuery);
+  assert.deepEqual(slimQuery.params, ['civilview', 2000]);
+  assert.ok(fullPool.calls.some((c) => c.text === 'VACUUM (FULL, ANALYZE) source_observations'));
+
+  // Fallback test when VACUUM (FULL, ANALYZE) rejects (e.g. lock timeout or unsupported permission)
+  const fallbackPool = fakePool((text) => {
+    if (/SELECT id, listing_id/i.test(text)) return { rows: [], rowCount: 0 };
+    if (/SET raw_payload = raw_payload - 'noticeExcerpt'/i.test(text)) return { rows: [], rowCount: 12 };
+    if (/VACUUM \(FULL, ANALYZE\) source_observations/i.test(text)) {
+      throw new Error('canceling statement due to lock timeout');
+    }
+    if (/VACUUM \(ANALYZE\) source_observations/i.test(text)) {
+      return { rows: [], rowCount: 0 };
+    }
+    return { rows: [], rowCount: 0 };
+  });
+
+  const fallbackReport = await compactPgObservations(fallbackPool, {
+    apply: true,
+    slimPayloads: true,
+    vacuumFull: true,
+  });
+
+  assert.equal(fallbackReport.slimmedPayloads, 12);
+  assert.equal(fallbackReport.vacuumMode, 'analyze');
+  assert.ok(fallbackPool.calls.some((c) => c.text === 'VACUUM (FULL, ANALYZE) source_observations'));
+  assert.ok(fallbackPool.calls.some((c) => c.text === 'VACUUM (ANALYZE) source_observations'));
 });

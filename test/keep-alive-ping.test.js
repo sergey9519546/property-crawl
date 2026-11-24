@@ -41,13 +41,13 @@ test('getTargetUrl resolves environment and defaults properly', () => {
   const prev = process.env.DEPLOY_SMOKE_URL;
   try {
     delete process.env.DEPLOY_SMOKE_URL;
-    assert.equal(getTargetUrl(), 'https://property-crawl.onrender.com/api/health');
+    assert.equal(getTargetUrl(), 'https://property-crawl-api.vercel.app/api/health');
 
-    process.env.DEPLOY_SMOKE_URL = 'https://custom-app.onrender.com';
-    assert.equal(getTargetUrl(), 'https://custom-app.onrender.com/api/health');
+    process.env.DEPLOY_SMOKE_URL = 'https://custom-app.example.com';
+    assert.equal(getTargetUrl(), 'https://custom-app.example.com/api/health');
 
-    process.env.DEPLOY_SMOKE_URL = 'https://custom-app.onrender.com/api/health';
-    assert.equal(getTargetUrl(), 'https://custom-app.onrender.com/api/health');
+    process.env.DEPLOY_SMOKE_URL = 'https://custom-app.example.com/api/health';
+    assert.equal(getTargetUrl(), 'https://custom-app.example.com/api/health');
   } finally {
     if (prev !== undefined) process.env.DEPLOY_SMOKE_URL = prev;
     else delete process.env.DEPLOY_SMOKE_URL;

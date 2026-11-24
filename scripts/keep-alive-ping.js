@@ -8,12 +8,12 @@
  * Usage:
  *   node scripts/keep-alive-ping.js [url] [--interval=600] [--once]
  *
- * Default URL: process.env.DEPLOY_SMOKE_URL || 'https://property-crawl.onrender.com'
+ * Default URL: process.env.DEPLOY_SMOKE_URL || 'https://property-crawl-api.vercel.app'
  */
 
 function getTargetUrl() {
   const targetArg = process.argv.slice(2).find((arg) => !arg.startsWith('--'));
-  const base = (targetArg || process.env.DEPLOY_SMOKE_URL || 'https://property-crawl.onrender.com').replace(/\/$/, '');
+  const base = (targetArg || process.env.DEPLOY_SMOKE_URL || 'https://property-crawl-api.vercel.app').replace(/\/$/, '');
   return base.endsWith('/api/health') ? base : `${base}/api/health`;
 }
 

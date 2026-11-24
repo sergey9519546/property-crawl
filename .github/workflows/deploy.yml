@@ -1,10 +1,15 @@
-name: Deploy / $0 production
+name: Deploy / Production Topology
 
-# Optional deploy after unit-gate is green.
+# Automated production deploy after CI / Verification Pipeline succeeds on main.
 # Secrets (repo settings):
-#   RENDER_DEPLOY_HOOK_URL  — Render dashboard deploy hook (preferred $0 path)
-#   KOYEB_API_TOKEN         — optional Koyeb API deploy
-#   DEPLOY_SMOKE_URL        — public base URL to curl after deploy
+#   VERCEL_TOKEN            — Vercel API token for property-crawl-api serverless deploy
+#   VERCEL_ORG_ID           — Vercel team/user ID (optional for vercel pull)
+#   VERCEL_PROJECT_ID       — Vercel project ID for property-crawl-api (optional for vercel pull)
+#   CLOUDFLARE_API_TOKEN    — Cloudflare API token for property-crawl-edge Worker deploy
+#   CLOUDFLARE_ACCOUNT_ID   — Cloudflare account ID (optional if configured in token scope)
+#   DEPLOY_SMOKE_URL        — Public API base URL (defaults to https://property-crawl-api.vercel.app)
+#   UI_SMOKE_URL            — Public Web UI URL (defaults to https://perfectproperty.bid)
+#   EDGE_SMOKE_URL          — Public Edge Worker URL (defaults to https://edge.perfectproperty.bid)
 
 on:
   workflow_run:
@@ -16,9 +21,9 @@ on:
       target:
         description: Deploy target
         required: true
-        default: render
+        default: all
         type: choice
-        options: [render, smoke-only]
+        options: [all, vercel-api, cloudflare-edge, smoke-only]
 
 jobs:
   deploy:
@@ -31,29 +36,70 @@ jobs:
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
       - name: Deploy target selection
         id: pick
         run: |
-          target="${{ github.event.inputs.target || 'render' }}"
+          target="${{ github.event.inputs.target || 'all' }}"
           echo "target=$target" >> "$GITHUB_OUTPUT"
           echo "Selected target: $target"
 
-      - name: Trigger Render deploy hook
-        if: ${{ steps.pick.outputs.target == 'render' }}
+      - name: Deploy Vercel Listing API
+        if: ${{ steps.pick.outputs.target == 'all' || steps.pick.outputs.target == 'vercel-api' }}
         env:
-          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
-          if [ -z "$RENDER_DEPLOY_HOOK_URL" ]; then
-            echo "RENDER_DEPLOY_HOOK_URL secret not set — configure Render Blueprint first."
-            echo "Manual path: https://dashboard.render.com → New Blueprint → this repo"
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "VERCEL_TOKEN secret not set — skipping Vercel Listing API deployment."
             exit 0
           fi
-          curl -fsS -X POST "$RENDER_DEPLOY_HOOK_URL"
+          npm install --global vercel
+          if [ -n "$VERCEL_ORG_ID" ] && [ -n "$VERCEL_PROJECT_ID" ]; then
+            npx vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+          fi
+          node scripts/deploy-vercel-api.js --deploy
+
+      - name: Deploy Cloudflare Edge Worker
+        if: ${{ steps.pick.outputs.target == 'all' || steps.pick.outputs.target == 'cloudflare-edge' }}
+        working-directory: cloudflare/property-crawl-edge
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "CLOUDFLARE_API_TOKEN secret not set — skipping Cloudflare Edge Worker deployment."
+            exit 0
+          fi
+          npx --yes wrangler deploy
 
       - name: Post-deploy smoke
         env:
-          DEPLOY_SMOKE_URL: ${{ secrets.DEPLOY_SMOKE_URL || 'https://property-crawl-api.vercel.app' }}
+          DEPLOY_SMOKE_URL: ${{ secrets.DEPLOY_SMOKE_URL }}
+          UI_SMOKE_URL: ${{ secrets.UI_SMOKE_URL }}
+          EDGE_SMOKE_URL: ${{ secrets.EDGE_SMOKE_URL }}
         run: |
-          echo "Smoke: $DEPLOY_SMOKE_URL/api/health"
-          curl -fsS --max-time 30 "$DEPLOY_SMOKE_URL/api/health" | tee /tmp/health.json
-          grep -qi 'ok\|status\|ready\|live' /tmp/health.json
+          API_BASE="${DEPLOY_SMOKE_URL:-https://property-crawl-api.vercel.app}"
+          UI_BASE="${UI_SMOKE_URL:-https://perfectproperty.bid}"
+          EDGE_BASE="${EDGE_SMOKE_URL:-https://edge.perfectproperty.bid}"
+
+          echo "Smoke API: ${API_BASE%/}/api/health"
+          curl -fsS --max-time 30 "${API_BASE%/}/api/health" | tee /tmp/api-health.json
+          grep -qi 'ok\|status\|ready\|live' /tmp/api-health.json
+
+          echo "Smoke UI: ${UI_BASE%/}/"
+          curl -fsSL --max-time 30 "${UI_BASE%/}/" -o /tmp/ui-home.html
+          grep -qi '<html' /tmp/ui-home.html
+
+          echo "Smoke Edge: ${EDGE_BASE%/}/health"
+          curl -fsS --max-time 30 "${EDGE_BASE%/}/health" | tee /tmp/edge-health.json
+          grep -qi 'ok\|property-crawl-edge' /tmp/edge-health.json

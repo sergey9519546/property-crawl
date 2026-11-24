@@ -19,6 +19,12 @@ const {
   pruneRawCollectorDumps
 } = require('../scripts/db-prune');
 
+const {
+  parseDbTarget,
+  sha256File,
+  uploadBackupToR2
+} = require('../scripts/export-hosted-backup');
+
 test('DisasterRecovery: creates snapshot with integrity manifest and checksums', () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dr-test-source-'));
   const backupDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dr-test-backups-'));
@@ -196,5 +202,165 @@ test('DisasterRecovery: raw dump pruner protects permanent audit ledgers', () =>
     assert.equal(fs.existsSync(auditLedger), true); // Protected!
   } finally {
     fs.rmSync(rawDir, { recursive: true, force: true });
+  }
+});
+
+test('HostedPgBackup: parseDbTarget extracts connection fields from DATABASE_DIRECT_URL', () => {
+  const savedDirect = process.env.DATABASE_DIRECT_URL;
+  const savedUrl = process.env.DATABASE_URL;
+  try {
+    process.env.DATABASE_DIRECT_URL = 'postgresql://postgres.projref:s3cr%23t%21pw@db.projref.supabase.co:5432/postgres';
+    process.env.DATABASE_URL = 'postgresql://pooled:ignored@pooler.supabase.com:6543/other';
+
+    const target = parseDbTarget();
+    assert.deepEqual(target, {
+      host: 'db.projref.supabase.co',
+      port: '5432',
+      user: 'postgres.projref',
+      database: 'postgres',
+      password: 's3cr#t!pw',
+    });
+  } finally {
+    if (savedDirect === undefined) delete process.env.DATABASE_DIRECT_URL;
+    else process.env.DATABASE_DIRECT_URL = savedDirect;
+    if (savedUrl === undefined) delete process.env.DATABASE_URL;
+    else process.env.DATABASE_URL = savedUrl;
+  }
+});
+
+test('HostedPgBackup: uploadBackupToR2 fails closed with R2_CREDENTIALS_UNSET when R2_* env vars are missing', async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dr-r2-neg-'));
+  try {
+    const dumpFilePath = path.join(tmpDir, 'property-crawl-pg-2026-11-24.dump');
+    const manifestPath = path.join(tmpDir, 'property-crawl-pg-2026-11-24.manifest.json');
+    fs.writeFileSync(dumpFilePath, Buffer.from('PGDMP-TEST-PAYLOAD'));
+    fs.writeFileSync(manifestPath, JSON.stringify({ version: 1, createdAt: '2026-11-24T08:17:00.000Z' }));
+
+    const baseEnv = {
+      R2_BUCKET: 'property-crawl-vault',
+      R2_ACCESS_KEY_ID: 'r2-access-key',
+      R2_SECRET_ACCESS_KEY: 'r2-secret-key',
+      R2_ENDPOINT: 'https://acct123.r2.cloudflarestorage.com',
+    };
+
+    await assert.rejects(
+      () => uploadBackupToR2({ dumpFilePath, manifestPath, env: {} }),
+      (err) => err && err.code === 'R2_CREDENTIALS_UNSET'
+    );
+
+    for (const missingKey of Object.keys(baseEnv)) {
+      const partialEnv = { ...baseEnv, [missingKey]: '' };
+      await assert.rejects(
+        () => uploadBackupToR2({ dumpFilePath, manifestPath, env: partialEnv }),
+        (err) => err && err.code === 'R2_CREDENTIALS_UNSET',
+        `expected R2_CREDENTIALS_UNSET when ${missingKey} is missing`
+      );
+    }
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('HostedPgBackup: uploadBackupToR2 sends SigV4 PUTs with SHA-256 digests and rejects on HTTP 500', async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dr-r2-pos-'));
+  try {
+    const dumpFilename = 'property-crawl-pg-2026-11-24.dump';
+    const manifestFilename = 'property-crawl-pg-2026-11-24.manifest.json';
+    const dumpFilePath = path.join(tmpDir, dumpFilename);
+    const manifestPath = path.join(tmpDir, manifestFilename);
+
+    const dumpPayload = Buffer.from('PGDMP\x01\x0e\x00custom-postgres-archive-bytes');
+    fs.writeFileSync(dumpFilePath, dumpPayload);
+    const expectedDumpSha256 = sha256File(dumpFilePath);
+
+    const manifestObj = {
+      version: 1,
+      createdAt: '2026-11-24T08:17:00.000Z',
+      archive: {
+        filename: dumpFilename,
+        bytes: dumpPayload.length,
+        sha256: expectedDumpSha256,
+        format: 'custom',
+      },
+      tables: ['TABLE DATA public listings'],
+    };
+    fs.writeFileSync(manifestPath, JSON.stringify(manifestObj, null, 2), 'utf8');
+    const expectedManifestSha256 = sha256File(manifestPath);
+
+    const r2Env = {
+      R2_BUCKET: 'property-crawl-vault',
+      R2_ACCESS_KEY_ID: 'r2-test-access-id',
+      R2_SECRET_ACCESS_KEY: 'r2-test-secret-access-key',
+      R2_ENDPOINT: 'https://acct999.r2.cloudflarestorage.com///',
+    };
+
+    const calls = [];
+    const okFetch = async (url, init) => {
+      calls.push({ url, init });
+      return {
+        ok: true,
+        status: 200,
+        text: async () => '',
+      };
+    };
+
+    const receipt = await uploadBackupToR2({
+      dumpFilePath,
+      manifestPath,
+      manifest: manifestObj,
+      env: r2Env,
+      fetchImpl: okFetch,
+    });
+
+    assert.equal(calls.length, 2);
+
+    assert.equal(
+      calls[0].url,
+      'https://acct999.r2.cloudflarestorage.com/property-crawl-vault/backups/postgres/2026-11-24/property-crawl-pg-2026-11-24.dump'
+    );
+    assert.equal(calls[0].init.method, 'PUT');
+    assert.equal(calls[0].init.headers['content-type'], 'application/octet-stream');
+    assert.equal(calls[0].init.headers['x-amz-content-sha256'], expectedDumpSha256);
+    assert.match(calls[0].init.headers.Authorization, /^AWS4-HMAC-SHA256 Credential=r2-test-access-id\//);
+    assert.match(calls[0].init.headers.Authorization, /SignedHeaders=.*x-amz-content-sha256.*Signature=[a-f0-9]{64}$/);
+    assert.deepEqual(Buffer.from(calls[0].init.body), dumpPayload);
+
+    assert.equal(
+      calls[1].url,
+      'https://acct999.r2.cloudflarestorage.com/property-crawl-vault/backups/postgres/2026-11-24/property-crawl-pg-2026-11-24.manifest.json'
+    );
+    assert.equal(calls[1].init.method, 'PUT');
+    assert.equal(calls[1].init.headers['content-type'], 'application/json');
+    assert.equal(calls[1].init.headers['x-amz-content-sha256'], expectedManifestSha256);
+    assert.match(calls[1].init.headers.Authorization, /^AWS4-HMAC-SHA256 Credential=r2-test-access-id\//);
+
+    assert.deepEqual(receipt, {
+      uploaded: true,
+      bucket: 'property-crawl-vault',
+      dumpKey: 'backups/postgres/2026-11-24/property-crawl-pg-2026-11-24.dump',
+      manifestKey: 'backups/postgres/2026-11-24/property-crawl-pg-2026-11-24.manifest.json',
+      dumpBytes: dumpPayload.length,
+      sha256: expectedDumpSha256,
+    });
+
+    // Fail-closed control: upstream R2 HTTP 500 rejects
+    const failingFetch = async () => ({
+      ok: false,
+      status: 500,
+      text: async () => 'InternalError: R2 upstream unavailable',
+    });
+
+    await assert.rejects(
+      () => uploadBackupToR2({
+        dumpFilePath,
+        manifestPath,
+        manifest: manifestObj,
+        env: r2Env,
+        fetchImpl: failingFetch,
+      }),
+      /HTTP 500/
+    );
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });

@@ -5,28 +5,26 @@ import type { Listing } from "@/data/listings";
 import { restoreChecklistStatuses } from "@/lib/evidence";
 import { useWorkspaceSession } from "@/components/workspace/workspace-shell";
 import { useLocale } from "@/components/i18n/locale-provider";
+import type { Locale } from "@/lib/i18n/config";
+import { localizeOccupancy } from "@/lib/i18n/domain";
+import { formatUsd } from "@/lib/i18n/translator";
 import { readUnderwriteScenario } from "@/lib/underwrite-scenario";
 import { AdversarialTrialDocket } from "./adversarial-trial-docket";
 import {
   computeStatutoryFeePreset,
   computeStatutoryDeadlinesAndCarry,
   computeLienWaterfall,
+  type LienWaterfallItem,
   type LienWaterfallResult,
 } from "@/lib/underwriting";
 import { displayMoney, positiveNumber } from "@/lib/listing-display";
 import {
-  CheckCircle2,
-  AlertTriangle,
   ShieldAlert,
-  Clock,
   Printer,
   ChevronDown,
   ChevronUp,
-  FileCheck2,
   Landmark,
   Scale,
-  DollarSign,
-  Users,
 } from "lucide-react";
 
 interface DueDiligenceChecklistProps {
@@ -46,10 +44,20 @@ interface CheckItem {
   defaultStatus: CheckStatus;
 }
 
+function formatMoney(value: unknown, locale: Locale, notPublishedLabel: string): string {
+  if (locale === "en") return displayMoney(value);
+  const numeric = typeof value === "number" ? value : Number(value);
+  if (value === null || value === undefined || value === "" || !Number.isFinite(numeric)) {
+    return notPublishedLabel;
+  }
+  return formatUsd(locale, numeric);
+}
+
 export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceChecklistProps) {
   const openingBid = positiveNumber(listing.openingBid) ?? 0;
   const stateCode = (listing.state || "US").toUpperCase();
-  const { messages: m } = useLocale();
+  const { locale, messages: m, format } = useLocale();
+  const dd = m.dueDiligenceChecklist;
   const session = useWorkspaceSession();
   const [linkedCaseId, setLinkedCaseId] = useState<string | null>(null);
   const [caseSyncBusy, setCaseSyncBusy] = useState(false);
@@ -127,77 +135,101 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
   const [waterfallTaxes, setWaterfallTaxes] = useState<string>("");
   const [showWaterfallDetails, setShowWaterfallDetails] = useState<boolean>(isSeniorLienRisk);
 
+  const formattedCarry = formatMoney(deadlines.estimatedCarryCost, locale, m.common.notPublished);
+  const formattedCreditedDeposit = feePreset
+    ? formatMoney(feePreset.creditedDeposit, locale, m.common.notPublished)
+    : "";
+  const localizedOccupancy = listing.occupancy
+    ? localizeOccupancy(listing.occupancy, m, locale) || listing.occupancy
+    : null;
+
   // 4. Verification Checklist Items
   const initialItems: CheckItem[] = [
     {
       id: "check-1-senior-lien",
-      category: "Title & Priority",
-      title: "Senior Deed of Trust / 1st Mortgage Survival",
-      statutoryRule: "Common law lien priority: Foreclosure of a junior deed (2nd mortgage, HELOC, or HOA) leaves senior 1st mortgage in full effect against purchaser.",
+      category: dd.checks.seniorLien.category,
+      title: dd.checks.seniorLien.title,
+      statutoryRule: dd.checks.seniorLien.statutoryRule,
       detectedFinding: isSeniorLienRisk
-        ? `FLAGGED: Junior lien signals detected (${listing.seniorLienWarning || "Possible subordinate mortgage"}). Senior mortgage may survive!`
-        : "No junior-lien wording found in the notice. That alone does not prove this sale wipes out other liens.",
-      actionRequired: "Examine County Recorder grantor/grantee index and Title Commitment Schedule B to verify deed recording date and priority position.",
+        ? format(dd.checks.seniorLien.findingFlagged, {
+            signal: listing.seniorLienWarning || dd.checks.seniorLien.findingFlaggedFallback,
+          })
+        : dd.checks.seniorLien.findingClear,
+      actionRequired: dd.checks.seniorLien.action,
       defaultStatus: isSeniorLienRisk ? "flagged" : "pending",
     },
     {
       id: "check-2-ad-valorem-taxes",
-      category: "Municipal Liens",
-      title: "Ad Valorem County/Municipal Real Property Taxes",
-      statutoryRule: "State constitutional tax super-priority: Real property ad valorem taxes prime all private mortgages and survive mortgage foreclosure.",
-      detectedFinding: `County property taxes in ${listing.county || "county"}, ${stateCode}: Buyer is responsible for delinquent property taxes not satisfied by auction distribution.`,
-      actionRequired: "Contact County Treasurer/Tax Collector for exact delinquent ad valorem balance plus penalties through sale month.",
+      category: dd.checks.adValoremTaxes.category,
+      title: dd.checks.adValoremTaxes.title,
+      statutoryRule: dd.checks.adValoremTaxes.statutoryRule,
+      detectedFinding: format(dd.checks.adValoremTaxes.finding, {
+        county: listing.county || dd.checks.adValoremTaxes.countyFallback,
+        state: stateCode,
+      }),
+      actionRequired: dd.checks.adValoremTaxes.action,
       defaultStatus: "pending",
     },
     {
       id: "check-3-irs-lien",
-      category: "Federal Tax Liens",
-      title: "IRS 120-Day Super-Priority Right of Redemption (26 U.S.C. § 7425)",
-      statutoryRule: "26 U.S.C. § 7425(d): If a federal tax lien is divested by foreclosure, the United States holds a 120-day post-sale right of redemption.",
+      category: dd.checks.irsLien.category,
+      title: dd.checks.irsLien.title,
+      statutoryRule: dd.checks.irsLien.statutoryRule,
       detectedFinding: hasIrsNoticeFlag
-        ? `IRS FEDERAL TAX LIEN DETECTED: 120-day redemption window locks title until ${deadlines.irsRedemptionDeadline || "120 days post-sale"}. Modeled carry: ${displayMoney(deadlines.estimatedCarryCost)}.`
-        : "No federal tax lien is mentioned in the published notice. A recorded lien can still exist.",
-      actionRequired: "Check County Recorder judgment docket for recorded Federal Tax Liens against the defendant/borrower.",
+        ? format(dd.checks.irsLien.findingFlagged, {
+            deadline: deadlines.irsRedemptionDeadline || dd.checks.irsLien.deadlineFallback,
+            carry: formattedCarry,
+          })
+        : dd.checks.irsLien.findingClear,
+      actionRequired: dd.checks.irsLien.action,
       defaultStatus: hasIrsNoticeFlag ? "flagged" : "pending",
     },
     {
       id: "check-4-statutory-redemption",
-      category: "Redemption & Confirmation",
-      title: "State Statutory Redemption & Court Confirmation Window",
-      statutoryRule: `${deadlines.objectionLabel || "State confirmation/objection window"}. Debtor statutory redemption or upset bid rights prevent immediate title vesting.`,
-      detectedFinding: `${deadlines.effectiveLockupDays}-day statutory holding lockup. Capital is frozen during this period. Modeled capital carry: ${displayMoney(deadlines.estimatedCarryCost)}.`,
-      actionRequired: "Confirm with clerk of court whether debtor has filed an objection, bankruptcy, or intent to upset bid.",
+      category: dd.checks.statutoryRedemption.category,
+      title: dd.checks.statutoryRedemption.title,
+      statutoryRule: format(dd.checks.statutoryRedemption.statutoryRule, {
+        window: deadlines.objectionLabel || dd.checks.statutoryRedemption.windowFallback,
+      }),
+      detectedFinding: format(dd.checks.statutoryRedemption.finding, {
+        days: deadlines.effectiveLockupDays,
+        carry: formattedCarry,
+      }),
+      actionRequired: dd.checks.statutoryRedemption.action,
       defaultStatus: deadlines.effectiveLockupDays > 0 ? "flagged" : "pending",
     },
     {
       id: "check-5-bankruptcy-stay",
-      category: "Federal Bankruptcy",
-      title: "Automatic Bankruptcy Stay Verification (11 U.S.C. § 362)",
-      statutoryRule: "11 U.S.C. § 362(a): A bankruptcy filing by the debtor prior to the auction gavel drop makes the foreclosure sale VOID ab initio.",
-      detectedFinding: "PACER / Bankruptcy Court Verification required morning of auction. A last-minute Chapter 13 filing voids the transaction.",
-      actionRequired: "Search PACER / CourtListener for debtor name and SSN last 4 digits at 8:30 AM on auction morning.",
+      category: dd.checks.bankruptcyStay.category,
+      title: dd.checks.bankruptcyStay.title,
+      statutoryRule: dd.checks.bankruptcyStay.statutoryRule,
+      detectedFinding: dd.checks.bankruptcyStay.finding,
+      actionRequired: dd.checks.bankruptcyStay.action,
       defaultStatus: "pending",
     },
     {
       id: "check-6-cash-settlement",
-      category: "Auction Execution",
-      title: "Certified Funds Deposit & Settlement Protocol",
-      statutoryRule: feePreset ? feePreset.scheduleLabel : "Court cashier's check deposit requirements.",
+      category: dd.checks.cashSettlement.category,
+      title: dd.checks.cashSettlement.title,
+      statutoryRule: feePreset ? feePreset.scheduleLabel : dd.checks.cashSettlement.statutoryRuleFallback,
       detectedFinding: feePreset
-        ? `Deposit requirement: ${displayMoney(feePreset.creditedDeposit)} (${feePreset.citations[0] || "Statutory deposit"}). Balance deadline per local court rules.`
-        : "Certified cashier's check required at hammer strike; failure to tender remaining balance results in deposit forfeiture.",
-      actionRequired: "Obtain bank cashier's checks in exact payable denominations to sheriff / referee / trustee prior to auction.",
+        ? format(dd.checks.cashSettlement.findingPreset, {
+            deposit: formattedCreditedDeposit,
+            citation: feePreset.citations[0] || dd.checks.cashSettlement.citationFallback,
+          })
+        : dd.checks.cashSettlement.findingDefault,
+      actionRequired: dd.checks.cashSettlement.action,
       defaultStatus: "pending",
     },
     {
       id: "check-7-occupancy-ptfa",
-      category: "Possession & Occupancy",
-      title: "Occupancy & Protecting Tenants at Foreclosure Act (PTFA)",
-      statutoryRule: "12 U.S.C. § 5220 (PTFA): Bona fide residential tenants are entitled to a minimum 90-day notice to vacate or lease term fulfillment.",
-      detectedFinding: listing.occupancy
-        ? `Reported occupancy: "${listing.occupancy}". Eviction proceedings require separate post-sale writ of possession.`
-        : "Occupancy status not published in source record. Physical drive-by or exterior reconnaissance required.",
-      actionRequired: "Perform drive-by visual inspection to confirm occupancy, active utilities, and post-sale holdover eviction timeline.",
+      category: dd.checks.occupancyPtfa.category,
+      title: dd.checks.occupancyPtfa.title,
+      statutoryRule: dd.checks.occupancyPtfa.statutoryRule,
+      detectedFinding: localizedOccupancy
+        ? format(dd.checks.occupancyPtfa.findingObserved, { occupancy: localizedOccupancy })
+        : dd.checks.occupancyPtfa.findingUnknown,
+      actionRequired: dd.checks.occupancyPtfa.action,
       defaultStatus: "pending",
     },
   ];
@@ -244,6 +276,59 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
     state: stateCode,
   });
 
+  const localizeWaterfallItemName = (item: LienWaterfallItem): string => {
+    if (locale === "en") return item.name;
+    if (item.id === "tax-lien-01") return dd.waterfallItemNames.taxLien;
+    if (item.id === "foreclosing-nv-hoa-01") return dd.waterfallItemNames.foreclosingNvHoa;
+    if (item.id === "extinguished-senior-mtg-01") {
+      return waterfallLienType === "tax_deed"
+        ? dd.waterfallItemNames.extinguishedSeniorTax
+        : dd.waterfallItemNames.extinguishedSeniorNvHoa;
+    }
+    if (item.id === "foreclosing-tax-01") return dd.waterfallItemNames.foreclosingTax;
+    if (item.id === "senior-mtg-01") return dd.waterfallItemNames.survivingSeniorMtg;
+    if (item.id === "foreclosing-mtg-01") return dd.waterfallItemNames.foreclosingFirstMtg;
+    if (item.id === "foreclosing-lien-01") {
+      return format(dd.waterfallItemNames.foreclosingJuniorLien, {
+        type: waterfallLienType.replace("_", " ").toUpperCase(),
+      });
+    }
+    return item.name;
+  };
+
+  const localizedWaterfallSummary = (() => {
+    if (!hasBid) return dd.waterfallEmptySummary;
+    if (locale === "en") return waterfallResult.summary;
+    if (!waterfallResult.complete) {
+      const reasons = waterfallResult.unknownReasons
+        .map((reason) => {
+          if (reason.includes("priority")) return dd.waterfallUnknownPriority;
+          if (reason.includes("senior mortgage")) return dd.waterfallUnknownSenior;
+          if (reason.includes("taxes")) return dd.waterfallUnknownTaxes;
+          return reason;
+        })
+        .join(" ");
+      return format(dd.waterfallSummaryIncomplete, {
+        reasons,
+        subtotal: formatMoney(waterfallResult.knownSurvivingDebtOnProperty, locale, m.common.notPublished),
+      });
+    }
+    if ((waterfallResult.totalSurvivingDebtOnProperty ?? 0) > 0) {
+      return format(dd.waterfallSummarySurviving, {
+        bid: formatMoney(bidAmount, locale, m.common.notPublished),
+        debt: formatMoney(waterfallResult.totalSurvivingDebtOnProperty, locale, m.common.notPublished),
+        cost: formatMoney(waterfallResult.totalEffectiveAcquisitionCost, locale, m.common.notPublished),
+      });
+    }
+    const base = dd.waterfallSummaryClear;
+    if ((waterfallResult.surplusProceedsToBorrower ?? 0) > 0) {
+      return `${base}${format(dd.waterfallSummarySurplusSuffix, {
+        surplus: formatMoney(waterfallResult.surplusProceedsToBorrower, locale, m.common.notPublished),
+      })}`;
+    }
+    return base;
+  })();
+
   const verifiedCount = Object.values(itemStatuses).filter((s) => s === "verified").length;
   const flaggedCount = Object.values(itemStatuses).filter((s) => s === "flagged").length;
   const pendingCount = Object.values(itemStatuses).filter((s) => s === "pending").length;
@@ -269,11 +354,11 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
       });
       if (res.status === 401) {
         session.requestUnlock();
-        throw new Error("Unlock operator session to sync.");
+        throw new Error(dd.syncUnlockError);
       }
       const data = await res.json().catch(() => null);
       if (!res.ok || !data?.case?.id) {
-        throw new Error(data?.error || "Could not sync binder to workspace.");
+        throw new Error(data?.error || dd.syncFailedDefault);
       }
       const caseRecord = data.case as {
         id: string;
@@ -304,9 +389,9 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
           }),
         }).catch(() => {});
       }
-      setCaseSyncNotice(`Synced to case ${caseRecord.id}`);
+      setCaseSyncNotice(format(dd.syncSuccessNotice, { id: caseRecord.id }));
     } catch (err) {
-      setCaseSyncNotice(err instanceof Error ? err.message : "Sync failed; binder saved locally.");
+      setCaseSyncNotice(err instanceof Error ? err.message : dd.syncErrorFallback);
     } finally {
       setCaseSyncBusy(false);
     }
@@ -327,16 +412,16 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
           <div>
             <div className="flex items-center gap-2">
               <span className="rounded bg-paper px-2 py-0.5 text-label font-bold uppercase tracking-wider text-ink-2 border border-line">
-                Courthouse Underwriting Binder
+                {dd.eyebrowBadge}
               </span>
               <span className="text-xs text-ink-3">·</span>
-              <span className="text-xs text-ink-3 font-medium">7 Deal-Killer Audit Matrix</span>
+              <span className="text-xs text-ink-3 font-medium">{dd.matrixBadge}</span>
             </div>
             <h2 id="due-diligence-heading" className="mt-1 text-xl font-bold tracking-tight text-ink">
               {m.workspacePages.ddChecklistHeading}
             </h2>
             <p className="mt-0.5 text-xs text-ink-3">
-              Automated legal risk elimination before tendering cashier&apos;s checks at courthouse auction.
+              {dd.subtitle}
             </p>
           </div>
         </div>
@@ -350,12 +435,12 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
               className="inline-flex items-center gap-1.5 rounded-control border border-line-strong bg-paper px-3 py-2 text-xs font-semibold text-ink shadow-sm transition hover:bg-card disabled:opacity-60"
             >
               {caseSyncBusy
-                ? "Syncing..."
+                ? dd.syncingBtn
                 : linkedCaseId
-                  ? `Synced (${linkedCaseId})`
+                  ? format(dd.syncedBtn, { id: linkedCaseId })
                   : session.memberTools
-                    ? "Sync Binder to Case"
-                    : "Unlock to Sync Case"}
+                    ? dd.syncBinderBtn
+                    : dd.unlockToSyncBtn}
             </button>
             <button
               onClick={() => window.print()}
@@ -388,15 +473,15 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
       {/* Triage Status Pills */}
       <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs sm:gap-4">
         <div className="rounded-control border border-line-strong bg-card p-3">
-          <span className="text-label font-semibold text-ink">Clear / Verified</span>
-          <p className="mt-0.5 text-lg font-black text-ink">{verifiedCount} of 7</p>
+          <span className="text-label font-semibold text-ink">{dd.pillVerifiedLabel}</span>
+          <p className="mt-0.5 text-lg font-black text-ink">{format(dd.pillVerifiedCount, { count: verifiedCount })}</p>
         </div>
         <div className="rounded-control border border-catch/30 bg-catch-wash p-3">
-          <span className="text-label font-semibold text-catch-ink">Flagged Risk Items</span>
+          <span className="text-label font-semibold text-catch-ink">{dd.pillFlaggedLabel}</span>
           <p className="mt-0.5 text-lg font-black text-ink">{flaggedCount}</p>
         </div>
         <div className="rounded-control border border-line bg-paper p-3">
-          <span className="text-label font-semibold text-ink-3">Pending Verification</span>
+          <span className="text-label font-semibold text-ink-3">{dd.pillPendingLabel}</span>
           <p className="mt-0.5 text-lg font-black text-ink">{pendingCount}</p>
         </div>
       </div>
@@ -408,15 +493,15 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
             <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-catch-ink" />
             <div className="space-y-1 text-xs">
               <h3 className="font-bold text-sm text-catch-ink">
-                CRITICAL WARNING: Junior Mortgage / HOA Foreclosure Signal
+                {dd.trapBannerHeading}
               </h3>
               <p className="leading-relaxed">
-                Source notices indicate this auction is prosecuted by a subordinate lienholder (
-                {listing.seniorLienWarning || "junior deed or assessment"}). Under state foreclosure law, the senior first mortgage
-                does NOT wipe out; it survives against the auction winner!
+                {format(dd.trapBannerBody, {
+                  signal: listing.seniorLienWarning || dd.trapBannerFallbackSignal,
+                })}
               </p>
               <p className="font-semibold text-ink">
-                Do not bid based on opening bid alone. Simulate the surviving senior mortgage below.
+                {dd.trapBannerAction}
               </p>
             </div>
           </div>
@@ -426,11 +511,12 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
       {/* 7 Deal-Killer Checklist */}
       <div className="mt-6 space-y-3">
         <h3 className="text-xs font-bold uppercase tracking-wider text-ink-3">
-          The 7 Statutory Deal-Killer Checkpoints
+          {dd.checkpointsHeading}
         </h3>
         <div className="divide-y divide-line rounded-control border border-line bg-card shadow-xs">
           {initialItems.map((item) => {
             const status = itemStatuses[item.id] || item.defaultStatus;
+            const statusPrintLabel = dd.statusPrintLabels[status] || status.toUpperCase();
             return (
               <div key={item.id} className="p-4 transition hover:bg-paper/50">
                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -445,10 +531,10 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
                       {item.detectedFinding}
                     </p>
                     <details className="mt-1.5 text-label text-ink-3">
-                      <summary className="cursor-pointer font-semibold text-ink-2 hover:text-ink">Statutory basis &amp; verification step</summary>
+                      <summary className="cursor-pointer font-semibold text-ink-2 hover:text-ink">{dd.detailsSummary}</summary>
                       <div className="mt-1 space-y-1">
-                        <p className="leading-relaxed"><strong>Statutory Basis:</strong> {item.statutoryRule}</p>
-                        <p className="leading-relaxed text-ink"><strong>Action:</strong> {item.actionRequired}</p>
+                        <p className="leading-relaxed"><strong>{dd.statutoryBasisLabel}</strong> {item.statutoryRule}</p>
+                        <p className="leading-relaxed text-ink"><strong>{dd.actionLabel}</strong> {item.actionRequired}</p>
                       </div>
                     </details>
                   </div>
@@ -464,7 +550,7 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
                           : "border border-line bg-card text-ink-3 hover:bg-go-wash hover:text-go"
                       }`}
                     >
-                      ✓ Verified
+                      {dd.statusVerifiedBtn}
                     </button>
                     <button
                       type="button"
@@ -475,7 +561,7 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
                           : "border border-line bg-card text-ink-3 hover:bg-catch-wash hover:text-catch-ink"
                       }`}
                     >
-                      ⚠ Risk Flag
+                      {dd.statusFlaggedBtn}
                     </button>
                     <button
                       type="button"
@@ -486,13 +572,13 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
                           : "border border-line bg-card text-ink-3 hover:bg-paper"
                       }`}
                     >
-                      Pending
+                      {dd.statusPendingBtn}
                     </button>
                   </div>
 
                   {/* Print Status Display */}
                   <div className="hidden print:block text-xs font-bold uppercase">
-                    Status: {status.toUpperCase()}
+                    {format(dd.printStatus, { status: statusPrintLabel })}
                   </div>
                 </div>
               </div>
@@ -507,7 +593,7 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
           <div className="flex items-center gap-2">
             <Landmark className="h-4 w-4 text-ink-2" />
             <h3 className="text-sm font-bold text-ink">
-              Interactive Lien Waterfall & Surplus Proceeds Simulator
+              {locale === "en" ? "Interactive Lien Waterfall & Surplus Proceeds Simulator" : dd.waterfallHeading}
             </h3>
           </div>
           <button
@@ -515,7 +601,7 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
             onClick={() => setShowWaterfallDetails(!showWaterfallDetails)}
             className="flex items-center gap-1 text-xs font-semibold text-ink-3 hover:text-ink"
           >
-            {showWaterfallDetails ? "Collapse Controls" : "Adjust Lien Assumptions"}
+            {showWaterfallDetails ? dd.collapseControlsBtn : dd.adjustAssumptionsBtn}
             {showWaterfallDetails ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
           </button>
         </div>
@@ -524,7 +610,7 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
         {showWaterfallDetails && (
           <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 text-xs font-medium text-ink-2">
             <label className="space-y-1">
-              <span>Simulated Winning Bid ($)</span>
+              <span>{dd.winningBidInputLabel}</span>
               <input
                 type="number"
                 min="0"
@@ -535,35 +621,35 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
               />
             </label>
             <label className="space-y-1">
-              <span>Foreclosing Lien Type</span>
+              <span>{dd.foreclosingLienTypeLabel}</span>
               <select
-                aria-label="Foreclosing Lien Type"
+                aria-label={dd.foreclosingLienTypeLabel}
                 value={waterfallLienType}
                 onChange={(e) => setWaterfallLienType(e.target.value as any)}
                 className="w-full rounded-control border border-line-strong bg-card px-3 py-1.5 text-xs text-yours shadow-xs focus:border-yours focus:outline-hidden"
               >
-                <option value="unknown">Unknown — verify lien priority</option>
-                <option value="first_mortgage">1st Mortgage (Senior Deed)</option>
-                <option value="second_mortgage">2nd Mortgage (Subordinate)</option>
-                <option value="heloc">HELOC / Equity Line</option>
-                <option value="hoa_assessment">HOA Assessment Lien</option>
-                <option value="tax_deed">County Tax Collector Deed</option>
+                <option value="unknown">{dd.lienTypeUnknown}</option>
+                <option value="first_mortgage">{dd.lienTypeFirstMortgage}</option>
+                <option value="second_mortgage">{dd.lienTypeSecondMortgage}</option>
+                <option value="heloc">{dd.lienTypeHeloc}</option>
+                <option value="hoa_assessment">{dd.lienTypeHoa}</option>
+                <option value="tax_deed">{dd.lienTypeTaxDeed}</option>
               </select>
             </label>
             <label className="space-y-1">
-              <span>Surviving Senior Mortgage ($)</span>
+              <span>{dd.seniorMortgageInputLabel}</span>
               <input
                 type="number"
                 min="0"
                 step="5000"
                 value={waterfallSeniorMtg}
                 onChange={(e) => setWaterfallSeniorMtg(e.target.value)}
-                placeholder="Unknown until supplied"
+                placeholder={dd.seniorMortgagePlaceholder}
                 className="w-full rounded-control border border-line-strong bg-card px-3 py-1.5 text-xs text-yours shadow-xs focus:border-yours focus:outline-hidden"
               />
             </label>
             <label className="space-y-1">
-              <span>Delinquent Real Property Taxes ($)</span>
+              <span>{dd.delinquentTaxesInputLabel}</span>
               <input
                 type="number"
                 min="0"
@@ -579,9 +665,11 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
         {/* Waterfall Calculation Summary Cards */}
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div className="rounded-control border border-line bg-card p-3 shadow-xs">
-            <span className="text-label font-semibold text-ink-3">Your Winning Bid</span>
-            <p className="mt-0.5 text-lg font-black text-yours">{hasBid ? displayMoney(bidAmount) : "Enter a bid"}</p>
-            <span className="text-label text-ink-3">Knock-down price at auction</span>
+            <span className="text-label font-semibold text-ink-3">{dd.summaryWinningBidLabel}</span>
+            <p className="mt-0.5 text-lg font-black text-yours">
+              {hasBid ? formatMoney(bidAmount, locale, m.common.notPublished) : dd.enterBidPrompt}
+            </p>
+            <span className="text-label text-ink-3">{dd.summaryWinningBidSub}</span>
           </div>
 
           <div
@@ -596,12 +684,14 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
                 (waterfallResult.totalSurvivingDebtOnProperty ?? 0) > 0 ? "text-catch-ink" : "text-ink-3"
               }`}
             >
-              Surviving Priority Debt
+              {dd.summarySurvivingDebtLabel}
             </span>
-            <p
-              className="mt-0.5 text-lg font-black text-yours"
-            >
-              {hasBid ? waterfallResult.complete ? displayMoney(waterfallResult.totalSurvivingDebtOnProperty) : "Unknown" : "—"}
+            <p className="mt-0.5 text-lg font-black text-yours">
+              {hasBid
+                ? waterfallResult.complete
+                  ? formatMoney(waterfallResult.totalSurvivingDebtOnProperty, locale, m.common.notPublished)
+                  : dd.unknownValue
+                : "—"}
             </p>
             <span
               className={`text-label ${
@@ -609,21 +699,25 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
               }`}
             >
               {!hasBid
-                ? "Enter amounts to calculate"
+                ? dd.survivingDebtEnterAmounts
                 : !waterfallResult.complete
-                ? "Supply the missing balances and lien priority"
+                ? dd.survivingDebtSupplyMissing
                 : (waterfallResult.totalSurvivingDebtOnProperty ?? 0) > 0
-                ? "Buyer must satisfy this senior debt!"
-                : "No surviving liens in the amounts entered"}
+                ? dd.survivingDebtBuyerMustSatisfy
+                : dd.survivingDebtNone}
             </span>
           </div>
 
           <div className="on-ink rounded-control border border-ink bg-ink p-3 text-white shadow-xs">
-            <span className="text-label font-semibold text-white/75">Scenario Acquisition Cost</span>
+            <span className="text-label font-semibold text-white/75">{dd.summaryAcquisitionCostLabel}</span>
             <p className="mt-0.5 text-lg font-black ev-yours">
-              {hasBid ? waterfallResult.complete ? displayMoney(waterfallResult.totalEffectiveAcquisitionCost) : "Incomplete" : "—"}
+              {hasBid
+                ? waterfallResult.complete
+                  ? formatMoney(waterfallResult.totalEffectiveAcquisitionCost, locale, m.common.notPublished)
+                  : dd.incompleteValue
+                : "—"}
             </p>
-            <span className="text-label text-white/60">Bid + surviving mortgages & taxes</span>
+            <span className="text-label text-white/60">{dd.summaryAcquisitionCostSub}</span>
           </div>
         </div>
 
@@ -632,11 +726,11 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="border-b border-line text-ink-3">
-                <th className="py-2 pr-3 font-semibold">Priority Tier</th>
-                <th className="py-2 pr-3 font-semibold">Lienholder / Instrument</th>
-                <th className="py-2 pr-3 font-semibold text-right">Lien Amount</th>
-                <th className="py-2 pr-3 font-semibold text-right">Paid From Bid</th>
-                <th className="py-2 font-semibold text-right">Surviving Debt</th>
+                <th className="py-2 pr-3 font-semibold">{dd.tablePriorityTier}</th>
+                <th className="py-2 pr-3 font-semibold">{dd.tableLienholder}</th>
+                <th className="py-2 pr-3 font-semibold text-right">{dd.tableLienAmount}</th>
+                <th className="py-2 pr-3 font-semibold text-right">{dd.tablePaidFromBid}</th>
+                <th className="py-2 font-semibold text-right">{dd.tableSurvivingDebt}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-line font-medium">
@@ -648,16 +742,16 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
                     </span>
                   </td>
                   <td className="py-2 pr-3 font-semibold text-ink">
-                    {item.name}
+                    {localizeWaterfallItemName(item)}
                     {item.isForeclosingLien && (
                       <span className="ml-1.5 rounded bg-yours-wash px-1 py-0.2 text-meta font-bold text-yours">
-                        Foreclosing
+                        {dd.foreclosingBadge}
                       </span>
                     )}
                   </td>
-                  <td className="py-2 pr-3 text-right">{displayMoney(item.amount)}</td>
+                  <td className="py-2 pr-3 text-right">{formatMoney(item.amount, locale, m.common.notPublished)}</td>
                   <td className="py-2 pr-3 text-right font-semibold text-yours">
-                    {displayMoney(item.amountPaidFromProceeds)}
+                    {formatMoney(item.amountPaidFromProceeds, locale, m.common.notPublished)}
                   </td>
                   <td
                     className={`py-2 text-right font-bold ${
@@ -665,19 +759,19 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
                     }`}
                   >
                     {item.remainingBalanceAgainstProperty > 0
-                      ? displayMoney(item.remainingBalanceAgainstProperty)
-                      : "EXTINGUISHED"}
+                      ? formatMoney(item.remainingBalanceAgainstProperty, locale, m.common.notPublished)
+                      : dd.extinguishedBadge}
                   </td>
                 </tr>
               ))}
               {hasBid && (waterfallResult.surplusProceedsToBorrower ?? 0) > 0 && (
                 <tr className="bg-card font-semibold text-ink">
-                  <td className="py-2 pr-3 text-label uppercase font-bold text-ink-2">Surplus</td>
+                  <td className="py-2 pr-3 text-label uppercase font-bold text-ink-2">{dd.surplusRowLabel}</td>
                   <td className="py-2 pr-3" colSpan={2}>
-                    Debtor / Mortgagor Surplus Proceeds
+                    {dd.surplusRowDesc}
                   </td>
                   <td className="py-2 pr-3 text-right text-yours">
-                    {displayMoney(waterfallResult.surplusProceedsToBorrower)}
+                    {formatMoney(waterfallResult.surplusProceedsToBorrower, locale, m.common.notPublished)}
                   </td>
                   <td className="py-2 text-right text-ink-3">—</td>
                 </tr>
@@ -687,7 +781,7 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
         </div>
 
         <p className="mt-3 text-label leading-relaxed text-ink-3 font-medium">
-          {hasBid ? waterfallResult.summary : "Enter a simulated winning bid and any lien amounts you have verified to run the waterfall."}
+          {localizedWaterfallSummary}
         </p>
       </div>
     </section>

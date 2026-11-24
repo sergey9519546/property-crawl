@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { displayDate } from "@/lib/listing-display";
 import {
   PieChart,
   TrendingDown,
@@ -11,7 +10,6 @@ import {
   Building,
   DollarSign,
   ArrowRight,
-  ExternalLink,
   Trash2,
   AlertCircle,
   Loader2,
@@ -23,10 +21,12 @@ import {
   ChevronLeft,
   Download,
   Kanban,
-  CheckCircle2,
 } from "lucide-react";
 import { useWorkspaceSession } from "@/components/workspace/workspace-shell";
 import { useLocale } from "@/components/i18n/locale-provider";
+import type { Locale } from "@/lib/i18n/config";
+import { localizeDisplayDate, localizePropType } from "@/lib/i18n/domain";
+import { formatUsd } from "@/lib/i18n/translator";
 import { sourceDisplayText } from "@/lib/source-display";
 import { bandForScore } from "@/lib/score-bands";
 
@@ -139,15 +139,17 @@ type SavedDeal = {
   propType?: string;
 };
 
-function formatMoney(amount: number | null | undefined): string {
+function formatMoney(amount: number | null | undefined, locale: Locale): string {
   if (amount == null || !Number.isFinite(amount)) return "—";
-  return `$${Math.round(amount).toLocaleString()}`;
+  if (locale === "en") return `$${Math.round(amount).toLocaleString()}`;
+  return formatUsd(locale, amount);
 }
 
 const STORAGE_PIPELINE_KEY = "perfectproperty_pipeline_stages_v1";
 
 export function PortfolioView() {
-  const { locale, messages: m } = useLocale();
+  const { locale, messages: m, format } = useLocale();
+  const pv = m.portfolioView;
   const session = useWorkspaceSession();
   const [tab, setTab] = React.useState<"watchlist" | "pipeline" | "drops" | "schedule" | "allocation">("pipeline");
   const [dashboard, setDashboard] = React.useState<DashboardPayload | null>(null);
@@ -259,12 +261,12 @@ export function PortfolioView() {
         );
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load portfolio metrics");
+      setError(err instanceof Error ? err.message : pv.loadError);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [session.memberTools, escrowCapital, escrowSortBy, allowRecycling]);
+  }, [session.memberTools, escrowCapital, escrowSortBy, allowRecycling, pv.loadError]);
 
   React.useEffect(() => {
     loadData();
@@ -377,19 +379,19 @@ export function PortfolioView() {
             href="/api/export?format=markdown&saved=true"
             download="perfectproperty_dossiers.md"
             className="flex items-center gap-1.5 rounded-control border border-line-strong bg-card px-3.5 py-2.5 text-xs font-semibold text-ink-2 hover:bg-paper transition"
-            title="Download printable Markdown summaries for saved properties"
+            title={pv.exportMdTitle}
           >
             <Download className="h-3.5 w-3.5" />
-            Export Summaries (.md)
+            {pv.exportMdBtn}
           </a>
           <a
             href="/api/export?format=csv&saved=true"
             download="perfectproperty_portfolio.csv"
             className="flex items-center gap-1.5 rounded-control border border-line-strong bg-card px-3.5 py-2.5 text-xs font-semibold text-ink-2 hover:bg-paper transition"
-            title="Download CSV table of all saved listings"
+            title={pv.exportCsvTitle}
           >
             <Download className="h-3.5 w-3.5" />
-            CSV Export
+            {pv.exportCsvBtn}
           </a>
           <button
             onClick={() => {
@@ -400,14 +402,14 @@ export function PortfolioView() {
             className="flex items-center gap-1.5 rounded-control border border-line-strong bg-card px-3.5 py-2.5 text-xs font-semibold text-ink-2 hover:bg-paper transition disabled:opacity-50"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
-            Refresh
+            {pv.refreshBtn}
           </button>
           <Link
             href="/listings"
             className="flex items-center gap-1.5 rounded-control bg-ink px-4 py-2.5 text-xs font-semibold text-white hover:bg-ink-2 transition"
           >
             <Plus className="h-3.5 w-3.5" />
-            Add Listings
+            {pv.addListingsBtn}
           </Link>
         </div>
       </div>
@@ -423,46 +425,48 @@ export function PortfolioView() {
       <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-card border border-line bg-card p-5 shadow-sm">
           <div className="flex items-center justify-between text-xs font-semibold text-ink-3">
-            <span>Total Opening Bids</span>
+            <span>{pv.kpiTotalBidsLabel}</span>
             <DollarSign className="h-4 w-4 text-ink-3" />
           </div>
-          <p className="mt-3 text-3xl font-extrabold text-ink">{formatMoney(totalPipelineCapital)}</p>
-          <p className="mt-1 text-label text-ink-3">Across {deals.length} tracked listings</p>
+          <p className="mt-3 text-3xl font-extrabold text-ink">{formatMoney(totalPipelineCapital, locale)}</p>
+          <p className="mt-1 text-label text-ink-3">{format(pv.kpiTotalBidsSub, { count: deals.length })}</p>
         </div>
 
         <div className="rounded-card border border-line bg-card p-5 shadow-sm">
           <div className="flex items-center justify-between text-xs font-semibold text-ink-3">
-            <span>Estimated Equity Spread</span>
+            <span>{pv.kpiEquityLabel}</span>
             <Building className="h-4 w-4 text-ink-3" />
           </div>
           <p className="mt-3 text-3xl font-extrabold text-ink">
-            {formatMoney(dashboard?.totalEstimatedEquity)}
+            {formatMoney(dashboard?.totalEstimatedEquity, locale)}
           </p>
-          <p className="mt-1 text-label text-ink-3">Published value midpoint minus bid</p>
+          <p className="mt-1 text-label text-ink-3">{pv.kpiEquitySub}</p>
         </div>
 
         <div className="rounded-card border border-line bg-card p-5 shadow-sm">
           <div className="flex items-center justify-between text-xs font-semibold text-ink-3">
-            <span>Median Deal Score</span>
+            <span>{pv.kpiMedianScoreLabel}</span>
             <ShieldCheck className="h-4 w-4 text-ink-3" />
           </div>
           <p className="mt-3 text-3xl font-extrabold text-ink" style={{ color: bandForScore(dashboard?.medianDealScore)?.color }}>
             {dashboard?.medianDealScore != null ? Math.round(dashboard.medianDealScore) : "—"}
           </p>
           <p className="mt-1 text-label text-ink-3">
-            {dashboard?.medianDiscount != null ? `${Math.round(dashboard.medianDiscount * 100)}% median discount` : "Shown when value range exists"}
+            {dashboard?.medianDiscount != null
+              ? format(pv.kpiMedianDiscountSub, { pct: Math.round(dashboard.medianDiscount * 100) })
+              : pv.kpiMedianScoreFallbackSub}
           </p>
         </div>
 
         <div className="rounded-card border border-line bg-card p-5 shadow-sm">
           <div className="flex items-center justify-between text-xs font-semibold text-ink-3">
-            <span>Upcoming Sales</span>
+            <span>{pv.kpiUpcomingSalesLabel}</span>
             <CalendarDays className="h-4 w-4 text-ink-3" />
           </div>
           <p className="mt-3 text-3xl font-extrabold text-ink">
             {dashboard?.upcomingSales?.length ?? 0}
           </p>
-          <p className="mt-1 text-label text-ink-3">Sales scheduled in next 30 days</p>
+          <p className="mt-1 text-label text-ink-3">{pv.kpiUpcomingSalesSub}</p>
         </div>
       </div>
 
@@ -477,7 +481,7 @@ export function PortfolioView() {
           }`}
         >
           <Kanban className="h-3.5 w-3.5" />
-          Pipeline ({deals.length})
+          {format(pv.tabPipeline, { count: deals.length })}
         </button>
         <button
           onClick={() => setTab("watchlist")}
@@ -487,7 +491,7 @@ export function PortfolioView() {
               : "border-transparent text-ink-3 hover:text-ink"
           }`}
         >
-          Saved List ({deals.length})
+          {format(pv.tabWatchlist, { count: deals.length })}
         </button>
         <button
           onClick={() => setTab("drops")}
@@ -497,7 +501,7 @@ export function PortfolioView() {
               : "border-transparent text-ink-3 hover:text-ink"
           }`}
         >
-          Price Drops
+          {pv.tabDrops}
           {dropsCount > 0 && (
             <span className="rounded-full bg-line px-2 py-0.5 text-label text-ink">
               {dropsCount}
@@ -512,7 +516,7 @@ export function PortfolioView() {
               : "border-transparent text-ink-3 hover:text-ink"
           }`}
         >
-          Sale Calendar ({dashboard?.upcomingSales?.length ?? 0})
+          {format(pv.tabSchedule, { count: dashboard?.upcomingSales?.length ?? 0 })}
         </button>
         <button
           onClick={() => setTab("allocation")}
@@ -522,7 +526,7 @@ export function PortfolioView() {
               : "border-transparent text-ink-3 hover:text-ink"
           }`}
         >
-          By State &amp; Type
+          {pv.tabAllocation}
         </button>
       </div>
 
@@ -534,16 +538,16 @@ export function PortfolioView() {
             {deals.length === 0 ? (
               <div className="rounded-card border border-dashed border-line bg-card p-12 text-center">
                 <Kanban className="mx-auto h-8 w-8 text-ink-3 mb-3" />
-                <h2 className="text-base font-bold text-ink">No saved properties in your pipeline</h2>
+                <h2 className="text-base font-bold text-ink">{pv.pipelineEmptyHeading}</h2>
                 <p className="mt-1 text-xs text-ink-3 max-w-sm mx-auto">
-                  Save listings to your watchlist to organize your research from initial screening and title checks through sale day.
+                  {pv.pipelineEmptyBody}
                 </p>
                 <div className="mt-5">
                   <Link
                     href="/listings"
                     className="inline-flex items-center gap-2 rounded-control bg-ink px-5 py-2.5 text-xs font-semibold text-white hover:bg-ink-2 transition"
                   >
-                    Browse Listings <ArrowRight className="h-3.5 w-3.5" />
+                    {pv.browseListingsBtn} <ArrowRight className="h-3.5 w-3.5" />
                   </Link>
                 </div>
               </div>
@@ -552,6 +556,9 @@ export function PortfolioView() {
                 {PIPELINE_STAGES.map((stage, stageIndex) => {
                   const stageDeals = dealsByStage[stage.id];
                   const stageCapital = stageDeals.reduce((sum, d) => sum + (d.openingBid || 0), 0);
+                  const stageMeta = pv.pipelineStages[stage.id];
+                  const prevStageLabel = stageIndex > 0 ? pv.pipelineStages[PIPELINE_STAGES[stageIndex - 1].id].label : "";
+                  const nextStageLabel = stageIndex < stageOrder.length - 1 ? pv.pipelineStages[PIPELINE_STAGES[stageIndex + 1].id].label : "";
 
                   return (
                     <div
@@ -561,17 +568,17 @@ export function PortfolioView() {
                       {/* Column Header */}
                       <div className="border-b border-line pb-3">
                         <div className="flex items-center justify-between">
-                          <span className="font-extrabold text-xs text-ink">{stage.label}</span>
+                          <span className="font-extrabold text-xs text-ink">{stageMeta.label}</span>
                           <span className="rounded-full bg-line px-2 py-0.5 text-label font-bold text-ink">
                             {stageDeals.length}
                           </span>
                         </div>
                         <div className="mt-1.5 flex items-center justify-between text-label text-ink-3">
-                          <span>Opening Bids:</span>
-                          <span className="font-bold text-ink">{formatMoney(stageCapital)}</span>
+                          <span>{pv.stageOpeningBidsLabel}</span>
+                          <span className="font-bold text-ink">{formatMoney(stageCapital, locale)}</span>
                         </div>
-                        <p className="mt-1 text-xs text-ink-3 line-clamp-1" title={stage.description}>
-                          {stage.description}
+                        <p className="mt-1 text-xs text-ink-3 line-clamp-1" title={stageMeta.description}>
+                          {stageMeta.description}
                         </p>
                       </div>
 
@@ -579,7 +586,7 @@ export function PortfolioView() {
                       <div className="mt-3 space-y-3 flex-1 overflow-y-auto">
                         {stageDeals.length === 0 ? (
                           <div className="py-8 text-center text-label text-ink-3 border border-dashed border-line/60 rounded-control">
-                            No listings in {stage.label.toLowerCase()}
+                            {format(pv.stageEmpty, { stage: stageMeta.label.toLowerCase() })}
                           </div>
                         ) : (
                           stageDeals.map((deal) => {
@@ -592,18 +599,20 @@ export function PortfolioView() {
                                 className="group rounded-control border border-line bg-card p-3 shadow-xs hover:border-line-strong transition"
                               >
                                 <div className="flex items-center justify-between text-meta text-ink-3">
-                                  <span className="font-semibold">{sourceDisplayText(deal.source || "Auction")}</span>
+                                  <span className="font-semibold">
+                                    {deal.source ? sourceDisplayText(deal.source) : pv.defaultSourceAuction}
+                                  </span>
                                   {deal.dealScore != null && (
                                     <span
                                       className="rounded px-1.5 py-0.5 font-bold"
                                       style={scoreBand ? { backgroundColor: `${scoreBand.color}20`, color: scoreBand.color } : undefined}
                                     >
-                                      {Math.round(deal.dealScore)}/99
+                                      {format(pv.scoreOutOf99, { score: Math.round(deal.dealScore) })}
                                     </span>
                                   )}
                                 </div>
                                 <h4 className="mt-1 text-xs font-bold text-ink line-clamp-2">
-                                  {deal.address || "Address not published"}
+                                  {deal.address || pv.addressNotPublished}
                                 </h4>
                                 {deal.city && deal.state && (
                                   <p className="text-meta text-ink-3 mt-0.5">
@@ -611,15 +620,15 @@ export function PortfolioView() {
                                   </p>
                                 )}
                                 <div className="mt-2.5 flex items-center justify-between border-t border-line/60 pt-2 text-label">
-                                  <span className="text-meta text-ink-3">Opening:</span>
-                                  <span className="font-extrabold text-ink">{formatMoney(deal.openingBid)}</span>
+                                  <span className="text-meta text-ink-3">{pv.cardOpeningLabel}</span>
+                                  <span className="font-extrabold text-ink">{formatMoney(deal.openingBid, locale)}</span>
                                 </div>
 
                                 {deal.saleDate && (
                                   <div className="mt-1 flex items-center justify-between text-meta text-ink-3">
-                                    <span>Sale Date:</span>
+                                    <span>{pv.cardSaleDateLabel}</span>
                                     <span className="font-semibold text-ink-2">
-                                      {displayDate(deal.saleDate, "Unscheduled")}
+                                      {localizeDisplayDate(deal.saleDate, locale, pv.unscheduled)}
                                     </span>
                                   </div>
                                 )}
@@ -634,7 +643,7 @@ export function PortfolioView() {
                                     }}
                                     disabled={stageIndex === 0}
                                     className="p-1 rounded text-ink-3 hover:text-ink disabled:opacity-20 hover:bg-paper transition"
-                                    title={stageIndex > 0 ? `Move back to ${PIPELINE_STAGES[stageIndex - 1].label}` : "First stage"}
+                                    title={stageIndex > 0 ? format(pv.moveBackTitle, { stage: prevStageLabel }) : pv.firstStageTitle}
                                   >
                                     <ChevronLeft className="h-3.5 w-3.5" />
                                   </button>
@@ -643,7 +652,7 @@ export function PortfolioView() {
                                     href={`/listings/${encodeURIComponent(dealId)}`}
                                     className="text-label font-semibold text-ink-2 hover:text-ink flex items-center gap-0.5 transition"
                                   >
-                                    Dossier <ArrowRight className="h-2.5 w-2.5" />
+                                    {pv.dossierLink} <ArrowRight className="h-2.5 w-2.5" />
                                   </Link>
 
                                   <button
@@ -654,7 +663,7 @@ export function PortfolioView() {
                                     }}
                                     disabled={stageIndex === stageOrder.length - 1}
                                     className="p-1 rounded text-ink-3 hover:text-ink disabled:opacity-20 hover:bg-paper transition"
-                                    title={stageIndex < stageOrder.length - 1 ? `Advance to ${PIPELINE_STAGES[stageIndex + 1].label}` : "Final stage"}
+                                    title={stageIndex < stageOrder.length - 1 ? format(pv.advanceToTitle, { stage: nextStageLabel }) : pv.finalStageTitle}
                                   >
                                     <ChevronRight className="h-3.5 w-3.5" />
                                   </button>
@@ -678,16 +687,16 @@ export function PortfolioView() {
             {deals.length === 0 ? (
               <div className="rounded-card border border-dashed border-line bg-card p-12 text-center">
                 <Building className="mx-auto h-8 w-8 text-ink-3 mb-3" />
-                <h2 className="text-base font-bold text-ink">No saved properties yet</h2>
+                <h2 className="text-base font-bold text-ink">{pv.watchlistEmptyHeading}</h2>
                 <p className="mt-1 text-xs text-ink-3 max-w-sm mx-auto">
-                  Browse public listings, save promising assets, and monitor their status over time.
+                  {pv.watchlistEmptyBody}
                 </p>
                 <div className="mt-5">
                   <Link
                     href="/listings"
                     className="inline-flex items-center gap-2 rounded-control bg-ink px-5 py-2.5 text-xs font-semibold text-white hover:bg-ink-2 transition"
                   >
-                    Browse Listings <ArrowRight className="h-3.5 w-3.5" />
+                    {pv.browseListingsBtn} <ArrowRight className="h-3.5 w-3.5" />
                   </Link>
                 </div>
               </div>
@@ -696,7 +705,7 @@ export function PortfolioView() {
                 {deals.map((deal) => {
                   const dealId = deal.listingId || deal.id;
                   const currentStageId = pipelineStages[dealId] || "triage";
-                  const currentStage = PIPELINE_STAGES.find((s) => s.id === currentStageId);
+                  const currentStageLabel = pv.pipelineStages[currentStageId]?.label || pv.pipelineStages.triage.label;
 
                   return (
                     <div
@@ -706,21 +715,21 @@ export function PortfolioView() {
                       <div>
                         <div className="flex items-center justify-between text-xs text-ink-3">
                           <span className="font-semibold text-ink-3">
-                            {sourceDisplayText(deal.source || "Auction")}
+                            {deal.source ? sourceDisplayText(deal.source) : pv.defaultSourceAuction}
                           </span>
                           <div className="flex items-center gap-1.5">
                             <span className="rounded-control bg-line px-2 py-0.5 text-label font-bold text-ink-2">
-                              {currentStage?.label || "Triage"}
+                              {currentStageLabel}
                             </span>
                             {deal.dealScore != null && (
                               <span className="rounded-control bg-line px-2 py-0.5 text-label font-bold text-ink" style={{ color: bandForScore(deal.dealScore)?.color }}>
-                                Score {Math.round(deal.dealScore)}
+                                {format(pv.scoreBadge, { score: Math.round(deal.dealScore) })}
                               </span>
                             )}
                           </div>
                         </div>
                         <h3 className="mt-2 text-sm font-bold text-ink line-clamp-2">
-                          {deal.address || "Address not published"}
+                          {deal.address || pv.addressNotPublished}
                         </h3>
                         {deal.city && deal.state && (
                           <p className="text-xs text-ink-3 mt-0.5">
@@ -733,19 +742,19 @@ export function PortfolioView() {
                         <div className="flex items-center justify-between text-xs">
                           <div>
                             <span className="block text-meta uppercase font-medium text-ink-3">
-                              Opening Amount
+                              {pv.openingAmountLabel}
                             </span>
                             <span className="text-sm font-extrabold text-ink">
-                              {formatMoney(deal.openingBid)}
+                              {formatMoney(deal.openingBid, locale)}
                             </span>
                           </div>
                           {deal.saleDate && (
                             <div className="text-right">
                               <span className="block text-meta uppercase font-medium text-ink-3">
-                                Auction Date
+                                {pv.auctionDateLabel}
                               </span>
                               <span className="text-xs font-semibold text-ink-2">
-                                {displayDate(deal.saleDate, "Unscheduled")}
+                                {localizeDisplayDate(deal.saleDate, locale, pv.unscheduled)}
                               </span>
                             </div>
                           )}
@@ -756,11 +765,11 @@ export function PortfolioView() {
                             href={`/listings/${encodeURIComponent(dealId)}`}
                             className="flex items-center gap-1 text-xs font-semibold text-ink hover:text-ink-2 transition"
                           >
-                            Open Dossier <ArrowRight className="h-3 w-3" />
+                            {pv.openDossierLink} <ArrowRight className="h-3 w-3" />
                           </Link>
                           <button
                             onClick={() => handleRemove(dealId)}
-                            title="Remove from watchlist"
+                            title={pv.removeWatchlistTitle}
                             className="text-ink-3 hover:text-ink p-1 rounded transition"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -780,16 +789,17 @@ export function PortfolioView() {
           <div className="space-y-4">
             {historyUnavailable && (
               <div className="rounded-control border border-catch/40 bg-catch/5 px-4 py-3 text-xs text-ink">
-                Historical bid snapshots are temporarily unavailable, so prior-bid comparisons could not be computed for your saved listings.
+                {locale === "en"
+                  ? "Historical bid snapshots are temporarily unavailable, so prior-bid comparisons could not be computed for your saved listings."
+                  : pv.historyUnavailableBanner}
               </div>
             )}
             {activeDrops.length === 0 ? (
               <div className="rounded-card border border-dashed border-line bg-card p-12 text-center">
                 <TrendingDown className="mx-auto h-8 w-8 text-ink-3 mb-3" />
-                <h2 className="text-base font-bold text-ink">No price drops recorded</h2>
+                <h2 className="text-base font-bold text-ink">{pv.dropsEmptyHeading}</h2>
                 <p className="mt-1 text-xs text-ink-3 max-w-sm mx-auto">
-                  When auctioneers or sheriff departments reduce opening bids or upset prices on your tracked assets,
-                  they will appear here automatically.
+                  {pv.dropsEmptyBody}
                 </p>
               </div>
             ) : (
@@ -799,20 +809,20 @@ export function PortfolioView() {
                     <div>
                       <div className="flex items-center gap-2">
                         <span className="rounded-control bg-line px-2 py-0.5 text-label font-bold text-ink">
-                          {drop.dropPct ? `-${Math.round(drop.dropPct * 100)}% DROP` : "PRICE DROP"}
+                          {drop.dropPct ? format(pv.dropPctBadge, { pct: Math.round(drop.dropPct * 100) }) : pv.priceDropBadge}
                         </span>
                         <h4 className="text-sm font-bold text-ink">{drop.address || drop.listingId}</h4>
                       </div>
                       <p className="text-xs text-ink-3 mt-1">
-                        Reduced from {formatMoney(drop.previousBid)} to{" "}
-                        <strong className="text-ink">{formatMoney(drop.currentBid)}</strong>
+                        {format(pv.reducedFromLabel, { previous: formatMoney(drop.previousBid, locale) })}{" "}
+                        <strong className="text-ink">{formatMoney(drop.currentBid, locale)}</strong>
                       </p>
                     </div>
                     <Link
                       href={`/listings/${encodeURIComponent(drop.listingId)}`}
                       className="rounded-control border border-line-strong bg-card px-3.5 py-2 text-xs font-semibold text-ink-2 hover:bg-paper transition"
                     >
-                      View Update
+                      {pv.viewUpdateLink}
                     </Link>
                   </div>
                 ))}
@@ -827,9 +837,9 @@ export function PortfolioView() {
             {!dashboard?.upcomingSales?.length ? (
               <div className="rounded-card border border-dashed border-line bg-card p-12 text-center">
                 <CalendarDays className="mx-auto h-8 w-8 text-ink-3 mb-3" />
-                <h2 className="text-base font-bold text-ink">No sales in the next 30 days</h2>
+                <h2 className="text-base font-bold text-ink">{pv.scheduleEmptyHeading}</h2>
                 <p className="mt-1 text-xs text-ink-3 max-w-sm mx-auto">
-                  None of your currently tracked properties have an auction date scheduled in the next 30-day window.
+                  {pv.scheduleEmptyBody}
                 </p>
               </div>
             ) : (
@@ -840,20 +850,20 @@ export function PortfolioView() {
                       <div className="flex items-center gap-2">
                         <span className="flex items-center gap-1 rounded-control bg-go-wash px-2 py-0.5 text-label font-bold text-go">
                           <Clock className="h-3 w-3" />
-                          {sale.saleDate ? displayDate(sale.saleDate, "Scheduled") : "Scheduled"}
+                          {sale.saleDate ? localizeDisplayDate(sale.saleDate, locale, pv.scheduled) : pv.scheduled}
                         </span>
                         <h4 className="text-sm font-bold text-ink">{sale.address || sale.id}</h4>
                       </div>
                       <p className="text-xs text-ink-3 mt-1">
-                        Opening Amount: <strong>{formatMoney(sale.openingBid)}</strong> · Source:{" "}
-                        {sourceDisplayText(sale.source || "Public Auction")}
+                        {pv.openingAmountPrefix} <strong>{formatMoney(sale.openingBid, locale)}</strong> · {pv.sourcePrefix}{" "}
+                        {sale.source ? sourceDisplayText(sale.source) : pv.defaultSourcePublicAuction}
                       </p>
                     </div>
                     <Link
                       href={`/listings/${encodeURIComponent(sale.id)}`}
                       className="rounded-control bg-ink px-3.5 py-2 text-xs font-semibold text-white hover:bg-ink-2 transition"
                     >
-                      Prepare Bid
+                      {pv.prepareBidLink}
                     </Link>
                   </div>
                 ))}
@@ -871,15 +881,15 @@ export function PortfolioView() {
                 <div>
                   <h3 className="text-sm font-bold text-ink flex items-center gap-2">
                     <DollarSign className="h-4 w-4 text-ink-2" />
-                    Escrow &amp; Deposit Capital Optimizer
+                    {pv.escrowTitle}
                   </h3>
                   <p className="mt-1 text-xs text-ink-3">
-                    Models pre-auction wire lockups, refund turnaround windows, and concurrent bidding power across your saved auctions.
+                    {pv.escrowSub}
                   </p>
                 </div>
                 <div className="flex flex-wrap items-end gap-3">
                   <label className="block text-xs">
-                    <span className="font-semibold text-ink-3 block mb-1">Liquid Capital ($)</span>
+                    <span className="font-semibold text-ink-3 block mb-1">{pv.liquidCapitalLabel}</span>
                     <input
                       type="number"
                       min={0}
@@ -890,15 +900,15 @@ export function PortfolioView() {
                     />
                   </label>
                   <label className="block text-xs">
-                    <span className="font-semibold text-ink-3 block mb-1">Priority Policy</span>
+                    <span className="font-semibold text-ink-3 block mb-1">{pv.priorityPolicyLabel}</span>
                     <select
                       value={escrowSortBy}
                       onChange={(e) => setEscrowSortBy(e.target.value as "priority" | "chronological" | "bidding_power")}
                       className="h-9 rounded-control border border-line-strong bg-paper px-2.5 text-xs font-semibold text-ink"
                     >
-                      <option value="priority">Deal Score / Priority</option>
-                      <option value="chronological">Chronological</option>
-                      <option value="bidding_power">Max Bidding Power</option>
+                      <option value="priority">{pv.priorityScoreOption}</option>
+                      <option value="chronological">{pv.priorityChronologicalOption}</option>
+                      <option value="bidding_power">{pv.priorityBiddingPowerOption}</option>
                     </select>
                   </label>
                   <label className="inline-flex h-9 items-center gap-2 rounded-control border border-line bg-paper px-3 text-xs font-semibold text-ink-2 cursor-pointer">
@@ -908,7 +918,7 @@ export function PortfolioView() {
                       onChange={(e) => setAllowRecycling(e.target.checked)}
                       className="rounded border-line-strong"
                     />
-                    Recycle deposits
+                    {pv.recycleDepositsLabel}
                   </label>
                 </div>
               </div>
@@ -917,19 +927,19 @@ export function PortfolioView() {
                 <>
                   <div className="grid gap-3 sm:grid-cols-4">
                     <div className="rounded-control border border-line bg-paper p-3">
-                      <span className="text-label font-bold uppercase tracking-wider text-ink-3">Peak Committed</span>
-                      <p className="mt-1 text-lg font-bold text-ink">{formatMoney(dashboard.escrowAllocation.totalCommittedCapital)}</p>
+                      <span className="text-label font-bold uppercase tracking-wider text-ink-3">{pv.peakCommittedLabel}</span>
+                      <p className="mt-1 text-lg font-bold text-ink">{formatMoney(dashboard.escrowAllocation.totalCommittedCapital, locale)}</p>
                     </div>
                     <div className="rounded-control border border-line bg-paper p-3">
-                      <span className="text-label font-bold uppercase tracking-wider text-ink-3">Remaining Capital</span>
-                      <p className="mt-1 text-lg font-bold text-ink">{formatMoney(dashboard.escrowAllocation.remainingUnallocatedCapital)}</p>
+                      <span className="text-label font-bold uppercase tracking-wider text-ink-3">{pv.remainingCapitalLabel}</span>
+                      <p className="mt-1 text-lg font-bold text-ink">{formatMoney(dashboard.escrowAllocation.remainingUnallocatedCapital, locale)}</p>
                     </div>
                     <div className="rounded-control border border-line bg-paper p-3">
-                      <span className="text-label font-bold uppercase tracking-wider text-ink-3">Max Bidding Power</span>
-                      <p className="mt-1 text-lg font-bold text-yours">{formatMoney(dashboard.escrowAllocation.maximumExecutableBiddingPower)}</p>
+                      <span className="text-label font-bold uppercase tracking-wider text-ink-3">{pv.maxBiddingPowerLabel}</span>
+                      <p className="mt-1 text-lg font-bold text-yours">{formatMoney(dashboard.escrowAllocation.maximumExecutableBiddingPower, locale)}</p>
                     </div>
                     <div className="rounded-control border border-line bg-paper p-3">
-                      <span className="text-label font-bold uppercase tracking-wider text-ink-3">Capital Efficiency</span>
+                      <span className="text-label font-bold uppercase tracking-wider text-ink-3">{pv.capitalEfficiencyLabel}</span>
                       <p className="mt-1 text-lg font-bold text-ink">{dashboard.escrowAllocation.capitalEfficiencyRatio}x</p>
                     </div>
                   </div>
@@ -938,7 +948,7 @@ export function PortfolioView() {
                     <div className="rounded-control border border-catch/30 bg-catch-wash p-3.5 space-y-1.5">
                       <p className="text-xs font-bold text-catch-ink flex items-center gap-1.5">
                         <AlertCircle className="h-3.5 w-3.5" />
-                        {dashboard.escrowAllocation.dateConflicts.length} Deposit Lockup Conflict(s) Detected
+                        {format(pv.conflictsDetected, { count: dashboard.escrowAllocation.dateConflicts.length })}
                       </p>
                       <ul className="space-y-1 text-xs text-catch-ink">
                         {dashboard.escrowAllocation.dateConflicts.map((conflict, idx) => (
@@ -949,7 +959,7 @@ export function PortfolioView() {
                   )}
 
                   {dashboard.escrowAllocation.allocatedAuctions.length === 0 ? (
-                    <p className="text-xs text-ink-3">{dashboard.escrowAllocation.notes || "Save auctions to your watchlist to simulate escrow lockup schedules."}</p>
+                    <p className="text-xs text-ink-3">{dashboard.escrowAllocation.notes || pv.escrowEmptyNotes}</p>
                   ) : (
                     <div className="divide-y divide-line rounded-control border border-line">
                       {dashboard.escrowAllocation.allocatedAuctions.map((item) => (
@@ -961,20 +971,26 @@ export function PortfolioView() {
                                   ? "bg-yours-wash text-yours border border-yours/30"
                                   : "bg-catch-wash text-catch-ink border border-catch/30"
                               }`}>
-                                {item.status === "FUNDED" ? "Funded" : item.status === "EXCLUDED_DATE_CONFLICT" ? "Date Conflict" : "Capital Shortfall"}
+                                {item.status === "FUNDED"
+                                  ? pv.statusFunded
+                                  : item.status === "EXCLUDED_DATE_CONFLICT"
+                                    ? pv.statusDateConflict
+                                    : pv.statusCapitalShortfall}
                               </span>
                               <span className="text-xs font-bold text-ink truncate">
                                 {item.original?.address || item.id}{item.original?.state ? ` (${item.original.state})` : ""}
                               </span>
                             </div>
                             <p className="mt-1 text-xs text-ink-3">
-                              {item.platform} · {item.paymentMethod.replace(/_/g, " ")} · Deposit: <strong>{formatMoney(item.requiredDeposit)}</strong> ({Math.round(item.depositPercent * 100)}%) · Target Bid: <strong>{formatMoney(item.targetBid)}</strong>
+                              {item.platform} · {item.paymentMethod.replace(/_/g, " ")} · {pv.depositLabel}:{" "}
+                              <strong>{formatMoney(item.requiredDeposit, locale)}</strong> ({Math.round(item.depositPercent * 100)}%) ·{" "}
+                              {pv.targetBidLabel}: <strong>{formatMoney(item.targetBid, locale)}</strong>
                             </p>
                             <p className="mt-0.5 text-label text-ink-3">{item.reason}</p>
                           </div>
                           {item.saleDate && (
                             <span className="shrink-0 text-xs font-semibold text-ink-2">
-                              Gavel: {displayDate(item.saleDate)}
+                              {pv.gavelPrefix} {localizeDisplayDate(item.saleDate, locale, "—")}
                             </span>
                           )}
                         </div>
@@ -983,7 +999,7 @@ export function PortfolioView() {
                   )}
                 </>
               ) : (
-                <p className="text-xs text-ink-3">Save deals to your watchlist to compute optimal deposit recycling.</p>
+                <p className="text-xs text-ink-3">{pv.escrowNoAllocation}</p>
               )}
             </div>
 
@@ -991,11 +1007,11 @@ export function PortfolioView() {
             {/* By State */}
             <div className="rounded-card border border-line bg-card p-5 shadow-sm space-y-3">
               <h3 className="text-xs font-bold uppercase tracking-wider text-ink-3 flex items-center gap-2">
-                <Layers className="h-4 w-4" /> Jurisdiction (State)
+                <Layers className="h-4 w-4" /> {pv.byStateHeading}
               </h3>
               <div className="space-y-2 pt-2">
                 {Object.entries(dashboard?.perState || {}).length === 0 ? (
-                  <p className="text-xs text-ink-3">No jurisdiction data</p>
+                  <p className="text-xs text-ink-3">{pv.byStateEmpty}</p>
                 ) : (
                   Object.entries(dashboard?.perState || {})
                     .sort(([, a], [, b]) => b - a)
@@ -1014,11 +1030,11 @@ export function PortfolioView() {
             {/* By Source */}
             <div className="rounded-card border border-line bg-card p-5 shadow-sm space-y-3">
               <h3 className="text-xs font-bold uppercase tracking-wider text-ink-3 flex items-center gap-2">
-                <Building className="h-4 w-4" /> Source Agency / Feed
+                <Building className="h-4 w-4" /> {pv.bySourceHeading}
               </h3>
               <div className="space-y-2 pt-2">
                 {Object.entries(dashboard?.perSource || {}).length === 0 ? (
-                  <p className="text-xs text-ink-3">No source data</p>
+                  <p className="text-xs text-ink-3">{pv.bySourceEmpty}</p>
                 ) : (
                   Object.entries(dashboard?.perSource || {})
                     .sort(([, a], [, b]) => b - a)
@@ -1037,17 +1053,17 @@ export function PortfolioView() {
             {/* By Property Type */}
             <div className="rounded-card border border-line bg-card p-5 shadow-sm space-y-3">
               <h3 className="text-xs font-bold uppercase tracking-wider text-ink-3 flex items-center gap-2">
-                <PieChart className="h-4 w-4" /> Asset Classification
+                <PieChart className="h-4 w-4" /> {pv.byPropTypeHeading}
               </h3>
               <div className="space-y-2 pt-2">
                 {Object.entries(dashboard?.perPropType || {}).length === 0 ? (
-                  <p className="text-xs text-ink-3">No property type data</p>
+                  <p className="text-xs text-ink-3">{pv.byPropTypeEmpty}</p>
                 ) : (
                   Object.entries(dashboard?.perPropType || {})
                     .sort(([, a], [, b]) => b - a)
                     .map(([propType, num]) => (
                       <div key={propType} className="flex items-center justify-between text-xs">
-                        <span className="font-semibold text-ink-2">{propType}</span>
+                        <span className="font-semibold text-ink-2">{localizePropType(propType, m, locale) || propType}</span>
                         <span className="rounded bg-line px-2 py-0.5 font-bold text-ink">
                           {num}
                         </span>

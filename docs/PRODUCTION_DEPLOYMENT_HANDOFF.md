@@ -58,6 +58,8 @@ Configure these variables directly in each host dashboard (**do NOT commit live 
 | `GOOGLE_MAPS_API_KEY` | Optional | Server-restricted GCP key | Server-side geocoding & Street View metadata lookup only |
 | `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | Optional (UI) | HTTP-referrer-restricted GCP key | Browser map/Street View embed key (never reuse server key) |
 | `RESEND_API_KEY` / `RESEND_FROM` / `OPERATOR_EMAIL` | Optional | `alerts@perfectproperty.bid` | Outbound hunt digests, verification emails, and cron failure alerts |
+| `COURTLISTENER_API_KEY` | Optional (With docket lookup) | CourtListener REST v4 API token | Required for live CourtListener v4 `Authorization: Token` requests; `server/scrapers/courtlistener.js` and `/api/verify-docket` fail closed (`courtlistener_api_key_required` / `COURTLISTENER_AUTH_REQUIRED`) when unset |
+| `COURTLISTENER_VERIFY_DOCKET` | Optional | `1` (disabled unless set) | Enables live CourtListener v4 bankruptcy/foreclosure docket lookup in `GET /api/verify-docket` and `/api/property-intelligence` when `COURTLISTENER_API_KEY` is also configured |
 | `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` / `STRIPE_PRICE_ID_PRO` / `STRIPE_PRICE_ID_DESK` | Optional | Stripe live keys & price IDs | Member Pro (`$39/mo`) and Desk (`$149/mo`) billing & webhooks |
 
 ### Cloudflare Worker (`edge.perfectproperty.bid`)
@@ -88,8 +90,9 @@ Configure in `cloudflare/property-crawl-edge/wrangler.toml` (`[vars]` + `[[r2_bu
      ```bash
      npx wrangler deploy
      ```
-4. **CI Post-Deploy Smoke Check**:
-   - `.github/workflows/deploy.yml` defaults `DEPLOY_SMOKE_URL` to `https://property-crawl-api.vercel.app` and curls `/api/health` after CI passes.
+4. **CI Post-Deploy Smoke Check & Automated Off-Host Backups**:
+   - `.github/workflows/deploy.yml` deploys `property-crawl-api` (`node scripts/deploy-vercel-api.js --deploy` when `VERCEL_TOKEN` is set) and `cloudflare/property-crawl-edge` (`npx --yes wrangler deploy` when `CLOUDFLARE_API_TOKEN` is set), then runs post-deploy smoke checks across `DEPLOY_SMOKE_URL` (`https://property-crawl-api.vercel.app/api/health`), `UI_SMOKE_URL` (`https://perfectproperty.bid/`), and `EDGE_SMOKE_URL` (`https://edge.perfectproperty.bid/health`).
+   - `.github/workflows/db-backup.yml` runs daily (`17 8 * * *` UTC) and via `workflow_dispatch`, executing `node scripts/export-hosted-backup.js --upload-r2` to create a custom-format `pg_dump -Fc` from `DATABASE_DIRECT_URL`, verify it via `pg_restore --list` and SHA-256 manifest, and upload both artifacts to Cloudflare R2 (`backups/postgres/<YYYY-MM-DD>/` using `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_ENDPOINT`).
 
 ---
 
@@ -108,6 +111,19 @@ Configure in `cloudflare/property-crawl-edge/wrangler.toml` (`[vars]` + `[[r2_bu
    curl -fsS "https://property-crawl-api.vercel.app/api/health" | grep '"dataMode":"postgres"'
    ```
    - Note: `npm run db:seed` is strictly for initializing isolated/test environments from `data.js`; never treat `data.js` as live production inventory.
+4. **Observation Compaction & Backup Verification**:
+   - Compact redundant `source_observations` heartbeat rows, strip `raw_payload.noticeExcerpt` payloads in batches, and reclaim dead heap space via operator `POST /api/scrapers/run` with `action=compact-observations`:
+     ```bash
+     curl -fsS -X POST "https://property-crawl-api.vercel.app/api/scrapers/run?action=compact-observations" \
+       -H "Authorization: Bearer $SCRAPER_ADMIN_TOKEN" \
+       -H "Content-Type: application/json" \
+       -d '{"slimPayloads":true,"vacuumFull":true}'
+     ```
+     (`slimPayloads` defaults to `true`; `vacuumFull: true` runs `VACUUM (FULL, ANALYZE) source_observations` with automatic fallback to `VACUUM (ANALYZE)` if restricted; pass `pruneExpired: true` to run bounded `purgeStaleListings` first.)
+   - Run an on-demand off-host verified backup & R2 upload locally (or trigger `.github/workflows/db-backup.yml`):
+     ```bash
+     node scripts/export-hosted-backup.js --upload-r2
+     ```
 
 ---
 

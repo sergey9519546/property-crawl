@@ -200,6 +200,7 @@ test('property-signals: database errors propagate as 503', async () => {
 // --- Verify-docket route ----------------------------------------------
 
 const handleVerifyDocket = require('../../server/routes/verify-docket');
+const { auditDocketEvidence } = handleVerifyDocket;
 
 test('verify-docket: rejects method other than GET/POST with 405', async () => {
   const res = captureRes();
@@ -352,4 +353,169 @@ test('verify-docket: aggregates attached provenance dockets and optional CourtLi
   }
 });
 
+test('verify-docket: skips live CourtListener v4 network lookup when COURTLISTENER_API_KEY is unset', async () => {
+  const originalFetch = globalThis.fetch;
+  let outboundFetchCount = 0;
+  const forbiddenFetch = async () => {
+    outboundFetchCount += 1;
+    throw new Error('outbound CourtListener v4 fetch must not fire without COURTLISTENER_API_KEY');
+  };
+  globalThis.fetch = forbiddenFetch;
+  try {
+    const audit = await auditDocketEvidence(
+      { address: '500 Oak St', county: 'Cuyahoga', state: 'OH', defendant: 'Jane Doe' },
+      {
+        lookup: true,
+        checkedAt: '2026-11-24T12:34:56.000Z',
+        env: { COURTLISTENER_API_KEY: '', COURTLISTENER_VERIFY_DOCKET: '1' },
+        fetchImpl: forbiddenFetch,
+      }
+    );
+    assert.equal(outboundFetchCount, 0);
+    assert.equal(audit.lookupExecuted, false);
+    assert.equal(audit.lookupSkippedReason, 'courtlistener_api_key_required');
+    assert.equal(audit.docketSummary.lookupExecuted, false);
+    assert.equal(audit.docketSummary.lookupSkippedReason, 'courtlistener_api_key_required');
+    assert.equal(audit.docketSummary.status, 'not_checked');
+    assert.ok(
+      audit.logs.includes('[12:34:56] Live CourtListener v4 lookup skipped: COURTLISTENER_API_KEY is not configured.')
+    );
 
+    const res = captureRes();
+    await handleVerifyDocket(
+      {
+        method: 'POST',
+        url: 'http://localhost/api/verify-docket',
+        body: { address: '500 Oak St', county: 'Cuyahoga', state: 'OH', lookup: true },
+      },
+      res,
+      {
+        env: { COURTLISTENER_API_KEY: '' },
+        fetchImpl: forbiddenFetch,
+      }
+    );
+    assert.equal(outboundFetchCount, 0);
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.payload.verified, false);
+    assert.equal(res.payload.verificationState, 'official_source_required');
+    assert.equal(res.payload.docketSummary.lookupExecuted, false);
+    assert.equal(res.payload.docketSummary.lookupSkippedReason, 'courtlistener_api_key_required');
+    assert.ok(res.payload.missingEvidence.includes('Bankruptcy-stay search result'));
+    assert.ok(
+      res.payload.logs.some((l) => l.includes('Live CourtListener v4 lookup skipped: COURTLISTENER_API_KEY is not configured.'))
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('verify-docket: executes authenticated CourtListener v4 lookup and classifies Chapter 7/13 active bankruptcy dockets without leaking PII', async () => {
+  const dbModule = require('../../server/db/client');
+  const originalGetById = dbModule.getListingById;
+  dbModule.getListingById = async () => ({
+    id: 'cl-bk-auth-1',
+    address: '742 Maple Ave',
+    county: 'Cuyahoga',
+    state: 'OH',
+    defendant: 'Jane Private Homeowner',
+    plaintiff: 'First Federal Mortgage Corp',
+    sourceObservedAt: '2026-11-20T00:00:00Z',
+  });
+
+  const capturedHeaders = [];
+  const capturedUrls = [];
+  const mockFetch = async (url, init = {}) => {
+    capturedUrls.push(String(url));
+    capturedHeaders.push(init.headers || {});
+    return {
+      status: 200,
+      url: String(url),
+      headers: new Headers({ 'content-type': 'application/json' }),
+      text: async () => JSON.stringify({
+        count: 2,
+        next: null,
+        previous: null,
+        results: [
+          {
+            docket_id: 88010013,
+            docketNumber: '1:26-bk-10442',
+            court_id: 'ohnb',
+            court: 'Bankruptcy Court, N.D. Ohio',
+            dateFiled: '2026-11-01',
+            dateTerminated: null,
+            caseName: 'In re Jane Private Homeowner',
+            cause: '11 U.S.C. § 301 Voluntary Petition (Chapter 13)',
+            suitNature: '422 Bankruptcy Chap. 13',
+            party: ['Jane Private Homeowner'],
+            attorney: ['Robert Private Attorney'],
+            docket_absolute_url: '/docket/88010013/bankruptcy-case-10442/',
+          },
+          {
+            docket_id: 88010007,
+            docketNumber: '1:26-bk-10999',
+            court_id: 'ohnb',
+            court: 'Bankruptcy Court, N.D. Ohio',
+            dateFiled: '2026-11-10',
+            dateTerminated: null,
+            caseName: 'In re Jane Private Homeowner',
+            cause: '11 U.S.C. § 301 Chapter 7 Petition',
+            suitNature: 'Bankruptcy Chapter 7',
+            party: ['Jane Private Homeowner'],
+            attorney: ['Robert Private Attorney'],
+            docket_absolute_url: '/docket/88010007/bankruptcy-case-10999/',
+          },
+        ],
+      }),
+    };
+  };
+
+  try {
+    const res = captureRes();
+    await handleVerifyDocket(
+      {
+        method: 'POST',
+        url: 'http://localhost/api/verify-docket',
+        headers: {},
+        body: { listingId: 'cl-bk-auth-1', lookup: true },
+      },
+      res,
+      {
+        env: { COURTLISTENER_API_KEY: 'cl-v4-test-token-999' },
+        fetchImpl: mockFetch,
+      }
+    );
+
+    assert.equal(capturedHeaders.length, 1);
+    assert.equal(capturedHeaders[0].Authorization, 'Token cl-v4-test-token-999');
+    assert.match(capturedUrls[0], /courtlistener\.com\/api\/rest\/v4\/search\//);
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.payload.verified, false);
+    assert.equal(res.payload.piiGated, true);
+    assert.equal(res.payload.defendant, null);
+    assert.equal(res.payload.plaintiff, null);
+
+    const summary = res.payload.docketSummary;
+    assert.equal(summary.lookupExecuted, true);
+    assert.equal(summary.lookupSkippedReason, null);
+    assert.equal(summary.status, 'active_bankruptcy_docket');
+    assert.equal(summary.activeBankruptcyStaySignal, true);
+    assert.equal(summary.hitCount, 2);
+    assert.equal(summary.bankruptcyHitCount, 2);
+    assert.equal(summary.activeBankruptcyCount, 2);
+    assert.deepEqual(
+      summary.dockets.map((d) => ({ caseNumber: d.caseNumber, chapter: d.chapter, isBankruptcy: d.isBankruptcy, isActive: d.isActive })),
+      [
+        { caseNumber: '1:26-bk-10442', chapter: '13', isBankruptcy: true, isActive: true },
+        { caseNumber: '1:26-bk-10999', chapter: '7', isBankruptcy: true, isActive: true },
+      ]
+    );
+
+    // Non-PII contract: personal debtor/attorney names never appear in docketSummary
+    const serializedSummary = JSON.stringify(summary);
+    assert.ok(!serializedSummary.includes('Jane Private Homeowner'));
+    assert.ok(!serializedSummary.includes('Robert Private Attorney'));
+  } finally {
+    dbModule.getListingById = originalGetById;
+  }
+});

@@ -52,6 +52,11 @@ function isoOrNull(value) {
   return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null;
 }
 
+function slimSnapshotForRawPayload(snapshot) {
+  const { noticeExcerpt: _omit, ...rest } = snapshot || {};
+  return rest;
+}
+
 function snapshotToRow(sourceId, snapshot) {
   const fields = snapshot && typeof snapshot === 'object' ? snapshot.fields || {} : {};
   const openingBid = Number(fields.openingBid);
@@ -68,7 +73,7 @@ function snapshotToRow(sourceId, snapshot) {
     fields.address != null ? String(fields.address) : null,
     snapshot.noticeExcerpt != null ? String(snapshot.noticeExcerpt) : null,
     /^[a-f0-9]{64}$/i.test(String(snapshot.noticeSha256 || '')) ? snapshot.noticeSha256 : null,
-    JSON.stringify(snapshot),
+    JSON.stringify(slimSnapshotForRawPayload(snapshot)),
   ];
 }
 
@@ -321,7 +326,7 @@ async function recordSourceRun(pool, sourceId, run, options = {}) {
           pendingRollForward.set(nMinus1.id, {
             id: nMinus1.id,
             observedAt,
-            rawPayload: JSON.stringify(nextObservation),
+            rawPayload: JSON.stringify(slimSnapshotForRawPayload(nextObservation)),
           });
           nMinus1.observedAt = observedAt;
           continue;
@@ -756,6 +761,8 @@ async function compactPgObservations(pool, options = {}) {
       totalBefore: 0,
       totalAfter: 0,
       pruned: 0,
+      slimmedPayloads: 0,
+      vacuumMode: 'none',
       bytesBefore: null,
       bytesAfter: null,
       compactedAt,
@@ -812,25 +819,72 @@ async function compactPgObservations(pool, options = {}) {
   }
 
   let prunedRows = 0;
-  if (apply && deletedIds.length > 0) {
-    const DELETE_BATCH = 500;
-    for (let offset = 0; offset < deletedIds.length; offset += DELETE_BATCH) {
-      const batch = deletedIds.slice(offset, offset + DELETE_BATCH);
-      const delRes = await pool.query(
-        'DELETE FROM source_observations WHERE id = ANY($1::text[])',
-        [batch]
-      );
-      prunedRows += delRes.rowCount || 0;
-    }
-    if (prunedRows > 0 && options.vacuum === true) {
-      try {
-        await pool.query('VACUUM (ANALYZE) source_observations');
-      } catch {
-        // Non-fatal on mock pools or inside transactions
+  let slimmedPayloads = 0;
+  let vacuumMode = 'none';
+  if (apply) {
+    if (deletedIds.length > 0) {
+      const DELETE_BATCH = 500;
+      for (let offset = 0; offset < deletedIds.length; offset += DELETE_BATCH) {
+        const batch = deletedIds.slice(offset, offset + DELETE_BATCH);
+        const delRes = await pool.query(
+          'DELETE FROM source_observations WHERE id = ANY($1::text[])',
+          [batch]
+        );
+        prunedRows += delRes.rowCount || 0;
       }
     }
-    cachedStats = null;
-    invalidateCountyStatsCache(pool);
+    if (options.slimPayloads !== false) {
+      const SLIM_BATCH = 2000;
+      const maxSlimBatches = Number.isInteger(options.maxSlimBatches) && options.maxSlimBatches > 0
+        ? options.maxSlimBatches
+        : 30;
+      try {
+        for (let b = 0; b < maxSlimBatches; b++) {
+          const slimRes = await pool.query(
+            `UPDATE source_observations
+                SET raw_payload = raw_payload - 'noticeExcerpt'
+              WHERE id IN (
+                SELECT id FROM source_observations
+                 WHERE ($1::text IS NULL OR source_key = $1)
+                   AND raw_payload ? 'noticeExcerpt'
+                 LIMIT $2
+              )`,
+            [sourceFilter, SLIM_BATCH]
+          );
+          const count = Number(slimRes?.rowCount) || 0;
+          slimmedPayloads += count;
+          if (count < SLIM_BATCH) break;
+        }
+      } catch {
+        // Guard against pools without JSONB ? operator or read-only stubs
+      }
+    }
+    if (prunedRows > 0 || slimmedPayloads > 0 || options.vacuumFull === true) {
+      if (options.vacuumFull === true) {
+        try {
+          await pool.query('VACUUM (FULL, ANALYZE) source_observations');
+          vacuumMode = 'full';
+        } catch {
+          try {
+            await pool.query('VACUUM (ANALYZE) source_observations');
+            vacuumMode = 'analyze';
+          } catch {
+            // Non-fatal inside transactions or unsupported runtimes
+          }
+        }
+      } else if (options.vacuum === true) {
+        try {
+          await pool.query('VACUUM (ANALYZE) source_observations');
+          vacuumMode = 'analyze';
+        } catch {
+          // Non-fatal inside transactions or unsupported runtimes
+        }
+      }
+    }
+    if (prunedRows > 0 || slimmedPayloads > 0) {
+      cachedStats = null;
+      invalidateCountyStatsCache(pool);
+    }
   } else {
     prunedRows = deletedIds.length;
   }
@@ -847,6 +901,8 @@ async function compactPgObservations(pool, options = {}) {
     totalBefore: res.rows.length,
     totalAfter: retainedRows,
     pruned: prunedRows,
+    slimmedPayloads,
+    vacuumMode,
     bytesBefore,
     bytesAfter,
     compactedAt,
@@ -954,5 +1010,6 @@ module.exports = {
   recordSourceRun,
   recomputeTriageForListings,
   queryWithStatementTimeout,
+  slimSnapshotForRawPayload,
   updateTriagePriority,
 };

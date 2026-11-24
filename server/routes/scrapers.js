@@ -547,9 +547,16 @@ function createScrapersHandler(dependencies = {}) {
             expiredPurged = await database.purgeStaleListings({ batchSize: 50, maxBatches: 40, maxDurationMs: 25_000 });
           }
           const { compactPgObservations } = require('../db/observations-persistence');
+          const vacuumFull = body.vacuumFull === true
+            || url.searchParams.get('vacuumFull') === 'true'
+            || url.searchParams.get('vacuumFull') === '1';
+          const slimPayloads = body.slimPayloads !== false
+            && url.searchParams.get('slimPayloads') !== 'false';
           const report = await compactPgObservations(database.pool, {
             apply: body.dryRun !== true && url.searchParams.get('dryRun') !== 'true',
             vacuum: true,
+            vacuumFull,
+            slimPayloads,
             source: body.source || url.searchParams.get('source') || null,
           });
           return res.json({

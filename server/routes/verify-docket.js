@@ -56,7 +56,14 @@ function tokenizeAddressMatch(text) {
 
 function isMatchingDocketCandidate(candidate, { caseNumber, defendant, address }) {
   if (!candidate || typeof candidate !== 'object') return false;
-  const candidateCase = cleanText(candidate.provenance?.sourceFacts?.caseNumber || candidate.caseNumber || '', 80).toLowerCase();
+  const candidateCase = cleanText(
+    candidate.provenance?.sourceFacts?.caseNumber
+    || candidate.provenance?.sourceFacts?.docketNumber
+    || candidate.caseNumber
+    || candidate.docketNumber
+    || '',
+    80
+  ).toLowerCase();
   if (caseNumber && candidateCase && candidateCase.includes(caseNumber.toLowerCase())) {
     return true;
   }
@@ -91,18 +98,23 @@ function classifyDocketCandidate(candidate, checkedAt = new Date().toISOString()
   const courtId = cleanText(candidate.courtId || rawObj.court_id || sourceFacts.courtId || '', 24).toLowerCase() || null;
   const courtName = cleanText(candidate.courtName || rawObj.court || sourceFacts.courtName || '', 160) || null;
   const caseNumber = cleanText(
-    sourceFacts.caseNumber || candidate.caseNumber || rawObj.docketNumber || candidate.docketNumber || '',
+    sourceFacts.caseNumber
+    || sourceFacts.docketNumber
+    || candidate.caseNumber
+    || rawObj.docketNumber
+    || candidate.docketNumber
+    || '',
     80
   ) || null;
   const dateFiled = cleanText(candidate.dateFiled || rawObj.dateFiled || sourceFacts.dateFiled || '', 32) || null;
   const dateTerminated = cleanText(candidate.dateTerminated || rawObj.dateTerminated || sourceFacts.dateTerminated || '', 32) || null;
-  const suitNature = cleanText(candidate.suitNature || rawObj.suitNature || '', 160);
-  const cause = cleanText(candidate.cause || rawObj.cause || '', 160);
+  const suitNature = cleanText(candidate.suitNature || rawObj.suitNature || sourceFacts.suitNature || '', 160);
+  const cause = cleanText(candidate.cause || rawObj.cause || sourceFacts.cause || '', 160);
   const chapterSource = `${suitNature} ${cause} ${candidate.chapter || ''} ${rawObj.caseName || ''} ${candidate.address || ''}`;
-  const chapterMatch = chapterSource.match(/\bchapter\s*(7|11|12|13)\b/i);
+  const chapterMatch = chapterSource.match(/\b(?:chapter|chap\.?)\s*(7|11|12|13)\b/i);
   const chapter = candidate.chapter ? cleanText(candidate.chapter, 8) : (chapterMatch ? chapterMatch[1] : null);
   const isBankruptcyCourt = Boolean(courtId && /^[a-z]{2,4}b$/i.test(courtId));
-  const isBankruptcyText = /(?:bankruptcy|chapter\s*(?:7|11|12|13)|11\s*u\.?s\.?c\.?\s*§?\s*362|title\s*11)/i.test(
+  const isBankruptcyText = /(?:bankruptcy|chap(?:ter|\.)\s*(?:7|11|12|13)|11\s*u\.?s\.?c\.?\s*§?\s*362|title\s*11)/i.test(
     `${suitNature} ${cause} ${sourceFacts.documents?.[0]?.label || ''}`
   );
   const isBankruptcy = typeof candidate.isBankruptcy === 'boolean'
@@ -111,7 +123,7 @@ function classifyDocketCandidate(candidate, checkedAt = new Date().toISOString()
   const isActive = typeof candidate.isActive === 'boolean'
     ? candidate.isActive
     : !dateTerminated;
-  const docketIdNum = Number(candidate.docketId || rawObj.docket_id);
+  const docketIdNum = Number(candidate.docketId || rawObj.docket_id || sourceFacts.docketId);
   const docketId = Number.isInteger(docketIdNum) && docketIdNum > 0 ? docketIdNum : null;
   const sourceUrl = cleanText(candidate.sourceUrl || candidate.provenance?.exactSourceUrl || '', 500) || null;
   const observedAt = cleanText(candidate.sourceObservedAt || candidate.observedAt || checkedAt, 64) || null;
@@ -134,7 +146,7 @@ function classifyDocketCandidate(candidate, checkedAt = new Date().toISOString()
 /**
  * Aggregates classified docket hits into a non-PII summary safe for public routes.
  */
-function summarizeDocketHits(dockets = [], { checkedAt = new Date().toISOString(), lookupExecuted = false } = {}) {
+function summarizeDocketHits(dockets = [], { checkedAt = new Date().toISOString(), lookupExecuted = false, lookupSkippedReason = null } = {}) {
   const safeDockets = (Array.isArray(dockets) ? dockets : [])
     .map((d) => classifyDocketCandidate(d, checkedAt))
     .filter(Boolean);
@@ -158,6 +170,7 @@ function summarizeDocketHits(dockets = [], { checkedAt = new Date().toISOString(
     status,
     checkedAt,
     lookupExecuted: Boolean(lookupExecuted),
+    lookupSkippedReason: lookupSkippedReason || null,
     hitCount: safeDockets.length,
     bankruptcyHitCount: bankruptcyDockets.length,
     activeBankruptcyCount,
@@ -191,67 +204,89 @@ async function auditDocketEvidence(listing = null, options = {}) {
     logs.push(`[${checkedAt.slice(11, 19)}] Attached ${officialEvidence.length} publisher docket/notice reference(s) from listing provenance.`);
   }
 
+  const activeEnv = options.env || process.env;
+  const apiKey = cleanText(options.apiKey ?? activeEnv?.COURTLISTENER_API_KEY ?? '', 240) || null;
   const lookupEnabled = Boolean(options.courtlistenerClient)
     || Boolean(options.lookup)
-    || (options.env?.COURTLISTENER_VERIFY_DOCKET || process.env.COURTLISTENER_VERIFY_DOCKET) === '1';
+    || activeEnv?.COURTLISTENER_VERIFY_DOCKET === '1';
 
   let caseNumber = attachedCaseNumber;
   const matchedDockets = [];
   let lookupExecuted = false;
+  let lookupSkippedReason = null;
 
   if (lookupEnabled && (address || attachedCaseNumber)) {
-    lookupExecuted = true;
-    const queryTerm = attachedCaseNumber
-      || cleanText(listing?.defendant, 100)
-      || `${address} ${county} ${state}`.trim();
-    const client = options.courtlistenerClient || new CourtListenerScraper({
-      query: queryTerm,
-      maxRecords: 5,
-      requestTimeoutMs: 6000
-    });
-    logs.push(`[${checkedAt.slice(11, 19)}] Querying CourtListener index for "${queryTerm}".`);
-    try {
-      const candidates = await client.scrapeFeed();
-      const matched = (Array.isArray(candidates) ? candidates : []).filter((c) =>
-        isMatchingDocketCandidate(c, {
-          caseNumber: attachedCaseNumber,
-          defendant: listing?.defendant,
-          address
-        })
-      );
-      for (const candidate of matched) {
-        const classified = classifyDocketCandidate(candidate, checkedAt);
-        if (classified) matchedDockets.push(classified);
+    if (!options.courtlistenerClient && !apiKey) {
+      lookupExecuted = false;
+      lookupSkippedReason = 'courtlistener_api_key_required';
+      logs.push(`[${checkedAt.slice(11, 19)}] Live CourtListener v4 lookup skipped: COURTLISTENER_API_KEY is not configured.`);
+    } else {
+      lookupExecuted = true;
+      const queryTerm = attachedCaseNumber
+        || cleanText(listing?.defendant, 100)
+        || `${address} ${county} ${state}`.trim();
+      const client = options.courtlistenerClient || new CourtListenerScraper({
+        query: queryTerm,
+        maxRecords: 5,
+        requestTimeoutMs: 6000,
+        apiKey,
+        ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
+      });
+      logs.push(`[${checkedAt.slice(11, 19)}] Querying CourtListener index for "${queryTerm}".`);
+      try {
+        const candidates = await client.scrapeFeed();
+        const matched = (Array.isArray(candidates) ? candidates : []).filter((c) =>
+          isMatchingDocketCandidate(c, {
+            caseNumber: attachedCaseNumber,
+            defendant: listing?.defendant,
+            address
+          })
+        );
+        for (const candidate of matched) {
+          const classified = classifyDocketCandidate(candidate, checkedAt);
+          if (classified) matchedDockets.push(classified);
 
-        const evidenceUrl = cleanText(candidate.sourceUrl || candidate.provenance?.exactSourceUrl || '', 500);
-        if (!evidenceUrl || officialEvidence.some((e) => e.url === evidenceUrl)) continue;
-        if (!caseNumber) {
-          const matchedCase = cleanText(candidate.provenance?.sourceFacts?.caseNumber || candidate.caseNumber || '', 80);
-          if (matchedCase) caseNumber = matchedCase;
+          const evidenceUrl = cleanText(candidate.sourceUrl || candidate.provenance?.exactSourceUrl || '', 500);
+          if (!evidenceUrl || officialEvidence.some((e) => e.url === evidenceUrl)) continue;
+          if (!caseNumber) {
+            const matchedCase = cleanText(
+              candidate.provenance?.sourceFacts?.caseNumber
+              || candidate.provenance?.sourceFacts?.docketNumber
+              || candidate.caseNumber
+              || classified?.caseNumber
+              || '',
+              80
+            );
+            if (matchedCase) caseNumber = matchedCase;
+          }
+          const fallbackLabel = classified?.isBankruptcy
+            ? (caseNumber ? `CourtListener bankruptcy docket ${caseNumber}` : 'CourtListener federal bankruptcy docket')
+            : (caseNumber ? `CourtListener docket ${caseNumber}` : 'CourtListener federal docket');
+          officialEvidence.push({
+            label: cleanText(
+              candidate.provenance?.sourceFacts?.documents?.[0]?.label || fallbackLabel,
+              180
+            ),
+            url: evidenceUrl,
+            fetchedAt: cleanText(candidate.sourceObservedAt || checkedAt, 64)
+          });
         }
-        const fallbackLabel = classified?.isBankruptcy
-          ? (caseNumber ? `CourtListener bankruptcy docket ${caseNumber}` : 'CourtListener federal bankruptcy docket')
-          : (caseNumber ? `CourtListener docket ${caseNumber}` : 'CourtListener federal docket');
-        officialEvidence.push({
-          label: cleanText(
-            candidate.provenance?.sourceFacts?.documents?.[0]?.label || fallbackLabel,
-            180
-          ),
-          url: evidenceUrl,
-          fetchedAt: cleanText(candidate.sourceObservedAt || checkedAt, 64)
-        });
+        logs.push(
+          matched.length > 0
+            ? `[${checkedAt.slice(11, 19)}] Matched ${matched.length} CourtListener federal docket record(s).`
+            : `[${checkedAt.slice(11, 19)}] No matching CourtListener federal docket record found.`
+        );
+      } catch (err) {
+        logs.push(`[${checkedAt.slice(11, 19)}] CourtListener lookup failed cleanly (${cleanText(err?.message || 'error', 120)}).`);
       }
-      logs.push(
-        matched.length > 0
-          ? `[${checkedAt.slice(11, 19)}] Matched ${matched.length} CourtListener federal docket record(s).`
-          : `[${checkedAt.slice(11, 19)}] No matching CourtListener federal docket record found.`
-      );
-    } catch (err) {
-      logs.push(`[${checkedAt.slice(11, 19)}] CourtListener lookup failed cleanly (${cleanText(err?.message || 'error', 120)}).`);
     }
   }
 
-  const docketSummary = summarizeDocketHits(matchedDockets, { checkedAt, lookupExecuted });
+  const docketSummary = summarizeDocketHits(matchedDockets, {
+    checkedAt,
+    lookupExecuted,
+    lookupSkippedReason,
+  });
 
   return {
     checkedAt,
@@ -259,6 +294,8 @@ async function auditDocketEvidence(listing = null, options = {}) {
     county,
     state,
     caseNumber,
+    lookupExecuted,
+    lookupSkippedReason,
     officialEvidence,
     matchedDockets,
     docketSummary,
@@ -309,14 +346,17 @@ async function handleVerifyDocket(req, res, options = {}) {
   }
 
   const lookupRequested = params.lookup === true || params.lookup === 'true' || params.lookup === '1';
+  const activeEnv = options.env || process.env;
   const audit = await auditDocketEvidence(listing, {
     address,
     county,
     state,
     caseNumber: params.caseNumber,
     lookup: lookupRequested,
+    apiKey: options.apiKey,
+    fetchImpl: options.fetchImpl,
     courtlistenerClient: options.courtlistenerClient,
-    env: options.env || process.env,
+    env: activeEnv,
   });
 
   const { checkedAt, officialEvidence, docketSummary, logs } = audit;
@@ -344,7 +384,6 @@ async function handleVerifyDocket(req, res, options = {}) {
   logs.push(`[${checkedAt.slice(11, 19)}] Result remains UNVERIFIED. No legal conclusion was generated.`);
 
   // Gate personal-name / PII fields behind workspace authorization
-  const env = options.env || process.env;
   const workspaceIdentity = require('../security/workspace-identity');
   const authFn = typeof workspaceIdentity.isWorkspaceAuthorized === 'function'
     ? workspaceIdentity.isWorkspaceAuthorized
@@ -352,7 +391,7 @@ async function handleVerifyDocket(req, res, options = {}) {
         ? workspaceIdentity.requireWorkspaceIdentity.isAuthorized
         : null);
   const authorized = typeof authFn === 'function'
-    ? authFn(req, env)
+    ? authFn(req, activeEnv)
     : false;
 
   return res.status(200).json({

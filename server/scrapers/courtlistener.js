@@ -6,10 +6,10 @@ const { buildDocumentReferences } = require('./document-reference');
 //
 // Source: https://www.courtlistener.com/api/rest/v4/
 //
-// CourtListener is a free API for court docket research (PACER alternative).
-// RECAP is the community document archive. This collector searches for
-// foreclosure / lien / property-related federal court dockets and maps each
-// docket to a listing-like enrichment record.
+// CourtListener is a REST v4 API for court docket research (PACER alternative)
+// operated by Free Law Project. RECAP is the community document archive. This
+// collector searches for foreclosure / lien / property-related federal court
+// dockets and maps each docket to a listing-like enrichment record.
 //
 // IMPORTANT: This is an ENRICHMENT source, not a primary listing source.
 // A court docket is NOT a property sale. It has no opening bid, no sale date,
@@ -24,11 +24,13 @@ const { buildDocumentReferences } = require('./document-reference');
 //      enrichment-only provenance.
 //   3. Enforce 1 req/sec rate limit and a bounded per-run record budget.
 //
-// Safety:
-//   - Default 20 dockets per run (free tier is 100/day unauthenticated).
+// Safety & Authentication:
+//   - CourtListener REST API v4 requires COURTLISTENER_API_KEY
+//     (`Authorization: Token <COURTLISTENER_API_KEY>`); unauthenticated
+//     requests return HTTP 401 Unauthorized.
+//   - Default 20 dockets per run (capped at 50).
 //   - Circuit breaker on every request (inherited from BaseScraper).
 //   - Minimum 1-second delay between API requests.
-//   - COURTLISTENER_API_KEY env var enables authenticated access (higher limits).
 //   - Never fabricates a bid, sale date, or occupancy status.
 
 const BaseScraper = require('./base');
@@ -111,6 +113,7 @@ class CourtListenerScraper extends BaseScraper {
   constructor(options = {}) {
     super({
       ...options,
+      timeoutMs: options.timeoutMs ?? options.requestTimeoutMs,
       name: options.name || 'CourtListenerCollector',
       sourceKey: SOURCE_KEY
     });
@@ -121,9 +124,10 @@ class CourtListenerScraper extends BaseScraper {
       DEFAULT_MAX_RECORDS,
       MAX_RECORDS_CAP
     );
-    this.searchQuery = options.searchQuery || DEFAULT_SEARCH_QUERY;
+    this.searchQuery = options.searchQuery || options.query || DEFAULT_SEARCH_QUERY;
     this.courtId = options.courtId || process.env.COURTLISTENER_COURT || null;
-    this.apiKey = options.apiKey ?? process.env.COURTLISTENER_API_KEY ?? null;
+    const rawApiKey = options.apiKey !== undefined ? options.apiKey : process.env.COURTLISTENER_API_KEY;
+    this.apiKey = typeof rawApiKey === 'string' && rawApiKey.trim() ? rawApiKey.trim() : null;
     this.minRequestIntervalMs = Number.isFinite(options.minRequestIntervalMs)
       ? Math.max(0, Math.floor(options.minRequestIntervalMs))
       : MIN_REQUEST_INTERVAL_MS;
@@ -179,8 +183,8 @@ class CourtListenerScraper extends BaseScraper {
   }
 
   /**
-   * Enforce a minimum interval between API requests. The free tier allows
-   * only 5 requests/minute; we stay well under that with 1 req/sec.
+   * Enforce a minimum interval between API requests (1 req/sec default) to
+   * stay well within CourtListener REST v4 authenticated rate limits.
    */
   async enforceRateLimit() {
     if (this.minRequestIntervalMs <= 0) return;
@@ -197,9 +201,28 @@ class CourtListenerScraper extends BaseScraper {
   async fetchSearchPage({ cursor } = {}) {
     await this.enforceRateLimit();
     const queryUrl = this.buildSearchUrl({ cursor });
-    const payload = await this.requestJson(queryUrl, {
-      headers: this.buildAuthHeaders()
-    });
+    let payload;
+    try {
+      payload = await this.requestJson(queryUrl, {
+        headers: this.buildAuthHeaders()
+      });
+    } catch (error) {
+      const status = Number(error && error.status);
+      if (status === 401 || status === 403) {
+        if (!this.circuitBreaker.isOpen()) {
+          this.circuitBreaker.trip(`HTTP ${status} received from CourtListener v4 endpoint.`, { immediate: true });
+        }
+        const authError = new CourtListenerError(
+          'CourtListener v4 API requires a valid COURTLISTENER_API_KEY token (HTTP ' + status + ')',
+          'COURTLISTENER_AUTH_REQUIRED'
+        );
+        authError.status = status;
+        authError.haltScraper = true;
+        authError.circuitRecorded = true;
+        throw authError;
+      }
+      throw error;
+    }
     if (payload && typeof payload === 'object' && payload.detail && !Array.isArray(payload.results)) {
       // Django REST Framework returns { detail: "..." } on auth/throttle errors.
       const detail = String(payload.detail);
@@ -436,6 +459,7 @@ class CourtListenerScraper extends BaseScraper {
 
 module.exports = new CourtListenerScraper();
 module.exports.CourtListenerScraper = CourtListenerScraper;
+module.exports.CourtListenerError = CourtListenerError;
 module.exports.SOURCE_KEY = SOURCE_KEY;
 module.exports.API_ROOT = API_ROOT;
 module.exports.DOCKET_URL_ROOT = DOCKET_URL_ROOT;

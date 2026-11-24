@@ -46,7 +46,7 @@ async function reportStatus() {
   console.log(`[Git] Active Worktrees: ${worktrees.length}`);
 
   // 3. Live Public Endpoint Health
-  const appOrigin = process.env.PUBLIC_APP_ORIGIN || 'https://property-crawl.onrender.com';
+  const appOrigin = process.env.PUBLIC_APP_ORIGIN || 'https://perfectproperty.bid';
   try {
     const res = await fetch(`${appOrigin}/api/health`, { signal: AbortSignal.timeout(5000) });
     if (res.ok) {

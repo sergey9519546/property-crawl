@@ -4,6 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   CourtListenerScraper,
+  CourtListenerError,
   SOURCE_KEY,
   API_ROOT,
   DOCKET_URL_ROOT,
@@ -15,6 +16,15 @@ const {
 } = require('../server/scrapers/courtlistener');
 const { validateListingForIngestion } = require('../server/scrapers/validation');
 const { inspectSourceRecordUrl } = require('../server/scrapers/source-policy');
+const { resetThrottleState } = require('../server/scrapers/auto-throttle');
+
+test.beforeEach(() => {
+  resetThrottleState();
+});
+
+test.afterEach(() => {
+  resetThrottleState();
+});
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -188,12 +198,16 @@ test('extracts state codes from federal and state court IDs', () => {
 // ---------------------------------------------------------------------------
 
 test('enforces a minimum interval between API requests', async () => {
+  resetThrottleState();
+  let fakeNow = 1000000;
+  const originalDateNow = Date.now;
+  Date.now = () => fakeNow;
+
   const requestTimes = [];
   const scraper = makeScraper({
     maxRecords: 3,
     minRequestIntervalMs: 1000,
-    sleep: async (ms) => { requestTimes.push(Date.now()); },
-    fetchImpl: async (url) => {
+    fetchImpl: async () => {
       requestTimes.push(Date.now());
       // Return 1 result per page so we need multiple requests.
       return jsonResponse(200, searchResponse(
@@ -203,21 +217,25 @@ test('enforces a minimum interval between API requests', async () => {
     }
   });
 
-  // Override the sleep to simulate time passing.
-  let fakeNow = 1000000;
-  const originalDateNow = Date.now;
-  Date.now = () => fakeNow;
   try {
-    const sleepCalls = [];
-    scraper.sleepImpl = async (ms) => { sleepCalls.push(ms); fakeNow += ms; };
-    await scraper.scrapeFeed();
+    scraper.sleepImpl = async (ms) => {
+      scraper.sleeps.push(ms);
+      fakeNow += ms;
+    };
+    const listings = await scraper.scrapeFeed();
+    assert.equal(listings.length, 3);
   } finally {
     Date.now = originalDateNow;
+    resetThrottleState();
   }
 
-  // With 3 pages and 1s interval, we should have sleep calls between requests.
+  // With 3 pages and 1s interval, we should have 2 sleep calls of 1000ms between requests.
   // The first request has no wait; subsequent ones wait the full interval.
-  assert.ok(scraper.sleeps.length >= 0, 'sleep was called');
+  assert.equal(requestTimes.length, 3);
+  assert.ok(scraper.sleeps.length >= 2, `expected >= 2 sleep calls, got ${scraper.sleeps.length}`);
+  assert.deepEqual(scraper.sleeps, [1000, 1000]);
+  assert.equal(requestTimes[1] - requestTimes[0], 1000);
+  assert.equal(requestTimes[2] - requestTimes[1], 1000);
 });
 
 test('rate limit header is set on authenticated requests', async () => {
@@ -241,10 +259,33 @@ test('omits Authorization header when no API key is configured', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Circuit breaker
+// Authentication & circuit breaker
 // ---------------------------------------------------------------------------
 
-test('circuit breaker halts on HTTP 403', async () => {
+test('maps HTTP 401 to CourtListenerError with code COURTLISTENER_AUTH_REQUIRED', async () => {
+  let calls = 0;
+  const scraper = makeScraper({
+    apiKey: null,
+    fetchImpl: async () => {
+      calls += 1;
+      return jsonResponse(401, { detail: 'Authentication credentials were not provided.' });
+    }
+  });
+  await assert.rejects(scraper.scrapeFeed(), (error) => {
+    assert.ok(error instanceof CourtListenerError, 'expected CourtListenerError instance');
+    assert.equal(error.code, 'COURTLISTENER_AUTH_REQUIRED');
+    assert.equal(error.status, 401);
+    assert.equal(
+      error.message,
+      'CourtListener v4 API requires a valid COURTLISTENER_API_KEY token (HTTP 401)'
+    );
+    return true;
+  });
+  assert.equal(calls, 1, '401 must halt immediately without futile retries');
+  assert.equal(scraper.circuitBreaker.isOpen(), true);
+});
+
+test('circuit breaker halts on HTTP 403 and maps to COURTLISTENER_AUTH_REQUIRED', async () => {
   let calls = 0;
   const scraper = makeScraper({
     fetchImpl: async () => {
@@ -253,7 +294,11 @@ test('circuit breaker halts on HTTP 403', async () => {
     }
   });
   await assert.rejects(scraper.scrapeFeed(), (error) => {
-    return /403|Forbidden|circuit/i.test(error.message) || error.code === 'UPSTREAM_FORBIDDEN';
+    assert.ok(error instanceof CourtListenerError, 'expected CourtListenerError instance');
+    assert.equal(error.code, 'COURTLISTENER_AUTH_REQUIRED');
+    assert.equal(error.status, 403);
+    assert.match(error.message, /COURTLISTENER_API_KEY.*HTTP 403/);
+    return true;
   });
   assert.equal(calls, 1, '403 must halt after a single request');
   assert.equal(scraper.circuitBreaker.isOpen(), true);
@@ -421,6 +466,14 @@ test('exposes a bounded collection scope for the discovery store', () => {
   assert.equal(scope.filters.type, 'r');
   assert.equal(scope.filters.query, DEFAULT_SEARCH_QUERY);
   assert.equal(scope.pageSize, DEFAULT_MAX_RECORDS);
+});
+
+test('honors query option alias for targeted docket lookups', () => {
+  const scraper = makeScraper({ query: '1:26-bk-10442', requestTimeoutMs: 6000 });
+  assert.equal(scraper.searchQuery, '1:26-bk-10442');
+  assert.equal(scraper.timeoutMs, 6000);
+  const parsed = new URL(scraper.buildSearchUrl());
+  assert.equal(parsed.searchParams.get('q'), '1:26-bk-10442');
 });
 
 test('bounded collection defaults to 20 dockets per run', () => {
