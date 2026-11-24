@@ -24,10 +24,12 @@ const { isUsStateOrTerritoryCode } = require('../state-codes');
 const { getStateHpiContext, getStateHpiYoy } = require('./fhfa-state-hpi');
 
 let dynamicBenchmarksCache = null;
+let dynamicProvenanceCache = null;
 let lastDynamicCheck = 0;
 
 function invalidateDynamicBenchmarksCache() {
   dynamicBenchmarksCache = null;
+  dynamicProvenanceCache = null;
   lastDynamicCheck = 0;
 }
 
@@ -60,11 +62,13 @@ function loadDynamicBenchmarks() {
         && Number.isFinite(Date.parse(provenance.retrievedAt));
       if (provenanceOk && parsed.benchmarks && typeof parsed.benchmarks === 'object') {
         dynamicBenchmarksCache = parsed.benchmarks;
+        dynamicProvenanceCache = provenance;
         return dynamicBenchmarksCache;
       }
     }
   } catch {}
   dynamicBenchmarksCache = {};
+  dynamicProvenanceCache = null;
   return dynamicBenchmarksCache;
 }
 
@@ -131,13 +135,16 @@ function getCountyMarketTrends(state, county) {
     return {
       state: normState,
       county: benchmark.county,
+      fips: benchmark.fips ?? null,
+      asOfYear: benchmark.asOfYear ?? null,
       medianSalePrice: benchmark.medianSalePrice ?? null,
       yoyPriceChangePct: benchmark.yoyPriceChangePct ?? null,
       marketTemperature: benchmark.marketTemperature ?? null,
+      medianDom: benchmark.medianDom ?? null,
       trendLabel: benchmark.trendLabel ?? null,
       source: 'PUBLIC_COUNTY_BENCHMARKS',
       observed: true,
-      retrievedAt: null,
+      retrievedAt: dynamicProvenanceCache?.retrievedAt || null,
       disclaimer: DISCLAIMER,
     };
   }

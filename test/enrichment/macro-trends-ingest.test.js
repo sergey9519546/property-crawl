@@ -11,6 +11,7 @@ const {
   parseMacroRecord,
   ingestMacroRecords,
   buildProvenance,
+  parseFhfaCountyRows,
 } = require('../../scripts/ingest-macro-trends');
 const {
   getCountyMarketTrends,
@@ -147,6 +148,27 @@ test('Macro Trends Ingest: writes an observed envelope and serves it via COUNTY_
   }
 });
 
+test('Macro Trends Ingest: parseFhfaCountyRows selects latest finite year and preserves null dollar prices', () => {
+  const rows = [
+    ['HPI for Counties'],
+    ['State', 'County', 'FIPS code', 'Year', 'Annual Change (%)', 'HPI'],
+    ['NJ', 'Camden', '34007', '1990', '.', '100.0'],
+    ['NJ', 'Camden', '34007', '2024', '7.1', '280.1'],
+    ['NJ', 'Camden', '34007', '2025', '5.824', '296.4'],
+    ['OH', 'Cuyahoga', '39035', '2025', '0.75', '240.0'],
+    ['XX', 'Atlantis', '99999', '2025', '9.0', '100.0'],
+  ];
+  const parsed = parseFhfaCountyRows(rows);
+  assert.deepEqual(Object.keys(parsed), ['NJ-CAMDEN', 'OH-CUYAHOGA']);
+  assert.equal(parsed['NJ-CAMDEN'].asOfYear, 2025);
+  assert.equal(parsed['NJ-CAMDEN'].yoyPriceChangePct, 5.82);
+  assert.equal(parsed['NJ-CAMDEN'].marketTemperature, 'hot');
+  assert.equal(parsed['NJ-CAMDEN'].medianSalePrice, null);
+  assert.equal(parsed['NJ-CAMDEN'].medianDom, null);
+  assert.equal(parsed['OH-CUYAHOGA'].marketTemperature, 'cold');
+  assert.equal(parsed['OH-CUYAHOGA'].fips, '39035');
+});
+
 test('Macro Trends Ingest: the loader fails closed on unprovenanced files', () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'macro-neg-'));
   const originalEnv = process.env.COUNTY_BENCHMARKS_PATH;
@@ -213,4 +235,25 @@ test('Macro Trends Ingest: the loader fails closed on unprovenanced files', () =
     invalidateDynamicBenchmarksCache();
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
+});
+
+test('Macro Trends Ingest: parseFhfaCountyRows selects latest finite year and preserves null dollar prices', () => {
+  const rows = [
+    ['HPI for Counties'],
+    ['State', 'County', 'FIPS code', 'Year', 'Annual Change (%)', 'HPI'],
+    ['NJ', 'Camden', '34007', '1990', '.', '100.0'],
+    ['NJ', 'Camden', '34007', '2024', '7.1', '280.1'],
+    ['NJ', 'Camden', '34007', '2025', '5.824', '296.4'],
+    ['OH', 'Cuyahoga', '39035', '2025', '0.75', '240.0'],
+    ['XX', 'Atlantis', '99999', '2025', '9.0', '100.0'],
+  ];
+  const parsed = parseFhfaCountyRows(rows);
+  assert.deepEqual(Object.keys(parsed), ['NJ-CAMDEN', 'OH-CUYAHOGA']);
+  assert.equal(parsed['NJ-CAMDEN'].asOfYear, 2025);
+  assert.equal(parsed['NJ-CAMDEN'].yoyPriceChangePct, 5.82);
+  assert.equal(parsed['NJ-CAMDEN'].marketTemperature, 'hot');
+  assert.equal(parsed['NJ-CAMDEN'].medianSalePrice, null);
+  assert.equal(parsed['NJ-CAMDEN'].medianDom, null);
+  assert.equal(parsed['OH-CUYAHOGA'].marketTemperature, 'cold');
+  assert.equal(parsed['OH-CUYAHOGA'].fips, '39035');
 });
