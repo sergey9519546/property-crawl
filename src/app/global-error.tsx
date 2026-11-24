@@ -5,6 +5,7 @@ import { RefreshCw, AlertOctagon } from "lucide-react";
 import { DEFAULT_LOCALE, LOCALE_COOKIE, isLocale, type Locale } from "@/lib/i18n/config";
 import { getMessages } from "@/lib/i18n/messages";
 import { interpolate } from "@/lib/i18n/translator";
+import { captureException } from "@/lib/telemetry/sentry";
 
 function readBrowserLocale(): Locale {
   if (typeof document === "undefined") return DEFAULT_LOCALE;
@@ -25,6 +26,16 @@ export default function GlobalError({
   useEffect(() => {
     setLocale(readBrowserLocale());
     console.error("Uncaught root layout error:", error);
+    void captureException(error, {
+      handled: false,
+      mechanismType: "react.global_error",
+      tags: {
+        runtime: "browser",
+        surface: "global-error",
+        ...(error?.digest ? { digest: error.digest } : {}),
+      },
+      extra: error?.digest ? { digest: error.digest } : undefined,
+    });
   }, [error]);
   const t = getMessages(locale).errors;
 

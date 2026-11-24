@@ -45,9 +45,23 @@ const { handleDecisionPacket } = require('./routes/decision-packet');
 const handleFederalHazards = require('./routes/federal-hazards');
 const scheduler = require('./scrapers/scheduler');
 const { discoveryReadiness, probeDiscoveryDatabase } = require('./discovery-readiness');
+const { captureException } = require('./telemetry/sentry');
 
 process.on('unhandledRejection', (reason, promise) => {
   console.error('[Server] Unhandled Promise Rejection at:', promise, 'reason:', reason);
+  void captureException(reason instanceof Error ? reason : new Error(String(reason)), {
+    handled: false,
+    mechanismType: 'onunhandledrejection',
+    tags: { runtime: 'node-server', hook: 'unhandledRejection' },
+  });
+});
+
+process.on('uncaughtExceptionMonitor', (error, origin) => {
+  void captureException(error, {
+    handled: false,
+    mechanismType: 'onuncaughtexception',
+    tags: { runtime: 'node-server', hook: 'uncaughtException', origin: String(origin || 'uncaughtException') },
+  });
 });
 
 const PORT = process.env.PORT || 3000;
@@ -510,6 +524,16 @@ async function handleRequest(req, res) {
 const server = http.createServer((req, res) => {
   return handleRequest(req, res).catch((error) => {
     console.error('[API] Request failed:', error.code || error.name);
+    void captureException(error, {
+      handled: false,
+      mechanismType: 'http.server',
+      tags: { runtime: 'node-server', hook: 'http_request' },
+      request: {
+        method: req.method,
+        url: req.url,
+        headers: req.headers,
+      },
+    });
     if (!res.headersSent) {
       res.statusCode = 503;
       res.setHeader('Content-Type', 'application/json');

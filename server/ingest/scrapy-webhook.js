@@ -47,7 +47,7 @@ function verifyScrapySignature(rawBody, signatureHeader, secret = process.env.SC
     }
 
     const rawTimestamp = options?.timestamp;
-    const requireTimestamp = Boolean(options?.requireTimestamp);
+    const requireTimestamp = options?.requireTimestamp !== false;
     if (requireTimestamp && (rawTimestamp === undefined || rawTimestamp === null || String(rawTimestamp).trim() === '')) {
       return { valid: false, status: 401, error: 'Missing webhook timestamp' };
     }

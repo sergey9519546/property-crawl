@@ -58,7 +58,8 @@ export async function POST(request: Request) {
   }
 
   const timestamp = request.headers.get("x-timestamp") || undefined;
-  const auth = verifyScrapySignature(rawBody, signature, undefined, { timestamp });
+  const requireTimestamp = process.env.SCRAPY_ALLOW_MISSING_TIMESTAMP !== "1";
+  const auth = verifyScrapySignature(rawBody, signature, undefined, { timestamp, requireTimestamp });
   if (!auth.valid) {
     return Response.json(
       { error: auth.error },

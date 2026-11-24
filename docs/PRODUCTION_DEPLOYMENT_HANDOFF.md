@@ -14,7 +14,7 @@ Production splits into four coordinated managed surfaces:
    - **`@opennextjs/cloudflare` Future Coupling Inventory (`11` `src/` files importing `@server/*`)**:
      - *6 pure JS / Edge-safe modules*: `title-risk-engine.js`, `secondary-property-media.js`, `source-policy.js`, `media-policy.js`, `validation.js`, `catalog.js`.
      - *3 `crypto`-only modules (`nodejs_compat` compatible)*: `stripe-checkout.js`, `decision-packet.js`, `scrapy-webhook.js`.
-     - *3 Node `fs`/`net`-bound modules (proxy to `PROPERTY_API_URL` before OpenNext cutover)*: `server/delivery/outbound-mail.js` (`node:fs` local outbox fallback), `server/db/live-record-store.js` (`node:fs` cache fallback behind `@ts-ignore` / Edge guard in `scrapy-ingest/route.ts`), `server/scrapers/zyte-client.js` (`node:net` private IP check).
+     - *3 Node `fs`/`net`-bound imports guarded on `NEXT_RUNTIME === 'edge'` (`be05`)*: `src/app/api/account/login/route.ts` uses Web `fetch` to Resend on Edge and lazy-loads `server/delivery/outbound-mail.js` (`node:fs` local outbox fallback) in Node; `src/lib/zyte.server.ts` fails closed on Edge and lazy-loads `server/scrapers/zyte-client.js` (`node:net`) in Node; `src/app/api/public/scrapy-ingest/route.ts` guards `server/db/live-record-store.js` behind `NEXT_RUNTIME === 'edge'` and enforces `requireTimestamp: true` replay protection.
 2. **Listing API & Intelligence Engine — Vercel Serverless (`https://property-crawl-api.vercel.app`)**:
    - Packaged by `scripts/deploy-vercel-api.js` into a slim serverless bundle (`api/index.js` -> `server/vercel-handler.js`, `vercel.json` with `maxDuration: 60` and `/api` rewrite), excluding `data.js`, `data/listings.snapshot.json`, Python crawlers, fixtures, and test suites.
    - `server/vercel-handler.js` routes ephemeral caches to `/tmp/property-crawl-cache`, forces `SCRAPER_BACKGROUND_ENABLED=0` inside serverless functions, and reconstructs `X-Forwarded-For` from `x-pp-client-ip` when `x-edge-secret` validates against `EDGE_SHARED_SECRET`.
@@ -61,6 +61,7 @@ Configure these variables directly in each host dashboard (**do NOT commit live 
 | `COURTLISTENER_API_KEY` | Optional (With docket lookup) | CourtListener REST v4 API token | Required for live CourtListener v4 `Authorization: Token` requests; `server/scrapers/courtlistener.js` and `/api/verify-docket` fail closed (`courtlistener_api_key_required` / `COURTLISTENER_AUTH_REQUIRED`) when unset |
 | `COURTLISTENER_VERIFY_DOCKET` | Optional | `1` (disabled unless set) | Enables live CourtListener v4 bankruptcy/foreclosure docket lookup in `GET /api/verify-docket` and `/api/property-intelligence` when `COURTLISTENER_API_KEY` is also configured |
 | `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` / `STRIPE_PRICE_ID_PRO` / `STRIPE_PRICE_ID_DESK` | Optional | Stripe live keys & price IDs | Member Pro (`$39/mo`) and Desk (`$149/mo`) billing & webhooks |
+| `SENTRY_DSN` / `NEXT_PUBLIC_SENTRY_DSN` | Optional | Sentry project DSN | Zero-dependency fail-silent error envelope reporting with header/PII scrubbing (`sendDefaultPii: false`) |
 
 ### Cloudflare Worker (`edge.perfectproperty.bid`)
 
@@ -92,7 +93,7 @@ Configure in `cloudflare/property-crawl-edge/wrangler.toml` (`[vars]` + `[[r2_bu
      ```
 4. **CI Post-Deploy Smoke Check & Automated Off-Host Backups**:
    - `.github/workflows/deploy.yml` deploys `property-crawl-api` (`node scripts/deploy-vercel-api.js --deploy` when `VERCEL_TOKEN` is set) and `cloudflare/property-crawl-edge` (`npx --yes wrangler deploy` when `CLOUDFLARE_API_TOKEN` is set), then runs post-deploy smoke checks across `DEPLOY_SMOKE_URL` (`https://property-crawl-api.vercel.app/api/health`), `UI_SMOKE_URL` (`https://perfectproperty.bid/`), and `EDGE_SMOKE_URL` (`https://edge.perfectproperty.bid/health`).
-   - `.github/workflows/db-backup.yml` runs daily (`17 8 * * *` UTC) and via `workflow_dispatch`, executing `node scripts/export-hosted-backup.js --upload-r2` to create a custom-format `pg_dump -Fc` from `DATABASE_DIRECT_URL`, verify it via `pg_restore --list` and SHA-256 manifest, and upload both artifacts to Cloudflare R2 (`backups/postgres/<YYYY-MM-DD>/` using `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_ENDPOINT`).
+   - `.github/workflows/db-backup.yml` runs daily (`17 8 * * *` UTC) and via `workflow_dispatch`, installing `postgresql-client-17` (PGDG) to match Supabase PostgreSQL 17 and executing `node scripts/export-hosted-backup.js --upload-r2` (`DATABASE_DIRECT_URL` or Supavisor `DATABASE_URL` auto-converted from `:6543` to `:5432`) to create a custom-format `pg_dump -Fc`, verify it via `pg_restore --list` and SHA-256 manifest, and upload both artifacts to Cloudflare R2 (`backups/postgres/<YYYY-MM-DD>/` using `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_ENDPOINT`).
 
 ---
 

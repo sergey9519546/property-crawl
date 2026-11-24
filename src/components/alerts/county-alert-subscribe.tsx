@@ -1,13 +1,55 @@
 "use client";
 
-import { FormEvent, useState } from "react";
-import { Check, Loader2, Mail } from "lucide-react";
+import { FormEvent, useEffect, useState } from "react";
+import { Check, Clock, Loader2, Mail } from "lucide-react";
 import { useLocale } from "@/components/i18n/locale-provider";
 
 export interface CountyAlertSubscribeProps {
   state: string;
   county: string;
   formalCounty: string;
+}
+
+type SubscribeStatus =
+  | "idle"
+  | "loading"
+  | "pending"
+  | "confirming"
+  | "success"
+  | "error";
+
+function pendingCopy(
+  locale: string,
+  county: string,
+  email: string,
+  mailDelivery: string | null,
+): string {
+  const deliverySent = mailDelivery === "sent" || mailDelivery === "local";
+  if (locale === "hy") {
+    return deliverySent
+      ? `Հաստատման հղումը ուղարկվել է ${email} հասցեին։ Սեղմեք հղումը՝ ${county} շրջանի ծանուցումները ակտիվացնելու համար։ Մինչև հաստատումը նամակներ չեն ուղարկվի։`
+      : `Բաժանորդագրությունը պահպանված է որպես չհաստատված (${email}), սակայն էլ. փոստի առաքումը կարգավորված չէ։ Ծանուցումները կմնան դադարեցված մինչև հաստատումը։`;
+  }
+  if (locale === "ru") {
+    return deliverySent
+      ? `Ссылка для подтверждения отправлена на ${email}. Перейдите по ссылке в письме, чтобы активировать уведомления по округу ${county}. До подтверждения дайджесты не отправляются.`
+      : `Подписка сохранена как ожидающая подтверждения (${email}), однако отправка почты не настроена на сервере. До подтверждения уведомления не отправляются.`;
+  }
+  return deliverySent
+    ? `Confirmation link sent to ${email}. Click the link in your email to activate ${county} alerts — no digests will be sent until confirmed.`
+    : `Subscription saved as pending confirmation for ${email}, but outbound email delivery is not configured on this server. Alerts remain paused until confirmed.`;
+}
+
+function confirmingCopy(locale: string): string {
+  if (locale === "hy") return "Հաստատվում է ծանուցումների բաժանորդագրությունը…";
+  if (locale === "ru") return "Подтверждение подписки на уведомления…";
+  return "Confirming your county alert subscription…";
+}
+
+function confirmFailedCopy(locale: string): string {
+  if (locale === "hy") return "Հաստատման հղումը անվավեր է կամ ժամկետանց։";
+  if (locale === "ru") return "Ссылка подтверждения недействительна или устарела.";
+  return "Confirmation link is invalid or expired. Please subscribe again.";
 }
 
 export function CountyAlertSubscribe({
@@ -18,8 +60,76 @@ export function CountyAlertSubscribe({
   const { locale, messages: m, format } = useLocale();
   const [email, setEmail] = useState("");
   const [cadence, setCadence] = useState<"daily" | "instant">("daily");
-  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [status, setStatus] = useState<SubscribeStatus>("idle");
+  const [pendingEmail, setPendingEmail] = useState("");
+  const [mailDelivery, setMailDelivery] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    const params = url.searchParams;
+    const token =
+      params.get("confirm_alert") ||
+      params.get("alert_token") ||
+      (params.get("action") === "confirm_county_digest" ? params.get("token") : null);
+    const confirmedFlag = params.get("alert_confirmed");
+    const confirmError = params.get("alert_confirm_error");
+
+    if (confirmedFlag === "1" || confirmedFlag === "true") {
+      setStatus("success");
+      return;
+    }
+    if (confirmError) {
+      setStatus("error");
+      setErrorMessage(locale === "en" ? confirmError : confirmFailedCopy(locale));
+      return;
+    }
+    if (!token) return;
+
+    let cancelled = false;
+    setStatus("confirming");
+    setErrorMessage("");
+
+    fetch(
+      `/api/alerts?action=confirm_county_digest&token=${encodeURIComponent(token)}`,
+      { method: "GET", cache: "no-store" },
+    )
+      .then(async (response) => {
+        const data = await response.json().catch(() => ({}));
+        if (cancelled) return;
+        if (!response.ok || data.verified !== true) {
+          throw new Error(
+            locale === "en" && typeof data.error === "string"
+              ? data.error
+              : confirmFailedCopy(locale),
+          );
+        }
+        setStatus("success");
+        params.delete("confirm_alert");
+        params.delete("alert_token");
+        params.delete("token");
+        if (params.get("action") === "confirm_county_digest") {
+          params.delete("action");
+        }
+        const cleaned = params.toString();
+        const nextUrl = `${url.pathname}${cleaned ? `?${cleaned}` : ""}${url.hash}`;
+        window.history.replaceState(null, "", nextUrl);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setStatus("error");
+        setErrorMessage(
+          locale === "en" && err instanceof Error
+            ? err.message
+            : confirmFailedCopy(locale),
+        );
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [locale]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -52,6 +162,13 @@ export function CountyAlertSubscribe({
         throw new Error(locale === "en" && typeof data.error === "string" ? data.error : m.states.countyAlertFailed);
       }
 
+      if (data.pendingConfirmation === true || data.verified === false) {
+        setPendingEmail(cleanEmail);
+        setMailDelivery(typeof data.mailDelivery === "string" ? data.mailDelivery : null);
+        setStatus("pending");
+        return;
+      }
+
       setStatus("success");
     } catch (err) {
       setStatus("error");
@@ -72,7 +189,20 @@ export function CountyAlertSubscribe({
         </p>
       </div>
 
-      {status === "success" ? (
+      {status === "confirming" ? (
+        <div className="mt-4 flex items-center gap-2 rounded-control border border-line bg-paper p-3.5 text-sm font-medium text-ink-2">
+          <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+          <span>{confirmingCopy(locale)}</span>
+        </div>
+      ) : status === "pending" ? (
+        <div
+          role="status"
+          className="mt-4 flex items-start gap-2 rounded-control border border-line-strong bg-paper p-3.5 text-sm font-medium text-ink"
+        >
+          <Clock className="mt-0.5 h-4 w-4 shrink-0 text-ink-2" />
+          <span>{pendingCopy(locale, formalCounty, pendingEmail || email.trim(), mailDelivery)}</span>
+        </div>
+      ) : status === "success" ? (
         <div className="mt-4 flex items-center gap-2 rounded-control bg-go-wash p-3.5 text-sm font-medium text-go">
           <Check className="h-4 w-4 shrink-0" />
           <span>{format(m.states.countyAlertSuccess, { county: formalCounty })}</span>

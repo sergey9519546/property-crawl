@@ -25,6 +25,7 @@ const { getHudSafmrBenchmark } = require('./hud-safmr');
 const { interpretAssessorParcel } = require('./assessor-reading');
 const { resolveCountyKey } = require('./arcgis-parcels');
 const { getStateHpiContext } = require('./fhfa-state-hpi');
+const { computeQualifiedDeedComps } = require('./deed-comps');
 
 const DISCLAIMER = 'Public record consensus benchmarks are statutory and administrative observations, not an appraisal, valuation opinion, or buyer bid recommendation.';
 
@@ -240,6 +241,27 @@ function computePublicBenchmarkConsensus(listingContext = {}, options = {}) {
   const availableSourceCount = sourcesAvailable.length;
   const publicConsensusScore = Math.round((availableSourceCount / 3) * 100) / 100;
 
+  const rawDeedComps = options.deedComps !== undefined ? options.deedComps : ctx.deedComps;
+  let secondaryDeedComps = null;
+  if (rawDeedComps !== undefined && rawDeedComps !== null) {
+    const computedComps =
+      !Array.isArray(rawDeedComps) &&
+      typeof rawDeedComps === 'object' &&
+      rawDeedComps.benchmarkType === 'PUBLIC_RECORD_DEED_COMPS'
+        ? rawDeedComps
+        : computeQualifiedDeedComps(rawDeedComps, {
+            zip,
+            source: options.deedCompsSource || ctx.deedCompsSource,
+            windowMonths: options.deedCompsWindowMonths,
+            asOf: options.asOf,
+          });
+    secondaryDeedComps = {
+      layer: 'L2_QUALIFIED_DEED_COMPS',
+      label: 'Secondary Public-Record Benchmark (L2 Qualified Deed Comps)',
+      ...computedComps,
+    };
+  }
+
   return {
     benchmarkType: 'PUBLIC_RECORD_BENCHMARK',
     isAppraisal: false,
@@ -264,6 +286,7 @@ function computePublicBenchmarkConsensus(listingContext = {}, options = {}) {
 
     // 4. Statewide FHFA HPI Macro Trend
     stateMacroHpi: state ? getStateHpiContext(state) : null,
+    ...(secondaryDeedComps ? { deedComps: secondaryDeedComps } : {}),
 
     // Strict Zero-Fabrication: estLow, estHigh, and dealScore must NEVER be generated here
     estLow: null,

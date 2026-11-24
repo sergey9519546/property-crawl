@@ -13,6 +13,7 @@
 const crypto = require('node:crypto');
 const { listHunts, evaluateInventory, sortHuntResults, MAX_RETURNED_RESULTS } = require('../intelligence/hunts');
 const { loadStore, mutateStore, MAX_EVENTS } = require('../intelligence/hunt-store');
+const { matchListingAgainstSearch } = require('../intelligence/saved-search-alerts');
 const { sendHuntDigest } = require('./resend-client');
 
 function formatCurrency(amount) {
@@ -252,6 +253,7 @@ async function dispatchInvestorAlertDigest({ recipient, hunt, evaluation, listin
     html: report.html,
     text: report.text || report.markdown,
     ...options,
+    ...(options.fetchImpl && !options.fetchFn ? { fetchFn: options.fetchImpl } : {}),
   });
 
   return {
@@ -259,6 +261,162 @@ async function dispatchInvestorAlertDigest({ recipient, hunt, evaluation, listin
     id: deliveryResult.id || null,
     reason: deliveryResult.reason || null,
     report,
+  };
+}
+
+/**
+ * Evaluates verified county alert subscriptions (saved_searches with filters.notifyEmail
+ * AND strict filters.verified === true) and dispatches investor digest emails.
+ * Unverified subscriptions (filters.verified !== true) are strictly skipped.
+ */
+async function runCountyAlertDigests({ listings = [], options = {} } = {}) {
+  const evaluatedAt = typeof options.now === 'string' ? options.now : new Date().toISOString();
+  const database = options.database || null;
+
+  if (
+    !database
+    || typeof database.listSavedSearchUserIds !== 'function'
+    || typeof database.listSavedSearches !== 'function'
+  ) {
+    return {
+      evaluatedAt,
+      skipped: 'saved_searches_unavailable',
+      totalSubscriptions: 0,
+      verifiedSubscriptions: 0,
+      skippedUnverified: 0,
+      totalMatches: 0,
+      digestsDispatched: 0,
+      results: [],
+    };
+  }
+
+  const userIds = await database.listSavedSearchUserIds();
+  const results = [];
+  let totalSubscriptions = 0;
+  let verifiedSubscriptions = 0;
+  let skippedUnverified = 0;
+  let totalMatches = 0;
+  let digestsDispatched = 0;
+
+  for (const userId of Array.isArray(userIds) ? userIds : []) {
+    const searches = await database.listSavedSearches(userId, { includeInactive: false });
+    for (const search of Array.isArray(searches) ? searches : []) {
+      const recipient = typeof search?.filters?.notifyEmail === 'string'
+        ? search.filters.notifyEmail.trim()
+        : '';
+      if (!recipient) continue;
+
+      totalSubscriptions++;
+
+      // Strict double-opt-in gate: never email any unverified subscription.
+      if (search?.filters?.verified !== true) {
+        skippedUnverified++;
+        results.push({
+          searchId: search?.id || null,
+          userId,
+          label: search?.label || null,
+          skipped: true,
+          reason: 'UNVERIFIED_SUBSCRIPTION',
+          matchedCount: 0,
+          dispatchResult: { delivered: false, reason: 'UNVERIFIED_SUBSCRIPTION' },
+        });
+        continue;
+      }
+
+      verifiedSubscriptions++;
+
+      try {
+        const matchedListings = [];
+        for (const listing of Array.isArray(listings) ? listings : []) {
+          const verdict = matchListingAgainstSearch(listing, search);
+          if (verdict.match) matchedListings.push(listing);
+        }
+
+        if (matchedListings.length === 0) {
+          results.push({
+            searchId: search.id,
+            userId,
+            label: search.label,
+            matchedCount: 0,
+            dispatchResult: { delivered: false, reason: 'NO_NEW_MATCHES' },
+          });
+          continue;
+        }
+
+        let targetListings = matchedListings;
+        if (typeof database.recordAlertMatches === 'function') {
+          const newRecords = await database.recordAlertMatches(
+            userId,
+            search.id,
+            matchedListings.map((l) => l.id),
+          );
+          const newIds = new Set((Array.isArray(newRecords) ? newRecords : []).map((r) => r.listingId));
+          const fresh = matchedListings.filter((l) => newIds.has(l.id));
+          targetListings = fresh.length > 0 ? fresh : (options.forceDispatch ? matchedListings : []);
+        }
+
+        if (targetListings.length === 0) {
+          results.push({
+            searchId: search.id,
+            userId,
+            label: search.label,
+            matchedCount: 0,
+            dispatchResult: { delivered: false, reason: 'NO_NEW_CHANGES' },
+          });
+          continue;
+        }
+
+        totalMatches += targetListings.length;
+
+        const evaluation = {
+          evaluatedAt,
+          results: targetListings.map((l) => ({
+            identityKey: l.id,
+            listingId: l.id,
+            status: 'match',
+          })),
+        };
+
+        const dispatchResult = await dispatchInvestorAlertDigest({
+          recipient,
+          hunt: {
+            id: search.id,
+            name: search.label || 'County Alert Digest',
+            notifyEmail: recipient,
+          },
+          evaluation,
+          listings: targetListings,
+          options,
+        });
+
+        if (dispatchResult.delivered) digestsDispatched++;
+
+        results.push({
+          searchId: search.id,
+          userId,
+          label: search.label,
+          matchedCount: targetListings.length,
+          dispatchResult,
+        });
+      } catch (err) {
+        results.push({
+          searchId: search?.id || null,
+          userId,
+          label: search?.label || null,
+          error: err.message,
+        });
+      }
+    }
+  }
+
+  return {
+    evaluatedAt,
+    totalSubscriptions,
+    verifiedSubscriptions,
+    skippedUnverified,
+    totalMatches,
+    digestsDispatched,
+    results,
   };
 }
 
@@ -411,6 +569,11 @@ async function runAllHuntDigests({ listings = [], options = {} }) {
     }
   }
 
+  let countyAlerts = null;
+  if (options.includeCountyAlerts !== false && options.database) {
+    countyAlerts = await runCountyAlertDigests({ listings, options });
+  }
+
   return {
     evaluatedAt: new Date().toISOString(),
     totalHunts: hunts.length,
@@ -418,6 +581,7 @@ async function runAllHuntDigests({ listings = [], options = {} }) {
     totalPriceDrops,
     digestsDispatched,
     results,
+    ...(countyAlerts ? { countyAlerts } : {}),
   };
 }
 
@@ -426,5 +590,6 @@ module.exports = {
   evaluatePriceDrop,
   generateInvestorDigestReport,
   dispatchInvestorAlertDigest,
+  runCountyAlertDigests,
   runAllHuntDigests,
 };

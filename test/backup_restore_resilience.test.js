@@ -228,6 +228,55 @@ test('HostedPgBackup: parseDbTarget extracts connection fields from DATABASE_DIR
   }
 });
 
+test('HostedPgBackup: parseDbTarget converts Supavisor pooler :6543 to session mode :5432 when DATABASE_DIRECT_URL is unset', () => {
+  const targetSubdomain = parseDbTarget({
+    DATABASE_URL: 'postgresql://postgres.projref:s3cr%23t%21pw@aws-0-us-east-1.pooler.supabase.com:6543/postgres',
+  });
+  assert.deepEqual(targetSubdomain, {
+    host: 'aws-0-us-east-1.pooler.supabase.com',
+    port: '5432',
+    user: 'postgres.projref',
+    database: 'postgres',
+    password: 's3cr#t!pw',
+  });
+
+  const targetApexPooler = parseDbTarget({
+    DATABASE_DIRECT_URL: '   ',
+    DATABASE_URL: 'postgresql://postgres.projref:pw@pooler.supabase.com:6543/postgres',
+  });
+  assert.equal(targetApexPooler.host, 'pooler.supabase.com');
+  assert.equal(targetApexPooler.port, '5432');
+
+  // Non-Supabase hosts on :6543 must not be rewritten
+  const nonSupabase = parseDbTarget({
+    DATABASE_URL: 'postgresql://app:pw@pgbouncer.internal:6543/postgres',
+  });
+  assert.equal(nonSupabase.port, '6543');
+
+  // Direct URL with explicit port is not rewritten
+  const explicitDirect = parseDbTarget({
+    DATABASE_DIRECT_URL: 'postgresql://postgres.projref:pw@aws-0-us-east-1.pooler.supabase.com:6543/postgres',
+  });
+  assert.equal(explicitDirect.port, '6543');
+});
+
+test('HostedPgBackup: db-backup.yml installs postgresql-client-17 from PGDG and supports DATABASE_URL fallback', () => {
+  const workflowPath = path.join(__dirname, '..', '.github', 'workflows', 'db-backup.yml');
+  const yml = fs.readFileSync(workflowPath, 'utf8');
+
+  // PGDG apt repo + PostgreSQL 17 client
+  assert.match(yml, /https:\/\/www\.postgresql\.org\/media\/keys\/ACCC4CF8\.asc/);
+  assert.match(yml, /https:\/\/apt\.postgresql\.org\/pub\/repos\/apt/);
+  assert.match(yml, /-pgdg\s+main/);
+  assert.match(yml, /apt-get install -y postgresql-client-17\b/);
+  assert.doesNotMatch(yml, /apt-get install -y postgresql-client(?:\s|$)/);
+
+  // DATABASE_URL fallback alongside DATABASE_DIRECT_URL in both config check and export step
+  assert.match(yml, /DATABASE_DIRECT_URL:\s*\$\{\{\s*secrets\.DATABASE_DIRECT_URL\s*\}\}/);
+  assert.match(yml, /DATABASE_URL:\s*\$\{\{\s*secrets\.DATABASE_URL\s*\}\}/);
+  assert.match(yml, /\[\s*-z\s*"\$DATABASE_DIRECT_URL"\s*\]\s*&&\s*\[\s*-z\s*"\$DATABASE_URL"\s*\]/);
+});
+
 test('HostedPgBackup: uploadBackupToR2 fails closed with R2_CREDENTIALS_UNSET when R2_* env vars are missing', async () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dr-r2-neg-'));
   try {

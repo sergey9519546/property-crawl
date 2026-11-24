@@ -38,13 +38,26 @@ const PG_DUMP = findPgBinary('pg_dump');
 const PG_RESTORE = findPgBinary('pg_restore');
 
 function parseDbTarget(env = process.env) {
-  const connStr = env.DATABASE_DIRECT_URL || env.DATABASE_URL || env.DISCOVERY_DATABASE_URL || '';
+  const directUrl = String(env.DATABASE_DIRECT_URL || '').trim();
+  const poolUrl = String(env.DATABASE_URL || '').trim();
+  const discoveryUrl = String(env.DISCOVERY_DATABASE_URL || '').trim();
+  const connStr = directUrl || poolUrl || discoveryUrl;
   if (connStr) {
     try {
       const parsed = new URL(connStr);
+      const hostname = parsed.hostname;
+      let port = parsed.port || '5432';
+      // Supavisor transaction pooler (:6543) rejects pg_dump prepared statements/session state.
+      // When DATABASE_DIRECT_URL is unset and DATABASE_URL uses the Supavisor pooler, switch
+      // to session mode (:5432) so pg_dump succeeds cleanly.
+      const isSupavisorHost =
+        hostname === 'pooler.supabase.com' || hostname.endsWith('.pooler.supabase.com');
+      if (!directUrl && isSupavisorHost && port === '6543') {
+        port = '5432';
+      }
       return {
-        host: parsed.hostname,
-        port: parsed.port || '5432',
+        host: hostname,
+        port,
         user: decodeURIComponent(parsed.username || 'postgres'),
         database: parsed.pathname.replace(/^\//, '') || 'postgres',
         password: decodeURIComponent(parsed.password || ''),

@@ -81,8 +81,41 @@ test('verifyScrapySignature: accepts valid HMAC-SHA256 signature', () => {
   const body = JSON.stringify({ recipe: 'foreclosure', items: [{ id: 'FC-101', county: 'Harris' }] });
   const validSig = signPayload(body, secret);
 
-  const result = verifyScrapySignature(body, validSig, secret);
+  const nowMs = 1_760_000_000_000;
+  const result = verifyScrapySignature(body, validSig, secret, {
+    timestamp: String(Math.floor(nowMs / 1000)),
+    nowMs,
+  });
   assert.equal(result.valid, true);
+});
+
+test('verifyScrapySignature: rejects missing or whitespace x-timestamp by default and allows explicit opt-out', () => {
+  const secret = 'production-grade-scrapy-secret-67890';
+  const body = JSON.stringify({ recipe: 'foreclosure', items: [] });
+  const validSig = signPayload(body, secret);
+  const nowMs = 1_760_000_000_000;
+
+  const missing = verifyScrapySignature(body, validSig, secret, { nowMs });
+  assert.equal(missing.valid, false);
+  assert.equal(missing.status, 401);
+  assert.match(missing.error, /Missing webhook timestamp/i);
+
+  const blank = verifyScrapySignature(body, validSig, secret, { timestamp: '   ', nowMs });
+  assert.equal(blank.valid, false);
+  assert.equal(blank.status, 401);
+  assert.match(blank.error, /Missing webhook timestamp/i);
+
+  const optedOut = verifyScrapySignature(body, validSig, secret, { requireTimestamp: false, nowMs });
+  assert.equal(optedOut.valid, true);
+
+  const optedOutExpired = verifyScrapySignature(body, validSig, secret, {
+    requireTimestamp: false,
+    timestamp: String(Math.floor(nowMs / 1000) - 301),
+    nowMs,
+  });
+  assert.equal(optedOutExpired.valid, false);
+  assert.equal(optedOutExpired.status, 401);
+  assert.match(optedOutExpired.error, /timestamp/i);
 });
 
 test('verifyScrapySignature: rejects stale x-timestamp > 300s and accepts fresh timestamp', () => {
@@ -583,6 +616,9 @@ test('scrapy webhook route handler declares GET and POST with HMAC verification,
   assert.match(source, /servesListings/);
   assert.match(source, /validateListingForIngestion/);
   assert.match(source, /x-signature/);
+  assert.match(source, /x-timestamp/);
+  assert.match(source, /SCRAPY_ALLOW_MISSING_TIMESTAMP\s*!==\s*["']1["']/);
+  assert.match(source, /requireTimestamp/);
   assert.match(source, /verifyConnection/);
   assert.match(source, /dataMode\(\) === "postgres"/);
   assert.match(source, /MAX_ITEMS_PER_BATCH/);

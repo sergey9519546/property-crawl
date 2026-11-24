@@ -396,3 +396,132 @@ test('Alert Digest: runAllHuntDigests supports PgHuntStore / durableStore and sc
   assert.equal(body.report.totalHunts, 1);
   assert.equal(baselineLookups, 2);
 });
+
+
+test('Alert Digest: runCountyAlertDigests strictly skips unverified subscriptions and dispatches only verified:true via dispatch-digests', async () => {
+  const { runCountyAlertDigests } = require('../../server/delivery/alert-digest');
+  const { createScrapersHandler } = require('../../server/routes/scrapers');
+
+  const recordedMatches = [];
+  const searches = [
+    {
+      id: 'sub_unverified_false',
+      userId: 'device:guest_1',
+      label: 'Travis, TX Digest',
+      isActive: true,
+      filters: {
+        states: ['TX'],
+        counties: ['travis'],
+        notifyEmail: 'unverified@example.com',
+        verified: false,
+      },
+    },
+    {
+      id: 'sub_unverified_string',
+      userId: 'device:guest_2',
+      label: 'Travis, TX Digest',
+      isActive: true,
+      filters: {
+        states: ['TX'],
+        counties: ['travis'],
+        notifyEmail: 'stringtrue@example.com',
+        verified: 'true',
+      },
+    },
+    {
+      id: 'sub_verified',
+      userId: 'device:guest_3',
+      label: 'Travis, TX Digest',
+      isActive: true,
+      filters: {
+        states: ['TX'],
+        counties: ['travis'],
+        notifyEmail: 'verified@example.com',
+        verified: true,
+      },
+    },
+  ];
+
+  const stubDb = {
+    isPg: false,
+    async getListings() { return { listings: [txListing] }; },
+    async listSavedSearchUserIds() {
+      return [...new Set(searches.map((s) => s.userId))];
+    },
+    async listSavedSearches(userId) {
+      return searches.filter((s) => s.userId === userId && s.isActive);
+    },
+    async recordAlertMatches(userId, searchId, listingIds) {
+      const out = listingIds.map((listingId) => ({ userId, searchId, listingId }));
+      recordedMatches.push(...out);
+      return out;
+    },
+  };
+
+  const txListing = {
+    id: 'TX-TRAVIS-77',
+    source: 'sheriff',
+    state: 'TX',
+    county: 'Travis',
+    city: 'Austin',
+    address: '77 Congress Ave, Austin, TX',
+    openingBid: 185000,
+    dealScore: 83,
+    saleDate: '2026-12-15',
+  };
+
+  const sentPayloads = [];
+  const report = await runCountyAlertDigests({
+    listings: [txListing],
+    options: {
+      database: stubDb,
+      apiKey: 're_test_county_digest',
+      fetchFn: async (_url, opts) => {
+        sentPayloads.push(JSON.parse(opts.body));
+        return { ok: true, json: async () => ({ id: 'email_verified_1' }) };
+      },
+    },
+  });
+
+  assert.equal(report.totalSubscriptions, 3);
+  assert.equal(report.skippedUnverified, 2);
+  assert.equal(report.verifiedSubscriptions, 1);
+  assert.equal(report.digestsDispatched, 1);
+  assert.equal(sentPayloads.length, 1);
+  assert.deepEqual(sentPayloads[0].to, ['verified@example.com']);
+  assert.equal(recordedMatches.length, 1);
+  assert.equal(recordedMatches[0].searchId, 'sub_verified');
+
+  // Verify scrapers action=dispatch-digests includes countyAlerts in report
+  const os = require('node:os');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'digest-scrapers-county-'));
+  try {
+    const handler = createScrapersHandler({
+      database: stubDb,
+      filePath: path.join(dir, 'hunts.json'),
+      env: { SCRAPER_ADMIN_TOKEN: 'tok', RESEND_API_KEY: '' },
+    });
+    let statusCode = 200;
+    let body = null;
+    await handler(
+      {
+        method: 'POST',
+        url: '/api/scrapers/run?action=dispatch-digests',
+        headers: { authorization: 'Bearer tok' },
+        body: {},
+      },
+      {
+        setHeader() {},
+        status(c) { statusCode = c; return this; },
+        json(v) { body = v; return v; },
+      },
+    );
+    assert.equal(statusCode, 200);
+    assert.ok(body.report.countyAlerts);
+    assert.equal(body.report.countyAlerts.totalSubscriptions, 3);
+    assert.equal(body.report.countyAlerts.skippedUnverified, 2);
+    assert.equal(body.report.countyAlerts.verifiedSubscriptions, 1);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
