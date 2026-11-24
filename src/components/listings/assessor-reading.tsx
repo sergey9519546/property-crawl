@@ -4,7 +4,7 @@ import * as React from "react";
 import { EnrichmentView } from "@/components/listings/enrichment-view";
 import { useLocale } from "@/components/i18n/locale-provider";
 
-type AssessorReadingResponse = {
+export type AssessorReadingResponse = {
   enrolled?: boolean;
   found?: boolean;
   countyName?: string | null;
@@ -24,6 +24,25 @@ type AssessorReadingResponse = {
   isAppraisal?: boolean;
 };
 
+const assessorReadingCache = new Map<string, Promise<AssessorReadingResponse>>();
+
+export function fetchAssessorReadingCached(listingId: string): Promise<AssessorReadingResponse> {
+  const key = listingId.trim();
+  const cached = assessorReadingCache.get(key);
+  if (cached) return cached;
+  const request = fetch(`/api/listings/${encodeURIComponent(listingId)}/assessor`, { cache: "no-store" })
+    .then(async (response) => {
+      if (!response.ok) throw new Error(`Assessor lookup returned ${response.status}`);
+      return response.json() as Promise<AssessorReadingResponse>;
+    })
+    .catch((err) => {
+      assessorReadingCache.delete(key);
+      throw err;
+    });
+  assessorReadingCache.set(key, request);
+  return request;
+}
+
 function money(value: number | null | undefined): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return "—";
   return `$${Math.round(value).toLocaleString()}`;
@@ -38,11 +57,7 @@ export function AssessorReading({ listingId, hasServerParcelKey = false }: { lis
     let cancelled = false;
     setStatus("loading");
     setReading(null);
-    void fetch(`/api/listings/${encodeURIComponent(listingId)}/assessor`, { cache: "no-store" })
-      .then(async (response) => {
-        if (!response.ok) throw new Error(String(response.status));
-        return response.json() as Promise<AssessorReadingResponse>;
-      })
+    void fetchAssessorReadingCached(listingId)
       .then((data) => {
         if (!cancelled) {
           setReading(data);

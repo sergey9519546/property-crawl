@@ -67,6 +67,9 @@ type Dossier = DiscoveryEvidenceData & {
     };
   };
   auctionMicrostructure?: {
+    applicable?: boolean;
+    reason?: string | null;
+    dispositionType?: string | null;
     probability: number | null;
     confidence: string;
     factors: { factor: string; impact: string; weight: number; description: string }[];
@@ -79,6 +82,26 @@ type Dossier = DiscoveryEvidenceData & {
     } | null;
     notes?: string;
   };
+  docketClearingAnalytics?: {
+    totalDockets: number;
+    sampleSufficient: boolean;
+    sampleSize?: number;
+    clearingRate: number | null;
+    postponementRate: number | null;
+    stayRate?: number | null;
+    plaintiffBuybackRate: number | null;
+    saleRate?: number | null;
+    cancellationRate?: number | null;
+    outcomeCounts?: {
+      scheduled?: number;
+      postponed?: number;
+      stayed?: number;
+      sold_plaintiff?: number;
+      sold_third_party?: number;
+      cancelled?: number;
+      unknown?: number;
+    };
+  } | null;
   surplusWaterfall?: {
     winningBid: number;
     openingBid: number;
@@ -131,6 +154,24 @@ type Dossier = DiscoveryEvidenceData & {
     } | null;
     hudSafmr?: unknown;
     impliedGrm?: number | null;
+    deedComps?: {
+      layer?: string;
+      label?: string;
+      available: boolean;
+      reason?: string | null;
+      benchmarkType?: string;
+      isAppraisal?: boolean;
+      isBidRecommendation?: boolean;
+      source?: string;
+      zip?: string | null;
+      sampleSize: number;
+      sqftSampleSize?: number;
+      excludedCount?: number;
+      medianSalePrice: number | null;
+      medianPricePerSqft: number | null;
+      windowMonths: number | null;
+      caveat: string;
+    } | null;
   } | null;
   publicRecords: {
     issues: string[]; sources: { id: string; label: string; url: string; observedAt?: string }[];
@@ -230,6 +271,13 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
     const anchor = document.createElement('a'); anchor.href = url; anchor.download = `property-dossier-${dossier.address.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 100)}.json`; anchor.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
+
+  const isNonAuctionDisposition = Boolean(
+    dossier?.auctionMicrostructure &&
+    (dossier.auctionMicrostructure.applicable === false ||
+      dossier.auctionMicrostructure.confidence === 'NON_AUCTION_DISPOSITION' ||
+      dossier.auctionMicrostructure.reason === 'NON_AUCTION_DISPOSITION')
+  );
 
   return <section className="overflow-hidden rounded-card border border-line bg-card shadow-sm" aria-label={t.sectionAria}>
     <div className="border-b border-line p-5 sm:p-6">
@@ -423,6 +471,58 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
             </div>
           </div>
         )}
+        {dossier.publicBenchmarks?.deedComps?.available === true && (
+          <div className="rounded-control border border-line bg-paper p-4" data-testid="deed-comps-benchmark-card">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-bold text-ink">L2 Qualified Deed-Comp Benchmark</h3>
+              <span className="rounded-full border border-line bg-card px-2 py-0.5 text-xs font-semibold text-ink-2">
+                {fmtNum(dossier.publicBenchmarks.deedComps.sampleSize)} qualified sales
+              </span>
+            </div>
+            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <div className="rounded-control border border-line bg-card p-2.5">
+                <span className="text-label font-bold uppercase text-ink-3">Median Sale Price</span>
+                <p className="mt-1 text-sm font-bold text-ink">
+                  {dossier.publicBenchmarks.deedComps.medianSalePrice != null
+                    ? fmtUsdVal(dossier.publicBenchmarks.deedComps.medianSalePrice)
+                    : t.naLabel}
+                </p>
+                <p className="mt-0.5 text-xs text-ink-3">
+                  {dossier.publicBenchmarks.deedComps.zip ? `ZIP ${dossier.publicBenchmarks.deedComps.zip}` : 'Recorded deed transfers'}
+                </p>
+              </div>
+              <div className="rounded-control border border-line bg-card p-2.5">
+                <span className="text-label font-bold uppercase text-ink-3">Median Price / Sq Ft</span>
+                <p className="mt-1 text-sm font-bold text-ink">
+                  {dossier.publicBenchmarks.deedComps.medianPricePerSqft != null
+                    ? `${fmtUsdVal(dossier.publicBenchmarks.deedComps.medianPricePerSqft)}/sq ft`
+                    : t.naLabel}
+                </p>
+                <p className="mt-0.5 text-xs text-ink-3">
+                  {dossier.publicBenchmarks.deedComps.sqftSampleSize != null
+                    ? `${fmtNum(dossier.publicBenchmarks.deedComps.sqftSampleSize)} with living area`
+                    : 'Area-verified deeds'}
+                </p>
+              </div>
+              <div className="rounded-control border border-line bg-card p-2.5">
+                <span className="text-label font-bold uppercase text-ink-3">Sample &amp; Window</span>
+                <p className="mt-1 text-sm font-bold text-ink">
+                  {fmtNum(dossier.publicBenchmarks.deedComps.sampleSize)} comps
+                </p>
+                <p className="mt-0.5 text-xs text-ink-3">
+                  {dossier.publicBenchmarks.deedComps.windowMonths != null
+                    ? `${dossier.publicBenchmarks.deedComps.windowMonths}-month window`
+                    : 'All qualified window'}
+                </p>
+              </div>
+            </div>
+            {dossier.publicBenchmarks.deedComps.caveat && (
+              <p className="mt-2.5 text-xs leading-relaxed text-ink-3">
+                {dossier.publicBenchmarks.deedComps.caveat}
+              </p>
+            )}
+          </div>
+        )}
         {dossier.hudSafmr && (
           <div className="rounded-control border border-line bg-paper p-4">
             <div className="flex items-center justify-between">
@@ -612,24 +712,29 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
               <h3 className="text-sm font-bold text-ink">{t.microHeading}</h3>
               <span className={cn(
                 "rounded-full border px-2 py-0.5 text-xs font-semibold",
+                isNonAuctionDisposition ? "border-line bg-card text-ink-2" :
                 dossier.auctionMicrostructure.probability != null && dossier.auctionMicrostructure.probability >= 0.7 ? "border-line-strong bg-card text-ink-2" :
                 dossier.auctionMicrostructure.probability != null && dossier.auctionMicrostructure.probability <= 0.4 ? "border-catch/40 bg-catch-wash text-catch-ink" :
                 "border-line bg-card text-ink-2"
               )}>
-                {dossier.auctionMicrostructure.probability != null
+                {isNonAuctionDisposition
+                  ? 'Agency / Fixed-REO Disposition'
+                  : dossier.auctionMicrostructure.probability != null
                   ? interpolate(t.proceedProbBadge, { pct: Math.round(dossier.auctionMicrostructure.probability * 100), conf: dossier.auctionMicrostructure.confidence })
                   : t.insufficientDocketData}
               </span>
             </div>
             <p className="mt-1 text-xs text-ink-3">
-              {t.microDesc}
+              {isNonAuctionDisposition
+                ? (dossier.auctionMicrostructure.notes || 'Fixed-price agency or negotiated REO disposition — county auction clearing probability and postponement microstructure do not apply.')
+                : t.microDesc}
             </p>
-            {dossier.auctionMicrostructure.statutoryContext && (
+            {!isNonAuctionDisposition && dossier.auctionMicrostructure.statutoryContext && (
               <p className="mt-2 text-xs font-medium text-ink-2">
                 {interpolate(t.statutoryCtxLine, { state: dossier.auctionMicrostructure.statutoryContext.state, rule: dossier.auctionMicrostructure.statutoryContext.rule })}
               </p>
             )}
-            {dossier.auctionMicrostructure.factors && dossier.auctionMicrostructure.factors.length > 3 && (
+            {!isNonAuctionDisposition && dossier.auctionMicrostructure.factors && dossier.auctionMicrostructure.factors.length > 3 && (
               <div className="mt-2">
                 <button
                   type="button"
@@ -642,7 +747,7 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
                 </button>
               </div>
             )}
-            {dossier.auctionMicrostructure.factors && dossier.auctionMicrostructure.factors.length > 0 && (
+            {!isNonAuctionDisposition && dossier.auctionMicrostructure.factors && dossier.auctionMicrostructure.factors.length > 0 && (
               <div className="mt-2 space-y-1">
                 {(showAllFactors ? dossier.auctionMicrostructure.factors : dossier.auctionMicrostructure.factors.slice(0, 3)).map((f, i) => (
                   <div key={i} className="flex items-center gap-2 text-xs text-ink-3">
@@ -657,6 +762,60 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
                 ))}
               </div>
             )}
+          </div>
+        )}
+        {dossier.docketClearingAnalytics && dossier.docketClearingAnalytics.sampleSufficient && dossier.docketClearingAnalytics.totalDockets > 0 && (
+          <div className="rounded-control border border-line bg-paper p-4" data-testid="docket-clearing-analytics-card">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-bold text-ink">Empirical County Docket Clearing</h3>
+              <span className="rounded-full border border-line bg-card px-2 py-0.5 text-xs font-semibold text-ink-2">
+                {fmtNum(dossier.docketClearingAnalytics.totalDockets)} observed dockets
+              </span>
+            </div>
+            <p className="mt-1 text-xs text-ink-3">
+              Historical county docket outcome distribution across {fmtNum(dossier.docketClearingAnalytics.totalDockets)} observed auction records.
+            </p>
+            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <div className="rounded-control border border-line bg-card p-2.5">
+                <span className="text-label font-bold uppercase text-ink-3">Postponed</span>
+                <p className="mt-1 text-sm font-bold text-ink">
+                  {dossier.docketClearingAnalytics.postponementRate != null
+                    ? `${Math.round(dossier.docketClearingAnalytics.postponementRate * 100)}%`
+                    : t.naLabel}
+                </p>
+                <p className="mt-0.5 text-xs text-ink-3">
+                  {dossier.docketClearingAnalytics.outcomeCounts?.postponed != null
+                    ? `${fmtNum(dossier.docketClearingAnalytics.outcomeCounts.postponed)} of ${fmtNum(dossier.docketClearingAnalytics.totalDockets)} dockets`
+                    : 'Adjourned or rescheduled'}
+                </p>
+              </div>
+              <div className="rounded-control border border-line bg-card p-2.5">
+                <span className="text-label font-bold uppercase text-ink-3">Cleared to 3rd Party</span>
+                <p className="mt-1 text-sm font-bold text-ink">
+                  {dossier.docketClearingAnalytics.clearingRate != null
+                    ? `${Math.round(dossier.docketClearingAnalytics.clearingRate * 100)}%`
+                    : t.naLabel}
+                </p>
+                <p className="mt-0.5 text-xs text-ink-3">
+                  {dossier.docketClearingAnalytics.outcomeCounts?.sold_third_party != null
+                    ? `${fmtNum(dossier.docketClearingAnalytics.outcomeCounts.sold_third_party)} third-party sales`
+                    : 'Share of completed sales'}
+                </p>
+              </div>
+              <div className="rounded-control border border-line bg-card p-2.5">
+                <span className="text-label font-bold uppercase text-ink-3">Plaintiff Buyback</span>
+                <p className="mt-1 text-sm font-bold text-ink">
+                  {dossier.docketClearingAnalytics.plaintiffBuybackRate != null
+                    ? `${Math.round(dossier.docketClearingAnalytics.plaintiffBuybackRate * 100)}%`
+                    : t.naLabel}
+                </p>
+                <p className="mt-0.5 text-xs text-ink-3">
+                  {dossier.docketClearingAnalytics.outcomeCounts?.sold_plaintiff != null
+                    ? `${fmtNum(dossier.docketClearingAnalytics.outcomeCounts.sold_plaintiff)} credit bids / REO`
+                    : 'Share of completed sales'}
+                </p>
+              </div>
+            </div>
           </div>
         )}
         {dossier.surplusWaterfall && (

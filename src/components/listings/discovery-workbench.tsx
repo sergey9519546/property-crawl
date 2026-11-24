@@ -90,7 +90,7 @@ const filterLabels: Record<string, string> = {
   program: "Program", lifecycle: "Sale status", occupancy: "Occupancy", freshness: "Freshness",
   saleFrom: "From", saleTo: "Until", maxBid: "Max opening bid", minScore: "Min Deal Score",
   minEquity: "Min equity (value minus bid)", hasDocuments: "Documents", hasPhoto: "Photos", seniorLien: "Senior lien", redemption: "Redemption period",
-  distressStage: "Sale type", minQuality: "Min listing detail",
+  distressStage: "Sale type", minQuality: "Min listing detail", enrolledOnly: "Assessor corridor",
 };
 // The search box owns the text being typed. While it lived in
 // DiscoveryWorkbench, every keystroke re-rendered the whole workbench and
@@ -315,6 +315,8 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
       if (activeFilters.isNew === "true" && !listing.triage?.isNew) return false;
       if (activeFilters.priceDropped === "true" && !listing.triage?.priceDropped) return false;
       if (activeFilters.occupancyKnown === "true" && !listing.triage?.occupancyKnown) return false;
+      if (activeFilters.enrolledOnly === "true" && !(listing as PropertyListing & { enrolledAssessor?: boolean }).enrolledAssessor) return false;
+      if (activeFilters.enrolledOnly === "false" && (listing as PropertyListing & { enrolledAssessor?: boolean }).enrolledAssessor) return false;
       if (activeFilters.stale === "true") {
         const isStale = listing.sourceFreshness?.status
           ? listing.sourceFreshness.status === "stale"
@@ -408,8 +410,9 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
       hasDocs: filters.hasDocuments === "true",
       stale: filters.stale === "true",
       occupancyKnown: filters.occupancyKnown === "true",
+      enrolledOnly: filters.enrolledOnly === "true",
     }),
-    [filters.isNew, filters.priceDropped, filters.hasDocuments, filters.stale, filters.occupancyKnown],
+    [filters.isNew, filters.priceDropped, filters.hasDocuments, filters.stale, filters.occupancyKnown, filters.enrolledOnly],
   );
   React.useEffect(() => setCursorStack([]), [queryKey]);
 
@@ -736,6 +739,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
       stale: undefined,
       occupancyKnown: undefined,
       distressStage: undefined,
+      enrolledOnly: undefined,
     });
   }, [setFilters]);
   const next = () => {
@@ -893,7 +897,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
                   }
                   className="inline-flex items-center gap-1 rounded-full bg-line px-2.5 py-1 text-label font-semibold text-ink"
                 >
-                  {filterLabels[key] || key}: {key === "hasDocuments" ? value === "true" ? "Available" : value === "false" ? "None posted" : "Not stated" : key === "hasPhoto" ? value === "true" ? "Has photo" : "No photo" : key === "seniorLien" ? value === "clean" ? "No senior-lien flag" : "High risk" : key === "redemption" ? value === "immediate" ? "Immediate deed" : "Active redemption" : sourceDisplayText(value!).replace(/_/g, " ")}
+                  {filterLabels[key] || key}: {key === "hasDocuments" ? value === "true" ? "Available" : value === "false" ? "None posted" : "Not stated" : key === "hasPhoto" ? value === "true" ? "Has photo" : "No photo" : key === "seniorLien" ? value === "clean" ? "No senior-lien flag" : "High risk" : key === "redemption" ? value === "immediate" ? "Immediate deed" : "Active redemption" : key === "enrolledOnly" ? value === "true" ? "Enrolled counties only" : "Unenrolled counties" : sourceDisplayText(value!).replace(/_/g, " ")}
                   <X size={12} />
                 </button>
               ))}
@@ -917,6 +921,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
           { key: "hasDocs" as const, label: "Has documents" },
           { key: "stale" as const, label: "Refresh due / Stale" },
           { key: "occupancyKnown" as const, label: "Occupancy stated" },
+          { key: "enrolledOnly" as const, label: "Enrolled assessor" },
         ]).map(({ key, label: chipLabel }) => (
           <button
             key={key}

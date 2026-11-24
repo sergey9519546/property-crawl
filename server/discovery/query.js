@@ -6,6 +6,47 @@ const { hash } = require("./store");
 const { servesListings, listingServingSourceSqlList } = require("../sources/catalog");
 const { resolveStateQuery } = require("../db/us-state-query");
 const { mapDistressStage } = require("../scrapers/normalization");
+const { resolveCountyKey, COUNTY_ARCGIS_REGISTRY } = require("../enrichment/arcgis-parcels");
+const { MARKET_CONVERSION, interpretAssessorParcel } = require("../enrichment/assessor-reading");
+
+const ENROLLED_STATEWIDE_PREFIXES = ["FL-", "CO-", "NC-", "NY-", "WI-", "AR-", "CT-", "NJ-"];
+function normalizeCountyForEnrollment(county) {
+  return String(county || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^\x20-\x7E]/g, "")
+    .replace(/\s+(COUNTY|PARISH|BOROUGH|MUNICIPALITY|CITY AND COUNTY)$/i, "")
+    .replace(/^SAINT\s+/i, "ST ")
+    .replace(/\.+/g, "")
+    .replace(/[-\s]+/g, " ")
+    .trim();
+}
+const ENROLLED_COUNTY_SQL_KEYS = Object.freeze(
+  Array.from(new Set(
+    Object.keys(COUNTY_ARCGIS_REGISTRY)
+      .filter((key) => {
+        if (key.endsWith("-STATEWIDE")) return false;
+        const hasPrefixRule = ENROLLED_STATEWIDE_PREFIXES.some((prefix) => key.startsWith(prefix));
+        return Boolean((MARKET_CONVERSION[key] || hasPrefixRule) && interpretAssessorParcel({ countyKey: key }).enrolled);
+      })
+      .map((key) => {
+        const idx = key.indexOf("-");
+        return `${key.slice(0, idx)}-${normalizeCountyForEnrollment(key.slice(idx + 1))}`;
+      }),
+  )),
+);
+const ENROLLED_COUNTY_SQL_EXPR =
+  "(upper(btrim(coalesce(state,''))) || '-' || btrim(regexp_replace(regexp_replace(regexp_replace(regexp_replace(upper(btrim(coalesce(county,''))), '\\s+(COUNTY|PARISH|BOROUGH|MUNICIPALITY|CITY AND COUNTY)$', ''), '^SAINT\\s+', 'ST '), '\\.+', '', 'g'), '[-\\s]+', ' ', 'g')))";
+const ENROLLED_ASSESSOR_SQL = ENROLLED_COUNTY_SQL_KEYS.length > 0
+  ? `(${ENROLLED_COUNTY_SQL_EXPR} IN (${ENROLLED_COUNTY_SQL_KEYS.map((k) => `'${k.replace(/'/g, "''")}'`).join(",")}))`
+  : "FALSE";
+function isEnrolledAssessorRow(row) {
+  const countyKey = resolveCountyKey(row?.state, row?.county);
+  if (!countyKey) return false;
+  const hasPrefixRule = ENROLLED_STATEWIDE_PREFIXES.some((prefix) => countyKey.startsWith(prefix));
+  if (!MARKET_CONVERSION[countyKey] && !hasPrefixRule) return false;
+  return Boolean(interpretAssessorParcel({ countyKey }).enrolled);
+}
 
 const MAX_SCAN = Math.max(50000, Number(process.env.DISCOVERY_MAX_SCAN) || 50000),
   MAX_LIMIT = 1000;
@@ -272,6 +313,7 @@ function queryFromUrl(url) {
     priceDropped: parseBool(get("priceDropped"), "priceDropped"),
     stale: parseBool(get("stale"), "stale"),
     occupancyKnown: parseBool(get("occupancyKnown"), "occupancyKnown"),
+    enrolledOnly: parseBool(get("enrolledOnly"), "enrolledOnly"),
     bbox: parseBbox(get("bbox")),
     sort,
     cursor,
@@ -434,6 +476,7 @@ function matches(row, f) {
   if (typeof f.priceDropped === 'boolean' && isPriceDroppedRow(row) !== f.priceDropped) return false;
   if (typeof f.stale === 'boolean' && isStaleObservationRow(row) !== f.stale) return false;
   if (typeof f.occupancyKnown === 'boolean' && isOccupancyKnownRow(row) !== f.occupancyKnown) return false;
+  if (typeof f.enrolledOnly === 'boolean' && isEnrolledAssessorRow(row) !== f.enrolledOnly) return false;
   if (f.bbox) {
     const [w, s, e, n] = f.bbox,
       lat = Number(row.lat),
@@ -855,6 +898,8 @@ function pgWhere(f, start = 1, options = {}) {
   else if (f.priceDropped === false) w.push(`NOT ${priceDropSql}`);
   if (f.stale === true) w.push("(source_observed_at IS NOT NULL AND source_observed_at < NOW() - INTERVAL '72 hours')");
   else if (f.stale === false) w.push("(source_observed_at IS NULL OR source_observed_at >= NOW() - INTERVAL '72 hours')");
+  if (f.enrolledOnly === true) w.push(ENROLLED_ASSESSOR_SQL);
+  else if (f.enrolledOnly === false) w.push(`NOT ${ENROLLED_ASSESSOR_SQL}`);
   if (f.lat != null && f.lng != null) {
     const first = start + p.length;
     w.push(`ST_DWithin(geog, ST_SetSRID(ST_MakePoint($${first},$${first + 1}),4326)::geography,$${first + 2})`);

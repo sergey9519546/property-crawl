@@ -228,6 +228,81 @@ export function computeTargetPriceScenario(params: {
   };
 }
 
+/** Computes Walk-Away Max Bid (MAO) from valuation, margin, rehab, and optional costs even when openingBid is null. */
+export function computeMaxAllowableOffer(params: {
+  estimatedValue: number | string | null | undefined;
+  targetMarginPct: number | string | null | undefined;
+  rehabBudget: number | string | null | undefined;
+  otherAcquisitionCosts?: number | string | null;
+}): number | null {
+  const estimatedValue = positiveNumber(params.estimatedValue);
+  const targetMarginPct = nonNegativeNumber(params.targetMarginPct);
+  const rehabBudget = nonNegativeNumber(params.rehabBudget);
+  const otherCosts = params.otherAcquisitionCosts === undefined || params.otherAcquisitionCosts === null
+    ? 0
+    : nonNegativeNumber(params.otherAcquisitionCosts);
+  if (
+    estimatedValue === null
+    || targetMarginPct === null
+    || targetMarginPct >= 100
+    || rehabBudget === null
+    || otherCosts === null
+  ) {
+    return null;
+  }
+  const targetProfit = Math.round(estimatedValue * (targetMarginPct / 100));
+  return Math.max(0, Math.floor(estimatedValue - targetProfit - rehabBudget - otherCosts));
+}
+
+/** Computes max supportable price at target DSCR from HUD SAFMR monthly rent. */
+export function computeSafmrRentFloor(params: {
+  monthlyRent: number | string | null | undefined;
+  targetDscr?: number;
+  annualInterestRatePct?: number;
+  ltvPct?: number;
+  expenseRatio?: number;
+  loanTermYears?: number;
+}): number | null {
+  const monthlyRent = positiveNumber(params.monthlyRent);
+  const targetDscr = positiveNumber(params.targetDscr ?? 1.20);
+  const annualInterestRatePct = nonNegativeNumber(params.annualInterestRatePct ?? 7.25);
+  const ltvPct = positiveNumber(params.ltvPct ?? 75);
+  const expenseRatio = nonNegativeNumber(params.expenseRatio ?? 0.35);
+  const loanTermYears = positiveNumber(params.loanTermYears ?? 30);
+
+  if (
+    monthlyRent === null
+    || targetDscr === null
+    || annualInterestRatePct === null
+    || ltvPct === null
+    || ltvPct > 100
+    || expenseRatio === null
+    || expenseRatio >= 1
+    || loanTermYears === null
+  ) {
+    return null;
+  }
+
+  const totalMonths = Math.round(loanTermYears * 12);
+  if (totalMonths <= 0) return null;
+
+  const noiMonthly = monthlyRent * (1 - expenseRatio);
+  const maxMonthlyDebt = noiMonthly / targetDscr;
+  const monthlyRate = (annualInterestRatePct / 100) / 12;
+
+  let maxLoan: number;
+  if (monthlyRate === 0) {
+    maxLoan = maxMonthlyDebt * totalMonths;
+  } else {
+    const factor = Math.pow(1 + monthlyRate, totalMonths);
+    if (!Number.isFinite(factor) || factor <= 1) return null;
+    maxLoan = maxMonthlyDebt * ((factor - 1) / (monthlyRate * factor));
+  }
+
+  if (!Number.isFinite(maxLoan) || maxLoan < 0) return null;
+  return Math.max(0, Math.floor(maxLoan / (ltvPct / 100)));
+}
+
 export function redemptionLabel(days: number | null | undefined): string {
   const parsed = nonNegativeNumber(days);
   if (parsed === null) return "Unknown — official sale terms required";
@@ -763,11 +838,49 @@ export const INSURANCE_BASE_RATE_PER_1000: Readonly<Record<string, number>> = {
 export const DEFAULT_NATIONAL_INSURANCE_RATE_PER_1000 = 5.52;
 export const DEFAULT_NATIONAL_TAX_RATE = 0.011;
 
+const FEDERAL_REO_SOURCES = new Set(["hud", "gsa", "usda", "fannie", "freddie", "fdic", "va"]);
+
+function isFederalReoSource(source: string | null | undefined): boolean {
+  if (typeof source !== "string") return false;
+  return FEDERAL_REO_SOURCES.has(source.trim().toLowerCase());
+}
+
+function hasFederalIrsLienSignal(params: {
+  hasIrsLien?: boolean | null;
+  source?: string | null;
+  seniorLienWarning?: string | null;
+  redemptionWarning?: string | null;
+  notes?: string | null;
+} | null | undefined): boolean {
+  if (!params) return false;
+  if (params.hasIrsLien === true) return true;
+  if (params.hasIrsLien === false) return false;
+  if (typeof params.source === "string" && params.source.trim().toLowerCase() === "irs") return true;
+  const text = `${params.seniorLienWarning || ""} ${params.redemptionWarning || ""} ${params.notes || ""}`;
+  return /(?:internal\s*revenue|federal\s*tax\s*lien|26\s*u\.?s\.?c\.?\s*§?\s*7425)/i.test(text);
+}
+
 export function publishedRedemptionDays(listing: {
   redemptionDays?: number | string | null;
+  source?: string | null;
+  hasIrsLien?: boolean | null;
+  seniorLienWarning?: string | null;
+  redemptionWarning?: string | null;
+  notes?: string | null;
+  isTaxSale?: boolean | null;
+  distressType?: string | null;
+  auctionProgram?: string | null;
+  program?: string | null;
   provenance?: { derivedFields?: { redemption?: unknown } } | null;
 } | null | undefined): number | null {
   if (listing?.provenance?.derivedFields?.redemption != null) return null;
+  if (
+    isFederalReoSource(listing?.source)
+    && !hasFederalIrsLienSignal(listing)
+    && !isTaxSaleContext(listing)
+  ) {
+    return null;
+  }
   const raw = listing?.redemptionDays;
   if (raw === null || raw === undefined || raw === "") return null;
   const parsed = typeof raw === "number" ? raw : Number(raw);
@@ -808,6 +921,8 @@ export function computeStatutoryDeadlinesAndCarry(params: {
   purchasePrice?: number | string | null;
   redemptionDays?: number | null;
   hasIrsLien?: boolean;
+  seniorLienWarning?: string | null;
+  redemptionWarning?: string | null;
   marketValue?: number | string | null;
   taxAssessedValue?: number | string | null;
   annualCostOfCapitalPct?: number;
@@ -918,50 +1033,49 @@ export function computeStatutoryDeadlinesAndCarry(params: {
     objectionLabel = "AL non-judicial mortgage foreclosure (Ala. Code § 35-10-1; statutory redemption governs post-sale)";
   }
 
-  const irsRedemptionDays = params.hasIrsLien ? 120 : 0;
-  let stateRedemptionDays = Math.max(0, Math.round(nonNegativeNumber(params.redemptionDays) ?? 0));
-  if (stateRedemptionDays === 0 && st === "TX") {
-    const isTax = isTaxSaleContext(params);
-    if (isTax) {
-      stateRedemptionDays = params.isHomestead ? 730 : 180;
+  const hasIrsLien = hasFederalIrsLienSignal(params);
+  const isTaxSale = isTaxSaleContext(params);
+  const suppressFederalReoStateRedemption = isFederalReoSource(params.source) && !hasIrsLien && !isTaxSale;
+  const irsRedemptionDays = hasIrsLien ? 120 : 0;
+  let stateRedemptionDays = suppressFederalReoStateRedemption
+    ? 0
+    : Math.max(0, Math.round(nonNegativeNumber(params.redemptionDays) ?? 0));
+  if (!suppressFederalReoStateRedemption) {
+    if (stateRedemptionDays === 0 && st === "TX") {
+      if (isTaxSale) {
+        stateRedemptionDays = params.isHomestead ? 730 : 180;
+      }
+    } else if (stateRedemptionDays === 0 && st === "GA") {
+      if (isTaxSale) {
+        stateRedemptionDays = 365;
+      }
+    } else if (stateRedemptionDays === 0 && st === "TN") {
+      if (isTaxSale) {
+        stateRedemptionDays = 365;
+      }
+    } else if (stateRedemptionDays === 0 && st === "MD") {
+      if (isTaxSale) {
+        stateRedemptionDays = 180;
+      }
+    } else if (stateRedemptionDays === 0 && st === "SC") {
+      if (isTaxSale) {
+        stateRedemptionDays = 365;
+      }
+    } else if (stateRedemptionDays === 0 && st === "IN") {
+      if (isTaxSale) {
+        stateRedemptionDays = 365;
+      }
+    } else if (stateRedemptionDays === 0 && st === "MO") {
+      if (isTaxSale) {
+        stateRedemptionDays = 365;
+      }
+    } else if (stateRedemptionDays === 0 && st === "AZ") {
+      if (isTaxSale) {
+        stateRedemptionDays = 1095; // 3 years under A.R.S. § 42-18153
+      }
+    } else if (stateRedemptionDays === 0 && st === "AL") {
+      stateRedemptionDays = params.isHomestead ? 180 : 365;
     }
-  } else if (stateRedemptionDays === 0 && st === "GA") {
-    const isTax = isTaxSaleContext(params);
-    if (isTax) {
-      stateRedemptionDays = 365;
-    }
-  } else if (stateRedemptionDays === 0 && st === "TN") {
-    const isTax = isTaxSaleContext(params);
-    if (isTax) {
-      stateRedemptionDays = 365;
-    }
-  } else if (stateRedemptionDays === 0 && st === "MD") {
-    const isTax = isTaxSaleContext(params);
-    if (isTax) {
-      stateRedemptionDays = 180;
-    }
-  } else if (stateRedemptionDays === 0 && st === "SC") {
-    const isTax = isTaxSaleContext(params);
-    if (isTax) {
-      stateRedemptionDays = 365;
-    }
-  } else if (stateRedemptionDays === 0 && st === "IN") {
-    const isTax = isTaxSaleContext(params);
-    if (isTax) {
-      stateRedemptionDays = 365;
-    }
-  } else if (stateRedemptionDays === 0 && st === "MO") {
-    const isTax = isTaxSaleContext(params);
-    if (isTax) {
-      stateRedemptionDays = 365;
-    }
-  } else if (stateRedemptionDays === 0 && st === "AZ") {
-    const isTax = isTaxSaleContext(params);
-    if (isTax) {
-      stateRedemptionDays = 1095; // 3 years under A.R.S. § 42-18153
-    }
-  } else if (stateRedemptionDays === 0 && st === "AL") {
-    stateRedemptionDays = params.isHomestead ? 180 : 365;
   }
   const effectiveLockupDays = Math.max(objectionOrConfirmationDays, irsRedemptionDays, stateRedemptionDays);
   const annualCostOfCapitalPct = nonNegativeNumber(params.annualCostOfCapitalPct) ?? 10;

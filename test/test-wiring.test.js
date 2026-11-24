@@ -35,10 +35,6 @@ const ALLOW_UNWIRED = new Map([
     'test/hardening.test.js',
     'executed by scripts/verify-gate.js, not by a package.json test script',
   ],
-  [
-    'test/property-title.test.js',
-    'live PropertyTitle API integration; needs external credentials, cannot run in CI',
-  ],
 ]);
 
 function collectTestFiles(dir, out = []) {

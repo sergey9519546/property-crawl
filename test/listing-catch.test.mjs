@@ -89,3 +89,28 @@ test("retains all critical/high warnings sorted by severity instead of dropping 
   assert.ok(out.flags.some((f) => /Clean energy assessment survives/i.test(f)));
   assert.ok(out.flags.some((f) => /6 months of dues/i.test(f)));
 });
+
+test("enriches missing opening amount copy with prior postponements and occupancy when known", () => {
+  const enriched = listingCatch({
+    openingBid: null,
+    occupancy: "Occupied",
+    trajectory: { priorPostponements: 3 },
+  });
+  assert.match(enriched.flags[0], /3 prior postponements/);
+  assert.match(enriched.flags[0], /reported occupied/i);
+
+  const sourceFactsOnly = listingCatch({
+    openingBid: null,
+    occupancy: "Vacant",
+    provenance: { sourceFacts: { priorPostponements: 2 } },
+  });
+  assert.match(sourceFactsOnly.flags[0], /2 prior postponements/);
+
+  // Negative control: < 2 postponements and vacant keeps standard unknown-price copy
+  const baseline = listingCatch({
+    openingBid: null,
+    occupancy: "Vacant",
+    trajectory: { priorPostponements: 1 },
+  });
+  assert.equal(baseline.flags[0], "No opening amount was published, so the price is unknown until the sale.");
+});

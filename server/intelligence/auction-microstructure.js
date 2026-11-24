@@ -26,19 +26,32 @@ const DOCKET_OUTCOMES = Object.freeze([
   'unknown',
 ]);
 
-/**
- * Normalizes raw event status / disposition into canonical docket outcome.
- *
- * @param {string|object} event
- * @returns {string} One of DOCKET_OUTCOMES
- */
-function normalizeDocketOutcome(event) {
-  if (!event) return 'scheduled';
-  const raw = typeof event === 'string'
-    ? event
-    : String(event.outcome || event.status || event.disposition || event.lifecycleStatus || '');
+const NON_AUCTION_DISPOSITION_SOURCES = Object.freeze([
+  'hud',
+  'gsa',
+  'usda',
+  'fannie',
+  'freddie',
+  'va',
+  'fdic',
+]);
 
-  const text = raw.trim().toLowerCase();
+const DECISIVE_DOCKET_OUTCOMES = new Set([
+  'sold_third_party',
+  'sold_plaintiff',
+  'cancelled',
+  'stayed',
+  'postponed',
+]);
+
+function isNonAuctionDispositionSource(source) {
+  if (typeof source !== 'string') return false;
+  const normalized = source.trim().toLowerCase();
+  return Boolean(normalized && NON_AUCTION_DISPOSITION_SOURCES.includes(normalized));
+}
+
+function classifyDocketText(raw) {
+  const text = String(raw || '').trim().toLowerCase();
   if (!text) return 'scheduled';
 
   // Stay / Bankruptcy
@@ -56,14 +69,19 @@ function normalizeDocketOutcome(event) {
     return 'postponed';
   }
 
-  // Sold to Plaintiff (Credit bid, Bank, Lender, REO)
-  if (/sold_plaintiff|plaintiff|credit\s*bid|bank\s*buy|revert|lender|reo\s*buyback/i.test(text)) {
+  // Sold to Plaintiff (Credit bid, Bank, Lender, REO, Reverted to Beneficiary/Plaintiff)
+  if (/sold_plaintiff|reverted?\s+to\s+(?:beneficiary|plaintiff)|plaintiff|credit\s*bid|bank\s*buy|revert|lender|reo\s*buyback/i.test(text)) {
     return 'sold_plaintiff';
   }
 
   // Sold to Third Party
-  if (/sold_third_party|third[_\s-]?party|sold\s*(?:to)?\s*(?:investor|bidder|public)|competitive\s*bid|\bsold\b/i.test(text)) {
+  if (/sold_third_party|sold_to_third_party|\b(?:3rd|third)[_\s-]?party\b|sold\s*(?:to)?\s*(?:investor|bidder|public)|competitive\s*bid|\bsold\b/i.test(text)) {
     return 'sold_third_party';
+  }
+
+  // Generic closed without 3rd-party or plaintiff clarity
+  if (/auction\s+is\s+closed|\bclosed\b/i.test(text)) {
+    return 'unknown';
   }
 
   // Scheduled / Active
@@ -72,6 +90,52 @@ function normalizeDocketOutcome(event) {
   }
 
   return 'unknown';
+}
+
+/**
+ * Normalizes raw event status / disposition into canonical docket outcome.
+ *
+ * @param {string|object} event
+ * @returns {string} One of DOCKET_OUTCOMES
+ */
+function normalizeDocketOutcome(event) {
+  if (!event) return 'scheduled';
+  if (typeof event === 'string') {
+    return classifyDocketText(event);
+  }
+  if (typeof event !== 'object') {
+    return classifyDocketText(String(event));
+  }
+
+  const primary = event.outcome
+    || event.transactionOutcome
+    || event.transaction_outcome
+    || '';
+  if (String(primary).trim()) {
+    const primaryOutcome = classifyDocketText(primary);
+    if (primaryOutcome !== 'unknown' || !event.lifecycleStatus && !event.lifecycle_status) {
+      return primaryOutcome;
+    }
+  }
+
+  const candidates = [
+    event.lifecycleStatus,
+    event.lifecycle_status,
+    event.disposition,
+    event.status,
+    event.fields?.status,
+  ];
+  for (const candidate of candidates) {
+    if (candidate !== null && candidate !== undefined && String(candidate).trim()) {
+      const classified = classifyDocketText(candidate);
+      if (DECISIVE_DOCKET_OUTCOMES.has(classified)) {
+        return classified;
+      }
+    }
+  }
+
+  const fallback = event.status || event.disposition || event.lifecycleStatus || event.lifecycle_status || event.fields?.status || '';
+  return classifyDocketText(fallback);
 }
 
 /**
@@ -209,9 +273,22 @@ function calculateDocketClearingAnalytics(historicalEvents, options = {}) {
  *
  * @param {object} listing - Property listing with state, source, priorPostponements, etc.
  * @param {object|null} countyStats - Empirical docket stats from calculateDocketClearingAnalytics
+ * @param {object|null} [context=null] - Optional evaluation context (e.g. { source })
  * @returns {object} Proceed probability assessment
  */
-function evaluateAuctionProceedProbability(listing = {}, countyStats = null) {
+function evaluateAuctionProceedProbability(listing = {}, countyStats = null, context = null) {
+  const resolvedSource = (context && typeof context === 'object' ? context.source : null) ?? listing?.source ?? null;
+  if (isNonAuctionDispositionSource(resolvedSource)) {
+    return {
+      applicable: false,
+      probability: null,
+      confidence: 'NON_AUCTION_DISPOSITION',
+      factors: [],
+      statutoryContext: null,
+      notes: 'Fixed or agency REO disposition — courthouse docket adjournment probabilities do not apply.',
+    };
+  }
+
   // Zero-Fabrication Invariant: require valid docket stats with at least minimal sample history
   if (
     !countyStats ||
@@ -387,6 +464,50 @@ function parseSaleDateMs(row) {
   return Number.isFinite(ms) ? ms : null;
 }
 
+function resolveTerminalStatusText(latest) {
+  if (!latest || typeof latest !== 'object') return '';
+  const prioritized = [
+    latest.transaction_outcome,
+    latest.transactionOutcome,
+    latest.outcome,
+    latest.lifecycle_status,
+    latest.lifecycleStatus,
+    latest.observation_status,
+    latest.status,
+    latest.disposition,
+    latest.fields?.status,
+    latest.listing_status,
+    latest.listingStatus,
+  ];
+  for (const candidate of prioritized) {
+    if (candidate === null || candidate === undefined) continue;
+    const str = String(candidate).trim();
+    if (!str) continue;
+    if (DECISIVE_DOCKET_OUTCOMES.has(classifyDocketText(str))) {
+      return str;
+    }
+  }
+  const fallbacks = [
+    latest.observation_status,
+    latest.status,
+    latest.outcome,
+    latest.disposition,
+    latest.lifecycle_status,
+    latest.lifecycleStatus,
+    latest.transaction_outcome,
+    latest.transactionOutcome,
+    latest.listing_status,
+    latest.listingStatus,
+    latest.fields?.status,
+  ];
+  for (const candidate of fallbacks) {
+    if (candidate !== null && candidate !== undefined && String(candidate).trim()) {
+      return String(candidate).trim();
+    }
+  }
+  return '';
+}
+
 /**
  * Aggregates raw `source_observations` rows / snapshots per (state, county) into
  * `countyStats` (clearing rate, postponement rate, median postponements) suitable
@@ -445,7 +566,9 @@ function aggregateCountyObservationStats(observations = [], options = {}) {
     let prevSaleMs = null;
 
     for (const obs of group) {
-      const statusVal = obs.status ?? obs.outcome ?? obs.disposition ?? obs.lifecycleStatus ?? obs.fields?.status ?? '';
+      const statusVal = obs.observation_status !== undefined
+        ? (obs.observation_status ?? obs.status ?? obs.outcome ?? obs.disposition ?? obs.fields?.status ?? '')
+        : (obs.status ?? obs.outcome ?? obs.disposition ?? obs.lifecycleStatus ?? obs.lifecycle_status ?? obs.fields?.status ?? '');
       const outcome = normalizeDocketOutcome(statusVal);
       const saleMs = parseSaleDateMs(obs);
 
@@ -462,7 +585,7 @@ function aggregateCountyObservationStats(observations = [], options = {}) {
     postponementCounts.push(postponements);
     const latest = group[group.length - 1];
     terminalEvents.push({
-      status: latest.status ?? latest.outcome ?? latest.disposition ?? latest.lifecycleStatus ?? latest.fields?.status ?? '',
+      status: resolveTerminalStatusText(latest),
       county: latest.county || latest.raw_payload?.county || options.county || null,
       state: latest.state || latest.raw_payload?.state || targetState || null,
     });
@@ -481,8 +604,11 @@ function aggregateCountyObservationStats(observations = [], options = {}) {
 
 module.exports = {
   DOCKET_OUTCOMES,
+  NON_AUCTION_DISPOSITION_SOURCES,
+  isNonAuctionDispositionSource,
   normalizeDocketOutcome,
   calculateDocketClearingAnalytics,
   evaluateAuctionProceedProbability,
+  evaluateAuctionMicrostructure: evaluateAuctionProceedProbability,
   aggregateCountyObservationStats,
 };

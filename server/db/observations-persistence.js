@@ -946,7 +946,16 @@ async function loadCountyObservationStats(pool, { state, county, minSample = 1 }
     const primaryRes = await queryWithStatementTimeout(
       pool,
       `SELECT so.source_key, so.record_id, so.listing_id, so.observed_at, so.sale_date,
-              COALESCE(NULLIF(so.status, ''), l.lifecycle_status, l.status) AS status,
+              CASE
+                WHEN NULLIF(TRIM(COALESCE(so.status, '')), '') IS NULL
+                  OR LOWER(TRIM(so.status)) ~ '^(?:auction\\s+is\\s+)?(?:closed|ended|completed|sold|auctioned)$'
+                THEN COALESCE(NULLIF(l.transaction_outcome, ''), NULLIF(l.lifecycle_status, ''), NULLIF(so.status, ''), l.status)
+                ELSE so.status
+              END AS status,
+              so.status AS observation_status,
+              l.lifecycle_status AS lifecycle_status,
+              l.transaction_outcome AS transaction_outcome,
+              l.status AS listing_status,
               l.state AS state,
               l.county AS county
          FROM listings l
@@ -966,7 +975,17 @@ async function loadCountyObservationStats(pool, { state, county, minSample = 1 }
   if (rows.length === 0) {
     const fallbackRes = await queryWithStatementTimeout(
       pool,
-      `SELECT so.source_key, so.record_id, so.listing_id, so.observed_at, so.sale_date, so.status,
+      `SELECT so.source_key, so.record_id, so.listing_id, so.observed_at, so.sale_date,
+              CASE
+                WHEN NULLIF(TRIM(COALESCE(so.status, '')), '') IS NULL
+                  OR LOWER(TRIM(so.status)) ~ '^(?:auction\\s+is\\s+)?(?:closed|ended|completed|sold|auctioned)$'
+                THEN COALESCE(NULLIF(l.transaction_outcome, ''), NULLIF(l.lifecycle_status, ''), NULLIF(so.status, ''), l.status)
+                ELSE so.status
+              END AS status,
+              so.status AS observation_status,
+              l.lifecycle_status AS lifecycle_status,
+              l.transaction_outcome AS transaction_outcome,
+              l.status AS listing_status,
               COALESCE(NULLIF(so.raw_payload->>'state', ''), l.state) AS state,
               COALESCE(NULLIF(so.raw_payload->>'county', ''), l.county) AS county
          FROM source_observations so

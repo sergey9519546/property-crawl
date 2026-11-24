@@ -141,7 +141,7 @@ test('candidateReady requires coordinates or an APN, no existing roll, and an en
   assert.equal(candidateReady({ lat: 0, lng: 0, state: 'AZ', county: 'Maricopa' }), false, 'null island is not a coordinate');
   assert.equal(candidateReady({ lat: 32.75, lng: -111.67, state: 'AZ', county: 'Pinal' }), false, 'unenrolled counties are not candidates');
   assert.equal(candidateReady({ lat: 33.4, lng: -112.3, state: 'AZ', county: 'Maricopa', provenance: { derivedFields: { assessorRoll: { countyKey: 'AZ-MARICOPA' } } } }), false, 'rolled rows are not candidates');
-  assert.equal(candidateReady({ lat: 33.4, lng: -112.3, state: 'AZ', county: 'Maricopa', assessed: 300000 }), false, 'assessed rows are not candidates');
+  assert.equal(candidateReady({ lat: 33.4, lng: -112.3, state: 'AZ', county: 'Maricopa', assessed: 300000 }), true, 'rows with a publisher assessed value but no assessorRoll remain candidates');
   assert.equal(candidateReady({}), false);
   assert.equal(candidateReady(null), false);
 });
@@ -514,6 +514,20 @@ test('isCompatibleNjSitusAddress matches normalized street variants and rejects 
   assert.equal(isCompatibleNjSitusAddress('1427 46TH STREET, NORTH BERGEN, NJ 07047', '1427 80TH ST'), false);
   assert.equal(isCompatibleNjSitusAddress('1427 NORTH PARK AVE, NORTH BERGEN, NJ 07047', '1427 NORTH 80TH ST'), false);
   assert.equal(isCompatibleNjSitusAddress('1427 46TH ST APT 2', '1427 80TH ST APT 2'), false);
+  // Relaxed positive assertions: street abbreviations, directionals, unit suffixes, ordinals, and primary stems
+  assert.equal(isCompatibleNjSitusAddress('1427 46TH STREET, NORTH BERGEN, NJ 07047', '1427 46 ST'), true);
+  assert.equal(isCompatibleNjSitusAddress('19 W PARK AV #2B, PARK RIDGE, NJ 07656', '19 WEST PARK AVENUE UNIT 2B'), true);
+  assert.equal(isCompatibleNjSitusAddress('019 N PARK LN, PARK RIDGE, NJ 07656', '19 PARK LANE'), true);
+  assert.equal(isCompatibleNjSitusAddress('42 OAK DR, WAYNE, NJ 07470', '42 S OAK DRIVE # 4'), true);
+  assert.equal(isCompatibleNjSitusAddress('88 RIVER RD, HACKENSACK, NJ 07601', '88 E RIVER ROAD (UNIT A)'), true);
+  assert.equal(isCompatibleNjSitusAddress('500 KENNEDY BLVD, JERSEY CITY, NJ 07306', '500 KENNEDY BOULEVARD APT 3C'), true);
+  assert.equal(isCompatibleNjSitusAddress('100 ST GEORGES AVE, RAHWAY, NJ 07065', '100 SAINT GEORGE AVENUE'), true);
+  assert.equal(isCompatibleNjSitusAddress('50 CEDAR GROVE DR, WAYNE, NJ 07470', '50 CEDARGROVE DRIVE'), true);
+  // Strict negative assertions: different house numbers, distinct streets, unit tokens must never cross-match
+  assert.equal(isCompatibleNjSitusAddress('19 W PARK AVE, PARK RIDGE, NJ 07656', '21 W PARK AVE'), false);
+  assert.equal(isCompatibleNjSitusAddress('1427 46TH ST #2', '1427 80TH ST #2'), false);
+  assert.equal(isCompatibleNjSitusAddress('1427 46TH ST-UNIT 2', '1427 80TH ST-UNIT 2'), false);
+  assert.equal(isCompatibleNjSitusAddress('123 MAIN ST', '123 PARKWAY'), false);
 });
 
 test('isExactNjGeocodeMatch rejects same-house-number different-street candidates and accepts valid equivalents', () => {
@@ -874,4 +888,109 @@ test('GET /api/listings/:id/assessor rejects cached or queried parcels with mism
   assert.equal(liveRes.out.body.reason, 'Parcel situs address does not corroborate listing street address.');
   assert.equal(persistedCount, 0);
   assert.equal(queriedListing.assessorParcel, undefined);
+});
+
+test('backfill selects sheriff listings that carry a publisher assessed value without an assessorRoll', async () => {
+  const sheriffRow = {
+    id: 'sheriff:oh-cuy-1',
+    source: 'sheriff',
+    state: 'OH',
+    county: 'Cuyahoga',
+    address: '100 Public Square, Cleveland, OH 44114',
+    lat: 41.4993,
+    lng: -81.6944,
+    openingBid: 80000,
+    assessed: 180000,
+    provenance: { origin: 'live', observed: true, publisher: 'Sheriff', recordId: 'oh-cuy-1' },
+  };
+  assert.equal(candidateReady(sheriffRow), true);
+  const db = fakeDb([sheriffRow]);
+  const res = await backfillAssessorRolls({
+    db,
+    cachePath: temporaryCachePath(),
+    now: Date.parse('2026-11-01T00:00:00.000Z'),
+    fetchFn: async () => arcgisFetchReturning({
+      PARCELPIN: '101-01-001',
+      TOTAL_ASSESSED_VAL: 63000,
+    })(),
+  });
+  assert.equal(res.considered, 1);
+  assert.equal(res.harvested, 1);
+  assert.equal(res.persisted, 1);
+  assert.equal(sheriffRow.provenance.derivedFields.assessorRoll.countyKey, 'OH-CUYAHOGA');
+  assert.equal(sheriffRow.provenance.derivedFields.assessorRoll.parcel.assessedValue.total, 63000);
+  assert.equal(sheriffRow.assessed, 180000, 'existing publisher assessed appraisal must remain untouched when assessorRoll attaches');
+});
+
+test('presentListing sets enrolledAssessor corridor flag and discovery query filters enrolledOnly with SQL/memory parity', async () => {
+  const { presentListing } = require('../server/routes/listings');
+  const { queryFromUrl, matches, search } = require('../server/discovery/query');
+  const { readDiscoveryFilters, discoverySearchParams } = await import('../src/lib/discovery-query.ts');
+  const { PGlite } = require('@electric-sql/pglite');
+
+  assert.equal(presentListing({ id: 'e1', source: 'sheriff', state: 'OH', county: 'Cuyahoga' }).enrolledAssessor, true);
+  assert.equal(presentListing({ id: 'e2', source: 'sheriff', state: 'FL', county: 'Orange' }).enrolledAssessor, true);
+  assert.equal(presentListing({ id: 'e3', source: 'civilview', state: 'NJ', county: 'Hudson' }).enrolledAssessor, true);
+  assert.equal(presentListing({ id: 'u1', source: 'servicelink', state: 'AZ', county: 'Pinal' }).enrolledAssessor, false);
+  assert.equal(presentListing({ id: 'u2', source: 'sheriff', state: 'IL', county: 'Cook' }).enrolledAssessor, false);
+  assert.equal(presentListing({ id: 'u3', source: 'trustee', state: 'CA', county: 'Los Angeles' }).enrolledAssessor, false);
+  assert.equal(presentListing({ id: 'u4', source: 'civilview', state: 'PA', county: 'Chester' }).enrolledAssessor, false);
+
+  const clientFilters = readDiscoveryFilters(new URLSearchParams('enrolledOnly=true&state=OH'));
+  assert.equal(clientFilters.enrolledOnly, 'true');
+  assert.equal(discoverySearchParams(clientFilters).get('enrolledOnly'), 'true');
+  assert.equal('enrolledOnly' in readDiscoveryFilters(new URLSearchParams('enrolledOnly=maybe')), false);
+
+  const parsedTrue = queryFromUrl(new URL('http://localhost/api/listings?enrolledOnly=true'));
+  assert.equal(parsedTrue.enrolledOnly, true);
+  const parsedFalse = queryFromUrl(new URL('http://localhost/api/listings?enrolledOnly=false'));
+  assert.equal(parsedFalse.enrolledOnly, false);
+  assert.throws(() => queryFromUrl(new URL('http://localhost/api/listings?enrolledOnly=bogus')), (err) => err.status === 400);
+
+  const rows = [
+    { id: 'r-oh-cuy', source: 'sheriff', state: 'OH', county: 'Cuyahoga County', provenance: { origin: 'live' } },
+    { id: 'r-fl-stl', source: 'sheriff', state: 'FL', county: 'St. Lucie', provenance: { origin: 'live' } },
+    { id: 'r-nj-hud', source: 'civilview', state: 'NJ', county: 'Hudson', provenance: { origin: 'live' } },
+    { id: 'r-il-cook', source: 'sheriff', state: 'IL', county: 'Cook', provenance: { origin: 'live' } },
+    { id: 'r-az-pin', source: 'servicelink', state: 'AZ', county: 'Pinal', provenance: { origin: 'live' } },
+    { id: 'r-null-co', source: 'hud', state: 'FL', county: null, provenance: { origin: 'live' } },
+  ];
+
+  assert.deepEqual(rows.filter((r) => matches(r, parsedTrue)).map((r) => r.id), ['r-oh-cuy', 'r-fl-stl', 'r-nj-hud']);
+  assert.deepEqual(rows.filter((r) => matches(r, parsedFalse)).map((r) => r.id), ['r-il-cook', 'r-az-pin', 'r-null-co']);
+
+  const pglite = new PGlite();
+  try {
+    await pglite.query(`CREATE TABLE listings (
+      id text PRIMARY KEY, updated_at timestamptz DEFAULT now(), deal_score int,
+      state text, county text, city text, address text,
+      source_key text, prop_type text, occupancy text,
+      auction_program text, lifecycle_status text, status text, transaction_outcome text,
+      has_documents boolean, provenance jsonb, sale_date date, opening_bid numeric,
+      equity_spread numeric, senior_lien_risk text, redemption_days int,
+      est_low numeric, est_high numeric, triage_priority int, latitude float8, longitude float8
+    )`);
+    for (const r of rows) {
+      await pglite.query(
+        'INSERT INTO listings (id, source_key, state, county, provenance) VALUES ($1, $2, $3, $4, $5::jsonb)',
+        [r.id, r.source, r.state, r.county, JSON.stringify(r.provenance)],
+      );
+    }
+    const pgDb = { isPg: true, pool: pglite, listingSelect: 'id, source_key AS source, state, county, provenance' };
+    const memDb = { isPg: false, getListings: async () => ({ total: rows.length, listings: rows }) };
+
+    for (const qs of ['enrolledOnly=true', 'enrolledOnly=false']) {
+      const f = queryFromUrl(new URL(`http://localhost/api/listings?${qs}&limit=50`));
+      const pgRes = await search(pgDb, f);
+      const memRes = await search(memDb, f);
+      assert.deepEqual(
+        pgRes.listings.map((l) => l.id).sort(),
+        memRes.listings.map((l) => l.id).sort(),
+        `PG/memory parity failed for ${qs}`,
+      );
+      assert.equal(pgRes.total, memRes.total);
+    }
+  } finally {
+    await pglite.close();
+  }
 });

@@ -3,7 +3,8 @@
 import React, { useEffect, useState } from "react";
 import { Listing } from "@/data/listings";
 import { AlertTriangle, Calculator, CheckCircle2, Download, FileJson, FileText, Scale, ShieldCheck, Sparkles } from "lucide-react";
-import { classifyInvestmentStrategies, computeCashToClose, computeConstitutionalSurplus, computeDscrCoverage, computeReassessmentShock, computeRedemptionYield, computeStatutoryDeadlinesAndCarry, computeStatutoryFeePreset, computeTargetPriceScenario, isTaxSaleContext, publishedRedemptionDays } from "@/lib/underwriting";
+import { classifyInvestmentStrategies, computeCashToClose, computeConstitutionalSurplus, computeDscrCoverage, computeMaxAllowableOffer, computeReassessmentShock, computeRedemptionYield, computeSafmrRentFloor, computeStatutoryDeadlinesAndCarry, computeStatutoryFeePreset, computeTargetPriceScenario, isTaxSaleContext, publishedRedemptionDays } from "@/lib/underwriting";
+import { fetchAssessorReadingCached } from "@/components/listings/assessor-reading";
 import { computeRedemptionExpectedValue } from "@/lib/redemption-ev";
 import { displayMoney, positiveNumber } from "@/lib/listing-display";
 import { readUnderwriteScenario, writeUnderwriteScenario } from "@/lib/underwrite-scenario";
@@ -138,6 +139,11 @@ export function BiddingSimulator({ listing, publishedUpsetEstimate }: BiddingSim
   const estimatedValue = customValuationNum ?? publisherValuation;
   const isCustomValuation = customValuationNum !== null;
 
+  const hudSafmr = listing.hudSafmr;
+  const safmrRentFloor = hudSafmr && hudSafmr.fairMarketRent > 0
+    ? computeSafmrRentFloor({ monthlyRent: hudSafmr.fairMarketRent })
+    : null;
+
   const amounts = Object.fromEntries(Object.entries(scenario).map(([field, value]) => [field, enteredAmount(value)])) as Record<ScenarioField, number | null>;
   const cash = computeCashToClose({ openingBid: openingBid ?? 0, purchasePrice: openingBid ?? 0, ...amounts });
   const otherAcquisitionCosts = acquisitionFields.every((field) => amounts[field] !== null)
@@ -146,25 +152,41 @@ export function BiddingSimulator({ listing, publishedUpsetEstimate }: BiddingSim
   const reverseScenario = openingBid !== null
     ? computeTargetPriceScenario({ estimatedValue, targetMarginPct: targetMargin, rehabBudget, currentPrice: openingBid, otherAcquisitionCosts })
     : null;
+  const standaloneMao = estimatedValue !== null && estimatedValue > 0
+    ? computeMaxAllowableOffer({
+        estimatedValue,
+        targetMarginPct: targetMargin,
+        rehabBudget,
+        otherAcquisitionCosts,
+      })
+    : null;
 
   const calculateMao = (rehab: number, margin: number, customVal: string | null, customBid: string | null, scenarioMap: Record<ScenarioField, string>) => {
     const customValNum = customVal !== null && customVal !== "" && Number.isFinite(Number(customVal)) ? Number(customVal) : null;
     const activeEstimatedValue = customValNum ?? publisherValuation;
-    const customBidNum = customBid !== null && customBid !== "" && Number.isFinite(Number(customBid)) ? Number(customBid) : null;
-    const activeOpeningBid = (customBidNum !== null && customBidNum > 0) ? customBidNum : (publishedOpeningBid ?? null);
-    if (activeOpeningBid === null) return null;
+    if (activeEstimatedValue === null || activeEstimatedValue <= 0) return null;
     const activeAmounts = Object.fromEntries(Object.entries(scenarioMap).map(([field, value]) => [field, enteredAmount(value)])) as Record<ScenarioField, number | null>;
     const activeOtherAcquisitionCosts = acquisitionFields.every((field) => activeAmounts[field] !== null)
       ? acquisitionFields.reduce((total, field) => total + (activeAmounts[field] ?? 0), 0)
       : null;
-    const freshScenario = computeTargetPriceScenario({
+    const customBidNum = customBid !== null && customBid !== "" && Number.isFinite(Number(customBid)) ? Number(customBid) : null;
+    const activeOpeningBid = (customBidNum !== null && customBidNum > 0) ? customBidNum : (publishedOpeningBid ?? null);
+    if (activeOpeningBid !== null && activeOtherAcquisitionCosts !== null) {
+      const freshScenario = computeTargetPriceScenario({
+        estimatedValue: activeEstimatedValue,
+        targetMarginPct: margin,
+        rehabBudget: rehab,
+        currentPrice: activeOpeningBid,
+        otherAcquisitionCosts: activeOtherAcquisitionCosts,
+      });
+      if (freshScenario) return freshScenario.maxPurchasePrice;
+    }
+    return computeMaxAllowableOffer({
       estimatedValue: activeEstimatedValue,
       targetMarginPct: margin,
       rehabBudget: rehab,
-      currentPrice: activeOpeningBid,
       otherAcquisitionCosts: activeOtherAcquisitionCosts,
     });
-    return freshScenario?.maxPurchasePrice ?? null;
   };
 
   const persistScenario = (
@@ -247,9 +269,7 @@ export function BiddingSimulator({ listing, publishedUpsetEstimate }: BiddingSim
     setIsImportingAssessor(true);
     setAssessorError(null);
     try {
-      const res = await fetch(`/api/listings/${encodeURIComponent(listing.id)}/assessor`, { cache: "no-store" });
-      if (!res.ok) throw new Error("Assessor lookup returned " + res.status);
-      const data = await res.json();
+      const data = await fetchAssessorReadingCached(listing.id);
       const figure = data?.marketComparison;
       if (figure && Number.isFinite(figure) && figure > 0) {
         const rounded = Math.round(figure).toString();
@@ -296,6 +316,8 @@ export function BiddingSimulator({ listing, publishedUpsetEstimate }: BiddingSim
     taxAssessedValue: listing.assessed ?? null,
     redemptionDays: publishedRedemption,
     hasIrsLien: hasIrsNoticeFlag,
+    seniorLienWarning: listing.seniorLienWarning,
+    redemptionWarning: listing.redemptionWarning,
     isTaxSale: isTaxCandidate,
     isHomestead,
   });
@@ -327,7 +349,6 @@ export function BiddingSimulator({ listing, publishedUpsetEstimate }: BiddingSim
   const surplusAnalysis = realizedBid !== null && realizedBid > 0 && typeof listing.judgment === "number" && listing.judgment > 0
     ? computeConstitutionalSurplus({ openingBid: realizedBid, judgmentDebt: listing.judgment })
     : null;
-  const hudSafmr = listing.hudSafmr;
   const modeledDscr = hudSafmr && openingBid !== null ? (() => {
     const loanAmount = openingBid * Math.max(0, Math.min(1, ltvPct / 100));
     const r = Math.max(0, interestRatePct) / 100 / 12;
@@ -353,7 +374,7 @@ export function BiddingSimulator({ listing, publishedUpsetEstimate }: BiddingSim
     try {
       const payload = {
         disposition: "UNDERWRITE",
-        maxAllowableOffer: reverseScenario?.maxPurchasePrice ?? openingBid ?? null,
+        maxAllowableOffer: reverseScenario?.maxPurchasePrice ?? standaloneMao ?? openingBid ?? null,
         rehabBudget,
         targetMargin,
         customValuation: customValuation || undefined,
@@ -500,7 +521,7 @@ export function BiddingSimulator({ listing, publishedUpsetEstimate }: BiddingSim
                         onClick={() => updateCustomOpeningBid(String(Math.round(publishedJudgment)))}
                         className="rounded-lg border border-line-strong bg-card px-3 py-1.5 text-xs font-semibold text-ink-2 shadow-sm transition hover:bg-paper"
                       >
-                        Use execution judgment ({displayMoney(publishedJudgment)})
+                        Use Court Judgment ({displayMoney(publishedJudgment)}) as Upset Estimate <span className="ml-1 text-ink-3">(Scenario input)</span>
                       </button>
                     )}
                   </div>
@@ -756,6 +777,86 @@ export function BiddingSimulator({ listing, publishedUpsetEstimate }: BiddingSim
           </div>
         </div>
 
+        {openingBid === null && (
+          <div className="space-y-3 border-t border-line pt-4">
+            {estimatedValue === null ? (
+              <div className="rounded-xl border border-catch/30 bg-catch-wash p-4 text-ink">
+                <div className="flex gap-3">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-catch-ink" />
+                  <div>
+                    <h4 className="text-xs font-bold">Walk-Away Max Bid (MAO) requires a valuation assumption</h4>
+                    <p className="mt-1 text-xs leading-relaxed text-ink-2">Enter your target ARV, import the county assessor figure, or apply the HUD SAFMR rent-floor scenario below to compute your Walk-Away Max Bid even before an opening bid is published.</p>
+                  </div>
+                </div>
+                <div className="mt-3 border-t border-catch/30 pt-3">
+                  <label htmlFor="custom-valuation-input" className="block text-xs font-semibold text-ink">
+                    Model Walk-Away Max Bid (MAO) with your target ARV or benchmark assumption:
+                  </label>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                    <div className="flex items-center rounded-control border border-line-strong bg-card px-3 focus-within:border-yours focus-within:ring-2 focus-within:ring-yours/20">
+                      <span className="text-xs font-bold text-ink-3">$</span>
+                      <input
+                        id="custom-valuation-input"
+                        inputMode="decimal"
+                        value={customValuation}
+                        onChange={(event) => updateCustomValuation(event.target.value)}
+                        placeholder="e.g. 185000"
+                        aria-label="Target ARV or valuation assumption"
+                        className="w-32 bg-transparent px-2 py-1.5 text-xs font-semibold text-yours outline-none focus-visible:shadow-none"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      disabled={isImportingAssessor}
+                      onClick={handleImportAssessor}
+                      className="rounded-lg border border-line-strong bg-card px-3 py-1.5 text-xs font-semibold text-ink-2 shadow-sm transition hover:bg-paper disabled:opacity-50"
+                    >
+                      {isImportingAssessor ? "Reading assessor…" : "Import Assessor Figure"}
+                    </button>
+                    {safmrRentFloor !== null && hudSafmr && (
+                      <button
+                        type="button"
+                        onClick={() => updateCustomValuation(String(safmrRentFloor))}
+                        className="rounded-lg border border-line-strong bg-card px-3 py-1.5 text-xs font-semibold text-ink-2 shadow-sm transition hover:bg-paper"
+                      >
+                        Use 1.20× DSCR Rent-Floor ({displayMoney(safmrRentFloor)} from HUD SAFMR {displayMoney(hudSafmr.fairMarketRent)}/mo) <span className="ml-1 text-ink-3">(Scenario input)</span>
+                      </button>
+                    )}
+                    {assessorError && (
+                      <span className="text-xs text-catch-ink">{assessorError}</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : standaloneMao !== null ? (
+              <div className="space-y-3">
+                {isCustomValuation && (
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-yours/30 bg-yours-wash px-3.5 py-2.5 text-xs text-ink">
+                    <div className="flex items-center gap-2">
+                      <span className="h-2 w-2 rounded-full bg-yours" />
+                      <span>Modeled from entered ARV assumption: <strong>{displayMoney(estimatedValue)}</strong> (investor assumption — not a publisher appraisal)</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => updateCustomValuation("")}
+                      className="text-xs font-bold text-ink-2 underline underline-offset-2 hover:text-ink"
+                    >
+                      Reset assumption
+                    </button>
+                  </div>
+                )}
+                <div className="rounded-xl border border-line bg-paper p-3.5" data-testid="walk-away-mao-card">
+                  <p className="text-xs font-bold uppercase text-ink-3">Walk-Away Max Bid (MAO)</p>
+                  <p className="mt-1 text-xl font-extrabold text-yours">{displayMoney(standaloneMao)}</p>
+                  <p className="mt-1 text-xs text-ink-3">
+                    {displayMoney(estimatedValue)} valuation minus {targetMargin}% target margin ({displayMoney(Math.round(estimatedValue * (targetMargin / 100)))}) and {displayMoney(rehabBudget)} rehab{otherAcquisitionCosts !== null ? ` minus ${displayMoney(otherAcquisitionCosts)} entered acquisition costs` : " (before closing costs — enter an assumed opening bid above to model statutory fees)"}. Saved to your active underwriting scenario.
+                  </p>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        )}
+
         {openingBid !== null && (<>
         {cash.totalAcquisitionCost !== null ? (
           <div className="grid grid-cols-1 gap-3 border-t border-line pt-4 sm:grid-cols-2">
@@ -812,6 +913,15 @@ export function BiddingSimulator({ listing, publishedUpsetEstimate }: BiddingSim
                 >
                   {isImportingAssessor ? "Reading assessor…" : "Import Assessor Figure"}
                 </button>
+                {safmrRentFloor !== null && hudSafmr && (
+                  <button
+                    type="button"
+                    onClick={() => updateCustomValuation(String(safmrRentFloor))}
+                    className="rounded-lg border border-line-strong bg-card px-3 py-1.5 text-xs font-semibold text-ink-2 shadow-sm transition hover:bg-paper"
+                  >
+                    Use 1.20× DSCR Rent-Floor ({displayMoney(safmrRentFloor)} from HUD SAFMR {displayMoney(hudSafmr.fairMarketRent)}/mo) <span className="ml-1 text-ink-3">(Scenario input)</span>
+                  </button>
+                )}
                 {assessorError && (
                   <span className="text-xs text-catch-ink">{assessorError}</span>
                 )}
@@ -849,7 +959,16 @@ export function BiddingSimulator({ listing, publishedUpsetEstimate }: BiddingSim
             </div>
           </div>
         ) : (
-          <div className="flex gap-3 rounded-xl border border-catch/30 bg-catch-wash p-4 text-xs text-ink"><AlertTriangle className="h-4 w-4 shrink-0" /><p>Target price remains unresolved until every acquisition-cost field has a value. Unknown taxes, debt, and fees are not treated as $0.</p></div>
+          <div className="space-y-3">
+            {standaloneMao !== null && (
+              <div className="rounded-xl border border-line bg-paper p-3.5" data-testid="walk-away-mao-card">
+                <p className="text-xs font-bold uppercase text-ink-3">Walk-Away Max Bid (MAO) — Pre-Closing Costs</p>
+                <p className="mt-1 text-xl font-extrabold text-yours">{displayMoney(standaloneMao)}</p>
+                <p className="mt-1 text-xs text-ink-3">Valuation minus {targetMargin}% target margin and {displayMoney(rehabBudget)} rehab before unresolved acquisition costs.</p>
+              </div>
+            )}
+            <div className="flex gap-3 rounded-xl border border-catch/30 bg-catch-wash p-4 text-xs text-ink"><AlertTriangle className="h-4 w-4 shrink-0" /><p>Target price remains unresolved until every acquisition-cost field has a value. Unknown taxes, debt, and fees are not treated as $0.</p></div>
+          </div>
         )}
         </>)}
       </div>
@@ -974,6 +1093,17 @@ export function BiddingSimulator({ listing, publishedUpsetEstimate }: BiddingSim
               <p className="text-xs text-ink-2">
                 Published Section 8 Fair Market Rent ({displayMoney(hudSafmr.fairMarketRent)}/mo for {hudSafmr.bedrooms}BR in ZIP {hudSafmr.zip}, 90%–110% payment standard {displayMoney(hudSafmr.paymentStandard90Pct)}–{displayMoney(hudSafmr.paymentStandard110Pct)}/mo).
               </p>
+              {safmrRentFloor !== null && (
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={() => updateCustomValuation(String(safmrRentFloor))}
+                    className="rounded-lg border border-line-strong bg-card px-3 py-1.5 text-xs font-semibold text-ink-2 shadow-sm transition hover:bg-paper"
+                  >
+                    Use 1.20× DSCR Rent-Floor ({displayMoney(safmrRentFloor)} from HUD SAFMR {displayMoney(hudSafmr.fairMarketRent)}/mo) <span className="ml-1 text-ink-3">(Scenario input)</span>
+                  </button>
+                </div>
+              )}
               {modeledDscr && (
                 <div className="mt-1 pt-1.5 border-t border-line text-xs space-y-2">
                   <div className="flex items-center justify-between gap-1 text-ink">

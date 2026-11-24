@@ -16,6 +16,9 @@ import {
   computeDscrCoverage,
   classifyInvestmentStrategies,
   computeLienWaterfall,
+  computeMaxAllowableOffer,
+  computeSafmrRentFloor,
+  publishedRedemptionDays,
 } from '../src/lib/underwriting.ts';
 
 test('cash requirements stay unresolved until every cost is explicit', () => {
@@ -562,3 +565,131 @@ test('classifyInvestmentStrategies categorizes exit strategies based on conserva
   assert.ok(fullStrategy.strategies.includes('wholesale'));
   assert.ok(fullStrategy.strategies.includes('flip'));
 });
+
+test('computeMaxAllowableOffer unlocks MAO without an opening bid and fails closed on invalid inputs', () => {
+  assert.equal(computeMaxAllowableOffer({
+    estimatedValue: 200_000,
+    targetMarginPct: 25,
+    rehabBudget: 30_000,
+  }), 120_000);
+
+  assert.equal(computeMaxAllowableOffer({
+    estimatedValue: 200_000,
+    targetMarginPct: 25,
+    rehabBudget: 30_000,
+    otherAcquisitionCosts: null,
+  }), 120_000);
+
+  assert.equal(computeMaxAllowableOffer({
+    estimatedValue: 200_000,
+    targetMarginPct: 25,
+    rehabBudget: 30_000,
+    otherAcquisitionCosts: 10_000,
+  }), 110_000);
+
+  assert.equal(computeMaxAllowableOffer({
+    estimatedValue: 100_000,
+    targetMarginPct: 30,
+    rehabBudget: 80_000,
+    otherAcquisitionCosts: 5_000,
+  }), 0);
+
+  assert.equal(computeMaxAllowableOffer({ estimatedValue: null, targetMarginPct: 30, rehabBudget: 25_000 }), null);
+  assert.equal(computeMaxAllowableOffer({ estimatedValue: 0, targetMarginPct: 30, rehabBudget: 25_000 }), null);
+  assert.equal(computeMaxAllowableOffer({ estimatedValue: -50_000, targetMarginPct: 30, rehabBudget: 25_000 }), null);
+  assert.equal(computeMaxAllowableOffer({ estimatedValue: 200_000, targetMarginPct: 100, rehabBudget: 25_000 }), null);
+  assert.equal(computeMaxAllowableOffer({ estimatedValue: 200_000, targetMarginPct: -5, rehabBudget: 25_000 }), null);
+  assert.equal(computeMaxAllowableOffer({ estimatedValue: 200_000, targetMarginPct: 25, rehabBudget: -1 }), null);
+  assert.equal(computeMaxAllowableOffer({ estimatedValue: 200_000, targetMarginPct: 25, rehabBudget: 25_000, otherAcquisitionCosts: -100 }), null);
+});
+
+test('computeSafmrRentFloor computes deterministic 1.20x DSCR supportable price and rejects invalid inputs', () => {
+  const r = 0.0725 / 12;
+  const factor = Math.pow(1 + r, 360);
+  const expectedLoan = (1500 * 0.65 / 1.20) * ((factor - 1) / (r * factor));
+  const expectedPrice = Math.floor(expectedLoan / 0.75);
+  assert.equal(computeSafmrRentFloor({ monthlyRent: 1500 }), expectedPrice);
+  assert.ok(expectedPrice > 150_000 && expectedPrice < 170_000);
+
+  assert.equal(
+    computeSafmrRentFloor({ monthlyRent: 1200, targetDscr: 1.20, annualInterestRatePct: 0, ltvPct: 75, expenseRatio: 0.35, loanTermYears: 30 }),
+    Math.floor(((1200 * 0.65 / 1.20) * 360) / 0.75),
+  );
+
+  assert.equal(computeSafmrRentFloor({ monthlyRent: 0 }), null);
+  assert.equal(computeSafmrRentFloor({ monthlyRent: -1500 }), null);
+  assert.equal(computeSafmrRentFloor({ monthlyRent: null }), null);
+  assert.equal(computeSafmrRentFloor({ monthlyRent: 1500, targetDscr: 0 }), null);
+  assert.equal(computeSafmrRentFloor({ monthlyRent: 1500, ltvPct: 0 }), null);
+  assert.equal(computeSafmrRentFloor({ monthlyRent: 1500, ltvPct: 105 }), null);
+  assert.equal(computeSafmrRentFloor({ monthlyRent: 1500, expenseRatio: 1 }), null);
+  assert.equal(computeSafmrRentFloor({ monthlyRent: 1500, expenseRatio: -0.1 }), null);
+  assert.equal(computeSafmrRentFloor({ monthlyRent: 1500, annualInterestRatePct: -1 }), null);
+  assert.equal(computeSafmrRentFloor({ monthlyRent: 1500, loanTermYears: 0 }), null);
+});
+
+test('federal/agency REO suppresses phantom state mortgagor redemption unless IRS lien or tax sale applies', () => {
+  for (const source of ['hud', 'gsa', 'usda', 'fannie', 'freddie', 'fdic', 'va']) {
+    assert.equal(
+      publishedRedemptionDays({ source, redemptionDays: 365 }),
+      null,
+      `${source} must suppress phantom state redemptionDays`,
+    );
+    const carry = computeStatutoryDeadlinesAndCarry({
+      saleDate: '2026-11-01',
+      state: 'AL',
+      source,
+      redemptionDays: 365,
+      purchasePrice: 120_000,
+    });
+    assert.equal(carry.stateRedemptionDays, 0, `${source} in AL must not surface phantom stateRedemptionDays`);
+    assert.equal(carry.irsRedemptionDays, 0);
+  }
+
+  assert.equal(
+    publishedRedemptionDays({
+      source: 'hud',
+      redemptionDays: 120,
+      seniorLienWarning: 'Subject to 26 U.S.C. § 7425 federal tax lien.',
+    }),
+    120,
+  );
+  const hudWithIrsText = computeStatutoryDeadlinesAndCarry({
+    saleDate: '2026-11-01',
+    state: 'OH',
+    source: 'hud',
+    seniorLienWarning: 'Internal Revenue Service federal tax lien recorded',
+    purchasePrice: 120_000,
+  });
+  assert.equal(hudWithIrsText.irsRedemptionDays, 120);
+  assert.equal(hudWithIrsText.effectiveLockupDays, 120);
+
+  const alSheriff = computeStatutoryDeadlinesAndCarry({
+    saleDate: '2026-11-01',
+    state: 'AL',
+    source: 'sheriff',
+    isHomestead: false,
+    purchasePrice: 120_000,
+  });
+  assert.equal(alSheriff.stateRedemptionDays, 365);
+  assert.equal(publishedRedemptionDays({ source: 'sheriff', redemptionDays: 180 }), 180);
+});
+
+test('BiddingSimulator shares AssessorReading cache, unlocks MAO without opening bid, and exposes 1-click scenario buttons', async () => {
+  const fsNode = await import('node:fs');
+  const pathNode = await import('node:path');
+  const root = pathNode.resolve(import.meta.dirname, '..');
+  const assessorSrc = fsNode.readFileSync(pathNode.join(root, 'src/components/listings/assessor-reading.tsx'), 'utf8');
+  const simSrc = fsNode.readFileSync(pathNode.join(root, 'src/components/terminal/bidding-simulator.tsx'), 'utf8');
+
+  assert.match(assessorSrc, /export function fetchAssessorReadingCached/);
+  assert.match(assessorSrc, /assessorReadingCache/);
+  assert.match(simSrc, /fetchAssessorReadingCached\(listing\.id\)/);
+  assert.doesNotMatch(simSrc, /fetch\(`\/api\/listings\/\$\{encodeURIComponent\(listing\.id\)\}\/assessor`/);
+  assert.match(simSrc, /computeMaxAllowableOffer/);
+  assert.match(simSrc, /computeSafmrRentFloor/);
+  assert.match(simSrc, /Walk-Away Max Bid \(MAO\)/);
+  assert.match(simSrc, /Use Court Judgment \([\s\S]*?\) as Upset Estimate/);
+  assert.match(simSrc, /Use 1\.20× DSCR Rent-Floor \(/);
+});
+

@@ -15,10 +15,16 @@ const assert = require('node:assert/strict');
 
 const {
   DOCKET_OUTCOMES,
+  NON_AUCTION_DISPOSITION_SOURCES,
+  isNonAuctionDispositionSource,
   normalizeDocketOutcome,
   calculateDocketClearingAnalytics,
   evaluateAuctionProceedProbability,
+  evaluateAuctionMicrostructure,
+  aggregateCountyObservationStats,
 } = require('../../server/intelligence/auction-microstructure');
+const { loadCountyObservationStats } = require('../../server/db/observations-persistence');
+const { buildPropertyDossier } = require('../../server/intelligence/dossier');
 
 const {
   PLATFORM_DEPOSIT_RULES,
@@ -648,4 +654,173 @@ test('Escrow Optimizer: handles invalid saleDate gracefully and detects concurre
   assert.equal(sameDayTx.excludedAuctionCount, 1);
   assert.equal(sameDayTx.dateConflicts.length, 1);
   assert.equal(sameDayTx.totalCommittedCapital, 50000);
+});
+
+test('Auction Microstructure: normalizes 3rd-party/beneficiary dispositions and leaves generic closed as unknown', () => {
+  assert.equal(normalizeDocketOutcome('Status: Auctioned - Sold to 3rd Party'), 'sold_third_party');
+  assert.equal(normalizeDocketOutcome('Purchased - 3rd Party'), 'sold_third_party');
+  assert.equal(normalizeDocketOutcome('sold_to_third_party'), 'sold_third_party');
+  assert.equal(normalizeDocketOutcome('Status: Auctioned - Reverted to Beneficiary'), 'sold_plaintiff');
+  assert.equal(normalizeDocketOutcome('Reverted to Plaintiff'), 'sold_plaintiff');
+  assert.equal(normalizeDocketOutcome('Closed - Sold to 3rd Party'), 'sold_third_party');
+  // Negative control: generic closed without disposition clarity must remain unknown
+  assert.equal(normalizeDocketOutcome('Auction is Closed'), 'unknown');
+  assert.equal(normalizeDocketOutcome('closed'), 'unknown');
+});
+
+test('Auction Microstructure: loadCountyObservationStats recovers listing lifecycle/outcome when observation status is generic closed', async () => {
+  const capturedQueries = [];
+  const mockPool = {
+    async query(sql) {
+      capturedQueries.push(sql);
+      return {
+        rows: [
+          {
+            source_key: 'sheriff',
+            record_id: 'rec-1',
+            listing_id: 'l-1',
+            observed_at: '2026-10-01T12:00:00Z',
+            sale_date: '2026-10-15',
+            status: 'Postponed',
+            observation_status: 'Postponed',
+            lifecycle_status: 'Status: Auctioned - Sold to 3rd Party',
+            transaction_outcome: null,
+            listing_status: 'closed',
+            state: 'NJ',
+            county: 'Camden',
+          },
+          {
+            source_key: 'sheriff',
+            record_id: 'rec-1',
+            listing_id: 'l-1',
+            observed_at: '2026-11-01T12:00:00Z',
+            sale_date: '2026-11-01',
+            status: 'Status: Auctioned - Sold to 3rd Party',
+            observation_status: 'Auction is Closed',
+            lifecycle_status: 'Status: Auctioned - Sold to 3rd Party',
+            transaction_outcome: null,
+            listing_status: 'closed',
+            state: 'NJ',
+            county: 'Camden',
+          },
+          {
+            source_key: 'sheriff',
+            record_id: 'rec-2',
+            listing_id: 'l-2',
+            observed_at: '2026-11-02T12:00:00Z',
+            sale_date: '2026-11-02',
+            status: 'Status: Auctioned - Reverted to Beneficiary',
+            observation_status: 'Auction is Closed',
+            lifecycle_status: 'Status: Auctioned - Reverted to Beneficiary',
+            transaction_outcome: 'reverted_to_plaintiff',
+            listing_status: 'closed',
+            state: 'NJ',
+            county: 'Camden',
+          },
+          {
+            source_key: 'sheriff',
+            record_id: 'rec-3',
+            listing_id: 'l-3',
+            observed_at: '2026-11-03T12:00:00Z',
+            sale_date: '2026-11-03',
+            status: 'Auction is Closed',
+            observation_status: 'Auction is Closed',
+            lifecycle_status: null,
+            transaction_outcome: null,
+            listing_status: 'closed',
+            state: 'NJ',
+            county: 'Camden',
+          },
+        ],
+      };
+    },
+  };
+
+  const stats = await loadCountyObservationStats(mockPool, { state: 'NJ', county: 'Camden' });
+  assert.ok(capturedQueries[0].includes('lifecycle_status'));
+  assert.ok(capturedQueries[0].includes('transaction_outcome'));
+  assert.equal(stats.totalDockets, 3);
+  assert.equal(stats.outcomeCounts.sold_third_party, 1);
+  assert.equal(stats.outcomeCounts.sold_plaintiff, 1);
+  assert.equal(stats.outcomeCounts.unknown, 1);
+  assert.equal(stats.clearingRate, 0.5);
+  assert.equal(stats.plaintiffBuybackRate, 0.5);
+  // Prior postponed observation on rec-1 is preserved despite terminal lifecycle outcome
+  assert.equal(aggregateCountyObservationStats([
+    {
+      source_key: 'sheriff',
+      record_id: 'rec-1',
+      observed_at: '2026-10-01T12:00:00Z',
+      observation_status: 'Postponed',
+      lifecycle_status: 'Status: Auctioned - Sold to 3rd Party',
+      state: 'NJ',
+      county: 'Camden',
+    },
+    {
+      source_key: 'sheriff',
+      record_id: 'rec-1',
+      observed_at: '2026-11-01T12:00:00Z',
+      observation_status: 'Auction is Closed',
+      lifecycle_status: 'Status: Auctioned - Sold to 3rd Party',
+      state: 'NJ',
+      county: 'Camden',
+    },
+  ], { state: 'NJ', county: 'Camden' }).medianPostponements, 1);
+});
+
+test('Auction Microstructure: guards non-auction fixed/agency REO sources in direct calls and dossier', () => {
+  for (const source of NON_AUCTION_DISPOSITION_SOURCES) {
+    assert.equal(isNonAuctionDispositionSource(source), true);
+  }
+  assert.equal(isNonAuctionDispositionSource('civilview'), false);
+  assert.equal(isNonAuctionDispositionSource(null), false);
+
+  const countyStats = {
+    totalDockets: 60,
+    saleRate: 0.5,
+    clearingRate: 0.7,
+    postponementRate: 0.3,
+    stayRate: 0.05,
+    sampleSufficient: true,
+    outcomeCounts: { sold_plaintiff: 9, sold_third_party: 21 },
+  };
+
+  const reoDirect = evaluateAuctionMicrostructure({ state: 'NJ', source: 'hud' }, countyStats);
+  assert.equal(reoDirect.applicable, false);
+  assert.equal(reoDirect.probability, null);
+  assert.equal(reoDirect.confidence, 'NON_AUCTION_DISPOSITION');
+  assert.deepEqual(reoDirect.factors, []);
+  assert.equal(reoDirect.statutoryContext, null);
+  assert.match(reoDirect.notes, /Fixed or agency REO disposition/);
+
+  const reoViaContext = evaluateAuctionProceedProbability({ state: 'NJ' }, countyStats, { source: 'gsa' });
+  assert.equal(reoViaContext.applicable, false);
+  assert.equal(reoViaContext.confidence, 'NON_AUCTION_DISPOSITION');
+
+  // Negative control: omitted source continues to evaluate normally
+  const omittedSource = evaluateAuctionProceedProbability({ state: 'NJ', priorPostponements: 2 }, countyStats);
+  assert.equal(omittedSource.confidence, 'HIGH');
+  assert.ok(omittedSource.probability > 0.5);
+
+  // Dossier integration check for HUD vs CivilView
+  const hudDossier = buildPropertyDossier({
+    id: 'hud:1',
+    source: 'hud',
+    state: 'NJ',
+    county: 'Camden',
+    address: '100 Federal Way, Camden, NJ',
+  }, { countyStats });
+  assert.equal(hudDossier.auctionMicrostructure.applicable, false);
+  assert.equal(hudDossier.auctionMicrostructure.confidence, 'NON_AUCTION_DISPOSITION');
+  assert.equal(hudDossier.auctionMicrostructure.probability, null);
+
+  const sheriffDossier = buildPropertyDossier({
+    id: 'civilview:1',
+    source: 'civilview',
+    state: 'NJ',
+    county: 'Camden',
+    address: '200 Sheriff Ave, Camden, NJ',
+  }, { countyStats, trajectoryOverride: { priorPostponements: 2, statutoryStayExhausted: true } });
+  assert.equal(sheriffDossier.auctionMicrostructure.confidence, 'HIGH');
+  assert.ok(sheriffDossier.auctionMicrostructure.probability > 0.5);
 });

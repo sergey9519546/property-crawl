@@ -88,6 +88,49 @@ describe('computeCatchSummary — deterministic "Here\'s the Catch" one-liner', 
     assert.match(out, /No opening amount published/);
   });
 
+  test('rule 4c: missing opening bid enriches fallback with prior postponements and occupancy when known', () => {
+    const postponedOnly = computeCatchSummary({
+      saleDate: '2027-01-15',
+      trajectory: { priorPostponements: 3 },
+    }, [], null);
+    assert.match(postponedOnly, /No opening amount published/);
+    assert.match(postponedOnly, /3 prior postponements/);
+    assert.ok(postponedOnly.length < 160);
+
+    const occupiedOnly = computeCatchSummary({
+      saleDate: '2027-01-15',
+      occupancy: 'Occupied',
+    }, [], null);
+    assert.match(occupiedOnly, /No opening amount published/);
+    assert.match(occupiedOnly, /reported occupied/i);
+    assert.ok(occupiedOnly.length < 160);
+
+    const bothFacts = computeCatchSummary({
+      saleDate: '2027-01-15',
+      occupancy: 'Owner-occupied',
+      provenance: { sourceFacts: { priorPostponements: 2 } },
+    }, [], null);
+    assert.match(bothFacts, /2 prior postponements/);
+    assert.match(bothFacts, /owner-occupied/i);
+    assert.ok(bothFacts.length < 160);
+
+    const longOccupancy = computeCatchSummary({
+      saleDate: '2027-01-15',
+      occupancy: 'Occupied by former owner and multiple holdover residential tenants with unverified lease claims and disputed possession',
+      trajectory: { priorPostponements: 4 },
+    }, [], null);
+    assert.ok(longOccupancy.length < 160);
+    assert.match(longOccupancy, /4 prior postponements/);
+
+    // Negative control: < 2 postponements and unoccupied preserves exact legacy fallback
+    const belowThreshold = computeCatchSummary({
+      saleDate: '2027-01-15',
+      occupancy: 'Unoccupied',
+      trajectory: { priorPostponements: 1 },
+    }, [], null);
+    assert.equal(belowThreshold, 'No opening amount published — price unknown until sale day; confirm before bidding.');
+  });
+
   test('rule 5: opening bid but no sale date', () => {
     const listing = { openingBid: 100000, estLow: 200000, estHigh: 250000 };
     const out = computeCatchSummary(listing, [], null);

@@ -48,10 +48,6 @@ const TEST_DIR = path.join(ROOT, 'test');
 // failure this script exists to prevent.
 const NOT_RUNNABLE_HERE = new Map([
   [
-    'test/property-title.test.js',
-    'live PropertyTitle API integration; needs third-party credentials and network',
-  ],
-  [
     'test/test-landbanksearch.js',
     'not a test: a manual scratch script that calls the live landbanksearch.com feed, asserts '
     + 'nothing, and exits 1 on any error. Running it from CI would contact a third party and '

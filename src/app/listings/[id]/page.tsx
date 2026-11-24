@@ -863,8 +863,8 @@ export default async function ListingPage({ params, searchParams }: Props) {
             <BiddingSimulator listing={listing} publishedUpsetEstimate={publishedUpsetAmount} />
             <DueDiligenceChecklist listing={listing} className="scroll-mt-6" />
             <ListingCompare listingId={listing.id} label={listing.address} />
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:items-start">
-              <Parcel3DVisualizer listing={listing} />
+            <div className={hasAssessorEnrollment ? "grid grid-cols-1 gap-6 lg:grid-cols-2 lg:items-start" : "space-y-4"}>
+              {hasAssessorEnrollment ? <Parcel3DVisualizer listing={listing} /> : <p className="rounded-control border border-line bg-card px-4 py-2.5 text-xs text-ink-3" data-testid="parcel-boundary-not-enrolled">Parcel boundary GIS not enrolled for this state/county{listing.state ? ` (${[publishedText(listing.county, ""), listing.state].filter(Boolean).join(", ")})` : ""}.</p>}
               <NearbyComps listingId={listing.id} targetAddress={listing.address} targetSqft={listing.sqft} targetOpeningBid={openingBid} />
             </div>
             {gisLink && (

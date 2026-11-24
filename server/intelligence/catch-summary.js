@@ -121,6 +121,31 @@ function computeCatchSummary(listing = {}, titleWarnings = [], riskLevel = null)
     if (isFederalReo) {
       return 'No asking price published in the federal disposition feed — confirm list price on the agency portal.';
     }
+    const rawPostponements = optNum(
+      record.trajectory?.priorPostponements
+      ?? record.provenance?.sourceFacts?.priorPostponements
+      ?? record.priorPostponements
+    );
+    const priorPostponements = rawPostponements !== null && rawPostponements >= 2 ? Math.floor(rawPostponements) : 0;
+    const isOccupied = Boolean(
+      occupancy && /occupied/i.test(occupancy) && !/\b(?:un|not|non[- ]?)occupied\b/i.test(occupancy)
+    );
+    if (priorPostponements >= 2 || isOccupied) {
+      const occLower = isOccupied ? occupancy.toLowerCase() : null;
+      if (priorPostponements >= 2 && isOccupied) {
+        const detailed = `No opening amount published — ${priorPostponements} prior postponements, reported ${occLower}; price unknown until sale day.`;
+        return detailed.length < 160
+          ? detailed
+          : `No opening amount published — ${priorPostponements} prior postponements, reported occupied; price unknown until sale day.`;
+      }
+      if (priorPostponements >= 2) {
+        return `No opening amount published — ${priorPostponements} prior postponements; price unknown until sale day, confirm terms.`;
+      }
+      const detailed = `No opening amount published — reported ${occLower} (no interior access); price unknown until sale day.`;
+      return detailed.length < 160
+        ? detailed
+        : 'No opening amount published — reported occupied (no interior access); price unknown until sale day.';
+    }
     return 'No opening amount published — price unknown until sale day; confirm before bidding.';
   }
 

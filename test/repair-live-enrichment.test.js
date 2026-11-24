@@ -877,3 +877,97 @@ test('repairLiveEnrichment handles null Census geocode cleanly when resolveArcgi
   const row = pool.rows.find((r) => r.id === 'SL-NOCOORD-NULL');
   assert.ok(row.provenance.derivedFields.geocodeAttemptedAt);
 });
+
+test('repairLiveEnrichment invokes backfillAssessorRolls before Pass 4 with default limit 35 and skips when <= 4s reserve remains', async () => {
+  const pool = makeFakePool([
+    {
+      id: 'SH-OH-1',
+      source: 'sheriff',
+      state: 'OH',
+      county: 'Cuyahoga',
+      city: 'Cleveland',
+      zip: '44114',
+      address: '100 Public Square, Cleveland, OH 44114',
+      sourceUrl: 'https://cuyahoga.sheriffsaleauction.com/listing/1',
+      lat: 41.4993,
+      lng: -81.6944,
+      propType: 'Single Family',
+      openingBid: null,
+      raw: 'Sheriff sale',
+      sourceObservedAt: '2026-11-22T00:00:00.000Z',
+      provenance: { origin: 'live', observed: true },
+    },
+  ]);
+
+  const callOrder = [];
+  let capturedOpts = null;
+  const origQuery = pool.query.bind(pool);
+  pool.query = async (sql, params) => {
+    if (String(sql).includes('catch_summary IS NULL')) callOrder.push('pass4_catch');
+    return origQuery(sql, params);
+  };
+  const fakeDb = {
+    pool,
+    async getListings() { return { total: 0, listings: [] }; },
+    async createListing(l) { return l; },
+  };
+
+  const report = await repairLiveEnrichment({
+    db: fakeDb,
+    pool,
+    includeCountyBackfill: false,
+    maxDurationMs: 20_000,
+    wallClock: () => 1_000,
+    backfillAssessorRolls: async (opts) => {
+      callOrder.push('assessor_backfill');
+      capturedOpts = opts;
+      return { considered: 1, harvested: 1, persisted: 1 };
+    },
+  });
+
+  assert.deepEqual(callOrder, ['assessor_backfill', 'pass4_catch']);
+  assert.equal(capturedOpts.limit, 35);
+  assert.equal(capturedOpts.maxDurationMs, 16_000, 'must reserve 4s for Pass 4');
+  assert.equal(report.assessorBackfill.harvested, 1);
+  assert.equal(report.catchBackfilled, 1);
+
+  // When only 3.5s remains (< 4s reserve), assessor backfill must be skipped so Pass 4 still runs.
+  let tick = 0;
+  let skippedCalls = 0;
+  const pool2 = makeFakePool([
+    {
+      id: 'SH-OH-2',
+      source: 'sheriff',
+      state: 'OH',
+      county: 'Cuyahoga',
+      city: 'Cleveland',
+      zip: '44114',
+      address: '200 Public Square, Cleveland, OH 44114',
+      sourceUrl: 'https://cuyahoga.sheriffsaleauction.com/listing/2',
+      lat: 41.5,
+      lng: -81.7,
+      propType: 'Single Family',
+      openingBid: null,
+      raw: 'Sheriff sale',
+      sourceObservedAt: '2026-11-22T00:00:00.000Z',
+      provenance: { origin: 'live', observed: true },
+    },
+  ]);
+  const reserveReport = await repairLiveEnrichment({
+    db: { pool: pool2, async getListings() { return { total: 0, listings: [] }; }, async createListing(l) { return l; } },
+    pool: pool2,
+    includeCountyBackfill: false,
+    maxDurationMs: 20_000,
+    wallClock: () => {
+      tick += 1;
+      // startedAt = 0; jump to 16500ms after initial checks so 3500ms remains before Pass 3c
+      return tick <= 1 ? 0 : 16_500;
+    },
+    backfillAssessorRolls: async () => {
+      skippedCalls += 1;
+      return { considered: 0, harvested: 0 };
+    },
+  });
+  assert.equal(skippedCalls, 0, 'assessor backfill must skip when <= 4s reserve remains');
+  assert.equal(reserveReport.catchBackfilled, 1, 'Pass 4 must still run within its 4s reserve');
+});

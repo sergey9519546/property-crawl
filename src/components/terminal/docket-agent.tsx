@@ -40,6 +40,13 @@ export interface VerificationResult {
   logs: string[];
   disclaimer: string;
   summaryMarkdown: string;
+  code?: string | null;
+  lookupSkippedReason?: string | null;
+  docketSummary?: {
+    status?: string;
+    lookupExecuted?: boolean;
+    lookupSkippedReason?: string | null;
+  } | null;
 }
 
 function isSafeEvidenceUrl(value: string) {
@@ -58,6 +65,7 @@ export function DocketAgent({ listing, customAddress }: DocketAgentProps) {
   const [logs, setLogs] = useState<string[]>([]);
   const [result, setResult] = useState<VerificationResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [unconfiguredAuth, setUnconfiguredAuth] = useState(false);
 
   const effectiveAddress = listing?.address || customAddress || "";
   const effectiveCounty = listing?.county || "";
@@ -71,6 +79,7 @@ export function DocketAgent({ listing, customAddress }: DocketAgentProps) {
     setLogs([]);
     setResult(null);
     setError(null);
+    setUnconfiguredAuth(false);
 
     try {
       const response = await fetch("/api/verify-docket", {
@@ -83,9 +92,14 @@ export function DocketAgent({ listing, customAddress }: DocketAgentProps) {
           state: effectiveState,
         }),
       });
-      const data = (await response.json()) as VerificationResult & { error?: string };
+      const data = (await response.json()) as VerificationResult & { error?: string; code?: string };
 
       if (!response.ok) {
+        const authDiag = `${data.code || ""} ${data.error || ""} ${data.lookupSkippedReason || ""}`;
+        if (/COURTLISTENER_AUTH_REQUIRED|courtlistener_api_key_required/i.test(authDiag)) {
+          setUnconfiguredAuth(true);
+          return;
+        }
         throw new Error(data.error || t.docketErrorDefault);
       }
 
@@ -104,6 +118,13 @@ export function DocketAgent({ listing, customAddress }: DocketAgentProps) {
 
   const evidence = (result?.officialEvidence || []).filter((item) => isSafeEvidenceUrl(item.url));
   const isVerified = Boolean(result?.verified && evidence.length > 0);
+  const isUnconfiguredAuth = unconfiguredAuth || Boolean(
+    result?.docketSummary?.lookupSkippedReason === "courtlistener_api_key_required"
+    || result?.docketSummary?.lookupSkippedReason === "COURTLISTENER_AUTH_REQUIRED"
+    || result?.lookupSkippedReason === "courtlistener_api_key_required"
+    || result?.lookupSkippedReason === "COURTLISTENER_AUTH_REQUIRED"
+    || result?.code === "COURTLISTENER_AUTH_REQUIRED"
+  );
 
   return (
     <section className="space-y-4 rounded-card border border-white/10 bg-ink p-5 text-white shadow-xl">
@@ -142,7 +163,7 @@ export function DocketAgent({ listing, customAddress }: DocketAgentProps) {
         </div>
       )}
 
-      {(logs.length > 0 || isRunning) && (
+      {(logs.length > 0 || isRunning) && !isUnconfiguredAuth && (
         <div className="max-h-48 space-y-1 overflow-y-auto rounded-control border border-white/10 bg-black/50 p-4 font-mono text-label leading-relaxed text-white/75">
           <div className="mb-2 flex items-center gap-2 border-b border-white/5 pb-2 text-meta uppercase tracking-wider text-white/60">
             <Terminal className="h-3 w-3 text-white/60" />
@@ -162,7 +183,16 @@ export function DocketAgent({ listing, customAddress }: DocketAgentProps) {
         </div>
       )}
 
-      {result && (
+      {isUnconfiguredAuth && evidence.length === 0 && (
+        <div
+          data-testid="docket-unconfigured-disclosure"
+          className="rounded-control border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/60"
+        >
+          {t.docketNotVerified || "Not verified from official records"} · Live federal docket lookup is not configured (COURTLISTENER_API_KEY unset).
+        </div>
+      )}
+
+      {result && !(isUnconfiguredAuth && evidence.length === 0) && (
         <div className={`space-y-4 rounded-control border p-4 ${
           isVerified
             ? "border-white/10 bg-white/5"

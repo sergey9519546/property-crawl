@@ -22,7 +22,8 @@ if (Array.isArray(SOURCE_CATALOG)) {
     }
   }
 }
-const { interpretAssessorParcel } = require('../enrichment/assessor-reading');
+const { interpretAssessorParcel, MARKET_CONVERSION } = require('../enrichment/assessor-reading');
+const ENROLLED_STATEWIDE_PREFIXES = ['FL-', 'CO-', 'NC-', 'NY-', 'WI-', 'AR-', 'CT-', 'NJ-'];
 const { isCompatibleNjSitusAddress } = require('../enrichment/nj-cadastral');
 
 function isParcelSitusMismatched(listing, parcel) {
@@ -247,6 +248,10 @@ function presentListing(listing) {
       presented.images = [];
     }
   }
+  const countyKey = resolveCountyKey(presented.state, presented.county);
+  const hasPrefixRule = Boolean(countyKey && ENROLLED_STATEWIDE_PREFIXES.some((prefix) => countyKey.startsWith(prefix)));
+  const interpretedEnrolled = countyKey ? interpretAssessorParcel({ countyKey }).enrolled : false;
+  presented.enrolledAssessor = Boolean(countyKey && interpretedEnrolled && (MARKET_CONVERSION[countyKey] || hasPrefixRule));
   return annotateListing(presented);
 }
 

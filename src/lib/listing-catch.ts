@@ -17,6 +17,9 @@ type CatchInput = {
   seniorLienRisk?: string | null;
   sourceFreshness?: { ageHours: number | null; status: string } | null;
   judgment?: unknown;
+  priorPostponements?: unknown;
+  trajectory?: { priorPostponements?: unknown } | null;
+  provenance?: { sourceFacts?: { priorPostponements?: unknown } | null } | null;
 };
 
 export type ListingCatch = { flags: string[]; notes: string[] };
@@ -56,6 +59,16 @@ export function listingCatch(listing: CatchInput, titleWarnings: string[] = []):
   const bid = num(listing.openingBid);
   const low = num(listing.estLow);
   const high = num(listing.estHigh);
+  const occupancy = text(listing.occupancy);
+  const isOccupied = Boolean(
+    occupancy && /occupied/i.test(occupancy) && !/\b(?:un|not|non[- ]?)occupied\b/i.test(occupancy),
+  );
+  const rawPostponements = num(
+    listing.trajectory?.priorPostponements
+    ?? listing.provenance?.sourceFacts?.priorPostponements
+    ?? listing.priorPostponements,
+  );
+  const priorPostponements = rawPostponements !== null && rawPostponements >= 2 ? Math.floor(rawPostponements) : 0;
   const sourceKey = String(listing.source || "").trim().toLowerCase();
   const hasFederalTaxLien = /internal revenue|federal tax lien/i.test(`${listing.seniorLienRisk || ""} ${titleWarnings.join(" ")}`);
   const isFederalReo = ["hud", "gsa", "usda", "fannie", "freddie", "fdic", "va"].includes(sourceKey) && !hasFederalTaxLien;
@@ -73,14 +86,19 @@ export function listingCatch(listing: CatchInput, titleWarnings: string[] = []):
       flags.push(`No opening bid is published prior to sale (typical for sheriff sales). Court judgment on execution is ${money(judgment)}; the upset price/reserve is announced morning of the sale.`);
     } else if (isFederalReo) {
       flags.push("No asking amount was published in the federal disposition feed — confirm current list price on the agency portal.");
+    } else if (priorPostponements >= 2 && isOccupied) {
+      flags.push(`No opening amount was published (${priorPostponements} prior postponements; reported ${occupancy!.toLowerCase()}), so the price is unknown until the sale.`);
+    } else if (priorPostponements >= 2) {
+      flags.push(`No opening amount was published (${priorPostponements} prior postponements), so the price is unknown until the sale.`);
+    } else if (isOccupied) {
+      flags.push(`No opening amount was published (reported ${occupancy!.toLowerCase()}), so the price is unknown until the sale.`);
     } else {
       flags.push("No opening amount was published, so the price is unknown until the sale.");
     }
   }
 
-  const occupancy = text(listing.occupancy);
   if (!occupancy) flags.push("Occupancy is not published: assume no interior inspection and budget for a possible eviction.");
-  else if (/occupied/i.test(occupancy) && !/\b(?:un|not|non[- ]?)occupied\b/i.test(occupancy)) flags.push(`Reported ${occupancy.toLowerCase()}: expect no interior access and possible eviction cost.`);
+  else if (isOccupied) flags.push(`Reported ${occupancy.toLowerCase()}: expect no interior access and possible eviction cost.`);
   else notes.push(`Reported ${occupancy.toLowerCase()}.`);
 
   const redemption = num(listing.redemptionDays);

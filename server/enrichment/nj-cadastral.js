@@ -35,14 +35,17 @@ const TOKEN_ABBREV = Object.freeze({
   ST: 'STREET', STR: 'STREET',
   AVE: 'AVENUE', AV: 'AVENUE',
   RD: 'ROAD',
-  DR: 'DRIVE',
+  DR: 'DRIVE', DRV: 'DRIVE',
   LN: 'LANE',
   CT: 'COURT',
   PL: 'PLACE',
   TER: 'TERRACE', TERR: 'TERRACE',
-  BLVD: 'BOULEVARD',
+  BLVD: 'BOULEVARD', BLV: 'BOULEVARD',
   PKWY: 'PARKWAY', PKY: 'PARKWAY',
   HWY: 'HIGHWAY',
+  WY: 'WAY',
+  CRES: 'CRESCENT',
+  MT: 'MOUNT',
   WLK: 'WALK',
   TRL: 'TRAIL',
   CIR: 'CIRCLE',
@@ -64,15 +67,16 @@ const STREET_SUFFIX_TOKENS = new Set([
   'STREET', 'ST', 'STR',
   'AVENUE', 'AVE', 'AV',
   'ROAD', 'RD',
-  'DRIVE', 'DR',
-  'BOULEVARD', 'BLVD',
+  'DRIVE', 'DR', 'DRV',
+  'BOULEVARD', 'BLVD', 'BLV',
   'LANE', 'LN',
   'COURT', 'CT',
   'PLACE', 'PL',
   'TERRACE', 'TER', 'TERR',
   'PARKWAY', 'PKWY', 'PKY',
   'HIGHWAY', 'HWY',
-  'WAY',
+  'WAY', 'WY',
+  'CRESCENT', 'CRES',
   'CIRCLE', 'CIR',
   'TRAIL', 'TRL',
   'PLAZA', 'PLZ',
@@ -226,13 +230,14 @@ function cleanStreetLineForComparison(rawAddress) {
     const segments = raw
       .split(',')
       .map((s) => s.trim())
-      .filter((s) => s && !/^(?:BLOCK|BLK|LOT|UNIT|APT|APARTMENT)\b/i.test(s));
+      .filter((s) => s && !/^(?:BLOCK|BLK|LOT|UNIT|APT|APARTMENT|STE|SUITE|FL|FLOOR|BLDG|BUILDING|RM|ROOM|#)\b/i.test(s) && !/^#\s*[A-Z0-9-]+$/i.test(s));
     raw = segments[0] || '';
   }
 
   raw = raw
-    .replace(/\s+(?:APT|APARTMENT|UNIT|STE|SUITE|FL|FLOOR|BLDG|BUILDING|RM|ROOM)\b.*$/i, '')
-    .replace(/\s+#\s*[A-Z0-9-]+\s*$/i, '')
+    .replace(/\s*\([^)]*(?:UNIT|APT|APARTMENT|STE|SUITE|FL|FLOOR|BLDG|BUILDING|RM|ROOM)\b[^)]*\)/gi, '')
+    .replace(/(?:[\s-]+)(?:APT|APARTMENT|UNIT|STE|SUITE|FL|FLR|FLOOR|BLDG|BUILDING|RM|ROOM)(?:\b|#).*$/i, '')
+    .replace(/(?<!\b(?:ROUTE|RT|RTE|HWY|HIGHWAY|CR|SR|US))\s*#\s*[A-Z0-9-]+(?:\s+(?:APT|APARTMENT|UNIT|STE|SUITE|FL|FLR|FLOOR|REAR|FRONT)\b.*)?\s*$/i, '')
     .replace(/,+$/, '')
     .trim();
   return raw;
@@ -253,11 +258,30 @@ function extractCoreStreetTokens(tokens, { stripLeadingHouse = true } = {}) {
   const nonSuffix = tokens
     .slice(startIndex)
     .filter((token) => !STREET_SUFFIX_TOKENS.has(token));
+  if (nonSuffix.length === 0) {
+    const rest = tokens.slice(startIndex);
+    const nonDir = rest.filter((token) => !DIRECTIONAL_TOKENS.has(token));
+    return nonDir.length > 0 ? nonDir : rest;
+  }
   if (nonSuffix.length > 1) {
     const withoutDirectionals = nonSuffix.filter((token) => !DIRECTIONAL_TOKENS.has(token));
     if (withoutDirectionals.length > 0) return withoutDirectionals;
   }
   return nonSuffix;
+}
+
+function normalizeHouseToken(token) {
+  return String(token || '').replace(/^0+(?=\d)/, '');
+}
+
+function coreStreetStem(token) {
+  const upper = String(token || '').toUpperCase();
+  const ord = upper.match(/^(\d+)(?:ST|ND|RD|TH)$/);
+  if (ord) return ord[1];
+  if (upper.length >= 5 && upper.endsWith('S') && !upper.endsWith('SS')) {
+    return upper.slice(0, -1);
+  }
+  return upper;
 }
 
 function isCompatibleNjSitusAddress(listingAddress, situsAddress) {
@@ -271,13 +295,19 @@ function isCompatibleNjSitusAddress(listingAddress, situsAddress) {
   const listingTokens = normalizeTokens(cleanedListing);
   if (!listingTokens.length || !/^\d+[A-Z]?$/.test(listingTokens[0])) return true;
 
-  if (listingTokens[0] !== situsTokens[0]) return false;
+  if (normalizeHouseToken(listingTokens[0]) !== normalizeHouseToken(situsTokens[0])) return false;
 
   const listingCore = extractCoreStreetTokens(listingTokens);
   const situsCore = extractCoreStreetTokens(situsTokens);
   if (listingCore.length > 0 && situsCore.length > 0) {
-    const situsSet = new Set(situsCore);
-    if (!listingCore.some((token) => situsSet.has(token))) return false;
+    const listingStems = listingCore.map(coreStreetStem);
+    const situsStems = situsCore.map(coreStreetStem);
+    const situsSet = new Set(situsStems);
+    if (!listingStems.some((stem) => situsSet.has(stem)) && listingStems.join('') !== situsStems.join('')) {
+      return false;
+    }
+  } else if (listingCore.length > 0 || situsCore.length > 0) {
+    return false;
   }
 
   return true;

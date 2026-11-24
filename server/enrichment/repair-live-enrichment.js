@@ -184,6 +184,8 @@ async function repairLiveEnrichment(options = {}) {
   const observedAt = new Date(nowMs).toISOString();
   const wallClock = typeof options.wallClock === 'function' ? options.wallClock : Date.now;
   const startedAt = wallClock();
+  const PASS4_RESERVE_MS = 4_000;
+  const remainingMs = () => (maxDurationMs > 0 ? Math.max(0, maxDurationMs - (wallClock() - startedAt)) : Infinity);
   const budgetExpired = () => maxDurationMs > 0 && (wallClock() - startedAt) >= maxDurationMs;
 
   const report = {
@@ -539,7 +541,33 @@ async function repairLiveEnrichment(options = {}) {
     }
   }
 
-  // Pass 4: Fast Local Deterministic Catch Summary Backfill ($0, runs before external ArcGIS calls)
+  // Pass 3c: Bounded Enrolled County & Statewide ArcGIS Assessor Backfill (before Pass 4, leaving >= 4s reserve)
+  if (!dryRun && options.includeAssessorBackfill !== false && !budgetExpired()
+      && typeof database?.getListings === 'function' && typeof database?.createListing === 'function') {
+    const remainingBeforeAssessor = remainingMs();
+    if (maxDurationMs === 0 || remainingBeforeAssessor > PASS4_RESERVE_MS) {
+      try {
+        const backfillAssessorFn = typeof options.backfillAssessorRolls === 'function'
+          ? options.backfillAssessorRolls
+          : require('./assessor-backfill').backfillAssessorRolls;
+        const assessorLimit = Math.min(100, Math.max(1, Number(options.assessorLimit) || 35));
+        const assessorBudgetMs = maxDurationMs > 0
+          ? Math.max(1, remainingBeforeAssessor - PASS4_RESERVE_MS)
+          : undefined;
+        report.assessorBackfill = await backfillAssessorFn({
+          db: database,
+          limit: assessorLimit,
+          fetchFn,
+          now: nowMs,
+          ...(assessorBudgetMs ? { maxDurationMs: assessorBudgetMs, wallClock } : {}),
+        });
+      } catch (err) {
+        report.errors.push(`assessorBackfill: ${err?.message || err}`);
+      }
+    }
+  }
+
+  // Pass 4: Fast Local Deterministic Catch Summary Backfill ($0, runs after assessor backfill with >= 4s reserve)
   if (!dryRun && options.includeCatchBackfill !== false && !budgetExpired()) {
     try {
       const { arbitrateTitleRisk } = require('../intelligence/title-risk-engine');
@@ -617,23 +645,6 @@ async function repairLiveEnrichment(options = {}) {
       });
     } catch (err) {
       report.errors.push(`catchBackfill: ${err?.message || err}`);
-    }
-  }
-
-  // Pass 5: Bounded Enrolled County & Statewide ArcGIS Assessor Backfill
-  if (!dryRun && options.includeAssessorBackfill !== false && !budgetExpired()
-      && typeof database?.getListings === 'function' && typeof database?.createListing === 'function') {
-    try {
-      const { backfillAssessorRolls } = require('./assessor-backfill');
-      const assessorLimit = Math.min(25, Math.max(1, Number(options.assessorLimit) || 25));
-      report.assessorBackfill = await backfillAssessorRolls({
-        db: database,
-        limit: assessorLimit,
-        fetchFn,
-        now: nowMs,
-      });
-    } catch (err) {
-      report.errors.push(`assessorBackfill: ${err?.message || err}`);
     }
   }
 

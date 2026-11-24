@@ -12,11 +12,11 @@ Primary users are distressed-property investors, foreclosure auction buyers, leg
 
 ## Product Purpose
 
-PerfectProperty is an evidence-first discovery and triage engine for distressed and government-sold real estate. Its purpose is to surface high-spread opportunities while forensically exposing the hidden statutory catches—such as unexpired redemption windows, surviving senior tax liens, uninspected tenant occupancy, and non-negotiable cash-to-close deposit requirements—before buyers wire certified funds. Success means a buyer never bids on a property unaware of its legal or financial liabilities.
+PerfectProperty is an evidence-first distressed auction and disposition underwriting operating system. Its purpose is to separate published auction terms, public-record benchmarks (L3 statutory assessor conversions, L2 qualified deed comps, and 100%-coverage HUD SAFMR rent-floor ceilings), docket postponement trajectories, and buyer assumptions—while forensically exposing surviving liens, statutory redemption clocks, holdover possession carry, and non-negotiable cash-to-close deposits before buyers wire certified funds. Success means a buyer never bids blind to legal liabilities or docket reality.
 
 ## Positioning
 
-"Zillow for distressed property, with an AI that reads the fine print and tells you if each one is actually a deal — and what the catch is." Unlike generic MLS aggregators or opaque auction marketplaces that cosmetically mask liabilities to pump bid activity, PerfectProperty treats missing facts as liabilities and highlights the catch first.
+Unlike retail MLS aggregators ("Zillow-style" portals) or seller-aligned auction sites that mask reserve traps behind nominal bids, PerfectProperty operates as a pre-bid fiduciary ledger and underwriting terminal: treating missing facts as explicit liabilities, surfacing the catch first, unlocking Walk-Away Max Bids (`MAO`) without fabricated ARVs, and automatically watching passed deals via Second-Look triggers.
 
 ## Operating Context
 

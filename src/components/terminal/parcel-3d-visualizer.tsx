@@ -6,6 +6,7 @@ import { AlertTriangle, Box, Compass, Layers, LoaderCircle, MapPin, RotateCcw } 
 import { Listing } from "@/data/listings";
 import { inspectParcelBoundaryInputs } from "@/lib/listing-map-policy";
 import { fetchParcelBoundaryCached } from "@/lib/parcel-boundary-cache";
+import { hasParcelBoundaryCoverage } from "@/lib/parcel-boundary-coverage";
 import { useLocale } from "@/components/i18n/locale-provider";
 import { formatLocaleNumber } from "@/lib/i18n/translator";
 
@@ -253,8 +254,10 @@ function Fact({ label, value }: { label: string; value: string }) {
 export function Parcel3DVisualizer({ listing }: Parcel3DProps) {
   const { locale, messages, format } = useLocale();
   const t = messages.docketParcel;
-  const preflight = useMemo(() => inspectParcelBoundaryInputs(listing), [listing]);
-  const unavailableMessage = preflight.message || t.parcelUnavailableMsg;
+  const hasCoverage = hasParcelBoundaryCoverage(listing.state, listing.county);
+  const rawPreflight = useMemo(() => inspectParcelBoundaryInputs(listing), [listing]);
+  const preflight = useMemo(() => (hasCoverage ? rawPreflight : { ...rawPreflight, eligible: false }), [hasCoverage, rawPreflight]);
+  const unavailableMessage = !hasCoverage ? "Parcel boundary GIS not enrolled for this state/county" : (preflight.message || t.parcelUnavailableMsg);
   const [loadState, setLoadState] = useState<LoadState>(() =>
     preflight.eligible
       ? { status: "loading", feature: null, message: null }
@@ -551,7 +554,7 @@ export function Parcel3DVisualizer({ listing }: Parcel3DProps) {
           </div>
         ) : null}
 
-        {loadState.status === "unavailable" ? (
+        {loadState.status === "unavailable" && !hasCoverage ? (<p className="px-4 py-3 text-xs text-ink-3" data-testid="parcel-boundary-not-enrolled">Parcel boundary GIS not enrolled for this state/county</p>) : loadState.status === "unavailable" ? (
           <div className="mx-auto flex min-h-[160px] max-w-lg flex-col items-center justify-center px-6 py-6 text-center">
             <span className="mb-3 grid h-10 w-10 place-items-center rounded-full border border-catch/30 bg-catch-wash">
               <AlertTriangle className="h-5 w-5 text-catch-ink" />

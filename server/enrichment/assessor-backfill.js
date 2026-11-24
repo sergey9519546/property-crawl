@@ -32,9 +32,9 @@ function countyEnrolled(state, county) {
 
 function candidateReady(listing) {
   if (!listing || typeof listing !== 'object') return false;
-  // The roll marker is the authority — a row that already carries a roll (or
+  // The roll marker is the authority — rows carrying a publisher assessed figure without an attached assessorRoll remain eligible for parcel-roll harvest.
   // an assessed figure from another enrichment path) is not a backfill target.
-  if (listing.assessorParcel || listing.provenance?.derivedFields?.assessorRoll || Number(listing.assessed) > 0) return false;
+  if (listing.assessorParcel || listing.provenance?.derivedFields?.assessorRoll) return false;
   const lat = Number(listing.lat);
   const lng = Number(listing.lng);
   const hasCoords = Number.isFinite(lat) && Number.isFinite(lng) && !(lat === 0 && lng === 0);
@@ -52,7 +52,7 @@ function candidateReady(listing) {
   return countyEnrolled(listing.state, listing.county);
 }
 
-async function resolveNjCadastralBatch({ db, fetchFn, now, limit = 15, perStateLimit = 60, cachePath, logger = null } = {}) {
+async function resolveNjCadastralBatch({ db, fetchFn, now, limit = 15, perStateLimit = 60, cachePath, logger = null, maxDurationMs, wallClock } = {}) {
   const out = { considered: 0, njEnriched: 0, persisted: 0, failed: 0, notFound: 0 };
   if (!db || typeof db.getListings !== 'function' || typeof db.createListing !== 'function' || limit <= 0) {
     return out;
@@ -61,7 +61,11 @@ async function resolveNjCadastralBatch({ db, fetchFn, now, limit = 15, perStateL
   const cache = loadCache(effectiveCachePath);
   const cacheTtlMs = DEFAULT_CACHE_TTL_MS;
   const missTtlMs = DEFAULT_MISS_TTL_MS;
+  const clock = typeof wallClock === 'function' ? wallClock : Date.now;
+  const startedAt = clock();
+  const budgetMs = Number.isFinite(Number(maxDurationMs)) && Number(maxDurationMs) > 0 ? Number(maxDurationMs) : 0;
   const nowMs = Number.isFinite(now) ? now : Date.now();
+  const budgetExpired = () => budgetMs > 0 && (clock() - startedAt) >= budgetMs;
   let page = { listings: [] };
   try {
     page = await db.getListings({ state: 'NJ', missingAssessorRoll: true, limit: perStateLimit });
@@ -88,6 +92,7 @@ async function resolveNjCadastralBatch({ db, fetchFn, now, limit = 15, perStateL
 
   let cacheDirty = false;
   for (const { row, key } of candidates) {
+    if (budgetExpired()) break;
     out.considered += 1;
     try {
       const res = await enrichNjListing(row, { fetchFn, now: nowMs });
@@ -117,7 +122,7 @@ async function resolveNjCadastralBatch({ db, fetchFn, now, limit = 15, perStateL
   return out;
 }
 
-async function backfillAssessorRolls({ db, fetchFn, now, limit = 30, perStateLimit = 60, cachePath, logger = null } = {}) {
+async function backfillAssessorRolls({ db, fetchFn, now, limit = 30, perStateLimit = 60, cachePath, logger = null, maxDurationMs, wallClock } = {}) {
   const result = { considered: 0, harvested: 0, njEnriched: 0, persisted: 0, failed: 0, notFound: 0, skipped: null };
   if (!db || typeof db.getListings !== 'function' || typeof db.createListing !== 'function') {
     result.skipped = 'db-unavailable';
@@ -134,7 +139,11 @@ async function backfillAssessorRolls({ db, fetchFn, now, limit = 30, perStateLim
   const cache = loadCache(cachePath || DEFAULT_CACHE_PATH);
   const cacheTtlMs = DEFAULT_CACHE_TTL_MS;
   const missTtlMs = DEFAULT_MISS_TTL_MS;
+  const clock = typeof wallClock === 'function' ? wallClock : Date.now;
+  const startedAt = clock();
+  const budgetMs = Number.isFinite(Number(maxDurationMs)) && Number(maxDurationMs) > 0 ? Number(maxDurationMs) : 0;
   const nowMs = Number.isFinite(now) ? now : Date.now();
+  const budgetExpired = () => budgetMs > 0 && (clock() - startedAt) >= budgetMs;
   const seen = new Set();
   const candidates = [];
   const stateBuckets = [];
@@ -186,6 +195,7 @@ async function backfillAssessorRolls({ db, fetchFn, now, limit = 30, perStateLim
       fetchFn,
       now,
       cachePath,
+      ...(budgetMs > 0 ? { maxDurationMs: Math.max(1, budgetMs - (clock() - startedAt)), wallClock: clock } : {}),
       onHarvested: async (listing) => {
         const derivedFields = listing?.provenance?.derivedFields;
         const roll = derivedFields?.assessorRoll;
@@ -218,7 +228,7 @@ async function backfillAssessorRolls({ db, fetchFn, now, limit = 30, perStateLim
   }
 
   const remainingForNj = Math.max(0, limit - result.considered);
-  if (remainingForNj > 0) {
+  if (remainingForNj > 0 && !budgetExpired()) {
     const njOut = await resolveNjCadastralBatch({
       db,
       fetchFn,
@@ -226,6 +236,7 @@ async function backfillAssessorRolls({ db, fetchFn, now, limit = 30, perStateLim
       limit: remainingForNj,
       perStateLimit,
       cachePath,
+      ...(budgetMs > 0 ? { maxDurationMs: Math.max(1, budgetMs - (clock() - startedAt)), wallClock: clock } : {}),
       logger,
     });
     result.njEnriched = njOut.njEnriched;

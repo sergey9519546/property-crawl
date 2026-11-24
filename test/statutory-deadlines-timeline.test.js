@@ -104,3 +104,26 @@ test('Timeline Progress & Carry Math: computes accurate elapsed ratio and lockup
   const progressPct = Math.min(100, Math.max(0, Math.round((elapsedDays / totalDays) * 100)));
   assert.equal(progressPct, 50);
 });
+
+test('Federal REO sources suppress phantom state redemption unless IRS lien applies', () => {
+  const hudAl = computeStatutoryDeadlinesAndCarry({
+    saleDate: '2026-10-01',
+    state: 'AL',
+    source: 'hud',
+    redemptionDays: 365,
+    purchasePrice: 150000,
+  });
+  assert.equal(hudAl.stateRedemptionDays, 0);
+  assert.equal(hudAl.irsRedemptionDays, 0);
+  assert.equal(hudAl.effectiveLockupDays, 0);
+
+  const hudWithIrs = computeStatutoryDeadlinesAndCarry({
+    saleDate: '2026-10-01',
+    state: 'OH',
+    source: 'hud',
+    hasIrsLien: true,
+    purchasePrice: 150000,
+  });
+  assert.equal(hudWithIrs.irsRedemptionDays, 120);
+  assert.equal(hudWithIrs.effectiveLockupDays, 120);
+});

@@ -416,7 +416,7 @@ function buildPropertyDossier(listing, { observations = { records: {}, signals: 
     statutoryStayExhausted: Boolean(effectiveTrajectory?.statutoryStayExhausted || listing.statutoryStayExhausted),
     bankruptcyStayActive: Boolean(titleRisk?.bankruptcyStay?.stayEffective || listing.bankruptcyStayActive),
   };
-  const auctionMicrostructure = evaluateAuctionProceedProbability(listingForMicrostructure, effectiveCountyStats);
+  const auctionMicrostructure = evaluateAuctionProceedProbability(listingForMicrostructure, effectiveCountyStats, { source: listing.source });
   // Zero-Fabrication: a published opening bid is a minimum asking term, not a
   // realized gavel price, and the canonical judgment column is `judgment`
   // (LISTING_SELECT in server/db/client.js); `judgmentAmount` is only a legacy
