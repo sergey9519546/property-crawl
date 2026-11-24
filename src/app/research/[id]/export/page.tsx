@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import { WorkspaceShell } from '@/components/workspace/workspace-shell';
 import { DecisionPacketView } from '@/components/research/decision-packet-view';
 import { hasPermission, readWorkspaceSession, workspaceSessionConfiguration } from '@/lib/workspace-session';
+import { currentMember } from '@/lib/member-account';
 import { buildDecisionPacket } from '@server/export/decision-packet';
 import { getMessages } from '@/lib/i18n/messages';
 import { getRequestLocale } from '@/lib/i18n/server';
@@ -52,10 +53,16 @@ async function fetchListingOrCase(id: string) {
       });
       const configuration = workspaceSessionConfiguration();
       const session = readWorkspaceSession(sessionRequest);
-      if (configuration.configured && session.authenticated && hasPermission(session.role, 'canExportDossier')) {
+      const member = !session.authenticated && configuration.configured ? await currentMember(sessionRequest) : null;
+      const canReadMemberCase = Boolean(member?.entitled);
+      if (configuration.configured && ((session.authenticated && hasPermission(session.role, 'canExportDossier')) || canReadMemberCase)) {
+        const authHeaders: Record<string, string> = {
+          'x-scraper-token': configuration.credential,
+          ...(canReadMemberCase && member?.id ? { 'x-pp-account': member.id } : {}),
+        };
         const caseListRes = await fetch(`${baseUrl}/api/workspace/cases?listingId=${encodeURIComponent(listing.id)}`, {
           cache: 'no-store',
-          headers: { 'x-scraper-token': configuration.credential },
+          headers: authHeaders,
           signal: AbortSignal.timeout(12_000),
         });
         if (caseListRes.ok) {
@@ -64,7 +71,7 @@ async function fetchListingOrCase(id: string) {
           if (firstCase?.id) {
             const caseDetailRes = await fetch(`${baseUrl}/api/workspace/cases/${encodeURIComponent(firstCase.id)}`, {
               cache: 'no-store',
-              headers: { 'x-scraper-token': configuration.credential },
+              headers: authHeaders,
               signal: AbortSignal.timeout(12_000),
             });
             if (caseDetailRes.ok) {
@@ -91,10 +98,15 @@ async function fetchListingOrCase(id: string) {
       });
       const configuration = workspaceSessionConfiguration();
       const session = readWorkspaceSession(sessionRequest);
-      if (configuration.configured && session.authenticated && hasPermission(session.role, 'canExportDossier')) {
+      const member = !session.authenticated && configuration.configured ? await currentMember(sessionRequest) : null;
+      const canReadMemberCase = Boolean(member?.entitled);
+      if (configuration.configured && ((session.authenticated && hasPermission(session.role, 'canExportDossier')) || canReadMemberCase)) {
         const caseRes = await fetch(`${baseUrl}/api/workspace/cases/${encodeURIComponent(decodedId)}`, {
           cache: 'no-store',
-          headers: { 'x-scraper-token': configuration.credential },
+          headers: {
+            'x-scraper-token': configuration.credential,
+            ...(canReadMemberCase && member?.id ? { 'x-pp-account': member.id } : {}),
+          },
           signal: AbortSignal.timeout(12_000),
         });
         if (caseRes.ok) {

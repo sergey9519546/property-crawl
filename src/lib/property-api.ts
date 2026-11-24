@@ -105,7 +105,7 @@ export async function proxyPropertyApi(request: Request, dependencies: {
   if (edgeSecret) headers.set("x-edge-secret", edgeSecret);
   // Member scope: set only by proxyMemberPropertyApi after it verified the session.
   if (dependencies.operatorToken && dependencies.accountId) headers.set("x-pp-account", dependencies.accountId);
-  else {
+  else if (!dependencies.operatorToken) {
     const authorization = request.headers.get("authorization");
     if (authorization) headers.set("Authorization", authorization);
   }

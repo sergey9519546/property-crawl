@@ -257,6 +257,12 @@ function isPartialOrContinuationRun(report, run = {}) {
     r?.truncated === true ||
     rReport?.truncated === true ||
     listings?.truncated === true ||
+    rep?.resumedFromCheckpoint === true ||
+    r?.resumedFromCheckpoint === true ||
+    rReport?.resumedFromCheckpoint === true ||
+    listings?.resumedFromCheckpoint === true ||
+    Number(rep?.pagesPreviouslyCommitted || r?.pagesPreviouslyCommitted || rReport?.pagesPreviouslyCommitted || 0) > 0 ||
+    Number(rep?.statesPreviouslyCompleted || r?.statesPreviouslyCompleted || rReport?.statesPreviouslyCompleted || 0) > 0 ||
     (rep?.nextCursor != null && rep.nextCursor !== '') ||
     (r?.nextCursor != null && r.nextCursor !== '') ||
     (rReport?.nextCursor != null && rReport.nextCursor !== '') ||
@@ -732,17 +738,27 @@ class IngestionScheduler {
             circuitOpen: false,
             driftAlarm: driftAlarm && driftAlarm.hasDrift ? driftAlarm : null
           });
-          const isPartial = isPartialOrContinuationRun(rawReport, items); this.sourceLastRun.set(scraper.sourceKey, { at: Date.now(), partial: isPartial, failed: false, retries: 0 });
+          const isPartial = isPartialOrContinuationRun(rawReport, items);
           const nextCursor = rawReport.nextCursor ?? items?.nextCursor ?? null;
           const continuationToken = rawReport.continuationToken ?? rawReport.nextContinuationToken ?? items?.continuationToken ?? items?.nextContinuationToken ?? null;
           const nextContinuationToken = rawReport.nextContinuationToken ?? items?.nextContinuationToken ?? continuationToken;
           const partialSweep = Boolean(rawReport.partialSweep === true || items?.partialSweep === true);
-          const truncated = Boolean(coverage.truncated === true || rawReport.truncated === true || items?.truncated === true || isPartial);
+          const hasPendingContinuation = Boolean(
+            partialSweep ||
+            coverage.truncated === true ||
+            rawReport.truncated === true ||
+            items?.truncated === true ||
+            (nextCursor != null && nextCursor !== '') ||
+            (continuationToken != null && continuationToken !== '') ||
+            (nextContinuationToken != null && nextContinuationToken !== '')
+          );
+          this.sourceLastRun.set(scraper.sourceKey, { at: Date.now(), partial: hasPendingContinuation, failed: false, retries: 0 });
+          const truncated = Boolean(coverage.truncated === true || rawReport.truncated === true || items?.truncated === true || hasPendingContinuation);
           const hasFailures = hasReportFailures(rawReport);
-          const complete = (isPartial || hasFailures) ? false : (coverage.complete === true || rawReport.complete === true);
+          const complete = (hasPendingContinuation || hasFailures) ? false : (coverage.complete === true || rawReport.complete === true);
           const fullSweepComplete = (isPartial || hasFailures) ? false : (coverage.fullSweepComplete === true || rawReport.fullSweepComplete === true);
           const report = (scraper.lastRunReport && typeof scraper.lastRunReport === 'object') || isPartial || items?.report || isListingEnvelope
-            ? { outcome: coverage.outcome || (isPartial ? 'partial' : null), truncated, complete, fullSweepComplete, partialSweep, nextCursor, continuationToken, nextContinuationToken, scope: coverage.acquisitionScope || null, coverage, ...(rawReport.county ? { county: rawReport.county } : {}), ...(rawReport.state ? { state: rawReport.state } : {}), ...(Array.isArray(rawReport.completedCounties) ? { completedCounties: rawReport.completedCounties } : {}), ...(Array.isArray(rawReport.attemptedStates) ? { attemptedStates: rawReport.attemptedStates } : {}), ...(Array.isArray(rawReport.completedStates) ? { completedStates: rawReport.completedStates } : {}), ...(Array.isArray(rawReport.failures) && rawReport.failures.length ? { failures: rawReport.failures } : {}), ...(Array.isArray(rawReport.statesFailed) && rawReport.statesFailed.length ? { statesFailed: rawReport.statesFailed } : {}), ...(Array.isArray(rawReport.failedCounties) && rawReport.failedCounties.length ? { failedCounties: rawReport.failedCounties } : {}), ...(rawReport.sweepStartedAt ? { sweepStartedAt: rawReport.sweepStartedAt } : {}), ...(driftAlarm && driftAlarm.hasDrift ? { driftAlarm } : {}) }
+            ? { outcome: coverage.outcome || (hasPendingContinuation ? 'partial' : null), truncated, complete, fullSweepComplete, partialSweep, nextCursor, continuationToken, nextContinuationToken, scope: coverage.acquisitionScope || null, coverage, ...(rawReport.county ? { county: rawReport.county } : {}), ...(rawReport.state ? { state: rawReport.state } : {}), ...(Array.isArray(rawReport.completedCounties) ? { completedCounties: rawReport.completedCounties } : {}), ...(Array.isArray(rawReport.attemptedStates) ? { attemptedStates: rawReport.attemptedStates } : {}), ...(Array.isArray(rawReport.completedStates) ? { completedStates: rawReport.completedStates } : {}), ...(Array.isArray(rawReport.failures) && rawReport.failures.length ? { failures: rawReport.failures } : {}), ...(Array.isArray(rawReport.statesFailed) && rawReport.statesFailed.length ? { statesFailed: rawReport.statesFailed } : {}), ...(Array.isArray(rawReport.failedCounties) && rawReport.failedCounties.length ? { failedCounties: rawReport.failedCounties } : {}), ...(rawReport.sweepStartedAt ? { sweepStartedAt: rawReport.sweepStartedAt } : {}), ...(rawReport.pagesPreviouslyCommitted != null ? { pagesPreviouslyCommitted: rawReport.pagesPreviouslyCommitted } : {}), ...(rawReport.statesPreviouslyCompleted != null ? { statesPreviouslyCompleted: rawReport.statesPreviouslyCompleted } : {}), ...(typeof rawReport.resumedFromCheckpoint === 'boolean' ? { resumedFromCheckpoint: rawReport.resumedFromCheckpoint } : {}), ...(driftAlarm && driftAlarm.hasDrift ? { driftAlarm } : {}) }
             : (driftAlarm && driftAlarm.hasDrift ? { driftAlarm } : null);
           let observationError = null;
           try {

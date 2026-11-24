@@ -113,6 +113,8 @@ export function AccountPanel() {
   const params = useSearchParams();
   const session = useWorkspaceSession();
   const checkout = params.get("checkout");
+  const initialTier: "pro" | "desk" = params.get("tier") === "desk" ? "desk" : "pro";
+  const [selectedTier, setSelectedTier] = React.useState<"pro" | "desk">(initialTier);
   const [account, setAccount] = React.useState<Account | null | undefined>(undefined);
   const [price, setPrice] = React.useState<Price>(null);
   const [checkoutReady, setCheckoutReady] = React.useState<boolean | null>(null);
@@ -128,11 +130,11 @@ export function AccountPanel() {
 
   React.useEffect(() => {
     void load().catch(() => setAccount(null));
-    void fetch("/api/checkout", { cache: "no-store" }).then(json).then((body) => {
+    void fetch(`/api/checkout?tier=${encodeURIComponent(selectedTier)}`, { cache: "no-store" }).then(json).then((body) => {
       setCheckoutReady(body.configured === true);
       setPrice((body.price as Price) ?? null);
     }).catch(() => setCheckoutReady(false));
-  }, [load]);
+  }, [load, selectedTier]);
 
   React.useEffect(() => {
     if (checkout !== "success" || !account || account.entitled) return;
@@ -145,10 +147,14 @@ export function AccountPanel() {
     return () => window.clearInterval(timer);
   }, [checkout, account, load]);
 
-  async function post(path: string, label: string, method = "POST") {
+  async function post(path: string, label: string, method = "POST", payload?: Record<string, unknown>) {
     setPending(label); setError("");
     try {
-      const response = await fetch(path, { method, credentials: "same-origin" });
+      const response = await fetch(path, {
+        method,
+        credentials: "same-origin",
+        ...(payload ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) } : {}),
+      });
       const body = await json(response);
       if (!response.ok) throw new Error(typeof body.error === "string" ? body.error : "The request failed");
       return body;
@@ -193,9 +199,27 @@ export function AccountPanel() {
           {checkout === "cancelled" && <p className="mt-2 text-ink-3">{m.accountUi.checkoutCancelled}</p>}
           {checkoutReady === false && <p className="mt-3 rounded-xl bg-catch-wash p-3 text-catch-ink">{m.accountUi.checkoutNotConfigured}</p>}
           {checkoutReady && (
-            <button type="button" disabled={Boolean(pending)} onClick={async () => { const body = await post("/api/checkout", "checkout"); if (typeof body?.url === "string") window.location.assign(body.url); }} className={`${button} mt-4 bg-ink text-white hover:bg-ink-2`}>
-              {pending === "checkout" ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}{m.accountUi.subscribeCta}{label ? ` · ${label}` : ""}
-            </button>
+            <div className="mt-4 space-y-3">
+              <div className="inline-flex rounded-control border border-line bg-paper p-1 text-xs font-semibold">
+                <button
+                  type="button"
+                  onClick={() => setSelectedTier("pro")}
+                  className={`rounded-control px-3 py-1.5 transition ${selectedTier === "pro" ? "bg-ink text-white" : "text-ink-2 hover:text-ink"}`}
+                >
+                  Pro ($39/mo)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedTier("desk")}
+                  className={`rounded-control px-3 py-1.5 transition ${selectedTier === "desk" ? "bg-ink text-white" : "text-ink-2 hover:text-ink"}`}
+                >
+                  Desk ($149/mo)
+                </button>
+              </div>
+              <button type="button" disabled={Boolean(pending)} onClick={async () => { const body = await post("/api/checkout", "checkout", "POST", { tier: selectedTier }); if (typeof body?.url === "string") window.location.assign(body.url); }} className={`${button} bg-ink text-white hover:bg-ink-2`}>
+                {pending === "checkout" ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}{m.accountUi.subscribeCta}{label ? ` · ${label}` : ""}
+              </button>
+            </div>
           )}
         </div>
       )}

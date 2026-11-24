@@ -43,6 +43,15 @@ class UsdaScrapeError extends Error {
   }
 }
 
+function parseOffset(value) {
+  if (value == null) return 0;
+  const raw = (typeof value === 'object' && !Array.isArray(value))
+    ? (value.continuationToken ?? value.cursor ?? value.nextCursor ?? value.offset ?? value.token)
+    : value;
+  const n = Number.parseInt(raw, 10);
+  return Number.isInteger(n) && n >= 0 ? n : 0;
+}
+
 class UsdaResalesScraper extends BaseScraper {
   constructor(options = {}) {
     super({
@@ -58,13 +67,11 @@ class UsdaResalesScraper extends BaseScraper {
       1,
       Number(options.maxStates || process.env.USDA_MAX_STATES || ((process.env.VERCEL === '1' || process.env.NOW_REGION) ? 10 : MAX_PUBLISHER_JURISDICTIONS)),
     );
-    const initialOffset = Number.parseInt(options.stateOffset ?? options.cursor ?? options.checkpoint ?? 0, 10);
-    this.stateOffset = Number.isInteger(initialOffset) && initialOffset >= 0 ? initialOffset : 0;
+    this.stateOffset = parseOffset(options.stateOffset ?? options.cursor ?? options.checkpoint ?? 0);
   }
 
   setCheckpoint(checkpoint) {
-    const n = Number.parseInt(checkpoint, 10);
-    this.stateOffset = Number.isInteger(n) && n >= 0 ? n : 0;
+    this.stateOffset = parseOffset(checkpoint);
     return this;
   }
 

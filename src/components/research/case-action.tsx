@@ -17,7 +17,7 @@ export function CaseAction({ listingId, className, label }: { listingId: string;
   const [error, setError] = React.useState("");
 
   async function openCase() {
-    if (!session.authenticated) { session.requestUnlock(); return; }
+    if (!session.memberTools) { if (session.member) router.push("/pricing"); else session.requestUnlock(); return; }
     setBusy(true); setError("");
     try {
       const underwriteScenario = readUnderwriteScenario(listingId);

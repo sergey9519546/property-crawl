@@ -57,8 +57,17 @@ async function handleAlerts(req, res) {
     if (action === 'dispatch_digest') {
       const authenticatedUserId = requireUserIdentity(req, res);
       if (!authenticatedUserId) return;
+      let recipient = (recipientEmail || req.body?.recipient || req.body?.email || '').trim();
+      if (authenticatedUserId.startsWith('account:')) {
+        const accountId = authenticatedUserId.slice('account:'.length);
+        const member = await require('../accounts/store').accountServiceFor(db).get(accountId).catch(() => null);
+        if (!member?.email) return res.status(403).json({ error: 'Member email could not be verified' });
+        if (recipient && recipient.toLowerCase() !== String(member.email).toLowerCase()) {
+          return res.status(403).json({ error: 'Members can only dispatch digests to their signed-in email address' });
+        }
+        recipient = member.email;
+      }
       const saved = await db.getSavedDeals(authenticatedUserId);
-      const recipient = (recipientEmail || req.body?.recipient || req.body?.email || '').trim();
       const evaluation = {
         results: saved.map((deal) => ({ identityKey: deal.id, listingId: deal.id, status: 'match' })),
         matches: saved.map((deal) => ({ listingId: deal.id, listing: deal })),

@@ -38,7 +38,7 @@ const TIERS = [
     price: "$39",
     cadence: "per month",
     ctaLabel: "Subscribe in account",
-    ctaHref: "/account",
+    ctaHref: "/account?tier=pro",
     highlight: true,
     features: [
       "Saved hunts & email match digests across states and counties",
@@ -52,7 +52,7 @@ const TIERS = [
     price: "$149",
     cadence: "per month",
     ctaLabel: "Configure team access",
-    ctaHref: "/account",
+    ctaHref: "/account?tier=desk",
     highlight: false,
     features: [
       "Everything in Pro Underwriting plus team workflows",

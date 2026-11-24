@@ -55,7 +55,7 @@ export function ResearchInbox() {
   const requestGate = React.useRef(createRequestGate()).current;
 
   const refresh = React.useCallback(async (quiet = false) => {
-    if (!session.authenticated) return;
+    if (!session.memberTools) return;
     const token = requestGate.begin();
     if (!quiet) setLoading(true);
     try {
@@ -74,14 +74,14 @@ export function ResearchInbox() {
       setError(caught instanceof Error ? caught.message : "Research cases could not be loaded");
     }
     finally { if (requestGate.isCurrent(token) && !quiet) setLoading(false); }
-  }, [session.authenticated, state]);
+  }, [session.memberTools, state]);
 
   React.useEffect(() => { void refresh(); }, [refresh]);
   React.useEffect(() => {
-    if (!session.authenticated) return;
+    if (!session.memberTools) return;
     const timer = window.setInterval(() => { if (document.visibilityState === "visible") void refresh(true); }, 8_000);
     return () => window.clearInterval(timer);
-  }, [refresh, session.authenticated]);
+  }, [refresh, session.memberTools]);
 
   function browserListingIds() {
     try {
@@ -123,7 +123,7 @@ export function ResearchInbox() {
   return <div className="mx-auto max-w-[1380px] px-5 py-10 sm:px-8">
     <div className="flex flex-wrap items-end justify-between gap-5">
       <div><p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-ink"><Inbox size={17} /> {m.workspacePages.researchEyebrow}</p><h1 className="mt-3 max-w-4xl text-4xl font-semibold leading-tight tracking-tight sm:text-6xl">{m.workspacePages.researchHeading}</h1><p className="mt-4 max-w-3xl text-sm leading-7 text-ink-2">{m.workspacePages.researchSub}</p></div>
-      <button type="button" onClick={() => void refresh()} disabled={loading || !session.authenticated} className="inline-flex items-center gap-2 rounded-control border border-line bg-card px-4 py-2.5 text-sm font-semibold disabled:opacity-50"><RefreshCw size={15} className={loading ? "animate-spin" : ""} />{m.listingsUi.refreshBtn}</button>
+      <button type="button" onClick={() => void refresh()} disabled={loading || !session.memberTools} className="inline-flex items-center gap-2 rounded-control border border-line bg-card px-4 py-2.5 text-sm font-semibold disabled:opacity-50"><RefreshCw size={15} className={loading ? "animate-spin" : ""} />{m.listingsUi.refreshBtn}</button>
     </div>
 
     <div className="mt-8 grid gap-5 lg:grid-cols-[1fr_330px]">

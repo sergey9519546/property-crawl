@@ -36,7 +36,10 @@ export async function POST(request: Request) {
     html: null,
     text: `Sign in to PerfectProperty:\n\n${link}\n\nThe link works once and expires in 15 minutes. If you did not ask for it, ignore this email.`,
   });
-  if (mail.delivery === "unavailable") return Response.json({ error: "The sign-in email could not be sent" }, { status: 503, headers });
+  const resendTransportFailure = Boolean(mail.reason && (mail.reason.startsWith("http-") || mail.reason === "request-failed"));
+  if (mail.delivery === "unavailable" || resendTransportFailure || (process.env.NODE_ENV === "production" && mail.delivery === "local")) {
+    return Response.json({ error: "The sign-in email could not be sent" }, { status: 503, headers });
+  }
   return Response.json({
     sent: true,
     delivery: mail.delivery,

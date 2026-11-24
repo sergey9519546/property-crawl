@@ -475,6 +475,7 @@ class ServiceLinkScraper extends BaseScraper {
       scope: this.getCollectionScope(),
       sweepStartedAt: this.sweepStartedAt,
       pagesPreviouslyCommitted: this.pagesCommitted,
+      resumedFromCheckpoint: Boolean(validContinuationToken(this.resumeToken) || this.pagesCommitted > 0),
     };
     this.lastRunReport = report;
 
@@ -542,7 +543,7 @@ class ServiceLinkScraper extends BaseScraper {
       report.outcome = listings.length ? 'success' : 'empty';
       report.truncated = report.continuationStopped === true;
       report.complete = report.truncated !== true && report.failures.length === 0;
-      report.fullSweepComplete = report.complete && Boolean(this.sweepStartedAt);
+      report.fullSweepComplete = report.complete && Boolean(this.sweepStartedAt) && !report.resumedFromCheckpoint;
       const hasMoreRecords = report.continuationStopped === true && Boolean(report.nextContinuationToken);
       report.partialSweep = report.truncated === true;
       report.nextCursor = hasMoreRecords ? report.nextContinuationToken : null;

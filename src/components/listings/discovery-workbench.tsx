@@ -714,6 +714,16 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
       `/listings/${encodeURIComponent(id)}?returnTo=${encodeURIComponent(discoveryUrl(filters))}`,
     ), [router, filters]);
   const exportCurrent = (format: "csv" | "json" = "csv") => {
+    if (showSavedOnly) {
+      if (!session.memberTools) {
+        session.requestUnlock();
+        return;
+      }
+      const params = discoverySearchParams(filters, { format });
+      params.set("saved", "true");
+      window.location.assign(`/api/export?${params}`);
+      return;
+    }
     if (!session.authenticated) {
       session.requestUnlock();
       return;

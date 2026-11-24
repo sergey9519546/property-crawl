@@ -81,7 +81,7 @@ export function ResearchCase({ caseId }: { caseId: string }) {
   const [relationship, setRelationship] = React.useState("sale_terms");
 
   const load = React.useCallback(async () => {
-    if (!session.authenticated) return;
+    if (!session.memberTools) return;
     setLoading(true);
     try {
       const response = await fetch(`/api/workspace/cases/${encodeURIComponent(caseId)}`, { cache: "no-store", credentials: "same-origin" });
@@ -94,7 +94,7 @@ export function ResearchCase({ caseId }: { caseId: string }) {
       if (result.case.reconsideration?.conditions?.length) { setMode(result.case.reconsideration.mode); setConditions(result.case.reconsideration.conditions); }
     } catch (caught) { setError(caught instanceof Error ? caught.message : t.rcErrLoadCase); }
     finally { setLoading(false); }
-  }, [caseId, session.authenticated, t.rcErrLoadCase]);
+  }, [caseId, session.memberTools, t.rcErrLoadCase]);
 
   React.useEffect(() => { void load(); }, [load]);
 

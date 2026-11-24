@@ -58,18 +58,61 @@ function createScrapersHandler(dependencies = {}) {
           keyToName.set(s.sourceKey, s.name);
         }
       }
+      let catalogEntries = [];
+      let listingSourceAdmissionFn = null;
       try {
-        const { SOURCE_CATALOG } = require('../sources/catalog');
-        if (Array.isArray(SOURCE_CATALOG)) {
-          for (const entry of SOURCE_CATALOG) {
-            if (entry?.key && entry?.name && !keyToName.has(entry.key)) {
-              keyToName.set(entry.key, entry.name);
+        const catalog = require('../sources/catalog');
+        if (Array.isArray(catalog.SOURCE_CATALOG)) {
+          catalogEntries = catalog.SOURCE_CATALOG;
+          for (const entry of catalogEntries) {
+            const k = entry?.adapterKey || entry?.id;
+            const label = entry?.name || entry?.label;
+            if (k && label && !keyToName.has(k)) {
+              keyToName.set(k, label);
             }
           }
+        }
+        if (typeof catalog.listingSourceAdmission === 'function') {
+          listingSourceAdmissionFn = catalog.listingSourceAdmission;
         }
       } catch {
         // Optional catalog metadata
       }
+
+      const blockedCatalogKeys = new Set();
+      const retiredCatalogKeys = new Set();
+      for (const entry of catalogEntries) {
+        if (!entry) continue;
+        if (entry.status === 'INCONCLUSIVE_BLOCKED') {
+          if (entry.adapterKey) blockedCatalogKeys.add(String(entry.adapterKey).trim().toLowerCase());
+          if (entry.id) blockedCatalogKeys.add(String(entry.id).trim().toLowerCase());
+        } else if (entry.status === 'RETIRED') {
+          if (entry.adapterKey) retiredCatalogKeys.add(String(entry.adapterKey).trim().toLowerCase());
+          if (entry.id) retiredCatalogKeys.add(String(entry.id).trim().toLowerCase());
+        }
+      }
+
+      const classifyDisposition = (sourceKey) => {
+        const normKey = String(sourceKey || '').trim().toLowerCase();
+        const isPolicyBlocked = blockedCatalogKeys.has(normKey);
+        const isRetired = retiredCatalogKeys.has(normKey);
+        const admission = listingSourceAdmissionFn
+          ? listingSourceAdmissionFn(normKey)
+          : { serves: !isPolicyBlocked && !isRetired, reason: null };
+        const isDiscoveryOnly = admission.reason === 'DISCOVERY_ONLY';
+        const isListingServing = Boolean(admission.serves) && !isPolicyBlocked && !isRetired;
+        return { isPolicyBlocked, isDiscoveryOnly, isRetired, isListingServing };
+      };
+
+      const hasChallengeSignal = (state, dbError) => Boolean(
+        state?.lastErrorCode === 'UPSTREAM_BOT_CHALLENGE'
+        || /bot\s*challenge|turnstile|captcha|waf|cloudflare/i.test(state?.circuitBreakerReason || '')
+        || /bot\s*challenge|turnstile|captcha|waf|cloudflare/i.test(dbError || state?.lastError || '')
+      );
+
+      const nonServingFallbackStatus = (disp) => (
+        disp.isDiscoveryOnly ? 'discovery_only' : (disp.isRetired ? 'retired' : 'non_serving')
+      );
 
       const toIso = (val) => {
         if (!val) return null;
@@ -80,11 +123,22 @@ function createScrapersHandler(dependencies = {}) {
       const scrapersMap = new Map();
       for (const [name, state] of Object.entries(details)) {
         const mappedKey = nameToKey.get(name) || String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-');
-        const memStatus = state?.circuitBreakerTripped
-          ? 'fault'
-          : (state?.lastErrorCode === 'UPSTREAM_BOT_CHALLENGE'
-              ? 'challenge_gated'
-              : (Number(state?.consecutiveFailures || 0) > 0 ? 'error' : (Number(state?.runs || 0) > 0 ? 'healthy' : 'idle')));
+        const disp = classifyDisposition(mappedKey);
+        const challengeGated = disp.isPolicyBlocked || hasChallengeSignal(state, null);
+        let memStatus;
+        if (challengeGated) {
+          memStatus = 'challenge_gated';
+        } else if (!disp.isListingServing && (state?.circuitBreakerTripped || Number(state?.consecutiveFailures || 0) > 0)) {
+          memStatus = nonServingFallbackStatus(disp);
+        } else if (state?.circuitBreakerTripped) {
+          memStatus = 'fault';
+        } else if (Number(state?.consecutiveFailures || 0) > 0) {
+          memStatus = 'error';
+        } else if (Number(state?.runs || 0) > 0) {
+          memStatus = 'healthy';
+        } else {
+          memStatus = 'idle';
+        }
         const sanitized = {
           key: mappedKey,
           sourceKey: mappedKey,
@@ -96,9 +150,12 @@ function createScrapersHandler(dependencies = {}) {
           recordsIngested: Number(state?.lastAcceptedCount ?? state?.recordsIngested ?? 0),
           activeListings: Number(state?.activeListings || 0),
           status: memStatus,
-          consecutiveFailures: Number(state?.consecutiveFailures || 0),
+          consecutiveFailures: (memStatus === 'challenge_gated' || !disp.isListingServing)
+            ? 0
+            : Number(state?.consecutiveFailures || 0),
           averageLatencyMs: Number(state?.averageLatencyMs || 0),
           driftDetected: Boolean(state?.driftDetected),
+          listingServing: disp.isListingServing,
           ...(isAuthorized && state?.lastError ? { lastError: state.lastError } : {}),
         };
         scrapersMap.set(mappedKey, sanitized);
@@ -136,6 +193,7 @@ function createScrapersHandler(dependencies = {}) {
           for (const row of runsRes.rows) {
             const key = row?.source_key;
             if (!key) continue;
+            const disp = classifyDisposition(key);
             const existing = scrapersMap.get(key) || null;
             const dbRunIso = toIso(row.last_run_at);
             const dbSuccessIso = toIso(row.last_success_at);
@@ -147,6 +205,22 @@ function createScrapersHandler(dependencies = {}) {
               row.error && (!dbSuccessIso || (dbRunMs > Date.parse(dbSuccessIso)))
             );
             const displayName = existing?.name || keyToName.get(key) || key;
+            let mergedStatus;
+            if (disp.isPolicyBlocked) {
+              mergedStatus = 'challenge_gated';
+            } else if (existing?.status === 'fault' && disp.isListingServing) {
+              mergedStatus = 'fault';
+            } else if (preferDb) {
+              if (hasDbError) {
+                if (hasChallengeSignal(null, row.error)) mergedStatus = 'challenge_gated';
+                else if (!disp.isListingServing) mergedStatus = nonServingFallbackStatus(disp);
+                else mergedStatus = 'error';
+              } else {
+                mergedStatus = dbRunIso ? 'healthy' : 'idle';
+              }
+            } else {
+              mergedStatus = existing.status;
+            }
             const merged = {
               key,
               sourceKey: key,
@@ -159,19 +233,15 @@ function createScrapersHandler(dependencies = {}) {
                 ? Number(row.accepted_count || 0)
                 : Number(existing?.recordsIngested ?? row.accepted_count ?? 0),
               activeListings: activeCountMap.get(key) ?? existing?.activeListings ?? 0,
-              status: existing?.status === 'fault'
-                ? 'fault'
-                : (preferDb
-                    ? (hasDbError ? 'error' : (dbRunIso ? 'healthy' : 'idle'))
-                    : existing.status),
-              consecutiveFailures: Math.max(
-                Number(existing?.consecutiveFailures || 0),
-                hasDbError ? 1 : 0
-              ),
+              status: mergedStatus,
+              consecutiveFailures: (mergedStatus === 'challenge_gated' || !disp.isListingServing)
+                ? 0
+                : Math.max(Number(existing?.consecutiveFailures || 0), hasDbError ? 1 : 0),
               averageLatencyMs: preferDb
                 ? Number(row.duration_ms || existing?.averageLatencyMs || 0)
                 : Number(existing?.averageLatencyMs || 0),
               driftDetected: Boolean(existing?.driftDetected),
+              listingServing: disp.isListingServing,
               ...(isAuthorized && (existing?.lastError || row.error)
                 ? { lastError: existing?.lastError || row.error }
                 : {}),
@@ -186,6 +256,7 @@ function createScrapersHandler(dependencies = {}) {
 
         for (const [key, activeListings] of activeCountMap.entries()) {
           if (!scrapersMap.has(key)) {
+            const disp = classifyDisposition(key);
             const displayName = keyToName.get(key) || key;
             const entry = {
               key,
@@ -197,10 +268,11 @@ function createScrapersHandler(dependencies = {}) {
               lastNonEmptyAt: null,
               recordsIngested: 0,
               activeListings,
-              status: 'idle',
+              status: disp.isPolicyBlocked ? 'challenge_gated' : 'idle',
               consecutiveFailures: 0,
               averageLatencyMs: 0,
               driftDetected: false,
+              listingServing: disp.isListingServing,
             };
             scrapersMap.set(key, entry);
             details[displayName] = entry;
@@ -215,9 +287,15 @@ function createScrapersHandler(dependencies = {}) {
         (a, b) => (b.activeListings - a.activeListings) || String(a.key).localeCompare(String(b.key))
       );
       const totalScrapers = pgHydrated ? scrapers.length : Number(baseReport.totalScrapers ?? scrapers.length);
-      const scrapersInFault = scrapers.filter((s) => s.status === 'fault' || s.status === 'error').length;
-      const scrapersWithDrift = scrapers.filter((s) => s.driftDetected).length;
-      const scrapersChallengeGated = Number(baseReport.scrapersChallengeGated || 0);
+      const scrapersInFault = scrapers.filter(
+        (s) => (s.status === 'fault' || s.status === 'error') && s.listingServing !== false
+      ).length;
+      const scrapersWithDrift = scrapers.filter(
+        (s) => s.driftDetected && s.listingServing !== false
+      ).length;
+      const scrapersChallengeGated = (pgHydrated || scrapers.length > 0)
+        ? scrapers.filter((s) => s.status === 'challenge_gated').length
+        : Number(baseReport.scrapersChallengeGated || 0);
       const systemStatus = (scrapersInFault > 0 || scrapersWithDrift > 0)
         ? 'degraded'
         : (scrapersChallengeGated > 0

@@ -33,15 +33,28 @@ const STATE_NAME_TO_CODE = {
   'Puerto Rico': 'PR'
 };
 
+function parseOffset(value) {
+  if (value == null) return 0;
+  const raw = (typeof value === 'object' && !Array.isArray(value))
+    ? (value.continuationToken ?? value.cursor ?? value.nextCursor ?? value.offset ?? value.token)
+    : value;
+  const n = Number.parseInt(raw, 10);
+  return Number.isInteger(n) && n >= 0 ? n : 0;
+}
+
 class TreasuryForfeitureScraper extends BaseScraper {
   constructor(options = {}) {
-    super({ ...options, name: 'TreasuryForfeitureCollector', sourceKey: 'treasury' });
+    super({
+      ...options,
+      name: 'TreasuryForfeitureCollector',
+      sourceKey: 'treasury',
+      timeoutMs: options.timeoutMs ?? ((process.env.VERCEL === '1' || process.env.NOW_REGION) ? 8_000 : 15_000),
+    });
     this.baseUrl = 'https://www.treasury.gov/auctions/treasury/rp';
     this.detailConcurrency = Math.min(4, Math.max(1, Math.floor(Number(options.detailConcurrency) || 2)));
     this.maxRetries = Math.min(3, Math.max(1, Number(options.maxRetries || ((process.env.VERCEL === '1' || process.env.NOW_REGION) ? 1 : 2))));
     this.maxItems = Math.max(1, Number(options.maxItems || process.env.TREASURY_MAX_ITEMS || ((process.env.VERCEL === '1' || process.env.NOW_REGION) ? 3 : 100)));
-    const initialOffset = Number.parseInt(options.slugOffset ?? options.checkpoint ?? options.cursor ?? 0, 10);
-    this.slugOffset = Number.isInteger(initialOffset) && initialOffset >= 0 ? initialOffset : 0;
+    this.slugOffset = parseOffset(options.slugOffset ?? options.checkpoint ?? options.cursor ?? 0);
     this.lastRunReport = null;
     this.useScrapling = options.useScrapling ?? isScraplingEnabled('treasury');
     this.extract = options.extractImpl || extractWithScrapling;
@@ -50,8 +63,7 @@ class TreasuryForfeitureScraper extends BaseScraper {
   }
 
   setCheckpoint(checkpoint) {
-    const n = Number.parseInt(checkpoint, 10);
-    this.slugOffset = Number.isInteger(n) && n >= 0 ? n : 0;
+    this.slugOffset = parseOffset(checkpoint);
     return this;
   }
 
@@ -105,8 +117,9 @@ class TreasuryForfeitureScraper extends BaseScraper {
         this.detailConcurrency,
         async (slug) => {
           if (deadlineAt && Date.now() >= deadlineAt - 1500) { deadlineStopped = true; return null; }
-          attemptedCount += 1;
           await this.crawlJitter();
+          if (deadlineAt && Date.now() >= deadlineAt - 1500) { deadlineStopped = true; return null; }
+          attemptedCount += 1;
           return this.fetchDetail(slug);
         }
       );

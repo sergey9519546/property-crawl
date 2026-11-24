@@ -152,7 +152,8 @@ class HudHomeScraper extends BaseScraper {
       report.sweepStartedAt = this.sweepStartedAt || report.startedAt;
       report.pagesPreviouslyCommitted = this.pagesCommitted;
       report.statesPreviouslyCompleted = checkpoint.completedStates.size;
-      report.attemptedStates = states;
+      report.resumedFromCheckpoint = Boolean(this.checkpointToken || this.pagesCommitted > 0 || checkpoint.completedStates.size > 0);
+      const attemptedStates = [];
       const results = await mapWithConcurrency(states, this.stateConcurrency, (state) => {
         if (deadlineAt && Date.now() >= deadlineAt - 2000) {
           return { state, listings: [], pagesAttempted: 0, pagesFetched: 0, sourceRows: 0, malformedRows: 0, usedHtmlFallback: false, truncated: true, nextPage: checkpoint.nextPages[state] || 1 };
@@ -163,12 +164,16 @@ class HudHomeScraper extends BaseScraper {
       for (let index = 0; index < results.length; index += 1) {
         const state = states[index];
         const result = results[index];
-        report.statesAttempted += 1;
         if (result.status === 'fulfilled') {
           const stateResult = result.value;
           if (stateResult.truncated === true &&
               (!Number.isSafeInteger(stateResult.nextPage) || stateResult.nextPage < 1 || stateResult.nextPage > 1_000_000)) {
             throw new Error(`HUD checkpoint next page is invalid for ${state}`);
+          }
+          const wasAttempted = stateResult.pagesAttempted > 0 || !stateResult.truncated;
+          if (wasAttempted) {
+            report.statesAttempted += 1;
+            attemptedStates.push(state);
           }
           report.pagesAttempted += stateResult.pagesAttempted;
           report.pagesFetched += stateResult.pagesFetched;
@@ -184,13 +189,18 @@ class HudHomeScraper extends BaseScraper {
             delete checkpoint.nextPages[state];
           }
           allListings.push(...stateResult.listings);
-          if (stateResult.listings.length) report.statesWithListings += 1;
-          else report.statesEmpty += 1;
+          if (wasAttempted) {
+            if (stateResult.listings.length) report.statesWithListings += 1;
+            else report.statesEmpty += 1;
+          }
         } else {
+          report.statesAttempted += 1;
+          attemptedStates.push(state);
           report.statesFailed += 1;
           report.failures.push({ state, error: this.errorSummary(result.reason) });
         }
       }
+      report.attemptedStates = attemptedStates;
       report.listingsParsed = allListings.length;
       const standardized = allListings
         .filter(l => this.passesFilter(l))
@@ -200,7 +210,7 @@ class HudHomeScraper extends BaseScraper {
       report.completedStates = [...checkpoint.completedStates];
       report.remainingStates = remainingStates;
       report.truncated = remainingStates.length > 0;
-      report.outcome = report.statesFailed === report.statesAttempted
+      report.outcome = (report.statesAttempted > 0 && report.statesFailed === report.statesAttempted)
         ? 'failed'
         : report.statesFailed > 0
           ? 'partial_failure'

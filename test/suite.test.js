@@ -534,7 +534,7 @@ test('AlertsModal provides state, minScore, and maxBid criteria filters', () => 
 test('Scrapers API route supports POST /api/scrapers/run for on-demand triggers', () => {
   const scrapersRoute = fs.readFileSync(path.join(root, 'server/routes/scrapers.js'), 'utf8');
   assert.ok(scrapersRoute.includes('/api/scrapers/run'), 'run endpoint missing from server/routes/scrapers.js');
-  assert.ok(scrapersRoute.includes('scheduler.runAll()'), 'scheduler call missing from server/routes/scrapers.js');
+  assert.ok(/\b(?:activeS|s)cheduler\.runAll\(\)/.test(scrapersRoute), 'scheduler call missing from server/routes/scrapers.js');
 });
 
 test('Server boot includes clean startup logging and recurring scrape interval', () => {

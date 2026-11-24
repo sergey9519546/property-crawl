@@ -338,3 +338,339 @@ test('Phase 2.3 regressions: PROP_TYPE_ALIAS_SQL normalization, deadlineAt slice
     }
   }
 });
+
+test('multi-slice absence safety: HUD and ServiceLink final slices never trigger nationwide absence wipe, while single-pass complete sweeps do', async () => {
+  const os = require('node:os');
+  const { HudHomeScraper } = require('../../server/scrapers/hud');
+  const { ServiceLinkScraper } = require('../../server/scrapers/servicelink');
+  const defaultScheduler = require('../../server/scrapers/scheduler');
+  const { IngestionScheduler } = defaultScheduler;
+
+  const makeHudListing = (state, caseNum) => ({
+    id: `HUD-${caseNum}`,
+    source: 'hud',
+    state,
+    county: null,
+    city: 'Test City',
+    zip: '90001',
+    address: `100 Main St, Test City, ${state} 90001`,
+    propType: 'Single Family',
+    openingBid: 85000,
+    status: 'active',
+    sourceUrl: `https://www.hudhomestore.gov/Property/PropertyDetails?caseNumber=${caseNum}`,
+    sourceObservedAt: '2026-11-24T00:00:00.000Z',
+    raw: JSON.stringify({ caseNumber: caseNum }),
+    provenance: {
+      origin: 'live',
+      observed: true,
+      observedAt: '2026-11-24T00:00:00.000Z',
+      publisher: 'HUD HomeStore',
+      recordId: caseNum,
+      sourceFacts: {},
+    },
+  });
+
+  // 1. HUD slice 1 -> slice 2 (final slice): statesPreviouslyCompleted > 0, complete: true, nextContinuationToken: null
+  const hud1 = new HudHomeScraper({ states: ['AL', 'AK', 'WY', 'PR'], maxStates: 2, maxPagesPerState: 1, stateConcurrency: 1 });
+  hud1.executeWithRetry = (fn) => fn();
+  hud1.fetchStateHudHomes = async (state) => ({
+    state,
+    listings: state === 'AL' ? [makeHudListing('AL', '111-111111')] : [],
+    pagesAttempted: 1,
+    pagesFetched: 1,
+    sourceRows: state === 'AL' ? 1 : 0,
+    malformedRows: 0,
+    usedHtmlFallback: false,
+    truncated: false,
+  });
+  await hud1.scrapeFeed();
+  assert.equal(hud1.lastRunReport.complete, false);
+  assert.equal(hud1.lastRunReport.resumedFromCheckpoint, false);
+  assert.ok(hud1.lastRunReport.nextContinuationToken);
+
+  const hud2 = new HudHomeScraper({ states: ['AL', 'AK', 'WY', 'PR'], maxStates: 2, maxPagesPerState: 1, stateConcurrency: 1 });
+  hud2.executeWithRetry = (fn) => fn();
+  hud2.fetchStateHudHomes = async (state) => ({
+    state,
+    listings: state === 'WY' ? [makeHudListing('WY', '222-222222')] : [],
+    pagesAttempted: 1,
+    pagesFetched: 1,
+    sourceRows: state === 'WY' ? 1 : 0,
+    malformedRows: 0,
+    usedHtmlFallback: false,
+    truncated: false,
+  });
+  hud2.setCheckpoint({
+    continuationToken: hud1.lastRunReport.nextContinuationToken,
+    sweepStartedAt: hud1.lastRunReport.sweepStartedAt,
+    pagesCommitted: 2,
+  });
+
+  const hudAbsenceCalls = [];
+  const hudQueries = [];
+  const hudDb = {
+    isPg: true,
+    pool: {
+      async query(sql, params) {
+        hudQueries.push({ sql, params });
+        return { rows: [] };
+      },
+    },
+    async createListing(l) { return l; },
+    async reconcileDuplicateDockets() { return { superseded: 0 }; },
+    async reconcilePublisherAbsence(sourceId, seenIds, opts) {
+      hudAbsenceCalls.push({ sourceId, seenIds, opts });
+      return { retired: 0, restored: 0 };
+    },
+  };
+  const tmpCache = path.join(os.tmpdir(), `egm-absence-${Date.now()}.json`);
+  const tmpSlCheckpoint = path.join(os.tmpdir(), `egm-sl-cp-${Date.now()}.json`);
+  const prevLivePath = process.env.PROPERTY_LIVE_CACHE_PATH;
+  const prevSlCpPath = process.env.SERVICELINK_CHECKPOINT_PATH;
+  process.env.PROPERTY_LIVE_CACHE_PATH = tmpCache;
+  process.env.SERVICELINK_CHECKPOINT_PATH = tmpSlCheckpoint;
+  try {
+    const hudSched = new IngestionScheduler({
+      realScrapers: [hud2],
+      discoveryStore: null,
+      database: hudDb,
+      telemetry: { recordRun() {}, flush() {} },
+      networkEnabled: true,
+      concurrency: 1,
+      onSourceRun: async (sourceId, run) => {
+        await defaultScheduler.onSourceRun.call(
+          { database: hudDb },
+          sourceId,
+          { ...run, enableAssessorHarvest: false, enableAssessorBackfill: false },
+        );
+      },
+    });
+    await hudSched.runAll({ sourceIds: ['hud'] });
+    assert.equal(hud2.lastRunReport.complete, true);
+    assert.equal(hud2.lastRunReport.nextContinuationToken, undefined);
+    assert.equal(hud2.lastRunReport.statesPreviouslyCompleted, 2);
+    assert.equal(hud2.lastRunReport.resumedFromCheckpoint, true);
+    assert.ok(
+      hudQueries.some((q) => q.sql.includes('DELETE FROM discovery_checkpoints WHERE source_key = $1') && q.params?.[0] === 'hud'),
+      'final HUD slice must still delete its finished checkpoint row',
+    );
+    assert.equal(
+      hudAbsenceCalls.some((c) => c.opts?.state == null && c.opts?.county == null),
+      false,
+      'final HUD slice must NOT run nationwide publisherAbsence reconciliation',
+    );
+    assert.deepEqual(
+      hudAbsenceCalls.map((c) => ({ state: c.opts?.state, seenIds: c.seenIds })),
+      [{ state: 'WY', seenIds: ['HUD-222-222222'] }],
+      'final HUD slice must only run per-state absence reconciliation for its attempted completed states',
+    );
+
+    // 2. ServiceLink final continuation slice: resumedFromCheckpoint: true, complete: true, nextCursor: null
+    const slFinal = new ServiceLinkScraper({
+      maxPages: 2,
+      limit: 25,
+      random: () => 0,
+      sleep: async () => {},
+      now: () => new Date('2026-11-24T00:00:00.000Z'),
+      fetchImpl: async () => ({
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        text: async () => JSON.stringify({
+          continuationToken: null,
+          data: [{
+            listingId: 'a1cVO000004XjDoYAK',
+            auctionProgram: 'TPS',
+            propertyInfo: {
+              websiteUrl: 'https://www.servicelinkauction.com/property-details/946-western-ave-pittsburgh-15233-pa-united-states-tps',
+              address: '946 Western Ave',
+              city: 'Pittsburgh',
+              county: 'Allegheny',
+              state: 'PA',
+              postalCode: '15233',
+              propertyType: 'Single Family Home',
+            },
+            listingStatus: { statusText: 'Active' },
+          }],
+        }),
+      }),
+    });
+    slFinal.setCheckpoint({
+      continuationToken: 'cursor-page-40',
+      sweepStartedAt: '2026-11-24T00:00:00.000Z',
+      pagesCommitted: 40,
+    });
+    const slAbsenceCalls = [];
+    const slQueries = [];
+    const slDb = {
+      isPg: true,
+      pool: {
+        async query(sql, params) {
+          slQueries.push({ sql, params });
+          return { rows: [] };
+        },
+      },
+      async createListing(l) { return l; },
+      async reconcileDuplicateDockets() { return { superseded: 0 }; },
+      async reconcilePublisherAbsence(sourceId, seenIds, opts) {
+        slAbsenceCalls.push({ sourceId, seenIds, opts });
+        return { retired: 0, restored: 0 };
+      },
+    };
+    const slSched = new IngestionScheduler({
+      realScrapers: [slFinal],
+      discoveryStore: null,
+      database: slDb,
+      telemetry: { recordRun() {}, flush() {} },
+      networkEnabled: true,
+      concurrency: 1,
+      onSourceRun: async (sourceId, run) => {
+        await defaultScheduler.onSourceRun.call(
+          { database: slDb },
+          sourceId,
+          { ...run, enableAssessorHarvest: false, enableAssessorBackfill: false },
+        );
+      },
+    });
+    await slSched.runAll({ sourceIds: ['servicelink'] });
+    assert.equal(slFinal.lastRunReport.complete, true);
+    assert.equal(slFinal.lastRunReport.nextCursor, null);
+    assert.equal(slFinal.lastRunReport.pagesPreviouslyCommitted, 40);
+    assert.equal(slFinal.lastRunReport.resumedFromCheckpoint, true);
+    assert.equal(slFinal.lastRunReport.fullSweepComplete, false);
+    assert.ok(
+      slQueries.some((q) => q.sql.includes('DELETE FROM discovery_checkpoints WHERE source_key = $1') && q.params?.[0] === 'servicelink'),
+      'final ServiceLink slice must delete its finished checkpoint row',
+    );
+    assert.equal(
+      slAbsenceCalls.length,
+      0,
+      'final ServiceLink continuation slice must NOT mark the rest of the catalog publisherAbsence',
+    );
+
+    // 3. Single-pass complete sweep (statesPreviouslyCompleted: 0, resumedFromCheckpoint: false, complete: true) STILL runs full reconcilePublisherAbsence
+    const slSingle = new ServiceLinkScraper({
+      maxPages: 2,
+      limit: 25,
+      random: () => 0,
+      sleep: async () => {},
+      now: () => new Date('2026-11-24T00:00:00.000Z'),
+      fetchImpl: async () => ({
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        text: async () => JSON.stringify({
+          continuationToken: null,
+          data: [{
+            listingId: 'a1cVO000004XjDoBBB',
+            auctionProgram: 'TPS',
+            propertyInfo: {
+              websiteUrl: 'https://www.servicelinkauction.com/property-details/100-oak-st-tampa-33602-fl-united-states-tps',
+              address: '100 Oak St',
+              city: 'Tampa',
+              county: 'Hillsborough',
+              state: 'FL',
+              postalCode: '33602',
+              propertyType: 'Single Family Home',
+            },
+            listingStatus: { statusText: 'Active' },
+          }],
+        }),
+      }),
+    });
+    const singleAbsenceCalls = [];
+    const singleDb = {
+      isPg: true,
+      pool: { async query() { return { rows: [] }; } },
+      async createListing(l) { return l; },
+      async reconcileDuplicateDockets() { return { superseded: 0 }; },
+      async reconcilePublisherAbsence(sourceId, seenIds, opts) {
+        singleAbsenceCalls.push({ sourceId, seenIds, opts });
+        return { retired: 0, restored: 0 };
+      },
+    };
+    const singleSched = new IngestionScheduler({
+      realScrapers: [slSingle],
+      discoveryStore: null,
+      database: singleDb,
+      telemetry: { recordRun() {}, flush() {} },
+      networkEnabled: true,
+      concurrency: 1,
+      onSourceRun: async (sourceId, run) => {
+        await defaultScheduler.onSourceRun.call(
+          { database: singleDb },
+          sourceId,
+          { ...run, enableAssessorHarvest: false, enableAssessorBackfill: false },
+        );
+      },
+    });
+    await singleSched.runAll({ sourceIds: ['servicelink'] });
+    assert.equal(slSingle.lastRunReport.resumedFromCheckpoint, false);
+    assert.equal(slSingle.lastRunReport.fullSweepComplete, true);
+    assert.equal(singleAbsenceCalls.length, 1);
+    assert.equal(singleAbsenceCalls[0].opts?.runCompleted, true);
+    assert.equal(singleAbsenceCalls[0].opts?.state, null);
+    assert.equal(singleAbsenceCalls[0].opts?.county, null);
+  } finally {
+    if (prevLivePath === undefined) delete process.env.PROPERTY_LIVE_CACHE_PATH;
+    else process.env.PROPERTY_LIVE_CACHE_PATH = prevLivePath;
+    if (prevSlCpPath === undefined) delete process.env.SERVICELINK_CHECKPOINT_PATH;
+    else process.env.SERVICELINK_CHECKPOINT_PATH = prevSlCpPath;
+    try { fs.rmSync(tmpCache, { force: true }); } catch (_) {}
+    try { fs.rmSync(tmpSlCheckpoint, { force: true }); } catch (_) {}
+  }
+});
+
+test('HUD deadlineAt before state fetch excludes unattempted state from attemptedStates and completedStates', async () => {
+  const { HudHomeScraper } = require('../../server/scrapers/hud');
+  const hud = new HudHomeScraper({ states: ['AL', 'AK', 'AZ'], maxStates: 3, maxPagesPerState: 1, stateConcurrency: 1 });
+  hud.executeWithRetry = (fn) => fn();
+  let calls = 0;
+  hud.fetchStateHudHomes = async (state) => {
+    calls += 1;
+    if (calls === 2) {
+      await new Promise((r) => setTimeout(r, 30));
+    }
+    return {
+      state,
+      listings: [],
+      pagesAttempted: 1,
+      pagesFetched: 1,
+      sourceRows: 0,
+      malformedRows: 0,
+      usedHtmlFallback: false,
+      truncated: false,
+    };
+  };
+  await hud.scrapeFeed({ deadlineAt: Date.now() + 2010 });
+  assert.deepEqual(hud.lastRunReport.attemptedStates, ['AL', 'AK']);
+  assert.deepEqual(hud.lastRunReport.completedStates, ['AL', 'AK']);
+  assert.deepEqual(hud.lastRunReport.remainingStates, ['AZ']);
+  assert.equal(hud.lastRunReport.complete, false);
+});
+
+test('treasury and usda setCheckpoint unwrap object cursors and treasury sets bounded timeoutMs', () => {
+  const { TreasuryForfeitureScraper } = require('../../server/scrapers/treasury');
+  const { UsdaResalesScraper } = require('../../server/scrapers/usda');
+
+  const treasury = new TreasuryForfeitureScraper({ useScrapling: false });
+  treasury.setCheckpoint({ continuationToken: '3' });
+  assert.equal(treasury.slugOffset, 3);
+  const treasuryFromOpts = new TreasuryForfeitureScraper({ useScrapling: false, checkpoint: { cursor: '5' } });
+  assert.equal(treasuryFromOpts.slugOffset, 5);
+  assert.equal(treasury.timeoutMs, 15_000);
+
+  const prevVercel = process.env.VERCEL;
+  process.env.VERCEL = '1';
+  try {
+    const vercelTreasury = new TreasuryForfeitureScraper({ useScrapling: false });
+    assert.equal(vercelTreasury.timeoutMs, 8_000);
+  } finally {
+    if (prevVercel === undefined) delete process.env.VERCEL;
+    else process.env.VERCEL = prevVercel;
+  }
+
+  const usda = new UsdaResalesScraper({ useScrapling: false });
+  usda.setCheckpoint({ continuationToken: '10' });
+  assert.equal(usda.stateOffset, 10);
+  const usdaFromOpts = new UsdaResalesScraper({ useScrapling: false, checkpoint: { nextCursor: '7' } });
+  assert.equal(usdaFromOpts.stateOffset, 7);
+});

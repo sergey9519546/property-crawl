@@ -583,6 +583,166 @@ test('GET /api/scrapers hydrates telemetry from Postgres when in-memory telemetr
   assert.equal(shAuth.lastError, 'secret-internal-stack-trace');
 });
 
+test('GET /api/scrapers and /api/scrapers/health classify INCONCLUSIVE_BLOCKED and DISCOVERY_ONLY sources without false degraded faults', async () => {
+  const coldTelemetry = {
+    getHealthReport() {
+      return {
+        systemStatus: 'idle',
+        snapshotEvidence: { mode: 'filesystem', ok: true },
+        totalScrapers: 0,
+        scrapersInFault: 0,
+        scrapersChallengeGated: 0,
+        scrapersWithDrift: 0,
+        details: {},
+      };
+    },
+  };
+  let treasuryError = null;
+  const mockDb = {
+    isPg: true,
+    pool: {
+      async query(sql) {
+        const norm = sql.replace(/\s+/g, ' ').trim();
+        if (norm.includes('FROM source_observation_runs')) {
+          return {
+            rows: [
+              {
+                source_key: 'servicelink',
+                last_run_at: '2026-11-24T08:00:00.000Z',
+                last_success_at: '2026-11-24T08:00:00.000Z',
+                last_non_empty_at: '2026-11-24T08:00:00.000Z',
+                accepted_count: 150,
+                evidence_count: 150,
+                rejected_count: 0,
+                error: null,
+                duration_ms: 9000,
+                runs_count: 12,
+              },
+              {
+                source_key: 'treasury',
+                last_run_at: '2026-11-24T08:00:00.000Z',
+                last_success_at: treasuryError ? '2026-11-23T08:00:00.000Z' : '2026-11-24T08:00:00.000Z',
+                last_non_empty_at: '2026-11-24T08:00:00.000Z',
+                accepted_count: treasuryError ? 0 : 4,
+                evidence_count: treasuryError ? 0 : 4,
+                rejected_count: 0,
+                error: treasuryError,
+                duration_ms: 2500,
+                runs_count: 5,
+              },
+              {
+                source_key: 'bid4assets',
+                last_run_at: '2026-11-16T08:00:00.000Z',
+                last_success_at: null,
+                last_non_empty_at: null,
+                accepted_count: 0,
+                evidence_count: 0,
+                rejected_count: 0,
+                error: 'Blocked by upstream challenge',
+                duration_ms: 1200,
+                runs_count: 2,
+              },
+              {
+                source_key: 'landbank',
+                last_run_at: '2026-11-16T08:00:00.000Z',
+                last_success_at: null,
+                last_non_empty_at: null,
+                accepted_count: 0,
+                evidence_count: 0,
+                rejected_count: 0,
+                error: 'Turnstile verification required',
+                duration_ms: 1100,
+                runs_count: 2,
+              },
+              {
+                source_key: 'ca-controller-tax-sale',
+                last_run_at: '2026-11-16T08:00:00.000Z',
+                last_success_at: null,
+                last_non_empty_at: null,
+                accepted_count: 0,
+                evidence_count: 0,
+                rejected_count: 0,
+                error: 'Cloudflare challenge page',
+                duration_ms: 950,
+                runs_count: 1,
+              },
+              {
+                source_key: 'fannie',
+                last_run_at: '2026-11-16T08:00:00.000Z',
+                last_success_at: null,
+                last_non_empty_at: null,
+                accepted_count: 0,
+                evidence_count: 0,
+                rejected_count: 0,
+                error: 'SPA payload unparseable',
+                duration_ms: 800,
+                runs_count: 1,
+              },
+            ],
+          };
+        }
+        if (norm.includes('FROM listings') && norm.includes('discovery_is_live')) {
+          return {
+            rows: [
+              { source_key: 'servicelink', active_listings: 1200 },
+              { source_key: 'treasury', active_listings: 4 },
+            ],
+          };
+        }
+        return { rows: [] };
+      },
+    },
+  };
+
+  const handler = createScrapersHandler({
+    env: { SCRAPER_ADMIN_TOKEN: 'telemetry-secret' },
+    database: mockDb,
+    telemetry: coldTelemetry,
+    scheduler: { database: mockDb, realScrapers: [] },
+  });
+
+  const makeRes = () => ({
+    statusCode: 200,
+    body: null,
+    status(c) { this.statusCode = c; return this; },
+    json(b) { this.body = b; return this; },
+  });
+
+  // 1. Healthy active collectors + gated/discovery-only stale rows -> nominal_gated, 0 fault
+  for (const endpoint of ['/api/scrapers', '/api/scrapers/health']) {
+    const res = makeRes();
+    await handler({ method: 'GET', url: endpoint, headers: {} }, res);
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.scrapersInFault, 0);
+    assert.equal(res.body.scrapersChallengeGated, 3);
+    assert.equal(res.body.systemStatus, 'nominal_gated');
+
+    const byKey = new Map(res.body.scrapers.map((s) => [s.sourceKey, s]));
+    assert.equal(byKey.get('servicelink').status, 'healthy');
+    assert.equal(byKey.get('treasury').status, 'healthy');
+    assert.equal(byKey.get('bid4assets').status, 'challenge_gated');
+    assert.equal(byKey.get('bid4assets').consecutiveFailures, 0);
+    assert.equal(byKey.get('landbank').status, 'challenge_gated');
+    assert.equal(byKey.get('landbank').consecutiveFailures, 0);
+    assert.equal(byKey.get('ca-controller-tax-sale').status, 'challenge_gated');
+    assert.equal(byKey.get('ca-controller-tax-sale').consecutiveFailures, 0);
+    assert.equal(byKey.get('fannie').status, 'discovery_only');
+    assert.equal(byKey.get('fannie').consecutiveFailures, 0);
+  }
+
+  // 2. Genuine active collector error on treasury must still report degraded and scrapersInFault=1
+  treasuryError = 'HTTP 502 Bad Gateway';
+  const degradedRes = makeRes();
+  await handler({ method: 'GET', url: '/api/scrapers', headers: {} }, degradedRes);
+  assert.equal(degradedRes.statusCode, 200);
+  assert.equal(degradedRes.body.scrapersInFault, 1);
+  assert.equal(degradedRes.body.scrapersChallengeGated, 3);
+  assert.equal(degradedRes.body.systemStatus, 'degraded');
+  const treasuryRow = degradedRes.body.scrapers.find((s) => s.sourceKey === 'treasury');
+  assert.equal(treasuryRow.status, 'error');
+  assert.equal(treasuryRow.consecutiveFailures, 1);
+});
+
 
 test('repairLiveEnrichment Pass 3b backfills missing HUD county and countyFips via Census TIGERweb', async () => {
   const pool = makeFakePool([

@@ -56,7 +56,7 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
   const [caseSyncNotice, setCaseSyncNotice] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!session.authenticated || !listing.id) {
+    if (!session.memberTools || !listing.id) {
       setLinkedCaseId(null);
       return;
     }
@@ -75,7 +75,7 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
     return () => {
       cancelled = true;
     };
-  }, [session.authenticated, listing.id]);
+  }, [session.memberTools, listing.id]);
 
   // 1. Detect statutory presets and carry deadlines
   const feePreset = computeStatutoryFeePreset({
@@ -249,7 +249,7 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
   const pendingCount = Object.values(itemStatuses).filter((s) => s === "pending").length;
 
   const syncBinderToCase = async () => {
-    if (!session.authenticated) {
+    if (!session.memberTools) {
       session.requestUnlock();
       return;
     }
@@ -353,7 +353,7 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
                 ? "Syncing..."
                 : linkedCaseId
                   ? `Synced (${linkedCaseId})`
-                  : session.authenticated
+                  : session.memberTools
                     ? "Sync Binder to Case"
                     : "Unlock to Sync Case"}
             </button>

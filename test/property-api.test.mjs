@@ -153,3 +153,41 @@ test('proxyPropertyApi caches public-domain USGS/USDA aerial tiles and keeps no-
   );
   assert.equal(streetViewImage.headers.get('cache-control'), 'no-store');
 });
+
+test('proxyPropertyApi preserves server-injected operatorToken even when client sends a rogue Authorization header', async () => {
+  const seenHeaders = [];
+  const fetchImpl = async (_url, options) => {
+    seenHeaders.push(options.headers);
+    return Response.json({ ok: true });
+  };
+
+  // Operator route: operatorToken without accountId must not be clobbered by client Authorization
+  await proxyPropertyApi(
+    new Request('https://app.example/api/scrapers', {
+      headers: { authorization: 'Bearer attacker-forged-token' },
+    }),
+    { apiUrl: 'http://127.0.0.1:3102', operatorToken: 'server-operator-secret', role: 'operator', fetchImpl },
+  );
+  assert.equal(seenHeaders[0].get('authorization'), 'Bearer server-operator-secret');
+  assert.equal(seenHeaders[0].get('x-pp-account'), null);
+  assert.equal(seenHeaders[0].get('x-pp-role'), 'operator');
+
+  // Member route: operatorToken with accountId sets x-pp-account and keeps server token
+  await proxyPropertyApi(
+    new Request('https://app.example/api/hunts', {
+      headers: { authorization: 'Bearer attacker-forged-token' },
+    }),
+    { apiUrl: 'http://127.0.0.1:3102', operatorToken: 'server-operator-secret', accountId: 'acct_123', fetchImpl },
+  );
+  assert.equal(seenHeaders[1].get('authorization'), 'Bearer server-operator-secret');
+  assert.equal(seenHeaders[1].get('x-pp-account'), 'acct_123');
+
+  // Unprivileged route: without operatorToken, incoming Authorization continues to pass through
+  await proxyPropertyApi(
+    new Request('https://app.example/api/listings', {
+      headers: { authorization: 'Bearer caller-token' },
+    }),
+    { apiUrl: 'http://127.0.0.1:3102', fetchImpl },
+  );
+  assert.equal(seenHeaders[2].get('authorization'), 'Bearer caller-token');
+});
