@@ -62,21 +62,20 @@ function requireOperator(req, res, env) {
 }
 
 let store = createDocumentReviewStore();
-const pgLoadPromises = new WeakMap();
+const inFlightPgLoads = new WeakMap();
 
 async function ensureStoreLoaded(database, activeStore) {
   const pool = database && database.pool ? database.pool : activeStore?.pool;
   if (!pool || typeof activeStore?.loadPg !== 'function') return activeStore;
-  if (!pgLoadPromises.has(activeStore)) {
+  if (!inFlightPgLoads.has(activeStore)) {
     const loadPromise = Promise.resolve()
       .then(() => activeStore.loadPg())
-      .catch((err) => {
-        pgLoadPromises.delete(activeStore);
-        throw err;
+      .finally(() => {
+        inFlightPgLoads.delete(activeStore);
       });
-    pgLoadPromises.set(activeStore, loadPromise);
+    inFlightPgLoads.set(activeStore, loadPromise);
   }
-  await pgLoadPromises.get(activeStore);
+  await inFlightPgLoads.get(activeStore);
   return activeStore;
 }
 
@@ -266,7 +265,7 @@ async function hydratePendingCandidates(database) {
           judgmentAmount: listing.judgment || null,
           saleDate: listing.saleDate || null,
           apn: listing.apn || listing.provenance?.sourceFacts?.parcelId || null,
-          confidenceScore: doc.confidenceScore || (listing.dealScore ? listing.dealScore / 100 : null),
+          confidenceScore: typeof doc.confidenceScore === 'number' && Number.isFinite(doc.confidenceScore) ? doc.confidenceScore : null,
           evidenceSpans: doc.evidenceSpans || {},
         },
       });
@@ -284,9 +283,9 @@ async function handleDocumentReview(req, res, dependencies = {}) {
   const method = req.method;
   res.setHeader('Cache-Control', 'no-store');
   if (!requireOperator(req, res, env)) return;
-  await ensureStoreLoaded(database, store);
 
   if (method === 'GET' && url.pathname === '/api/document-review') {
+    await ensureStoreLoaded(database, store);
     const requestedStatus = url.searchParams.get('status');
     const hydrate = url.searchParams.get('hydrate') !== 'false';
     const stored = [...store.map.entries()].map(([id, record]) => ({
@@ -380,7 +379,9 @@ async function handleDocumentReview(req, res, dependencies = {}) {
     const id = documentId(listingId, body.documentIndex, body.documentUrl);
     if (!id) return badRequest(res, 'document id could not be derived');
 
-    const previousRaw = store.map.has(id) ? store.map.get(id) : null;
+    const previousRaw = store.pool && typeof store.getByIdPg === 'function'
+      ? await store.getByIdPg(id)
+      : (store.map.has(id) ? store.map.get(id) : null);
     const previous = previousRaw
       ? normalizeReview(previousRaw)
       : createPendingReview({ extractedAt: body.extractedAt });
@@ -389,7 +390,8 @@ async function handleDocumentReview(req, res, dependencies = {}) {
       expectedRevision: body.revision,
     });
     if (Array.isArray(result.errors) && result.errors.length) {
-      const code = result.errors.find(e => e.startsWith('shape:')) ? 400 : 422;
+      const code = result.errors.find(e => e.startsWith('shape:')) ? 400
+        : result.errors.find(e => e.includes('revision mismatch')) ? 409 : 422;
       return badRequest(res, result.errors.join('; '), code);
     }
     let contentHash = typeof body.contentHash === 'string' && /^[a-f0-9]{64}$/i.test(body.contentHash.trim())
@@ -415,7 +417,7 @@ async function handleDocumentReview(req, res, dependencies = {}) {
     if (updatedFields) {
       extractedFields = extractedFields ? { ...extractedFields, ...updatedFields } : { ...updatedFields };
     }
-    store.map.set(id, {
+    const nextRecord = {
       rawText: rawContent || body.rawText || previousRaw?.rawText || null,
       extractedFields,
       updatedFields,
@@ -428,10 +430,28 @@ async function handleDocumentReview(req, res, dependencies = {}) {
       contentHash: contentHash || previousRaw?.contentHash || null,
       reason: previousRaw?.reason || body.reason || null,
       reasons: previousRaw?.reasons || body.reasons || null,
-    });
-    const persisted = typeof store.persistAsync === 'function'
-      ? await store.persistAsync()
-      : store.persist();
+    };
+    store.map.set(id, nextRecord);
+    let persisted = false;
+    if (store.pool && typeof store.upsertOnePg === 'function') {
+      const expectedRev = previousRaw ? previous.revision : 0;
+      const upsertResult = await store.upsertOnePg(id, nextRecord, expectedRev);
+      if (upsertResult?.conflict) {
+        if (previousRaw) store.map.set(id, previousRaw);
+        else store.map.delete(id);
+        return res.status(409).json({
+          error: 'Document review was modified concurrently; reload and retry.',
+          code: 'REVIEW_CONFLICT',
+          id,
+          listingId,
+        });
+      }
+      persisted = Boolean(upsertResult?.ok);
+    } else {
+      persisted = typeof store.persistAsync === 'function'
+        ? await store.persistAsync()
+        : store.persist();
+    }
     if (!persisted) {
       // Roll back the in-memory decision so GET cannot advertise durability
       // the durable backend never received.
@@ -460,9 +480,9 @@ async function handleDocumentReview(req, res, dependencies = {}) {
       };
       const rawSnippet = rawContent || body.rawText || previousRaw?.rawText || '';
       const stateMatch = listingId.match(/email-notice-([a-z]{2})/i);
-      const state = mergedFields.state || (stateMatch ? stateMatch[1].toUpperCase() : 'OH');
-      const feedInfo = FEED_CONFIG ? FEED_CONFIG[state] : null;
-      const publisherName = feedInfo?.name || `${state} Press Association`;
+      const state = mergedFields.state || (stateMatch ? stateMatch[1].toUpperCase() : null);
+      const feedInfo = FEED_CONFIG && state ? FEED_CONFIG[state] : null;
+      const publisherName = feedInfo?.name || (state ? `${state} Press Association` : 'Public Notice Feed');
       const portalUrl = feedInfo?.portalUrl || 'https://publicnotice.org';
       const noticeUrl = body.documentUrl || previousRaw?.documentUrl || `${portalUrl}/notice/${listingId}`;
       const nowIso = new Date().toISOString();
@@ -577,8 +597,10 @@ async function handleDocumentReview(req, res, dependencies = {}) {
   if (method === 'GET' && url.pathname.startsWith('/api/document-review/')) {
     const tail = url.pathname.slice('/api/document-review/'.length).trim();
     if (!tail) return badRequest(res, 'document id is required');
-    if (!store.map.has(tail)) return res.status(404).json({ error: 'review not found' });
-    const record = store.map.get(tail);
+    const record = store.pool && typeof store.getByIdPg === 'function'
+      ? await store.getByIdPg(tail)
+      : (store.map.has(tail) ? store.map.get(tail) : null);
+    if (!record) return res.status(404).json({ error: 'review not found' });
     const vault = dependencies.vault || defaultVault;
     let vaultDocument = null;
     try {

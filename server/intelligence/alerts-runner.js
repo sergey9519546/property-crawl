@@ -71,7 +71,9 @@ async function runAlertsForUser({ userId, listings, database, mailOptions, webho
       }
     }
     const notify = isEmail(search?.filters?.notifyEmail) || isEmail(search?.filters?.email) || isEmail(search?.notifyEmail);
-    if (newCount > 0 && notify) {
+    if (newCount > 0 && notify && search?.filters?.verified !== true) {
+      row.mailDelivery = 'skipped_unverified';
+    } else if (newCount > 0 && notify) {
       try {
         const baseUrl = require('../app-origin').getCanonicalOrigin();
         const formattedItems = fresh.slice(0, 15).map((l) => {

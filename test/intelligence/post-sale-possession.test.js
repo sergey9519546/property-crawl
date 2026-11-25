@@ -323,3 +323,9 @@ test('buildPossessionDossier: builds structured object with verified citations',
   assert.ok(typeof dossier.summary === 'string');
   assert.ok(dossier.generatedAt);
 });
+
+test('estimateQuietTitleTimeline: TX Tex. Tax Code § 34.21 states 2-year homestead/ag and 6-month non-homestead', () => {
+  const tx = estimateQuietTitleTimeline('TX', 'tax-deed');
+  assert.match(tx.notes, /2-year \(residence homestead \/ agricultural-use\)/i);
+  assert.match(tx.notes, /6-month \/ 180-day \(non-homestead\)/i);
+});

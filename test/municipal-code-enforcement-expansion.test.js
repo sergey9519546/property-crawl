@@ -469,8 +469,10 @@ test('analyzeMunicipalViolations: MD dangerous building demolition citation trip
   assert.equal(analysis.hasMunicipalViolations, true);
   assert.equal(analysis.isCondemnedOrDemolitionRisk, true);
   assert.equal(analysis.activeViolationCount, 2);
-  // Liability: 2500 + 1100 + 15000 demolition escrow = 18600
-  assert.equal(analysis.estimatedSurvivingLienLiability, 18600);
+  // Observed fines only (2500 + 1100 = 3600); unquantified demolition liability is flagged explicitly without fabricating $15,000
+  assert.equal(analysis.estimatedSurvivingLienLiability, 3600);
+  assert.equal(analysis.demolitionLiabilityUnknown, true);
+  assert.equal(analysis.unquantifiedDemolitionRisk, true);
   assert.ok(analysis.municipalWarnings.some((w) => w.includes('CRITICAL MUNICIPAL ALERT: Active condemnation')));
   assert.ok(analysis.municipalWarnings.some((w) => w.includes('Md. Code Real Prop. § 14-804/806 & Baltimore City Code Art. 13')));
   assert.match(analysis.actionRequired, /DO NOT BID/);
@@ -497,8 +499,10 @@ test('analyzeMunicipalViolations: MO dangerous building repair/demolition specia
 
   assert.equal(analysis.state, 'MO');
   assert.equal(analysis.isCondemnedOrDemolitionRisk, true);
-  // Liability: 1800 + 15000 = 16800
-  assert.equal(analysis.estimatedSurvivingLienLiability, 16800);
+  // Observed fine only (1800); unquantified demolition liability is flagged explicitly without fabricating $15,000
+  assert.equal(analysis.estimatedSurvivingLienLiability, 1800);
+  assert.equal(analysis.demolitionLiabilityUnknown, true);
+  assert.equal(analysis.unquantifiedDemolitionRisk, true);
   assert.ok(analysis.municipalWarnings.some((w) => w.includes('RSMo § 67.410 & § 67.398')));
   assert.match(analysis.actionRequired, /DO NOT BID/);
 });
@@ -524,8 +528,10 @@ test('analyzeMunicipalViolations: GA demolition and nuisance abatement liens pri
 
   assert.equal(analysis.state, 'GA');
   assert.equal(analysis.isCondemnedOrDemolitionRisk, true);
-  // Liability: 3500 + 15000 = 18500
-  assert.equal(analysis.estimatedSurvivingLienLiability, 18500);
+  // Observed fine only (3500); unquantified demolition liability is flagged explicitly without fabricating $15,000
+  assert.equal(analysis.estimatedSurvivingLienLiability, 3500);
+  assert.equal(analysis.demolitionLiabilityUnknown, true);
+  assert.equal(analysis.unquantifiedDemolitionRisk, true);
   assert.ok(analysis.municipalWarnings.some((w) => w.includes('O.C.G.A. § 41-2-9(b) & § 36-60-17')));
   assert.match(analysis.actionRequired, /DO NOT BID/);
 });

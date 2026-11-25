@@ -165,10 +165,13 @@ function optionalCaseSink() {
         // narrow: only a validated listing with a current `match` result is
         // handed off, and the hunt event (when present) becomes the origin.
         return {
-          async upsertFromHunt({ hunt, evaluation, listings = [], leaseGuard = null }) {
+          async upsertFromHunt({ hunt, evaluation, listings = [], leaseGuard = null, database = null }) {
             if (evaluation?.resultsTruncated) return { skipped: 'evaluation_results_truncated', upserted: 0 };
             const byId = new Map(listings.map((listing) => [listing.id, listing]));
             const events = new Map((evaluation?.newEvents || []).map((event) => [event.identityKey, event]));
+            const ownerId = hunt?.owner || 'operator';
+            const researchStore = require('../intelligence/research-store');
+            const activeDb = database || require('../db/client');
             let upserted = 0;
             for (const result of evaluation?.results || []) {
               if (result.status !== 'match') continue;
@@ -177,14 +180,20 @@ function optionalCaseSink() {
               const event = events.get(result.identityKey);
               const type = event?.type === 'new_match' || event?.type === 'material_change' ? event.type : 'hunt_match';
               await assertLease(leaseGuard);
-              await candidate.createCase({
-                listing,
-                origin: {
-                  type, huntId: hunt.id, huntVersion: hunt.version,
-                  observedAt: result.observedAt,
-                  ...(type === 'material_change' && event?.changedFields?.length ? { changedFields: event.changedFields, changes: event.changes } : {}),
-                },
-              });
+              const origin = {
+                type, huntId: hunt.id, huntVersion: hunt.version,
+                observedAt: result.observedAt,
+                ...(type === 'material_change' && event?.changedFields?.length ? { changedFields: event.changedFields, changes: event.changes } : {}),
+              };
+              if (activeDb?.isPg && activeDb?.pool) {
+                await researchStore.createCasePg(activeDb, ownerId, { listing, origin });
+              } else {
+                await candidate.createCase({
+                  listing,
+                  ownerId,
+                  origin,
+                }, { filePath: researchStore.resolveStorePath(undefined, ownerId), ownerId });
+              }
               upserted++;
             }
             return { upserted };
@@ -340,7 +349,7 @@ class CollectionCoordinator {
         let handoffs = 0, upserted = 0, skipped = 0;
         for (const entry of evaluations) {
           await assertLease(claim.leaseGuard);
-          const handoff = await caseSink.upsertFromHunt({ job: await this.store.get(id), hunt: entry.hunt, evaluation: entry.evaluation, listings, leaseGuard: claim.leaseGuard });
+          const handoff = await caseSink.upsertFromHunt({ job: await this.store.get(id), hunt: entry.hunt, evaluation: entry.evaluation, listings, leaseGuard: claim.leaseGuard, database: this.database });
           handoffs++;
           upserted += Math.max(0, Number(handoff?.upserted) || 0);
           if (handoff?.skipped) skipped++;

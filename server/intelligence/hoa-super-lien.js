@@ -33,10 +33,10 @@
  * 7. Pennsylvania (68 Pa.C.S. § 3315 / § 5315):
  *    6 months of common assessments prime prior mortgages.
  *
- * 8. Other 22-State Super-Priority Jurisdictions (MA, MN, MO, NJ, OR, RI, TN, VT, WA, WV, AL, AK, HI, IL, NY):
+ * 8. Other Super-Priority Jurisdictions (MA, MN, MO, NJ, OR, RI, TN, VT, WA, WV, AL, AK, HI, IL):
  *    6 months rolling or fixed common assessment priority.
  *
- * 9. Non-Super-Priority States (TX, CA, OH, AZ, GA, NC, SC, VA, etc.):
+ * 9. Non-Super-Priority States (TX, CA, OH, NY, AZ, GA, NC, SC, VA, etc.):
  *    HOA liens are strictly subordinate to prior recorded first mortgages/deeds of trust.
  *    HOA foreclosure does NOT extinguish first mortgage; buyer takes title subject to senior mortgage debt.
  */
@@ -71,9 +71,11 @@ const HOA_SUPER_PRIORITY_RULES = Object.freeze({
   FL: {
     months: 12,
     statute: 'Fla. Stat. § 718.116 / § 720.3085',
-    label: 'Florida Safe Harbor: 12 months past assessments or 1% of original mortgage debt',
+    label: 'Florida Safe Harbor (first mortgagee / successor only; 3rd-party auction investors inherit 100% joint-and-several liability for unpaid assessments, interest, late fees, and legal fees)',
     extinguishesFirstMortgageOnHoaForeclosure: false,
     safeHarborApplicable: true,
+    safeHarborFirstMortgageeOnly: true,
+    thirdPartyJointAndSeveralLiability: true,
     safeHarborPercent: 0.01,
     statutoryDollarCap: null,
   },
@@ -213,14 +215,7 @@ const HOA_SUPER_PRIORITY_RULES = Object.freeze({
     safeHarborApplicable: false,
     statutoryDollarCap: null,
   },
-  NY: {
-    months: 6,
-    statute: 'N.Y. Real Prop. Law § 339-z',
-    label: 'New York condominium assessment priority over subordinate liens',
-    extinguishesFirstMortgageOnHoaForeclosure: false,
-    safeHarborApplicable: false,
-    statutoryDollarCap: null,
-  },
+  // NY removed: under N.Y. Real Prop. Law § 339-z, condo common-charge liens are expressly subordinate to unpaid first mortgages of record.
 });
 
 /**
@@ -248,8 +243,7 @@ function evaluateHoaSuperLien(params = {}) {
   // Determine if HOA/COA is foreclosing
   const isHoa = Boolean(
     params.isHoaForeclosing === true ||
-    params.foreclosingPartyType === 'HOA_ASSESSMENT' ||
-    (params.noticeText && /(?:homeowners?\s*association|condominium\s*association|\bhoa\b|master\s*association)/i.test(params.noticeText))
+    params.foreclosingPartyType === 'HOA_ASSESSMENT'
   );
 
   // Senior mortgage extinguishment: True only in Nevada under NRS 116.3116 / SFR Investments Pool 1
@@ -294,7 +288,7 @@ function evaluateHoaSuperLien(params = {}) {
   // Specific state nuances
   if (state === 'FL') {
     warnings.push(
-      `FLORIDA SAFE HARBOR (Fla. Stat. § 718.116 / § 720.3085): First mortgagee or subsequent purchaser liability is capped at the lesser of 12 months unpaid assessments or 1% of original mortgage debt.`
+      `FLORIDA SAFE HARBOR (Fla. Stat. § 718.116 / § 720.3085): Statutory Safe Harbor (lesser of 12 months unpaid assessments or 1% of original mortgage debt) protects ONLY the foreclosing first mortgagee (or its successor/assignee). A 3rd-party auction investor inherits 100% joint-and-several liability for all unpaid HOA/COA assessments, interest, late fees, and legal fees.`
     );
   } else if (state === 'MD') {
     warnings.push(
@@ -349,6 +343,10 @@ function evaluateHoaSuperLien(params = {}) {
     isSuperPriorityState,
     statutoryCapMonths,
     safeHarborApplicable,
+    safeHarborScope: state === 'FL' ? 'FIRST_MORTGAGEE_ONLY' : null,
+    thirdPartyInvestorLiability: state === 'FL' ? 'UNLIMITED_JOINT_AND_SEVERAL' : null,
+    safeHarborFirstMortgageeOnly: state === 'FL',
+    thirdPartyJointAndSeveralLiability: state === 'FL',
     statutoryDollarCap,
     statute,
     seniorMortgageExtinguished,

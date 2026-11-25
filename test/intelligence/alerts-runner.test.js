@@ -316,3 +316,28 @@ test('runAlertsForUser: flat-shape searches (used by older tests) still work', a
   const result = await runAlertsForUser({ userId: 'workspace:operator', listings, database: db });
   assert.equal(result.totalNewMatches, 1);
 });
+
+test('runAlertsForUser: unverified notifyEmail never sends email (P0-2)', async () => {
+  const db = makeStubDb([
+    search({ id: 'S-UNVER', userId: 'device:guest_1', filters: { states: ['TX'], notifyEmail: 'victim@example.com' } }),
+    search({ id: 'S-VER', userId: 'device:guest_2', filters: { states: ['TX'], notifyEmail: 'optedin@example.com', verified: true } }),
+  ]);
+  const sent = [];
+  const mailOptions = {
+    env: { RESEND_API_KEY: 're_test', RESEND_FROM: 'alerts@perfectproperty.bid' },
+    fetchImpl: async (_url, init) => {
+      sent.push(JSON.parse(init.body));
+      return { ok: true, status: 200, json: async () => ({ id: 'mail_1' }) };
+    },
+  };
+  const r1 = await runAlertsForUser({ userId: 'device:guest_1', listings: [listing({ id: 'A', state: 'TX' })], database: db, mailOptions });
+  assert.equal(r1.totalNewMatches, 1);
+  assert.equal(r1.results[0].mailDelivery, 'skipped_unverified');
+  assert.equal(sent.length, 0);
+
+  const r2 = await runAlertsForUser({ userId: 'device:guest_2', listings: [listing({ id: 'B', state: 'TX' })], database: db, mailOptions });
+  assert.equal(r2.totalNewMatches, 1);
+  assert.equal(r2.results[0].mailDelivery, 'sent');
+  assert.equal(sent.length, 1);
+  assert.deepEqual(sent[0].to, ['optedin@example.com']);
+});

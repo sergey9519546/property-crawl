@@ -32,6 +32,7 @@
     "listing_history",
     "listings",
     "newsletter_subscribers",
+    "research_cases",
     "saved_deals",
     "saved_searches",
     "source_observation_runs",
@@ -2081,6 +2082,69 @@
     },
     {
       "table": "newsletter_subscribers",
+      "column": "updated_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "research_cases",
+      "column": "created_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "research_cases",
+      "column": "id",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "research_cases",
+      "column": "identity_key",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "research_cases",
+      "column": "listing_id",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "research_cases",
+      "column": "owner_id",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "research_cases",
+      "column": "payload",
+      "type": "jsonb",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "research_cases",
+      "column": "revision",
+      "type": "integer",
+      "nullable": false,
+      "default": "1"
+    },
+    {
+      "table": "research_cases",
+      "column": "state",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "research_cases",
       "column": "updated_at",
       "type": "timestamp with time zone",
       "nullable": false,

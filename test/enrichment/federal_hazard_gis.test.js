@@ -622,3 +622,34 @@ test('USGS Terrain: succeeds via Promise.allSettled when 3 of 5 samples return a
   assert.equal(fail.status, 'unavailable');
   assert.equal(fail.slopeAnalysis, null);
 });
+
+test('FEMA Flood: rejects null, undefined, empty string, and -9999 sentinel values for STATIC_BFE and DEPTH', async () => {
+  const testCache = path.join(TEMP_CACHE_DIR, 'fema-sentinel-cache.json');
+  const mockFetch = async () => ({
+    ok: true,
+    json: async () => ({
+      features: [
+        {
+          attributes: {
+            FLD_ZONE: 'AE',
+            ZONE_SUBTY: '1 PCT ANNUAL CHANCE FLOOD HAZARD',
+            SFHA_TF: 'T',
+            STATIC_BFE: -9999,
+            V_DATUM: 'NAVD88',
+            DEPTH: '',
+          },
+        },
+      ],
+    }),
+  });
+
+  const res = await queryFemaFloodZone({
+    lat: 29.952,
+    lng: -90.072,
+    cachePath: testCache,
+    fetchFn: mockFetch,
+  });
+  assert.equal(res.status, 'success');
+  assert.equal(res.floodRisk.baseFloodElevation, null);
+  assert.equal(res.floodRisk.floodDepthFeet, null);
+});

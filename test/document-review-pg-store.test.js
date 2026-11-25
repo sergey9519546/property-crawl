@@ -118,3 +118,97 @@ test('handleDocumentReview hydrates PG store once on first authenticated request
   const pgSelects = pool.queries.filter((q) => /SELECT id, payload/i.test(q.sql));
   assert.equal(pgSelects.length, 1);
 });
+
+test('document-review PG store reloads after writes, enforces optimistic revision 409, and never fabricates confidenceScore or OH state', async (t) => {
+  const { startEmbeddedPostgres } = require('../server/db/pglite-pool');
+  const pgDir = fs.mkdtempSync(path.join(os.tmpdir(), 'doc-rev-pg-'));
+  const pg = await startEmbeddedPostgres({ dataDir: pgDir });
+  t.after(async () => {
+    await pg.pool.end();
+    fs.rmSync(pgDir, { recursive: true, force: true });
+  });
+
+  const route = require('../server/routes/document-review');
+  route._resetForTests({ pool: pg.pool, storePath: null, env: { NODE_ENV: 'test' } });
+  t.after(() => route._resetForTests({ pool: null, storePath: null, env: { NODE_ENV: 'test' } }));
+
+  const env = { NODE_ENV: 'test', SCRAPER_ADMIN_TOKEN: 'op-secret-token' };
+  const makeRes = () => ({
+    statusCode: 200,
+    headers: {},
+    body: null,
+    setHeader(k, v) { this.headers[k.toLowerCase()] = v; },
+    status(code) { this.statusCode = code; return this; },
+    json(data) { this.body = data; return this; },
+  });
+  const makePostReq = (body) => {
+    const listeners = { data: [], end: [] };
+    const req = {
+      method: 'POST',
+      url: '/api/document-review',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer op-secret-token' },
+      socket: { destroy() {} },
+      on(ev, fn) { (listeners[ev] ||= []).push(fn); return req; },
+    };
+    process.nextTick(() => {
+      listeners.data.forEach((fn) => fn(Buffer.from(JSON.stringify(body))));
+      listeners.end.forEach((fn) => fn());
+    });
+    return req;
+  };
+
+  // Hydration must NOT fabricate confidenceScore from dealScore / 100
+  const dbWithListing = {
+    isPg: true,
+    pool: pg.pool,
+    getListings: async () => ({
+      listings: [{
+        id: 'L-CONF-1',
+        dealScore: 85,
+        provenance: { sourceFacts: { documents: [{ url: 'https://example.com/notice.pdf', title: 'Notice' }] } },
+      }],
+    }),
+  };
+  const getHydrateRes = makeRes();
+  await handleDocumentReview(
+    { method: 'GET', url: '/api/document-review', headers: { authorization: 'Bearer op-secret-token' } },
+    getHydrateRes,
+    { env, database: dbWithListing }
+  );
+  assert.equal(getHydrateRes.statusCode, 200);
+  assert.equal(getHydrateRes.body.reviews[0].extractedFields.confidenceScore, null);
+
+  // First POST creates revision 1 and must NOT default missing state to 'OH'
+  const post1Res = makeRes();
+  await handleDocumentReview(
+    makePostReq({ listingId: 'L-CONF-1', documentIndex: 0, status: 'approved', reviewer: 'op-1', notes: 'verified' }),
+    post1Res,
+    { env, database: dbWithListing }
+  );
+  assert.equal(post1Res.statusCode, 200);
+  assert.equal(post1Res.body.review.revision, 1);
+  assert.equal(post1Res.body.listing.state, null);
+
+  // Stale revision POST must return 409 Conflict
+  const conflictRes = makeRes();
+  await handleDocumentReview(
+    makePostReq({ listingId: 'L-CONF-1', documentIndex: 0, status: 'rejected', revision: 0, reviewer: 'op-2', notes: 'stale' }),
+    conflictRes,
+    { env, database: dbWithListing }
+  );
+  assert.equal(conflictRes.statusCode, 409);
+
+  // Direct external PG update must be visible on subsequent GET (loadPg not cached forever)
+  await pg.pool.query(
+    `UPDATE document_reviews SET status = 'rejected', revision = 2, payload = jsonb_set(payload, '{status}', '"rejected"') WHERE id = $1`,
+    ['L-CONF-1~0']
+  );
+  const getAfterExternalRes = makeRes();
+  await handleDocumentReview(
+    { method: 'GET', url: '/api/document-review?hydrate=false', headers: { authorization: 'Bearer op-secret-token' } },
+    getAfterExternalRes,
+    { env, database: dbWithListing }
+  );
+  assert.equal(getAfterExternalRes.statusCode, 200);
+  assert.equal(getAfterExternalRes.body.reviews[0].review.status, 'rejected');
+});

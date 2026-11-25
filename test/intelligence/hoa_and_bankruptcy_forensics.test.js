@@ -604,3 +604,36 @@ test('detectIrsNoticeSignals & evaluateIrsNoticeRule: generic homeowner certifie
   assert.equal(ruleEval.lienSurvivesForeclosure, null);
   assert.match(ruleEval.bidderRecommendation, /VERIFY IRS NOTICE BEFORE BIDDING/i);
 });
+
+test('P0-6 regressions: bare HOA in noticeText, FL 3rd-party liability, NY § 339-z, and bare USA in IRS notice', () => {
+  // 1. Bare "hoa" in noticeText of a 1st-mortgage foreclosure must NOT trigger HOA foreclosure risk
+  const bankNoticeWithHoaDefendant = evaluateHoaSuperLien({
+    state: 'TX',
+    isHoaForeclosing: false,
+    foreclosingPartyType: 'FIRST_MORTGAGE',
+    noticeText: 'Wells Fargo Bank, N.A. v. Homeowner; Oakridge HOA named as junior defendant.',
+  });
+  assert.equal(bankNoticeWithHoaDefendant.riskRating, 'HOA_SUBORDINATE_EXTINGUISHED');
+  assert.equal(bankNoticeWithHoaDefendant.seniorMortgageExtinguished, false);
+
+  // 2. Florida Safe Harbor protects ONLY 1st mortgagee; 3rd-party investor has 100% joint-and-several liability
+  const flEval = evaluateHoaSuperLien({ state: 'FL', monthlyDues: 300, originalMortgageDebt: 200000 });
+  assert.equal(flEval.safeHarborScope, 'FIRST_MORTGAGEE_ONLY');
+  assert.equal(flEval.thirdPartyInvestorLiability, 'UNLIMITED_JOINT_AND_SEVERAL');
+  assert.equal(flEval.safeHarborFirstMortgageeOnly, true);
+  assert.equal(flEval.thirdPartyJointAndSeveralLiability, true);
+  assert.ok(flEval.warningDetails.some((w) => /ONLY the foreclosing first mortgagee/i.test(w) && /3rd-party auction investor/i.test(w)));
+
+  // 3. New York (N.Y. Real Prop. Law § 339-z) is subordinate to 1st mortgages, NOT super-priority
+  const nyEval = evaluateHoaSuperLien({ state: 'NY', isHoaForeclosing: true, monthlyDues: 500 });
+  assert.equal(nyEval.isSuperPriorityState, false);
+  assert.equal(nyEval.statutoryCapMonths, 0);
+  assert.equal(nyEval.riskRating, 'CRITICAL_SENIOR_MORTGAGE_SURVIVES');
+
+  // 4. Bare "United States of America" (HUD/VA/GSA) must NOT fire hasFederalTaxLien
+  const hudNotice = detectIrsNoticeSignals('Property sold by United States of America, Department of Housing and Urban Development.');
+  assert.equal(hudNotice.hasFederalTaxLien, false);
+  const hudRule = evaluateIrsNoticeRule({ noticeText: 'United States of America / VA Foreclosure Notice' });
+  assert.equal(hudRule.hasFederalTaxLien, false);
+  assert.equal(hudRule.redemptionDays, 0);
+});

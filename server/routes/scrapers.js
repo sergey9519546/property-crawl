@@ -639,11 +639,8 @@ function createScrapersHandler(dependencies = {}) {
         const database = resolveDatabase();
         try {
           const { runAllHuntDigests } = require('../delivery/alert-digest');
-          let listings = [];
-          if (database && typeof database.getListings === 'function') {
-            const fetched = await database.getListings({ limit: Math.min(2000, Number(body.limit) || 1000) });
-            listings = Array.isArray(fetched?.listings) ? fetched.listings : (Array.isArray(fetched) ? fetched : []);
-          }
+          const { scanAllListings } = require('../db/listings-scan');
+          const listings = (database && typeof database.getListings === 'function') ? (await scanAllListings(database)).pool : [];
           const report = await runAllHuntDigests({
             listings,
             options: {

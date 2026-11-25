@@ -228,6 +228,104 @@ function createDocumentReviewStore(options = {}) {
     }
   }
 
+  async function getByIdPg(id) {
+    if (!pool) return reviews.get(id) || null;
+    return queuePgOp(async () => {
+      try {
+        await ensurePgTable();
+        const result = await pool.query(
+          'SELECT id, payload, content_hash, revision FROM document_reviews WHERE id = $1',
+          [id]
+        );
+        if (!result.rows || result.rows.length === 0) {
+          reviews.delete(id);
+          lastLoadError = null;
+          return null;
+        }
+        const row = result.rows[0];
+        const payload = typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload;
+        if (payload && typeof payload === 'object') {
+          if (row.content_hash && !payload.contentHash) payload.contentHash = row.content_hash;
+          if (Number.isInteger(row.revision)) payload.revision = row.revision;
+          reviews.set(row.id, payload);
+          lastLoadError = null;
+          return payload;
+        }
+        return null;
+      } catch (err) {
+        const message = err && err.message ? err.message : String(err);
+        lastLoadError = message;
+        console.warn('[document-review] PostgreSQL getById failed:', message);
+        return reviews.get(id) || null;
+      }
+    });
+  }
+
+  async function upsertOnePg(id, record, expectedRevision = null) {
+    if (!pool) return { ok: false, conflict: false };
+    return queuePgOp(async () => {
+      try {
+        await ensurePgTable();
+        const listingId = record.listingId || id.split('~')[0];
+        const docIndex = Number.isInteger(record.documentIndex) ? record.documentIndex : null;
+        const docUrl = record.documentUrl || null;
+        const status = record.status || 'pending';
+        const notes = record.notes || null;
+        const reviewer = record.reviewer || null;
+        const reviewedAt = record.reviewedAt || null;
+        const revision = Number.isInteger(record.revision) ? record.revision : 1;
+        const priorStatus = record.priorStatus || null;
+        const extractedAt = record.extractedAt || null;
+        const contentHash = record.contentHash || null;
+        const payloadJson = JSON.stringify(record);
+
+        if (expectedRevision === 0 || expectedRevision === null || expectedRevision === undefined) {
+          const ins = await pool.query(
+            `INSERT INTO document_reviews
+              (id, listing_id, document_index, document_url, status, notes, reviewer,
+               reviewed_at, revision, prior_status, extracted_at, content_hash, payload, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, NOW())
+             ON CONFLICT (id) DO NOTHING
+             RETURNING id`,
+            [id, listingId, docIndex, docUrl, status, notes, reviewer, reviewedAt, revision, priorStatus, extractedAt, contentHash, payloadJson]
+          );
+          if (!ins.rows || ins.rows.length === 0) {
+            return { ok: false, conflict: true };
+          }
+        } else {
+          const upd = await pool.query(
+            `UPDATE document_reviews
+             SET listing_id = $2,
+                 document_index = $3,
+                 document_url = $4,
+                 status = $5,
+                 notes = $6,
+                 reviewer = $7,
+                 reviewed_at = $8,
+                 revision = $9,
+                 prior_status = $10,
+                 extracted_at = $11,
+                 content_hash = $12,
+                 payload = $13::jsonb,
+                 updated_at = NOW()
+             WHERE id = $1 AND revision = $14
+             RETURNING id`,
+            [id, listingId, docIndex, docUrl, status, notes, reviewer, reviewedAt, revision, priorStatus, extractedAt, contentHash, payloadJson, expectedRevision]
+          );
+          if (!upd.rows || upd.rows.length === 0) {
+            return { ok: false, conflict: true };
+          }
+        }
+        reviews.set(id, record);
+        lastPersistError = null;
+        return { ok: true, conflict: false };
+      } catch (err) {
+        recordPgFailure('upsertOne', err);
+        return { ok: false, conflict: false };
+      }
+    });
+  }
+
   async function persistPg() {
     if (!pool) return false;
     try {
@@ -340,6 +438,8 @@ function createDocumentReviewStore(options = {}) {
     get pool() { return pool; },
     load,
     loadPg,
+    getByIdPg,
+    upsertOnePg,
     persist() {
       if (pool) {
         // Callers needing synchronous confirmation against PG should use persistAsync.

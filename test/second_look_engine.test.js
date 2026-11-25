@@ -661,3 +661,72 @@ test('second-look evaluates buyer-supplied underwriteScenario.maxAllowableOffer 
     assert.equal(res.triggerEvents.some((e) => e.type === 'BID_AT_OR_BELOW_BUYER_MAO'), false);
   }
 });
+
+test('P0-6 regressions: HOA_SUPER_PRIORITY_RISK only fires for HOA foreclosures, and pass-case fields are preserved', () => {
+  const bankCaseInNv = {
+    id: 'case_018f9e20a1bc724090123555',
+    state: 'pass',
+    listingSnapshot: { state: 'NV', openingBid: 200000, plaintiff: 'Wells Fargo Bank, N.A.' },
+  };
+  const bankEval = evaluateSecondLookTriggers(bankCaseInNv, {
+    state: 'NV',
+    openingBid: 180000,
+    plaintiff: 'Wells Fargo Bank, N.A.',
+  });
+  assert.equal(bankEval.flags.includes('HOA_SUPER_PRIORITY_RISK'), false);
+
+  const hoaCaseInNv = {
+    id: 'case_018f9e20a1bc724090123556',
+    state: 'pass',
+    listingSnapshot: { state: 'NV', openingBid: 25000, plaintiff: 'Summerlin HOA' },
+  };
+  const hoaEval = evaluateSecondLookTriggers(hoaCaseInNv, {
+    state: 'NV',
+    openingBid: 20000,
+    plaintiff: 'Summerlin Community Homeowners Association',
+  });
+  assert.equal(hoaEval.flags.includes('HOA_SUPER_PRIORITY_RISK'), true);
+
+  // Also verify research-cases.js does not fire HOA_SUPER_PRIORITY_RISK on non-HOA bank foreclosures in FL/NV
+  const { createCase, updateCase } = require('../server/intelligence/research-cases');
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rc-hoa-gate-'));
+  const filePath = path.join(tmpDir, 'cases.json');
+  try {
+    const baseListing = {
+      id: 'fl-bank-1',
+      source: 'civilview',
+      state: 'FL',
+      address: '100 Palm Dr',
+      status: 'active',
+      sourceUrl: 'https://salesweb.civilview.com/Sales/SaleDetails?PropertyId=1',
+      raw: 'Notice of Sheriff Sale for 100 Palm Dr, plaintiff JPMorgan Chase Bank, N.A.',
+      plaintiff: 'JPMorgan Chase Bank, N.A.',
+      provenance: {
+        origin: 'live',
+        observed: true,
+        publisher: 'civilview',
+        recordId: 'fl-bank-1',
+        observedAt: '2026-10-01T00:00:00.000Z',
+      },
+    };
+    const created = createCase({
+      listing: { ...baseListing, openingBid: 200000 },
+    }, { filePath, now: '2026-10-01T00:00:00.000Z' });
+    updateCase(created.case.id, {
+      state: 'pass',
+      reasonCodes: ['price_too_high'],
+      decidedOpeningBid: 200000,
+      reconsideration: { mode: 'any', conditions: [{ field: 'openingBid', operator: 'lte', value: 160000 }] },
+      expectedRevision: created.case.revision,
+    }, { filePath, now: '2026-10-01T01:00:00.000Z' });
+    const { applySecondLookReconsideration } = require('../server/intelligence/second-look');
+    const reopened = applySecondLookReconsideration(created.case.id, { ...baseListing, openingBid: 150000 }, { filePath });
+    assert.equal(reopened.triggered, true);
+    assert.equal(reopened.case.state, 'inbox');
+    assert.equal(reopened.case.reconsiderationRequired, true);
+    assert.equal(reopened.case.latestTrigger.hoaSuperPriorityRisk, false);
+    assert.equal(reopened.case.latestTrigger.flags.includes('HOA_SUPER_PRIORITY_RISK'), false);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});

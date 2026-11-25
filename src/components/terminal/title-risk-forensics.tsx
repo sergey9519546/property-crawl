@@ -25,10 +25,10 @@ type ForeclosingLienType =
   | "tax_deed"
   | "mechanic_lien";
 
-// Authoritative parity with server/intelligence/hoa-super-lien.js (22 jurisdictions)
+// Authoritative parity with server/intelligence/hoa-super-lien.js (21 jurisdictions; NY § 339-z subordinates to 1st mortgages)
 const HOA_SUPER_PRIORITY_STATES = new Set([
   "AL", "AK", "CO", "CT", "DC", "FL", "HI", "IL", "MA", "MD",
-  "MN", "MO", "NJ", "NV", "NY", "OR", "PA", "RI", "TN", "VT", "WA", "WV"
+  "MN", "MO", "NJ", "NV", "OR", "PA", "RI", "TN", "VT", "WA", "WV"
 ]);
 
 function inferInitialLienType(

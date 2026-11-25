@@ -66,7 +66,7 @@ const QUIET_TITLE_DATA = Object.freeze({
     maxDays: 365,
     statutory: 'Tex. Tax Code § 34.21',
     notes:
-      'Tax deed matures after 6-month (homestead/ag) or 2-year (other) right of redemption under § 34.21. ' +
+      'Tax deed matures after 2-year (residence homestead / agricultural-use) or 6-month / 180-day (non-homestead) right of redemption under § 34.21. ' +
       'Quiet title suit to extinguish residual claims: 30–365 days.',
   },
   IL: {

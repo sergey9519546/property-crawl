@@ -165,13 +165,13 @@ test('Lien Waterfall Engine: NV NRS 116.3116 HOA super-priority extinguishes 1st
   assert.match(subPriority.criticalAlert, /SURVIVES against the purchaser/i);
 });
 
-test('TitleRiskForensics UI contract: synced 22 HOA states, unknown default, taxes input, NV parity, empty state & IRS sim label', () => {
+test('TitleRiskForensics UI contract: synced 21 HOA states, unknown default, taxes input, NV parity, empty state & IRS sim label', () => {
   const fs = require('node:fs');
   const path = require('node:path');
   const { HOA_SUPER_PRIORITY_RULES } = require('../server/intelligence/hoa-super-lien');
   const trfSrc = fs.readFileSync(path.join(__dirname, '..', 'src/components/terminal/title-risk-forensics.tsx'), 'utf8');
 
-  // 1. Synced HOA_SUPER_PRIORITY_STATES (matches hoa-super-lien.js 22 states: includes VT, excludes DE and NH)
+  // 1. Synced HOA_SUPER_PRIORITY_STATES (matches hoa-super-lien.js 21 states: includes VT, excludes DE, NH, and NY § 339-z)
   const setMatch = trfSrc.match(/const HOA_SUPER_PRIORITY_STATES = new Set\(\[([\s\S]*?)\]\);/);
   assert.ok(setMatch, 'HOA_SUPER_PRIORITY_STATES set must exist');
   const uiStates = new Set([...setMatch[1].matchAll(/"([A-Z]{2})"/g)].map((m) => m[1]));
@@ -179,6 +179,7 @@ test('TitleRiskForensics UI contract: synced 22 HOA states, unknown default, tax
   assert.equal(uiStates.has('VT'), true);
   assert.equal(uiStates.has('DE'), false);
   assert.equal(uiStates.has('NH'), false);
+  assert.equal(uiStates.has('NY'), false);
 
   // 2. inferInitialLienType defaults to "unknown", classifies tax sales, never treats IRS as tax_deed
   assert.match(trfSrc, /return "unknown";/);

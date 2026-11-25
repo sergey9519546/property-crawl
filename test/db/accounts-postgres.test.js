@@ -68,6 +68,22 @@ test('accounts, webhook ledger, cancellation and review hash on a real engine', 
     assert.equal(reloaded.map.get('L1~0').contentHash, hash);
     const column = await db.pool.query("SELECT content_hash FROM document_reviews WHERE id = 'L1~0'");
     assert.equal(column.rows[0].content_hash, hash, 'hash is stored in its own column, not only the JSON payload');
+
+    // Batched recordAlertMatches via UNNEST preserves idempotency on (search_id, listing_id).
+    await db.pool.query(
+      `INSERT INTO listings (id, source_key, state, address) VALUES ('L-1','treasury','TX','1 Main St'), ('L-2','treasury','TX','2 Main St'), ('L-3','treasury','TX','3 Main St') ON CONFLICT DO NOTHING`
+    );
+    const { createSavedSearch, recordAlertMatches } = require('../../server/db/workspace-persistence');
+    const pgClient = { isPg: true, pool: db.pool };
+    const saved = await createSavedSearch(pgClient, 'workspace:operator', {
+      label: 'PG Batch Test',
+      filters: { states: ['TX'] },
+    });
+    const firstBatch = await recordAlertMatches(pgClient, 'workspace:operator', saved.id, ['L-1', 'L-2', 'L-2']);
+    assert.equal(firstBatch.length, 2);
+    const secondBatch = await recordAlertMatches(pgClient, 'workspace:operator', saved.id, ['L-2', 'L-3']);
+    assert.equal(secondBatch.length, 1);
+    assert.equal(secondBatch[0].listingId, 'L-3');
   } finally {
     await db.pool.end();
     fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });

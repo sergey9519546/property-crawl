@@ -525,3 +525,159 @@ test('Alert Digest: runCountyAlertDigests strictly skips unverified subscription
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('Alert Digest: dispatch-digests scans >1000 listings, uses [PerfectProperty], and enforces cadence & entitlement', async () => {
+  const { runAllHuntDigests, runCountyAlertDigests } = require('../../server/delivery/alert-digest');
+  const { createScrapersHandler } = require('../../server/routes/scrapers');
+  const os = require('node:os');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'digest-wave1c-'));
+  try {
+    // 1. >1,000 listings scan via action=dispatch-digests
+    const totalListings = 1250;
+    const allListings = Array.from({ length: totalListings }, (_, idx) => ({
+      id: `L-${idx}`,
+      source: 'civilview',
+      state: idx === 1200 ? 'NV' : 'CA',
+      county: idx === 1200 ? 'Clark' : 'Los Angeles',
+      address: `${100 + idx} Test Way`,
+      openingBid: 50000,
+      dealScore: 80,
+      saleDate: '2026-12-20',
+      raw: 'Official sheriff sale notice for 100 Test Way.',
+      sourceUrl: `https://salesweb.civilview.com/Sales/SaleDetails?PropertyId=${idx}`,
+      sourceObservedAt: '2026-11-25T00:00:00.000Z',
+      provenance: { origin: 'live', observed: true, recordKind: 'source_record', publisher: 'Treasury', recordId: String(idx), observedAt: '2026-11-25T00:00:00.000Z' },
+    }));
+    const pagedDb = {
+      isPg: false,
+      async getListings({ limit = 1000, offset = 0 } = {}) {
+        return { total: allListings.length, listings: allListings.slice(offset, offset + limit) };
+      },
+      async listSavedSearchUserIds() { return ['device:d1']; },
+      async listSavedSearches() {
+        return [{
+          id: 'sub_nv',
+          userId: 'device:d1',
+          label: 'Clark NV',
+          isActive: true,
+          filters: { states: ['NV'], counties: ['clark'], notifyEmail: 'nv@example.com', verified: true, cadence: 'daily' },
+        }];
+      },
+      async recordAlertMatches(_u, _s, ids) { return ids.map((listingId) => ({ listingId })); },
+    };
+    const sent = [];
+    const handler = createScrapersHandler({
+      database: pagedDb,
+      filePath: path.join(dir, 'hunts.json'),
+      env: { SCRAPER_ADMIN_TOKEN: 'tok', RESEND_API_KEY: '' },
+    });
+    let statusCode = 200;
+    let body = null;
+    await handler(
+      { method: 'POST', url: '/api/scrapers/run?action=dispatch-digests', headers: { authorization: 'Bearer tok' }, body: {} },
+      { setHeader() {}, status(c) { statusCode = c; return this; }, json(v) { body = v; return v; } },
+    );
+    assert.equal(statusCode, 200);
+    assert.equal(body.report.countyAlerts.totalMatches, 1, 'listing at index 1200 must be scanned and matched');
+
+    // 2. [PerfectProperty] subject prefix + cadence cooldown + entitlement gate
+    const fetchFn = async (_url, opts) => {
+      sent.push(JSON.parse(opts.body));
+      return { ok: true, json: async () => ({ id: `mail_${sent.length}` }) };
+    };
+    const accounts = {
+      async get(id) {
+        if (id === 'acct_entitled_111111111111111111111111') return { id, entitled: true };
+        return { id, entitled: false };
+      },
+    };
+    const durableHunts = [
+      {
+        id: 'hunt_111111111111111111111111',
+        name: 'Entitled Hunt',
+        enabled: true,
+        version: 1,
+        owner: 'acct_entitled_111111111111111111111111',
+        notifyEmail: 'pro@example.com',
+        cadence: 'daily',
+        lastDigestAt: '2026-11-24T00:00:00.000Z',
+        criteria: { mode: 'all', rules: [{ field: 'state', operator: 'eq', value: 'NV' }] },
+      },
+      {
+        id: 'hunt_222222222222222222222222',
+        name: 'Canceled Hunt',
+        enabled: true,
+        version: 1,
+        owner: 'acct_canceled_222222222222222222222222',
+        notifyEmail: 'canceled@example.com',
+        cadence: 'daily',
+        criteria: { mode: 'all', rules: [{ field: 'state', operator: 'eq', value: 'NV' }] },
+      },
+      {
+        id: 'hunt_333333333333333333333333',
+        name: 'Cooldown Hunt',
+        enabled: true,
+        version: 1,
+        owner: 'acct_entitled_111111111111111111111111',
+        notifyEmail: 'cooldown@example.com',
+        cadence: 'daily',
+        lastDigestAt: '2026-11-25T10:00:00.000Z',
+        criteria: { mode: 'all', rules: [{ field: 'state', operator: 'eq', value: 'NV' }] },
+      },
+    ];
+    const durableStore = {
+      async list() { return durableHunts; },
+      async baseline() { return null; },
+      async saveEvaluation(_hunt, evaluated) { return evaluated.response; },
+    };
+    const huntReport = await runAllHuntDigests({
+      listings: [allListings[1200]],
+      options: {
+        durableStore,
+        accounts,
+        now: '2026-11-25T12:00:00.000Z',
+        apiKey: 're_test',
+        fetchFn,
+        includeCountyAlerts: false,
+      },
+    });
+    assert.equal(huntReport.digestsDispatched, 1);
+    assert.equal(sent.length, 1);
+    assert.match(sent[0].subject, /^\[PerfectProperty\]/);
+    assert.equal(huntReport.results.find((r) => r.huntId === 'hunt_222222222222222222222222').reason, 'ACCOUNT_NOT_ENTITLED');
+    assert.equal(huntReport.results.find((r) => r.huntId === 'hunt_333333333333333333333333').reason, 'CADENCE_COOLDOWN');
+
+    const countyCooldown = await runCountyAlertDigests({
+      listings: [allListings[1200]],
+      options: {
+        now: '2026-11-25T12:00:00.000Z',
+        accounts,
+        database: {
+          async listSavedSearchUserIds() { return ['device:d1', 'account:acct_canceled_222222222222222222222222']; },
+          async listSavedSearches(uid) {
+            return [{
+              id: `sub_${uid}`,
+              userId: uid,
+              label: 'NV',
+              isActive: true,
+              filters: {
+                states: ['NV'],
+                notifyEmail: 'x@example.com',
+                verified: true,
+                cadence: 'daily',
+                lastSentAt: '2026-11-25T10:00:00.000Z',
+              },
+            }];
+          },
+        },
+        apiKey: 're_test',
+        fetchFn,
+      },
+    });
+    assert.equal(countyCooldown.digestsDispatched, 0);
+    assert.equal(countyCooldown.results[0].reason, 'CADENCE_COOLDOWN');
+    assert.equal(countyCooldown.results[1].reason, 'ACCOUNT_NOT_ENTITLED');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

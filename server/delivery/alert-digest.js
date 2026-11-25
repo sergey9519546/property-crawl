@@ -249,7 +249,7 @@ async function dispatchInvestorAlertDigest({ recipient, hunt, evaluation, listin
     to: recipient,
     huntName: safeSubjectName,
     matches: report.matchedListings,
-    subject: `[PropertyCrawl] Deal Alert Digest: ${safeSubjectName}`,
+    subject: `[PerfectProperty] Deal Alert Digest: ${safeSubjectName}`,
     html: report.html,
     text: report.text || report.markdown,
     ...options,
@@ -264,6 +264,27 @@ async function dispatchInvestorAlertDigest({ recipient, hunt, evaluation, listin
   };
 }
 
+const CADENCE_WINDOW_MS = {
+  instant: 0,
+  daily: 24 * 60 * 60 * 1000,
+  weekly: 7 * 24 * 60 * 60 * 1000,
+};
+
+function isWithinCadenceCooldown(cadence, lastSentAt, nowMs) {
+  const key = typeof cadence === 'string' ? cadence.trim().toLowerCase() : '';
+  const windowMs = CADENCE_WINDOW_MS[key];
+  if (!windowMs || !lastSentAt) return false;
+  const lastMs = Date.parse(lastSentAt);
+  return Number.isFinite(lastMs) && (nowMs - lastMs) < windowMs;
+}
+
+function resolveAccountId(owner) {
+  if (typeof owner !== 'string' || !owner) return null;
+  if (owner.startsWith('account:')) return owner.slice(8) || null;
+  if (owner.startsWith('acct_')) return owner;
+  return null;
+}
+
 /**
  * Evaluates verified county alert subscriptions (saved_searches with filters.notifyEmail
  * AND strict filters.verified === true) and dispatches investor digest emails.
@@ -271,7 +292,10 @@ async function dispatchInvestorAlertDigest({ recipient, hunt, evaluation, listin
  */
 async function runCountyAlertDigests({ listings = [], options = {} } = {}) {
   const evaluatedAt = typeof options.now === 'string' ? options.now : new Date().toISOString();
+  const nowMs = Date.parse(evaluatedAt) || Date.now();
   const database = options.database || null;
+  const env = options.env || process.env;
+  const accounts = options.accounts || (database ? require('../accounts/store').accountServiceFor(database, { env }) : null);
 
   if (
     !database
@@ -299,6 +323,11 @@ async function runCountyAlertDigests({ listings = [], options = {} } = {}) {
   let digestsDispatched = 0;
 
   for (const userId of Array.isArray(userIds) ? userIds : []) {
+    const accountId = resolveAccountId(userId);
+    let accountEntitled = true;
+    if (accountId && accounts) {
+      accountEntitled = Boolean((await accounts.get(accountId))?.entitled);
+    }
     const searches = await database.listSavedSearches(userId, { includeInactive: false });
     for (const search of Array.isArray(searches) ? searches : []) {
       const recipient = typeof search?.filters?.notifyEmail === 'string'
@@ -319,6 +348,34 @@ async function runCountyAlertDigests({ listings = [], options = {} } = {}) {
           reason: 'UNVERIFIED_SUBSCRIPTION',
           matchedCount: 0,
           dispatchResult: { delivered: false, reason: 'UNVERIFIED_SUBSCRIPTION' },
+        });
+        continue;
+      }
+
+      if (!accountEntitled) {
+        results.push({
+          searchId: search?.id || null,
+          userId,
+          label: search?.label || null,
+          skipped: true,
+          reason: 'ACCOUNT_NOT_ENTITLED',
+          matchedCount: 0,
+          dispatchResult: { delivered: false, reason: 'ACCOUNT_NOT_ENTITLED' },
+        });
+        continue;
+      }
+
+      const cadence = search?.filters?.cadence || 'daily';
+      const lastSentAt = search?.filters?.lastSentAt || search?.lastSentAt || search?.lastRunAt || null;
+      if (!options.forceDispatch && isWithinCadenceCooldown(cadence, lastSentAt, nowMs)) {
+        results.push({
+          searchId: search?.id || null,
+          userId,
+          label: search?.label || null,
+          skipped: true,
+          reason: 'CADENCE_COOLDOWN',
+          matchedCount: 0,
+          dispatchResult: { delivered: false, reason: 'CADENCE_COOLDOWN' },
         });
         continue;
       }
@@ -389,7 +446,16 @@ async function runCountyAlertDigests({ listings = [], options = {} } = {}) {
           options,
         });
 
-        if (dispatchResult.delivered) digestsDispatched++;
+        if (dispatchResult.delivered) {
+          digestsDispatched++;
+          if (typeof database.updateSavedSearch === 'function') {
+            try {
+              await database.updateSavedSearch(userId, search.id, {
+                filters: { ...(search.filters || {}), lastSentAt: evaluatedAt },
+              });
+            } catch (_) {}
+          }
+        }
 
         results.push({
           searchId: search.id,
@@ -425,8 +491,11 @@ async function runCountyAlertDigests({ listings = [], options = {} } = {}) {
  */
 async function runAllHuntDigests({ listings = [], options = {} }) {
   const env = options.env || process.env;
+  const nowIso = typeof options.now === 'string' ? options.now : new Date().toISOString();
+  const nowMs = Date.parse(nowIso) || Date.now();
+  const accounts = options.accounts || (options.database ? require('../accounts/store').accountServiceFor(options.database, { env }) : null);
   let durableStore = options.durableStore || null;
-  if (!durableStore && options.database?.isPg && env.DISCOVERY_MODE === 'advanced') {
+  if (!durableStore && options.database?.isPg && (options.database.pool?.query || typeof options.database.query === 'function')) {
     durableStore = require('../discovery/hunt-store').createPgHuntStore(options.database);
   }
 
@@ -481,6 +550,33 @@ async function runAllHuntDigests({ listings = [], options = {} }) {
         matchedCount: 0,
         priceDropsCount: 0,
         dispatchResult: { delivered: false, reason: 'HUNT_DISABLED' },
+      });
+      continue;
+    }
+
+    const ownerAccountId = resolveAccountId(hunt.owner);
+    if (ownerAccountId && accounts && !(await accounts.get(ownerAccountId))?.entitled) {
+      results.push({
+        huntId: hunt.id,
+        huntName: hunt.name,
+        skipped: true,
+        reason: 'ACCOUNT_NOT_ENTITLED',
+        matchedCount: 0,
+        priceDropsCount: 0,
+        dispatchResult: { delivered: false, reason: 'ACCOUNT_NOT_ENTITLED' },
+      });
+      continue;
+    }
+
+    if (!options.forceDispatch && isWithinCadenceCooldown(hunt.cadence, hunt.lastDigestAt || hunt.lastSentAt, nowMs)) {
+      results.push({
+        huntId: hunt.id,
+        huntName: hunt.name,
+        skipped: true,
+        reason: 'CADENCE_COOLDOWN',
+        matchedCount: 0,
+        priceDropsCount: 0,
+        dispatchResult: { delivered: false, reason: 'CADENCE_COOLDOWN' },
       });
       continue;
     }
@@ -542,13 +638,14 @@ async function runAllHuntDigests({ listings = [], options = {} }) {
         if (!hasActionableChanges && !options.forceDispatch) {
           dispatchResult = { delivered: false, reason: 'NO_NEW_CHANGES', report };
         } else {
-          dispatchResult = await dispatchInvestorAlertDigest({
+          const dispatchResultLocal = await dispatchInvestorAlertDigest({
             recipient,
             hunt,
             evaluation: evalPayload,
             listings,
             options,
           });
+          dispatchResult = dispatchResultLocal;
           if (dispatchResult.delivered) digestsDispatched++;
         }
       }

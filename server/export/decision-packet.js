@@ -703,37 +703,67 @@ ${ua ? `## 4. Underwriting Assumptions & Strategy
 ${u.macroValuation ? `- **Estimated Macro Range**: $${u.macroValuation.estLow.toLocaleString()} – $${u.macroValuation.estHigh.toLocaleString()} (Midpoint: $${u.macroValuation.estimatedMacroValue.toLocaleString()})
 - **Historical Basis**: ${u.macroValuation.basis.type} ($${u.macroValuation.basis.historicalValue.toLocaleString()})
 - *Honest Disclosure*: ${u.macroValuation.disclaimer}` : '- Valuation estimate band currently unavailable.'}${hpiSummaryLine}
-${packet.hudSafmr ? `
+${packet.hudSafmr ? (() => {
+  const s = packet.hudSafmr;
+  const rows = [
+    ['0 Bedroom (Efficiency)', 0, '0br'],
+    ['1 Bedroom', 1, '1br'],
+    ['2 Bedroom', 2, '2br'],
+    ['3 Bedroom', 3, '3br'],
+    ['4 Bedroom', 4, '4br'],
+  ].map(([label, idx, key]) => {
+    const base = s.bedroomRents?.[idx] ?? s.bedroomRents?.[key] ?? s.rents?.[key] ?? null;
+    const p90 = (s.bedrooms === idx && Number.isFinite(s.paymentStandard90Pct))
+      ? s.paymentStandard90Pct
+      : (s.paymentStandard90?.[key] ?? (Number.isFinite(base) ? Math.round(base * 0.90) : null));
+    const p110 = (s.bedrooms === idx && Number.isFinite(s.paymentStandard110Pct))
+      ? s.paymentStandard110Pct
+      : (s.paymentStandard110?.[key] ?? (Number.isFinite(base) ? Math.round(base * 1.10) : null));
+    return `| **${label}** | $${Number.isFinite(base) ? base.toLocaleString() : '—'} | $${Number.isFinite(p90) ? p90.toLocaleString() : '—'} | $${Number.isFinite(p110) ? p110.toLocaleString() : '—'} |`;
+  }).join('\n');
+  return `
 ### HUD Fair Market Rent (SAFMR) Benchmark
-- **ZIP Code**: ${packet.hudSafmr.zip} (FY2025 Revised Section 8 FMR)
+- **ZIP Code**: ${s.zip} (FY2025 Revised Section 8 FMR)
 - **Voucher Payment Standard**: 90% floor to 110% ceiling (24 CFR § 888.113)
 
 | Unit Size | Section 8 FMR Baseline | 90% Benchmark Scenario | 110% Benchmark Scenario |
 |---|---|---|---|
-| **0 Bedroom (Efficiency)** | $${packet.hudSafmr.rents?.['0br']?.toLocaleString() ?? '—'} | $${packet.hudSafmr.paymentStandard90?.['0br']?.toLocaleString() ?? '—'} | $${packet.hudSafmr.paymentStandard110?.['0br']?.toLocaleString() ?? '—'} |
-| **1 Bedroom** | $${packet.hudSafmr.rents?.['1br']?.toLocaleString() ?? '—'} | $${packet.hudSafmr.paymentStandard90?.['1br']?.toLocaleString() ?? '—'} | $${packet.hudSafmr.paymentStandard110?.['1br']?.toLocaleString() ?? '—'} |
-| **2 Bedroom** | $${packet.hudSafmr.rents?.['2br']?.toLocaleString() ?? '—'} | $${packet.hudSafmr.paymentStandard90?.['2br']?.toLocaleString() ?? '—'} | $${packet.hudSafmr.paymentStandard110?.['2br']?.toLocaleString() ?? '—'} |
-| **3 Bedroom** | $${packet.hudSafmr.rents?.['3br']?.toLocaleString() ?? '—'} | $${packet.hudSafmr.paymentStandard90?.['3br']?.toLocaleString() ?? '—'} | $${packet.hudSafmr.paymentStandard110?.['3br']?.toLocaleString() ?? '—'} |
-| **4 Bedroom** | $${packet.hudSafmr.rents?.['4br']?.toLocaleString() ?? '—'} | $${packet.hudSafmr.paymentStandard90?.['4br']?.toLocaleString() ?? '—'} | $${packet.hudSafmr.paymentStandard110?.['4br']?.toLocaleString() ?? '—'} |
+${rows}
 
-- *Statutory Citation*: 42 U.S.C. § 1437f(o)(1)(B); official HUD Small Area Fair Market Rent schedule.` : ''}` : `## 4. Valuation band
+- *Statutory Citation*: 42 U.S.C. § 1437f(o)(1)(B); official HUD Small Area Fair Market Rent schedule.`;
+})() : ''}` : `## 4. Valuation band
 ${u.macroValuation ? `- **Estimated Macro Range**: $${u.macroValuation.estLow.toLocaleString()} – $${u.macroValuation.estHigh.toLocaleString()} (Midpoint: $${u.macroValuation.estimatedMacroValue.toLocaleString()})
 - **Historical Basis**: ${u.macroValuation.basis.type} ($${u.macroValuation.basis.historicalValue.toLocaleString()})
 - *Honest Disclosure*: ${u.macroValuation.disclaimer}` : '- Valuation estimate band currently unavailable.'}${hpiSummaryLine}
-${packet.hudSafmr ? `
+${packet.hudSafmr ? (() => {
+  const s = packet.hudSafmr;
+  const rows = [
+    ['0 Bedroom (Efficiency)', 0, '0br'],
+    ['1 Bedroom', 1, '1br'],
+    ['2 Bedroom', 2, '2br'],
+    ['3 Bedroom', 3, '3br'],
+    ['4 Bedroom', 4, '4br'],
+  ].map(([label, idx, key]) => {
+    const base = s.bedroomRents?.[idx] ?? s.bedroomRents?.[key] ?? s.rents?.[key] ?? null;
+    const p90 = (s.bedrooms === idx && Number.isFinite(s.paymentStandard90Pct))
+      ? s.paymentStandard90Pct
+      : (s.paymentStandard90?.[key] ?? (Number.isFinite(base) ? Math.round(base * 0.90) : null));
+    const p110 = (s.bedrooms === idx && Number.isFinite(s.paymentStandard110Pct))
+      ? s.paymentStandard110Pct
+      : (s.paymentStandard110?.[key] ?? (Number.isFinite(base) ? Math.round(base * 1.10) : null));
+    return `| **${label}** | $${Number.isFinite(base) ? base.toLocaleString() : '—'} | $${Number.isFinite(p90) ? p90.toLocaleString() : '—'} | $${Number.isFinite(p110) ? p110.toLocaleString() : '—'} |`;
+  }).join('\n');
+  return `
 ### HUD Fair Market Rent (SAFMR) Benchmark
-- **ZIP Code**: ${packet.hudSafmr.zip} (FY2025 Revised Section 8 FMR)
+- **ZIP Code**: ${s.zip} (FY2025 Revised Section 8 FMR)
 - **Voucher Payment Standard**: 90% floor to 110% ceiling (24 CFR § 888.113)
 
 | Unit Size | Section 8 FMR Baseline | 90% Benchmark Scenario | 110% Benchmark Scenario |
 |---|---|---|---|
-| **0 Bedroom (Efficiency)** | $${packet.hudSafmr.rents?.['0br']?.toLocaleString() ?? '—'} | $${packet.hudSafmr.paymentStandard90?.['0br']?.toLocaleString() ?? '—'} | $${packet.hudSafmr.paymentStandard110?.['0br']?.toLocaleString() ?? '—'} |
-| **1 Bedroom** | $${packet.hudSafmr.rents?.['1br']?.toLocaleString() ?? '—'} | $${packet.hudSafmr.paymentStandard90?.['1br']?.toLocaleString() ?? '—'} | $${packet.hudSafmr.paymentStandard110?.['1br']?.toLocaleString() ?? '—'} |
-| **2 Bedroom** | $${packet.hudSafmr.rents?.['2br']?.toLocaleString() ?? '—'} | $${packet.hudSafmr.paymentStandard90?.['2br']?.toLocaleString() ?? '—'} | $${packet.hudSafmr.paymentStandard110?.['2br']?.toLocaleString() ?? '—'} |
-| **3 Bedroom** | $${packet.hudSafmr.rents?.['3br']?.toLocaleString() ?? '—'} | $${packet.hudSafmr.paymentStandard90?.['3br']?.toLocaleString() ?? '—'} | $${packet.hudSafmr.paymentStandard110?.['3br']?.toLocaleString() ?? '—'} |
-| **4 Bedroom** | $${packet.hudSafmr.rents?.['4br']?.toLocaleString() ?? '—'} | $${packet.hudSafmr.paymentStandard90?.['4br']?.toLocaleString() ?? '—'} | $${packet.hudSafmr.paymentStandard110?.['4br']?.toLocaleString() ?? '—'} |
+${rows}
 
-- *Statutory Citation*: 42 U.S.C. § 1437f(o)(1)(B); official HUD Small Area Fair Market Rent schedule.` : ''}`}
+- *Statutory Citation*: 42 U.S.C. § 1437f(o)(1)(B); official HUD Small Area Fair Market Rent schedule.`;
+})() : ''}`}
 
 ---
 

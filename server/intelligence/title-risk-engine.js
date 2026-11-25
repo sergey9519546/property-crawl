@@ -29,7 +29,8 @@ const { evaluateIrsNoticeRule } = require('./irs-notice');
 /**
  * Classifies the foreclosing plaintiff party type
  */
-function classifyPartyText(text) {
+function classifyPartyText(text, options = {}) {
+  const allowMunicipalNameMatch = options.isPlaintiffSpan !== false;
   const combined = String(text || '').toLowerCase();
   if (!combined.trim()) return 'UNKNOWN';
 
@@ -39,7 +40,10 @@ function classifyPartyText(text) {
   }
 
   // 1b. Municipal or property tax authority
-  if (/(?:county\s*treasurer|tax\s*collector|city\s*of|dept\s*of\s*revenue|tax\s*lien|delinquent\s*tax)/i.test(combined)) {
+  const taxAuthorityPattern = allowMunicipalNameMatch
+    ? /(?:county\s*treasurer|tax\s*collector|city\s*of|county\s*of|dept\s*of\s*revenue|tax\s*lien|delinquent\s*tax)/i
+    : /(?:county\s*treasurer|tax\s*collector|dept\s*of\s*revenue|delinquent\s*tax\s*(?:foreclosure|sale|lien))/i;
+  if (taxAuthorityPattern.test(combined)) {
     return 'TAX_AUTHORITY';
   }
 
@@ -73,9 +77,9 @@ function classifyPartyText(text) {
 }
 
 function classifyForeclosingParty(plaintiff = '', noticeText = '') {
-  const fromPlaintiff = classifyPartyText(plaintiff);
+  const fromPlaintiff = classifyPartyText(plaintiff, { isPlaintiffSpan: true });
   if (fromPlaintiff !== 'UNKNOWN') return fromPlaintiff;
-  return classifyPartyText(noticeText);
+  return classifyPartyText(noticeText, { isPlaintiffSpan: false });
 }
 
 /**
@@ -139,7 +143,7 @@ function extractInstrumentPrioritySignals(listing = '', extraNoticeText = '') {
 function arbitrateTitleRisk(listing = {}, rawNoticeText = '') {
   const sourceFacts = listing.provenance?.sourceFacts || {};
   const plaintiff = String(listing.plaintiff || listing.plaintiff_or_seller || sourceFacts.plaintiff || '');
-  const state = String(listing.state || 'OH').toUpperCase();
+  const state = listing.state ? String(listing.state).trim().toUpperCase() : null;
   const sourceFactsText = [
     sourceFacts.plaintiff,
     sourceFacts.instrumentType,
@@ -253,7 +257,7 @@ function arbitrateTitleRisk(listing = {}, rawNoticeText = '') {
   const bankruptcyStay = analyzeBankruptcyStay({
     hasBankruptcyFiling: listing.bankruptcy?.active ?? listing.hasBankruptcyFiling ?? (docketHasActiveBk ? true : undefined),
     petitionDate: listing.bankruptcy?.petitionDate ?? listing.petitionDate ?? primaryBkHit?.dateFiled,
-    caseNumber: listing.bankruptcy?.caseNumber ?? listing.caseNumber ?? primaryBkHit?.caseNumber,
+    caseNumber: listing.bankruptcy?.caseNumber ?? listing.bankruptcyCaseNumber ?? primaryBkHit?.caseNumber ?? null,
     priorDismissalsWithin1Year: listing.bankruptcy?.priorDismissalsWithin1Year ?? listing.priorDismissalsWithin1Year,
     hasCourtExtension: listing.bankruptcy?.hasCourtExtension ?? listing.hasCourtExtension,
     hasInRemReliefOrder: listing.bankruptcy?.hasInRemReliefOrder ?? listing.hasInRemReliefOrder,

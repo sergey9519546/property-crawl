@@ -389,7 +389,7 @@ function matchedReconsiderationConditions(item, trigger = {}, timestamp = null) 
       const { HOA_SUPER_PRIORITY_STATES } = require('./hoa-super-lien');
       const risk = arbitrateTitleRisk(item.listingSnapshot || {});
       const plaintiff = String(item.listingSnapshot?.plaintiff || '');
-      const state = String(item.listingSnapshot?.state || item.state || 'OH').toUpperCase();
+      const state = item.listingSnapshot?.state ? String(item.listingSnapshot.state).trim().toUpperCase() : null;
       if (condition.operator === 'junior_lien_surviving_mortgage') {
         const isJunior = risk.firstMortgageSurvives && (
           risk.plaintiffType === 'SECOND_MORTGAGE_HELOC' ||
@@ -403,9 +403,9 @@ function matchedReconsiderationConditions(item, trigger = {}, timestamp = null) 
         return Boolean(risk.irsTaxLienRedemption?.hasIrsLien || risk.irsNoticeEvaluation?.hasFederalTaxLien || item.listingSnapshot?.hasIrsLien || item.listingSnapshot?.hasFederalTaxLien);
       }
       if (condition.operator === 'hoa_super_priority') {
-        const isSuperState = risk.hoaSuperPriority?.isSuperPriorityState || ['NV', 'FL'].includes(state) || Boolean(HOA_SUPER_PRIORITY_STATES[state]);
+        const isSuperState = Boolean(risk.hoaSuperPriority?.isSuperPriorityState || (state && Boolean(HOA_SUPER_PRIORITY_STATES[state])));
         const isHoa = risk.plaintiffType === 'HOA_ASSESSMENT' || /(?:homeowners?\s*association|condominium\s*association|\bhoa\b|\bcoa\b)/i.test(plaintiff);
-        return Boolean(isSuperState && (isHoa || risk.hoaSuperPriority?.isSuperPriorityState));
+        return Boolean(isSuperState && isHoa);
       }
       if (condition.operator === 'changed') {
         return changed.has('titleRisk') || changed.has('seniorLienRisk') || changed.has('plaintiff') || changed.has('hasIrsLien');
@@ -425,7 +425,7 @@ function applyReconsiderationTrigger(item, trigger, timestamp) {
   const { HOA_SUPER_PRIORITY_STATES } = require('./hoa-super-lien');
   const titleRisk = arbitrateTitleRisk(item.listingSnapshot || {});
   const plaintiff = String(item.listingSnapshot?.plaintiff || '');
-  const state = String(item.listingSnapshot?.state || item.state || 'OH').toUpperCase();
+  const state = item.listingSnapshot?.state ? String(item.listingSnapshot.state).trim().toUpperCase() : null;
   const alerts = [];
   const flags = [];
   const isJuniorLien = Boolean(titleRisk.firstMortgageSurvives && (
@@ -453,14 +453,13 @@ function applyReconsiderationTrigger(item, trigger, timestamp) {
   }
   const isSuperState = Boolean(
     titleRisk.hoaSuperPriority?.isSuperPriorityState ||
-    ['NV', 'FL'].includes(state) ||
-    Boolean(HOA_SUPER_PRIORITY_STATES[state])
+    (state && Boolean(HOA_SUPER_PRIORITY_STATES[state]))
   );
   const isHoa = Boolean(
     titleRisk.plaintiffType === 'HOA_ASSESSMENT' ||
     /(?:homeowners?\s*association|condominium\s*association|\bhoa\b|\bcoa\b)/i.test(plaintiff)
   );
-  if (isSuperState && (isHoa || titleRisk.hoaSuperPriority?.isSuperPriorityState)) {
+  if (isSuperState && isHoa) {
     flags.push('HOA_SUPER_PRIORITY_RISK');
   }
   item.reconsiderationRequired = true;

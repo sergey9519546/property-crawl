@@ -116,3 +116,25 @@ test('JSON export retains normalized identifiers, year, program aliases, and sup
   assert.equal(exported.auctionProgram, 'HUD REO');assert.equal(exported.program, 'HUD REO');assert.equal(exported.lifecycleStatus, 'publicly_listed');assert.equal(exported.lifecycle, 'publicly_listed');
   assert.equal(exported.saleTimezone, 'America/Los_Angeles');assert.equal(exported.raw, undefined);assert.equal(exported.provenance.sourceFacts, undefined);
 });
+
+test('Decision packet markdown renders HUD SAFMR bedroomRents and paymentStandard90Pct/110Pct without blank dashes', () => {
+  const { buildDecisionPacket, formatDecisionPacketMarkdown } = require('../server/export/decision-packet');
+  const packet = buildDecisionPacket({
+    id: 'SAFMR-1',
+    address: '100 Main St',
+    state: 'TX',
+    zip: '77002',
+    hudSafmr: {
+      zip: '77002',
+      bedrooms: 2,
+      fairMarketRent: 1500,
+      paymentStandard90Pct: 1350,
+      paymentStandard110Pct: 1650,
+      bedroomRents: [1100, 1250, 1500, 1950, 2300],
+    },
+  });
+  const md = formatDecisionPacketMarkdown(packet);
+  assert.match(md, /\$1,100/);
+  assert.match(md, /\$1,500 \| \$1,350 \| \$1,650/);
+  assert.match(md, /\$2,300/);
+});

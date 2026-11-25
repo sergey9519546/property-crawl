@@ -642,8 +642,10 @@ test('Escrow Optimizer: handles invalid saleDate gracefully and detects concurre
     { id: 'bad_date_1', platform: 'realauction', openingBid: 50000, saleDate: 'TBD - Continued' },
     { id: 'bad_date_2', platform: 'realauction', openingBid: 60000, saleDate: 'not-a-valid-date' },
   ], 15000);
-  assert.equal(badDatePlan.allocatedAuctions.length, 2);
-  assert.equal(badDatePlan.allocatedAuctions[0].saleDate, null);
+  assert.equal(badDatePlan.allocatedAuctions.length, 0);
+  assert.equal(badDatePlan.undatedTargets.length, 2);
+  assert.equal(badDatePlan.undatedTargets[0].saleDate, null);
+  assert.equal(badDatePlan.undatedTargets[0].conflictRisk, 'unknown');
 
   // 2. Zero-lockup same-day Texas Tax auctions ([t, t] interval) must count concurrent capital at gavel t
   const sameDayTx = optimizeEscrowAllocation([
@@ -823,4 +825,18 @@ test('Auction Microstructure: guards non-auction fixed/agency REO sources in dir
   }, { countyStats, trajectoryOverride: { priorPostponements: 2, statutoryStayExhausted: true } });
   assert.equal(sheriffDossier.auctionMicrostructure.confidence, 'HIGH');
   assert.ok(sheriffDossier.auctionMicrostructure.probability > 0.5);
+});
+
+test('Escrow Optimizer: undated auctions are placed in undatedTargets with conflictRisk unknown instead of fabricating dates', () => {
+  const plan = optimizeEscrowAllocation([
+    { id: 'dated-1', saleDate: '2026-12-01', targetBid: 100000, source: 'civilview' },
+    { id: 'undated-1', targetBid: 120000, source: 'hud' },
+  ], 50000);
+
+  assert.equal(plan.allocatedAuctions.length, 1);
+  assert.equal(plan.allocatedAuctions[0].id, 'dated-1');
+  assert.equal(plan.undatedTargets.length, 1);
+  assert.equal(plan.undatedTargets[0].id, 'undated-1');
+  assert.equal(plan.undatedTargets[0].saleDate, null);
+  assert.equal(plan.undatedTargets[0].conflictRisk, 'unknown');
 });

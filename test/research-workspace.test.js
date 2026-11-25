@@ -362,3 +362,117 @@ test('relative and delta reconsideration triggers (dropped_by_pct, bid_to_assess
   assert.equal(normalizedDecimal.reconsideration.conditions[0].value, 15);
   assert.equal(normalizedDecimal.reconsideration.conditions[1].value, 65);
 });
+
+
+test('workspace isolates cases between Member A, Member B, and Operator in file mode', async (t) => {
+  const filePath = tempStore(t);
+  const memberA = 'acct_111111111111111111111111';
+  const memberB = 'acct_222222222222222222222222';
+  const handler = createWorkspaceHandler({
+    filePath,
+    env: { NODE_ENV: 'test', SCRAPER_ADMIN_TOKEN: 'operator-secret' },
+    database: { isPg: false, getListingById: async () => listing() },
+    now: NOW,
+  });
+
+  async function callAs(accountId, method, url, body = {}) {
+    const res = response();
+    const headers = { authorization: 'Bearer operator-secret' };
+    if (accountId) headers['x-pp-account'] = accountId;
+    await handler({ method, url, body, headers }, res, new URL(url, 'http://localhost'));
+    return res;
+  }
+
+  const createdA = await callAs(memberA, 'POST', '/api/workspace/cases', { listingId: 'CIV-NJ-7-2128964683' });
+  assert.equal(createdA.statusCode, 201);
+  const caseId = createdA.body.case.id;
+
+  const listB = await callAs(memberB, 'GET', '/api/workspace/cases');
+  assert.equal(listB.statusCode, 200);
+  assert.equal(listB.body.total, 0);
+
+  const getB = await callAs(memberB, 'GET', `/api/workspace/cases/${caseId}`);
+  assert.equal(getB.statusCode, 404);
+
+  const patchB = await callAs(memberB, 'PATCH', `/api/workspace/cases/${caseId}`, {
+    expectedRevision: 1,
+    state: 'pursue',
+    reasonCodes: ['good_spread'],
+  });
+  assert.equal(patchB.statusCode, 404);
+
+  const listOp = await callAs(null, 'GET', '/api/workspace/cases');
+  assert.equal(listOp.statusCode, 200);
+  assert.equal(listOp.body.total, 0);
+
+  const patchA = await callAs(memberA, 'PATCH', `/api/workspace/cases/${caseId}`, {
+    expectedRevision: 1,
+    state: 'pursue',
+    reasonCodes: ['good_spread'],
+  });
+  assert.equal(patchA.statusCode, 200);
+  assert.equal(patchA.body.case.workspaceState, 'pursue');
+  assert.equal(patchA.body.case.revision, 2);
+});
+
+test('ACID Postgres research_cases persists across cold handlers and enforces multi-tenant isolation', async (t) => {
+  const { startEmbeddedPostgres } = require('../server/db/pglite-pool');
+  const pgDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rcase-pg-'));
+  const pg = await startEmbeddedPostgres({ dataDir: pgDir });
+  t.after(async () => {
+    await pg.pool.end();
+    fs.rmSync(pgDir, { recursive: true, force: true });
+  });
+
+  const memberA = 'acct_aaaaaaaaaaaaaaaaaaaaaaaa';
+  const memberB = 'acct_bbbbbbbbbbbbbbbbbbbbbbbb';
+  const database = { isPg: true, pool: pg.pool, getListingById: async () => listing() };
+  const handler1 = createWorkspaceHandler({
+    env: { NODE_ENV: 'test', SCRAPER_ADMIN_TOKEN: 'operator-secret' },
+    database,
+    now: NOW,
+  });
+
+  async function call(handler, accountId, method, url, body = {}) {
+    const res = response();
+    const headers = { authorization: 'Bearer operator-secret' };
+    if (accountId) headers['x-pp-account'] = accountId;
+    await handler({ method, url, body, headers }, res, new URL(url, 'http://localhost'));
+    return res;
+  }
+
+  const createdA = await call(handler1, memberA, 'POST', '/api/workspace/cases', { listingId: 'CIV-NJ-7-2128964683' });
+  const createdB = await call(handler1, memberB, 'POST', '/api/workspace/cases', { listingId: 'CIV-NJ-7-2128964683' });
+  assert.equal(createdA.statusCode, 201);
+  assert.equal(createdB.statusCode, 201);
+  const caseId = createdA.body.case.id;
+
+  const patchA = await call(handler1, memberA, 'PATCH', `/api/workspace/cases/${caseId}`, {
+    expectedRevision: 1,
+    state: 'pursue',
+    reasonCodes: ['good_spread'],
+  });
+  assert.equal(patchA.statusCode, 200);
+  assert.equal(patchA.body.case.revision, 2);
+
+  const handler2 = createWorkspaceHandler({
+    env: { NODE_ENV: 'test', SCRAPER_ADMIN_TOKEN: 'operator-secret' },
+    database,
+    now: NOW,
+  });
+  const listA = await call(handler2, memberA, 'GET', '/api/workspace/cases');
+  const listB = await call(handler2, memberB, 'GET', '/api/workspace/cases');
+  const listOp = await call(handler2, null, 'GET', '/api/workspace/cases');
+  assert.equal(listA.body.total, 1);
+  assert.equal(listA.body.items[0].workspaceState, 'pursue');
+  assert.equal(listB.body.total, 1);
+  assert.equal(listB.body.items[0].workspaceState, 'inbox');
+  assert.equal(listOp.body.total, 0);
+
+  const conflict = await call(handler2, memberA, 'PATCH', `/api/workspace/cases/${caseId}`, {
+    expectedRevision: 1,
+    state: 'pass',
+    reasonCodes: ['title_defect'],
+  });
+  assert.equal(conflict.statusCode, 409);
+});

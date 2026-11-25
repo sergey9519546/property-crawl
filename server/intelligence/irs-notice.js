@@ -40,7 +40,7 @@ function parseDateMs(dateVal) {
  */
 function detectIrsNoticeSignals(text = '') {
   const str = String(text || '');
-  const hasIrs = /(?:united\s*states\s*of\s*america|internal\s*revenue\s*service|\birs\b|federal\s*tax\s*lien|26\s*u\.?s\.?c\.?\s*§?\s*7425)/i.test(str);
+  const hasIrs = /(?:internal\s*revenue\s*service|\birs\b|(?:notice\s+of\s+)?federal\s*tax\s*lien|26\s*u\.?s\.?c\.?\s*§?\s*7425(?:\s*\(\s*[a-z0-9]+\s*\))?)/i.test(str);
 
   if (!hasIrs) {
     return {

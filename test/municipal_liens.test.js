@@ -93,9 +93,15 @@ test('municipal lien analyzer trips CRITICAL alert on active condemnation orders
 
   const analysis = analyzeMunicipalViolations(listing, violations);
   assert.equal(analysis.isCondemnedOrDemolitionRisk, true);
-  assert.ok(analysis.estimatedSurvivingLienLiability >= 19000, 'Must include demolition risk escrow');
+  assert.equal(analysis.demolitionLiabilityUnknown, true);
+  assert.equal(analysis.unquantifiedDemolitionRisk, true);
+  assert.equal(analysis.estimatedSurvivingLienLiability, 4200, 'Must not fabricate synthetic $15,000 demolition liability');
   assert.ok(analysis.municipalWarnings.some((w) => w.includes('CRITICAL MUNICIPAL ALERT: Active condemnation')));
   assert.match(analysis.actionRequired, /DO NOT BID/);
+
+  // Missing state must return null instead of silent 'OH' default
+  const noState = analyzeMunicipalViolations({ id: 'no-state' }, []);
+  assert.equal(noState.state, null);
 });
 
 test('municipal survival statutes exist for FL, OH, IL, PA', () => {

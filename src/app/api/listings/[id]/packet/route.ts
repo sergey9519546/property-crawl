@@ -1,5 +1,5 @@
 import { proxyPropertyApi } from "@/lib/property-api";
-import { proxyPrivatePropertyApi } from "@/lib/workspace-proxy";
+import { proxyMemberPropertyApi, proxyPrivatePropertyApi } from "@/lib/workspace-proxy";
 import { currentMember } from "@/lib/member-account";
 import { hasPermission, readWorkspaceSession, workspaceSessionConfiguration } from "@/lib/workspace-session";
 import { buildDecisionPacket, formatDecisionPacketMarkdown } from "@server/export/decision-packet";
@@ -200,6 +200,8 @@ export async function POST(request: Request) {
     );
   }
 
+  const member = session.authenticated ? null : await currentMember(request).catch(() => null);
+
   let forwardedRequest = request;
   try {
     const rawBody = await request.clone().json();
@@ -224,12 +226,17 @@ export async function POST(request: Request) {
         if (payload.isTaxSale === "true") payload.isTaxSale = true;
         else if (payload.isTaxSale === "false") payload.isTaxSale = false;
       }
-      if (typeof payload.operatorId !== "string" || !payload.operatorId.trim()) {
-        if (session.authenticated) {
+      if (session.authenticated) {
+        if (typeof payload.operatorId !== "string" || !payload.operatorId.trim()) {
           payload.operatorId = session.role;
+        } else {
+          payload.operatorId = payload.operatorId.trim();
         }
+      } else if (member?.id) {
+        // Paid members always attribute packet notes to their own account id.
+        payload.operatorId = member.id;
       } else {
-        payload.operatorId = payload.operatorId.trim();
+        delete payload.operatorId;
       }
       const headers = new Headers(request.headers);
       headers.delete("content-length");
@@ -244,6 +251,8 @@ export async function POST(request: Request) {
     // Preserve non-JSON request stream when body cannot be parsed as JSON
   }
 
-  // Overrides and custom underwriting mutations require operator/analyst credentials
-  return proxyPrivatePropertyApi(forwardedRequest);
+  if (session.authenticated) {
+    return proxyPrivatePropertyApi(forwardedRequest);
+  }
+  return proxyMemberPropertyApi(forwardedRequest, { permission: "canExportDossier" });
 }

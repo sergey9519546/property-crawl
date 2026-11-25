@@ -119,12 +119,23 @@ test('matchListingAgainstSearch: maxBid exceeded returns reason=maxBid_exceeded'
   assert.equal(result.reason, 'maxBid_exceeded');
 });
 
-test('matchListingAgainstSearch: openingBid missing is allowed (we don\'t penalize unknowns)', () => {
-  // maxBid filters out known-too-expensive; it does NOT require a value.
-  // A listing without an opening bid is still eligible to alert — the
-  // search constraint is a ceiling, not a presence check.
+test('matchListingAgainstSearch: openingBid missing fails closed when maxBid is set', () => {
   const result = matchListingAgainstSearch(listing({ openingBid: null }), search());
-  assert.equal(result.match, true);
+  assert.equal(result.match, false);
+  assert.equal(result.reason, 'maxBid_exceeded');
+  assert.equal(matchListingAgainstSearch(listing({ openingBid: undefined }), search()).match, false);
+  assert.equal(matchListingAgainstSearch(listing({ openingBid: NaN }), search()).match, false);
+});
+
+test('matchListingAgainstSearch: PROP_TYPE_SYNONYMS normalizes Single Family Home <-> Single Family', () => {
+  assert.deepEqual(
+    matchListingAgainstSearch(listing({ propType: 'Single Family Home' }), search({ propTypes: ['Single Family'] })),
+    { match: true }
+  );
+  assert.deepEqual(
+    matchListingAgainstSearch(listing({ propType: 'SFR' }), search({ propTypes: ['Single Family Residence'] })),
+    { match: true }
+  );
 });
 
 test('matchListingAgainstSearch: minEquity not met returns reason=minEquity_not_met', () => {

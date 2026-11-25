@@ -4,9 +4,11 @@ const db = require('../db/client');
 const { presentedRunToken, tokensMatch } = require('./scrapers');
 const { buildPropertyDossier } = require('../intelligence/dossier');
 const research = require('../intelligence/research-cases');
+const researchStore = require('../intelligence/research-store');
 const { loadObservationsForRecord } = require('../db/observations-persistence');
 const intake = require('../sources/intake');
 const intakeStore = require('../sources/store');
+const { memberAccountId } = require('../security/workspace-identity');
 
 function createWorkspaceHandler(dependencies = {}) {
   const database = dependencies.database || db;
@@ -19,10 +21,6 @@ function createWorkspaceHandler(dependencies = {}) {
     const record = intakeStore.loadStore(intakePath).records.find((item) => item.id === id);
     return record ? intake.getSummary(record) : null;
   });
-
-  function operationOptions() {
-    return { filePath, now: currentTime() };
-  }
 
   async function dossierFor(listing, timestamp) {
     let observations = { records: {}, signals: [] };
@@ -52,15 +50,32 @@ function createWorkspaceHandler(dependencies = {}) {
     });
     if (!tokensMatch(presentedRunToken(req), configuredToken)) return res.status(401).json({ error: 'Source operator credential required' });
 
+    const account = memberAccountId(req);
+    if (req.headers && req.headers['x-pp-account'] && !account) {
+      return res.status(400).json({ error: 'Invalid member account' });
+    }
+    const ownerId = account || 'operator';
+    const usePg = Boolean(database && database.isPg && database.pool);
+    const scopedFilePath = researchStore.resolveStorePath(filePath, ownerId);
+
+    function operationOptions() {
+      return { filePath: scopedFilePath, now: currentTime(), ownerId };
+    }
+
     try {
       if (url.pathname === '/api/workspace/cases') {
         if (req.method === 'GET') {
-          return res.json(research.listCases({
+          const filters = {
             state: url.searchParams.get('state') || undefined,
             sourceId: url.searchParams.get('sourceId') || undefined,
             listingId: url.searchParams.get('listingId') || undefined,
-            limit: url.searchParams.get('limit'), offset: url.searchParams.get('offset'),
-          }, { filePath }));
+            limit: url.searchParams.get('limit'),
+            offset: url.searchParams.get('offset'),
+          };
+          const result = usePg
+            ? await researchStore.listCasesPg(database, ownerId, filters)
+            : research.listCases(filters, { filePath: scopedFilePath });
+          return res.json(result);
         }
         if (req.method === 'POST') {
           const listingId = req.body?.listingId;
@@ -71,11 +86,16 @@ function createWorkspaceHandler(dependencies = {}) {
           if (!listing) return res.status(404).json({ error: 'Listing not found' });
           const configuredNow = currentTime();
           const timestamp = configuredNow === undefined ? Date.now() : configuredNow;
-          const result = research.createCase({
-            listing, sourceRef: req.body?.sourceRef, origin: req.body?.origin,
+          const payload = {
+            listing,
+            sourceRef: req.body?.sourceRef,
+            origin: req.body?.origin,
             dossier: await dossierFor(listing, timestamp),
             underwriteScenario: req.body?.underwriteScenario,
-          }, { filePath, now: timestamp });
+          };
+          const result = usePg
+            ? await researchStore.createCasePg(database, ownerId, payload, { now: timestamp })
+            : research.createCase(payload, { filePath: scopedFilePath, now: timestamp });
           return res.status(result.created ? 201 : 200).json(result);
         }
         return res.status(405).json({ error: 'Use GET to list cases or POST to create one' });
@@ -83,18 +103,25 @@ function createWorkspaceHandler(dependencies = {}) {
 
       if (url.pathname === '/api/workspace/import/preview' || url.pathname === '/api/workspace/import/commit') {
         if (req.method !== 'POST') return res.status(405).json({ error: 'Use POST for browser import' });
-        const options = { database, filePath, now: currentTime() };
+        const options = { database, filePath: scopedFilePath, now: currentTime(), ownerId };
         if (url.pathname.endsWith('/preview')) {
-          return res.json({ preview: await research.previewBrowserImport(req.body?.listingIds, options) });
+          const preview = usePg
+            ? await researchStore.previewBrowserImportPg(database, ownerId, req.body?.listingIds, options)
+            : await research.previewBrowserImport(req.body?.listingIds, options);
+          return res.json({ preview });
         }
-        const result = await research.commitBrowserImport(req.body?.listingIds, req.body?.previewHash, {
+        const commitOptions = {
           ...options,
           buildDossier: (listing, timestamp) => dossierFor(listing, timestamp),
-        });
+        };
+        const result = usePg
+          ? await researchStore.commitBrowserImportPg(database, ownerId, req.body?.listingIds, req.body?.previewHash, commitOptions)
+          : await research.commitBrowserImport(req.body?.listingIds, req.body?.previewHash, commitOptions);
         return res.json({ result });
       }
 
       if (url.pathname === '/api/workspace/alachua/pilot') {
+        if (account) return res.status(403).json({ error: 'This workspace tool is for the operator account only' });
         if (req.method !== 'POST') return res.status(405).json({ error: 'Use POST for the county reviewed-packet workflow' });
         const intakeId = req.body?.intakeId;
         if (!/^intake_[a-f0-9]{24}$/.test(intakeId || '')) {
@@ -118,7 +145,9 @@ function createWorkspaceHandler(dependencies = {}) {
 
       if (action === 'packet') {
         if (req.method !== 'GET') return res.status(405).json({ error: 'Use GET to export a research packet' });
-        const packet = research.buildPacket(id, { filePath });
+        const packet = usePg
+          ? await researchStore.buildPacketPg(database, ownerId, id)
+          : research.buildPacket(id, { filePath: scopedFilePath });
         const format = url.searchParams.get('format') || 'json';
         if (format === 'md' || format === 'markdown') {
           res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
@@ -132,22 +161,41 @@ function createWorkspaceHandler(dependencies = {}) {
 
       if (action === 'dossier') {
         if (req.method !== 'GET') return res.status(405).json({ error: 'Use GET to read a case dossier' });
-        return res.json(research.getCase(id, { filePath }));
+        const result = usePg
+          ? await researchStore.getCasePg(database, ownerId, id)
+          : research.getCase(id, { filePath: scopedFilePath });
+        return res.json(result);
       }
 
       if (action === 'evidence') {
         if (intakeId) {
           if (req.method !== 'DELETE') return res.status(405).json({ error: 'Use DELETE to unlink evidence' });
-          return res.json({ case: research.unlinkEvidence(id, intakeId, req.body || {}, operationOptions()) });
+          const updated = usePg
+            ? await researchStore.unlinkEvidencePg(database, ownerId, id, intakeId, req.body || {}, operationOptions())
+            : research.unlinkEvidence(id, intakeId, req.body || {}, operationOptions());
+          return res.json({ case: updated });
         }
         if (req.method !== 'POST') return res.status(405).json({ error: 'Use POST to link reviewed evidence' });
         const evidence = evidenceById(req.body?.intakeId);
         if (!evidence) throw new research.ResearchCaseError('RESEARCH_EVIDENCE_NOT_FOUND', 'Evidence packet was not found');
-        return res.json({ case: research.linkEvidence(id, evidence, req.body || {}, operationOptions()) });
+        const updated = usePg
+          ? await researchStore.linkEvidencePg(database, ownerId, id, evidence, req.body || {}, operationOptions())
+          : research.linkEvidence(id, evidence, req.body || {}, operationOptions());
+        return res.json({ case: updated });
       }
 
-      if (req.method === 'GET') return res.json(research.getCase(id, { filePath }));
-      if (req.method === 'PATCH') return res.json({ case: research.updateCase(id, req.body || {}, operationOptions()) });
+      if (req.method === 'GET') {
+        const result = usePg
+          ? await researchStore.getCasePg(database, ownerId, id)
+          : research.getCase(id, { filePath: scopedFilePath });
+        return res.json(result);
+      }
+      if (req.method === 'PATCH') {
+        const updated = usePg
+          ? await researchStore.updateCasePg(database, ownerId, id, req.body || {}, operationOptions())
+          : research.updateCase(id, req.body || {}, operationOptions());
+        return res.json({ case: updated });
+      }
       return res.status(405).json({ error: 'Use GET or PATCH for this research case' });
     } catch (error) {
       if (error instanceof research.ResearchCaseError) {

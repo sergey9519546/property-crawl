@@ -286,17 +286,17 @@ async function deleteSavedSearch(client, userId, id) {
 async function recordAlertMatches(client, userId, searchId, listingIds) {
   if (!Array.isArray(listingIds) || listingIds.length === 0) return [];
   if (client.isPg) {
-    const ids = [];
-    for (const listingId of listingIds) {
-      const res = await client.pool.query(
-        `INSERT INTO alert_matches (search_id, user_id, listing_id, matched_at)
-         VALUES ($1, $2, $3, NOW())
-         ON CONFLICT (search_id, listing_id) DO NOTHING
-         RETURNING id, search_id, user_id, listing_id, matched_at, read_at`,
-        [searchId, userId, listingId]
-      );
-      if (res.rows[0]) ids.push(serializeAlertMatch(res.rows[0]));
-    }
+    const uniqueIds = [...new Set(listingIds.filter((id) => typeof id === 'string' && id.length > 0))];
+    if (uniqueIds.length === 0) return [];
+    const res = await client.pool.query(
+      `INSERT INTO alert_matches (search_id, user_id, listing_id, matched_at)
+       SELECT $1, $2, listing_id, NOW()
+       FROM UNNEST($3::text[]) AS listing_id
+       ON CONFLICT (search_id, listing_id) DO NOTHING
+       RETURNING id, search_id, user_id, listing_id, matched_at, read_at`,
+      [searchId, userId, uniqueIds]
+    );
+    const ids = res.rows.map(serializeAlertMatch);
     await client.pool.query(
       `UPDATE saved_searches SET last_run_at = NOW(), last_match_count = $2 WHERE id = $1`,
       [searchId, ids.length]

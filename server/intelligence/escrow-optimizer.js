@@ -298,30 +298,56 @@ function optimizeEscrowAllocation(auctions = [], totalCapital = 0, options = {})
       capitalEfficiencyRatio: 0,
       allocatedAuctions: [],
       dateConflicts: [],
+      undatedTargets: [],
       notes: 'No auctions provided to optimize.',
     };
   }
 
   // Step 1: Pre-calculate deposit requirements and timing windows for each auction
-  const parsedAuctions = auctions.map((item, idx) => {
+  const parsedAuctions = [];
+  const undatedTargets = [];
+  auctions.forEach((item, idx) => {
     const id = item.id || item.listingId || `auction_${idx + 1}`;
     const depositCalc = calculateRequiredDeposit(item);
     const saleDateStr = item.saleDate || item.auctionDate || null;
     const rawParsedTime = saleDateStr ? new Date(saleDateStr).getTime() : NaN;
     const hasValidSaleDate = Number.isFinite(rawParsedTime);
-    const saleTime = hasValidSaleDate ? rawParsedTime : Date.now() + (idx * 86400000);
-    const leadTimeMs = depositCalc.leadTimeHours * 3600 * 1000;
-    const lockupStartMs = saleTime - leadTimeMs;
-    const refundMs = depositCalc.refundTurnaroundDays * 24 * 3600 * 1000;
-    const recyclableMs = saleTime + refundMs;
-
     const priorityScore = Number.isFinite(item.priorityScore)
       ? item.priorityScore
       : Number.isFinite(item.dealScore)
         ? item.dealScore
         : 50;
 
-    return {
+    if (!hasValidSaleDate) {
+      undatedTargets.push({
+        id,
+        original: item,
+        targetBid: depositCalc.targetBid,
+        requiredDeposit: depositCalc.requiredDeposit,
+        depositPercent: depositCalc.depositPercent,
+        paymentMethod: depositCalc.paymentMethod,
+        platform: depositCalc.rules.platform,
+        saleDate: null,
+        saleTime: null,
+        lockupStartTime: null,
+        recyclableTime: null,
+        lockupStartDate: null,
+        recyclableDate: null,
+        refundTurnaroundDays: depositCalc.refundTurnaroundDays,
+        priorityScore,
+        conflictRisk: 'unknown',
+        reason: 'Missing or invalid saleDate; kept separate from dated escrow lockup schedule.',
+      });
+      return;
+    }
+
+    const saleTime = rawParsedTime;
+    const leadTimeMs = depositCalc.leadTimeHours * 3600 * 1000;
+    const lockupStartMs = saleTime - leadTimeMs;
+    const refundMs = depositCalc.refundTurnaroundDays * 24 * 3600 * 1000;
+    const recyclableMs = saleTime + refundMs;
+
+    parsedAuctions.push({
       id,
       original: item,
       targetBid: depositCalc.targetBid,
@@ -329,7 +355,7 @@ function optimizeEscrowAllocation(auctions = [], totalCapital = 0, options = {})
       depositPercent: depositCalc.depositPercent,
       paymentMethod: depositCalc.paymentMethod,
       platform: depositCalc.rules.platform,
-      saleDate: hasValidSaleDate ? new Date(saleTime).toISOString() : null,
+      saleDate: new Date(saleTime).toISOString(),
       saleTime,
       lockupStartTime: lockupStartMs,
       recyclableTime: recyclableMs,
@@ -337,7 +363,7 @@ function optimizeEscrowAllocation(auctions = [], totalCapital = 0, options = {})
       recyclableDate: Number.isFinite(recyclableMs) ? new Date(recyclableMs).toISOString() : null,
       refundTurnaroundDays: depositCalc.refundTurnaroundDays,
       priorityScore,
-    };
+    });
   });
 
   // Step 2: Sort auctions according to chosen optimization policy
@@ -490,6 +516,7 @@ function optimizeEscrowAllocation(auctions = [], totalCapital = 0, options = {})
     excludedAuctionCount: allocatedAuctions.length - fundedList.length,
     allocatedAuctions,
     dateConflicts,
+    undatedTargets,
   };
 }
 

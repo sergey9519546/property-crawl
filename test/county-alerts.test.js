@@ -345,7 +345,8 @@ test('runAlertsForUser: dispatches rich email alert to county subscriber on new 
       states: ['NC'],
       counties: ['wake'],
       notifyEmail: 'subscriber@example.com',
-      cadence: 'daily'
+      cadence: 'daily',
+      verified: true
     }
   });
 

@@ -134,10 +134,9 @@ test('matchListingAgainstSearch: maxBid exceeded', () => {
   assert.equal(r.reason, 'maxBid_exceeded');
 });
 
-test('matchListingAgainstSearch: maxBid null bid does NOT trigger (passes)', () => {
-  // When the listing's bid is missing, we don't know if it would exceed — let it through.
+test('matchListingAgainstSearch: maxBid fails closed on null openingBid', () => {
   const r = matchListingAgainstSearch({ state: 'OH' }, { states: ['OH'], maxBid: 100000 });
-  assert.deepEqual(r, { match: true });
+  assert.deepEqual(r, { match: false, reason: 'maxBid_exceeded' });
 });
 
 test('matchListingAgainstSearch: minEquity not met', () => {

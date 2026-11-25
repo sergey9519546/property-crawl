@@ -206,7 +206,7 @@ function evaluateSecondLookTriggers(caseItem = {}, freshListing = {}, options = 
 
   const titleRisk = arbitrateTitleRisk(freshListing);
   const plaintiff = String(freshListing.plaintiff || '');
-  const state = String(freshListing.state || prior.state || 'OH').toUpperCase();
+  const state = (freshListing.state || prior.state) ? String(freshListing.state || prior.state).trim().toUpperCase() : null;
 
   const isJuniorLien = Boolean(titleRisk.firstMortgageSurvives && (
     titleRisk.plaintiffType === 'SECOND_MORTGAGE_HELOC' ||
@@ -228,14 +228,13 @@ function evaluateSecondLookTriggers(caseItem = {}, freshListing = {}, options = 
 
   const isSuperState = Boolean(
     titleRisk.hoaSuperPriority?.isSuperPriorityState ||
-    ['NV', 'FL'].includes(state) ||
-    Boolean(HOA_SUPER_PRIORITY_STATES[state])
+    (state && Boolean(HOA_SUPER_PRIORITY_STATES[state]))
   );
   const isHoa = Boolean(
     titleRisk.plaintiffType === 'HOA_ASSESSMENT' ||
     /(?:homeowners?\s*association|condominium\s*association|\bhoa\b|\bcoa\b|master\s*association)/i.test(plaintiff)
   );
-  const isHoaSuperPriority = Boolean(isSuperState && (isHoa || titleRisk.hoaSuperPriority?.isSuperPriorityState));
+  const isHoaSuperPriority = Boolean(isSuperState && isHoa);
 
   const priceChange = transition.changes.find((c) => c.type === 'PRICE_REDUCED');
   const dateChange = transition.changes.find((c) => c.type === 'DATE_RESCHEDULED');

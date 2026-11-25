@@ -283,8 +283,14 @@ async function queryFemaFloodZone({
     const fldZone = bestFeature.FLD_ZONE;
     const zoneSubty = bestFeature ? bestFeature.ZONE_SUBTY : null;
     const sfhaTf = bestFeature ? bestFeature.SFHA_TF : 'F';
-    const staticBfe = bestFeature && Number.isFinite(Number(bestFeature.STATIC_BFE)) ? Number(bestFeature.STATIC_BFE) : null;
-    const depth = bestFeature && Number.isFinite(Number(bestFeature.DEPTH)) ? Number(bestFeature.DEPTH) : null;
+    const parseFemaNumeric = (val) => {
+      if (val === null || val === undefined || val === '') return null;
+      const num = Number(val);
+      if (!Number.isFinite(num) || num <= -999) return null;
+      return num;
+    };
+    const staticBfe = bestFeature ? parseFemaNumeric(bestFeature.STATIC_BFE) : null;
+    const depth = bestFeature ? parseFemaNumeric(bestFeature.DEPTH) : null;
 
     const floodRisk = evaluateFloodRisk(fldZone, zoneSubty, sfhaTf);
     floodRisk.baseFloodElevation = staticBfe;

@@ -1074,8 +1074,9 @@ const fs = require('node:fs');
         const accounts = accountServiceFor(db);
         for (const userId of userIds) {
           // Members get saved-search alerts only while their subscription is active.
-          if (userId.startsWith('account:') && !(await accounts.get(userId.slice(8)))?.entitled) continue;
-          if (!userId.startsWith('workspace:') && !userId.startsWith('account:') && !userId.startsWith('device:')) continue;
+          const accountId = userId.startsWith('account:') ? userId.slice(8) : (userId.startsWith('acct_') ? userId : null);
+          if (accountId && !(await accounts.get(accountId))?.entitled) continue;
+          if (!userId.startsWith('workspace:') && !accountId && !userId.startsWith('device:')) continue;
           const alertResult = await runBgDb(db, () => runAlertsForUser({ userId, listings: run.listings, database: db }));
           if (alertResult && alertResult.totalNewMatches > 0) {
             console.log(`[Alerts] ${alertResult.totalNewMatches} new matches across ${alertResult.searches} searches for ${userId}`);

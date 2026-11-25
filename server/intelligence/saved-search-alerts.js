@@ -71,10 +71,51 @@ function normalizedSources(search) {
   return [...new Set(sources.map((s) => s.trim().toLowerCase()))];
 }
 
+const PROP_TYPE_SYNONYMS = Object.freeze({
+  'single family': 'single family',
+  'single-family': 'single family',
+  'single family home': 'single family',
+  'single family residence': 'single family',
+  'single-family residence': 'single family',
+  'single family residential': 'single family',
+  'single-family residential': 'single family',
+  'sfr': 'single family',
+  'manufactured': 'manufactured',
+  'manufactured home': 'manufactured',
+  'mobile': 'manufactured',
+  'mobile home': 'manufactured',
+  'modular': 'manufactured',
+  'modular home': 'manufactured',
+  'land': 'land',
+  'vacant land': 'land',
+  'vacant lot': 'land',
+  'lot': 'land',
+  'acreage': 'land',
+  'raw land': 'land',
+  'condo': 'condo',
+  'condominium': 'condo',
+  'condo/townhouse': 'condo',
+  'multi family': 'multi family',
+  'multi-family': 'multi family',
+  'multi family dwelling': 'multi family',
+  'multi-family dwelling': 'multi family',
+  'town house': 'town house',
+  'townhouse': 'town house',
+  'town home': 'town house',
+  'townhome': 'town house',
+});
+
+function normalizePropType(value) {
+  if (typeof value !== 'string') return '';
+  const cleaned = value.trim().toLowerCase();
+  if (!cleaned) return '';
+  return PROP_TYPE_SYNONYMS[cleaned] || cleaned;
+}
+
 function normalizedPropTypes(search) {
   const propTypes = getFilter(search, 'propTypes');
   if (!isStringArray(propTypes) || propTypes.length === 0) return null;
-  return [...new Set(propTypes.map((s) => s.trim().toLowerCase()).filter(Boolean))];
+  return [...new Set(propTypes.map(normalizePropType).filter(Boolean))];
 }
 
 function normalizedKeywords(search) {
@@ -153,7 +194,7 @@ function matchListingAgainstSearch(listing, search) {
 
   const propTypes = normalizedPropTypes(search);
   if (propTypes) {
-    const listingType = typeof listing.propType === 'string' ? listing.propType.trim().toLowerCase() : '';
+    const listingType = normalizePropType(listing.propType);
     if (!listingType || !propTypes.includes(listingType)) {
       return { match: false, reason: 'propType_mismatch' };
     }
@@ -170,7 +211,7 @@ function matchListingAgainstSearch(listing, search) {
   const maxBid = numericFilter(search, 'maxBid');
   if (maxBid !== null) {
     const bid = finiteOrNull(listing.openingBid);
-    if (Number.isFinite(bid) && bid > maxBid) {
+    if (bid === null || bid > maxBid) {
       return { match: false, reason: 'maxBid_exceeded' };
     }
   }

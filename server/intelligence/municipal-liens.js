@@ -91,7 +91,7 @@ const MUNICIPAL_SURVIVAL_RULES = Object.freeze({
 });
 
 function analyzeMunicipalViolations(listing = {}, violations = []) {
-  const state = String(listing.state || 'OH').toUpperCase();
+  const state = listing.state ? String(listing.state).trim().toUpperCase() : null;
   const rule = MUNICIPAL_SURVIVAL_RULES[state] || null;
 
   const activeViolations = [];
@@ -123,9 +123,8 @@ function analyzeMunicipalViolations(listing = {}, violations = []) {
   let survivingLiability = totalFines;
 
   if (hasDemolitionRisk) {
-    warnings.push('CRITICAL MUNICIPAL ALERT: Active condemnation or demolition order on file! Immediate risk of structure forfeiture or $15k-$30k city demolition assessment.');
-    // City demolition assessments typically average $15,000 to $25,000
-    survivingLiability += 15000;
+    warnings.push('CRITICAL MUNICIPAL ALERT: Active condemnation or demolition order on file! Unquantified demolition assessment risk — obtain written municipal payoff/repair estimate.');
+    // Demolition liability is unquantified until municipal payoff/bid is obtained (zero-fabrication: do not add synthetic $15,000)
   }
 
   if (activeViolations.length > 0) {
@@ -146,6 +145,8 @@ function analyzeMunicipalViolations(listing = {}, violations = []) {
     state,
     hasMunicipalViolations: activeViolations.length > 0,
     isCondemnedOrDemolitionRisk: hasDemolitionRisk,
+    demolitionLiabilityUnknown: hasDemolitionRisk,
+    unquantifiedDemolitionRisk: hasDemolitionRisk,
     estimatedSurvivingLienLiability: Math.round(survivingLiability),
     activeViolationCount: activeViolations.length,
     violations: activeViolations,

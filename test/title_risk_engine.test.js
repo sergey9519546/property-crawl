@@ -176,3 +176,23 @@ test('regex word boundaries prevent substring false positives on irs and hoa', (
   assert.equal(detection.redemptionDays, 0);
   assert.equal(detection.warning, null);
 });
+
+test('P0-6 regressions: City of in noticeText, no silent OH default, and no foreclosure caseNumber leak to bankruptcy', () => {
+  // "City of Columbus" in address prose of noticeText must not match TAX_AUTHORITY
+  assert.equal(
+    classifyForeclosingParty('', 'Property located in the City of Columbus, OH. Foreclosure by Wells Fargo Bank, N.A.'),
+    'FIRST_MORTGAGE'
+  );
+  // Explicit plaintiff "City of Columbus" still matches TAX_AUTHORITY
+  assert.equal(classifyForeclosingParty('City of Columbus'), 'TAX_AUTHORITY');
+
+  // Missing state returns null instead of silently defaulting to 'OH', and foreclosure caseNumber is not leaked to bankruptcyStay
+  const risk = arbitrateTitleRisk({
+    id: 'no-state-01',
+    plaintiff: 'JPMorgan Chase Bank, N.A.',
+    caseNumber: '2026-CV-001234',
+    openingBid: 50000,
+  });
+  assert.equal(risk.statutoryRedemption.state, null);
+  assert.equal(risk.bankruptcyStay.caseNumber ?? null, null);
+});
