@@ -85,20 +85,6 @@ function ensureDiscoveryLayers(
         },
       });
       map.addLayer({
-        id: DISCOVERY_COUNT_LAYER_ID,
-        type: "symbol",
-        source: DISCOVERY_SOURCE_ID,
-        filter: ["==", ["get", "isCluster"], true],
-        layout: {
-          "text-field": ["to-string", ["get", "count"]],
-          "text-size": 12,
-          "text-allow-overlap": true,
-        },
-        paint: {
-          "text-color": "#ffffff",
-        },
-      });
-      map.addLayer({
         id: DISCOVERY_PIN_LAYER_ID,
         type: "circle",
         source: DISCOVERY_SOURCE_ID,
@@ -110,6 +96,23 @@ function ensureDiscoveryLayers(
           "circle-stroke-color": "#ffffff",
         },
       });
+      if (map.getStyle()?.glyphs) {
+        map.addLayer({
+          id: DISCOVERY_COUNT_LAYER_ID,
+          type: "symbol",
+          source: DISCOVERY_SOURCE_ID,
+          filter: ["==", ["get", "isCluster"], true],
+          layout: {
+            "text-field": ["to-string", ["get", "count"]],
+            "text-font": ["Noto Sans Regular"],
+            "text-size": 12,
+            "text-allow-overlap": true,
+          },
+          paint: {
+            "text-color": "#ffffff",
+          },
+        });
+      }
     }
     toggleFemaFloodOverlay(map, floodEnabled);
   } catch {
@@ -143,6 +146,7 @@ export function DiscoveryMap({
   const collectionRef = React.useRef<FeatureCollection<Point, MapFeatureProps>>(EMPTY_COLLECTION);
   const [mapLayer, setMapLayer] = React.useState<"street" | "aerial">("street");
   const [floodOverlay, setFloodOverlay] = React.useState(false);
+  const [mapZoom, setMapZoom] = React.useState<number>(3.25);
   const floodOverlayRef = React.useRef(false);
   const fallbackUsedRef = React.useRef(false);
   const initializedLayerRef = React.useRef<"street" | "aerial" | null>(null);
@@ -184,7 +188,7 @@ export function DiscoveryMap({
       .setLngLat(coords)
       .setDOMContent(clusterRoot)
       .addTo(map);
-    const eps = 0.0008;
+      const eps = Math.max(0.0005, 360 / Math.pow(2, Math.round(map.getZoom()) + 4));
     const clusterBbox = [coords[0] - eps, coords[1] - eps, coords[0] + eps, coords[1] + eps].map((v) => v.toFixed(5)).join(",");
     const clusterParams = discoverySearchParams(filtersRef.current, { bbox: clusterBbox, limit: 20 });
     void fetch(`/api/listings?${clusterParams}`, { cache: "no-store" })
@@ -366,6 +370,7 @@ export function DiscoveryMap({
 
       let fallbackApplied = false;
       detachFallback = attachBasemapFallback(map, RASTER_STREET_STYLE, {
+        shouldFallback: () => initializedLayerRef.current !== "aerial",
         onFallback: () => {
           fallbackApplied = true;
           fallbackUsedRef.current = true;
@@ -420,6 +425,7 @@ export function DiscoveryMap({
         requestPins();
       });
       map.on("moveend", requestPins);
+      map.on("zoomend", () => { if (!disposed) setMapZoom(map.getZoom()); });
       requestAnimationFrame(requestPins);
     }).catch(() => setError("Map engine could not load. Use the ranked grid to continue research."));
 
@@ -488,6 +494,11 @@ export function DiscoveryMap({
         >
           <Layers size={13} aria-hidden /> Flood zones
         </button>
+        {floodOverlay && mapZoom < 12 ? (
+          <span className="rounded-control bg-ink/85 px-2 py-0.5 text-label font-semibold text-white">
+            Zoom in for FEMA flood zones
+          </span>
+        ) : null}
         <span className="text-ink-3">{notice}</span>
       </div>
     </div>

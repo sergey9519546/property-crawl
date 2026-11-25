@@ -166,6 +166,7 @@ function applyHarvest(candidate, parcel, observedAt) {
     canonicalApn: parcel.canonicalApn,
     landUse: parcel.landUse,
     legalDescription: parcel.legalDescription,
+    ...(parcel.assessorPhotoUrl ? { assessorPhotoUrl: parcel.assessorPhotoUrl } : {}),
     assessedValue: parcel.assessedValue || {
       total: parcel.assessedTotal ?? null,
       land: parcel.assessedLand ?? null,

@@ -1044,3 +1044,29 @@ test('treasury scrapeFeed: returns fulfilled partial listings before deadline wi
   assert.equal(out[0].state, 'TX');
   assert.equal(out[0].openingBid, 125000);
 });
+
+
+test('treasury fetchText: forwards browser Mozilla/5.0 User-Agent and never sends property-crawl-bot', async () => {
+  let capturedInit = null;
+  const s = new TreasuryForfeitureScraper({
+    useScrapling: false,
+    extractImpl: null,
+    fetchImpl: async (url, init) => {
+      capturedInit = { url, init };
+      return new Response('<html><title>ok</title></html>', {
+        status: 200,
+        headers: { 'content-type': 'text/html' },
+      });
+    },
+  });
+  const html = await s.fetchText('https://www.treasury.gov/auctions/treasury/rp/realprop.shtml', 2500);
+  assert.match(html, /ok/);
+  assert.ok(capturedInit && capturedInit.init && capturedInit.init.headers);
+  const ua = capturedInit.init.headers['User-Agent'];
+  assert.match(ua, /^Mozilla\/5\.0\b/);
+  assert.doesNotMatch(ua, /property-crawl-bot/i);
+  assert.equal(
+    capturedInit.init.headers.Accept,
+    'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+  );
+});

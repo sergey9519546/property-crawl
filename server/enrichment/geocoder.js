@@ -430,6 +430,156 @@ async function geocodeExactAddress(observedAddress, options = {}) {
   }
 }
 
+const CENSUS_BATCH_GEOCODER_ENDPOINT = 'https://geocoding.geo.census.gov/geocoder/locations/addressbatch';
+
+function parseCsvLine(line) {
+  const fields = [];
+  let current = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i += 1) {
+    const ch = line[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (line[i + 1] === '"') {
+          current += '"';
+          i += 1;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        current += ch;
+      }
+    } else if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === ',') {
+      fields.push(current);
+      current = '';
+    } else {
+      current += ch;
+    }
+  }
+  fields.push(current);
+  return fields;
+}
+
+function csvEscape(value) {
+  const text = String(value ?? '').replace(/[\r\n]+/g, ' ').trim();
+  if (/[",]/.test(text)) return `"${text.replace(/"/g, '""')}"`;
+  return text;
+}
+
+/**
+ * Batch-geocodes structured addresses via US Census Bureau's free
+ * /geocoder/locations/addressbatch endpoint (chunked <= 400 rows per POST).
+ * Every match is verified against street number, state, and state bounds and
+ * honestly stamped precision: 'street_interpolated'.
+ */
+async function geocodeExactAddressBatch(items = [], options = {}) {
+  const results = new Map();
+  if (!Array.isArray(items) || items.length === 0) return results;
+
+  const chunkSize = Math.max(1, Math.min(400, Number(options.chunkSize) || 400));
+  const timeoutMs = Math.max(5_000, Math.min(60_000, Number(options.timeoutMs) || 30_000));
+  const fetchFn = options.fetchFn || globalThis.fetch;
+  const cachePath = options.cachePath || resolveDefaultCachePath();
+  const shouldUseCache = !options.skipCache && (Boolean(options.cachePath) || (!options.fetchFn && process.env.NODE_ENV !== 'test'));
+  const cache = shouldUseCache ? loadCache(cachePath) : {};
+  let cacheDirty = false;
+
+  const uncached = [];
+  for (const item of items) {
+    if (!item || !item.id || !item.expected) continue;
+    const expected = item.expected;
+    const normKey = `${expected.street}, ${expected.city || ''}, ${expected.state} ${expected.zip5}`;
+    const hash = hashAddress(normKey);
+    if (shouldUseCache && cache[hash] && Number.isFinite(cache[hash].lat) && Number.isFinite(cache[hash].lng)) {
+      if (isCoordInStateBounds(cache[hash].lat, cache[hash].lng, expected.state).ok) {
+        results.set(item.id, { ...cache[hash], cached: true, hash });
+        continue;
+      }
+    }
+    uncached.push({ id: String(item.id), expected, hash });
+  }
+
+  if (!uncached.length || typeof fetchFn !== 'function') return results;
+
+  const expectedById = new Map(uncached.map((entry) => [entry.id, entry]));
+
+  for (let start = 0; start < uncached.length; start += chunkSize) {
+    const chunk = uncached.slice(start, start + chunkSize);
+    const csvRows = chunk.map(({ id, expected }) => [
+      csvEscape(id),
+      csvEscape(expected.street),
+      csvEscape(expected.city || ''),
+      csvEscape(expected.state),
+      csvEscape(expected.zip5),
+    ].join(','));
+    const csvBody = `${csvRows.join('\n')}\n`;
+
+    const form = new FormData();
+    form.append('addressFile', new Blob([csvBody], { type: 'text/csv' }), 'addresses.csv');
+    form.append('benchmark', 'Public_AR_Current');
+
+    try {
+      const res = await fetchFn(CENSUS_BATCH_GEOCODER_ENDPOINT, {
+        method: 'POST',
+        redirect: 'error',
+        body: form,
+        signal: options.signal || AbortSignal.timeout(timeoutMs),
+        headers: {
+          'User-Agent': 'PropertyCrawl/2.0 (Foreclosure Discovery Engine)',
+        },
+      });
+      if (!res || !res.ok) continue;
+      const text = await res.text();
+      for (const rawLine of text.split(/\r?\n/)) {
+        if (!rawLine.trim()) continue;
+        const cols = parseCsvLine(rawLine);
+        const rowId = (cols[0] || '').trim();
+        const matchIndicator = (cols[2] || '').trim();
+        const matchType = (cols[3] || '').trim();
+        const matchedAddress = (cols[4] || '').trim();
+        const coordPair = (cols[5] || '').trim();
+        if (matchIndicator !== 'Match' || matchType !== 'Exact' || !coordPair.includes(',')) continue;
+        const entry = expectedById.get(rowId);
+        if (!entry) continue;
+        const [lngRaw, latRaw] = coordPair.split(',');
+        const lng = Number(lngRaw);
+        const lat = Number(latRaw);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng) || (lat === 0 && lng === 0)) continue;
+        if (!isCoordInStateBounds(lat, lng, entry.expected.state).ok) continue;
+
+        // Verify street number matches expected street number
+        const matchedFirstToken = normalizeAddressToken(matchedAddress.split(/\s+/)[0]);
+        if (entry.expected.streetNumber && matchedFirstToken !== normalizeAddressToken(entry.expected.streetNumber)) {
+          continue;
+        }
+
+        const record = {
+          source: 'US_CENSUS_GEOCODER',
+          matchedAddress,
+          lat,
+          lng,
+          precision: 'street_interpolated',
+          timestamp: new Date().toISOString(),
+        };
+        results.set(rowId, { ...record, cached: false, hash: entry.hash });
+        if (shouldUseCache) {
+          cache[entry.hash] = record;
+          cacheDirty = true;
+        }
+      }
+    } catch (_) {
+      // Continue with next chunk if a single batch POST times out.
+    }
+  }
+
+  if (shouldUseCache && cacheDirty) {
+    saveCache(cache, cachePath);
+  }
+  return results;
+}
+
 module.exports = {
   normalizeAddress,
   normalizeAddressToken,
@@ -440,9 +590,11 @@ module.exports = {
   exactCensusGeocode,
   geocodeAddress,
   geocodeExactAddress,
+  geocodeExactAddressBatch,
   loadCache,
   saveCache,
   DEFAULT_CACHE_PATH,
   CENSUS_GEOCODER_ENDPOINT,
   CENSUS_STRUCTURED_GEOCODER_ENDPOINT,
+  CENSUS_BATCH_GEOCODER_ENDPOINT,
 };

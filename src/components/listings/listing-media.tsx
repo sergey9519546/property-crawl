@@ -121,7 +121,11 @@ export function ListingMedia({ listingId, address, state, county, apn, propType,
   const [mapLayer, setMapLayer] = React.useState<MapLayer>("vector");
   const [floodOverlay, setFloodOverlay] = React.useState(false);
   const [streetView, setStreetView] = React.useState<StreetViewState>({ status: "idle" });
-  const [aerialState, setAerialState] = React.useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [aerialState, setAerialState] = React.useState<"idle" | "loading" | "ready" | "error">(() => (!canShowPhoto && Boolean(normalizedListingId) ? "loading" : "idle"));
+  const [aerialUserRequested, setAerialUserRequested] = React.useState(false);
+  const [mapZoom, setMapZoom] = React.useState<number>(15);
+  const canShowPhotoRef = React.useRef(canShowPhoto);
+  canShowPhotoRef.current = canShowPhoto;
   const [mapReady, setMapReady] = React.useState(false);
   const [mapUnavailable, setMapUnavailable] = React.useState(false);
   const mapContainerRef = React.useRef<HTMLDivElement>(null);
@@ -152,7 +156,8 @@ export function ListingMedia({ listingId, address, state, county, apn, propType,
   React.useEffect(() => {
     streetViewRequestGeneration.current++;
     setStreetView({ status: "idle" });
-    setAerialState("idle");
+    setAerialUserRequested(false);
+    setAerialState(!canShowPhotoRef.current && Boolean(normalizedListingId) ? "loading" : "idle");
 
     // Always begin in the photo slot. A map is useful context, but it must not
     // masquerade as a property image when the publisher supplied none.
@@ -267,6 +272,7 @@ export function ListingMedia({ listingId, address, state, county, apn, propType,
         };
 
         detachFallback = attachBasemapFallback(map, RASTER_STREET_STYLE, {
+          shouldFallback: () => mapLayerRef.current !== "aerial",
           onFallback: () => {
             fallbackApplied = true;
             fallbackUsedRef.current = true;
@@ -339,11 +345,12 @@ export function ListingMedia({ listingId, address, state, county, apn, propType,
         onCheckReady = checkReady;
         map.on("styledata", checkReady);
         map.on("idle", checkReady);
+        map.on("zoomend", () => { if (!disposed) setMapZoom(map.getZoom()); });
         map.once("load", markReady);
         map.on("error", (event: unknown) => {
           if (disposed || map.loaded()) return;
           if (!isBasemapErrorEvent(event, map)) return;
-          if (fallbackApplied && !map.isStyleLoaded()) {
+          if (fallbackApplied && !map.isStyleLoaded() && mapLayerRef.current !== "aerial") {
             tileErrorAfterFallback = true;
             setMapUnavailable(true);
           }
@@ -522,14 +529,14 @@ export function ListingMedia({ listingId, address, state, county, apn, propType,
               {(aerialState === "loading" || aerialState === "ready") && normalizedListingId ? (
                 <>
                   <img
-                    src={`/api/property-image?listingId=${encodeURIComponent(normalizedListingId)}&mode=aerial`}
-                    alt={`Aerial parcel imagery for ${address}`}
+                    src={`/api/property-image?listingId=${encodeURIComponent(normalizedListingId)}&mode=composite`}
+                    alt={`Parcel-locked aerial imagery for ${address}`}
                     className={`h-full w-full object-cover transition-opacity ${aerialState === "loading" ? "opacity-60" : "opacity-100"}`}
                     onLoad={() => setAerialState("ready")}
                     onError={() => setAerialState("error")}
                   />
                   <span className="absolute left-3 top-3 rounded-control bg-ink/85 px-2.5 py-1 text-label font-semibold text-white backdrop-blur sm:left-4 sm:top-4 sm:px-3 sm:py-1.5">
-                    {aerialState === "loading" ? "Loading Esri / USGS NAIP aerial view…" : "Esri / USGS NAIP aerial parcel view · Overhead satellite context"}
+                    {aerialState === "loading" ? "Loading USGS / USDA NAIP parcel view…" : "USGS / USDA NAIP parcel view · Overhead satellite context"}
                   </span>
                 </>
               ) : (
@@ -549,7 +556,10 @@ export function ListingMedia({ listingId, address, state, county, apn, propType,
                         type="button"
                         disabled={aerialState === "loading"}
                         aria-pressed={aerialState === "ready"}
-                        onClick={() => setAerialState((prev) => (prev === "ready" ? "idle" : "loading"))}
+                        onClick={() => {
+                          setAerialUserRequested(true);
+                          setAerialState((prev) => (prev === "ready" ? "idle" : "loading"));
+                        }}
                         className="inline-flex min-h-11 items-center gap-1.5 rounded-control border border-white/70 bg-card/95 px-3 py-2 text-xs font-bold text-ink shadow-xl backdrop-blur hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-ink disabled:opacity-60 sm:gap-2 sm:px-4 sm:py-2.5 sm:text-sm"
                       >
                         <ImageIcon className="h-3.5 w-3.5" aria-hidden /> {aerialState === "loading" ? "Loading aerial…" : aerialState === "ready" ? "Hide aerial view" : "Aerial satellite view"}
@@ -576,7 +586,7 @@ export function ListingMedia({ listingId, address, state, county, apn, propType,
                     ) : null}
                   </div>
                 ) : null}
-                {aerialState === "error" ? <p role="status" className="rounded-control bg-ink/90 px-3 py-2 text-right text-xs leading-snug text-white shadow-lg backdrop-blur">Aerial satellite imagery could not be loaded for this location.</p> : null}
+                {aerialState === "error" && aerialUserRequested ? <p role="status" className="rounded-control bg-ink/90 px-3 py-2 text-right text-xs leading-snug text-white shadow-lg backdrop-blur">Aerial satellite imagery could not be loaded for this location.</p> : null}
                 {streetView.status === "unavailable" ? <p role="status" className="rounded-control bg-ink/90 px-3 py-2 text-right text-xs leading-snug text-white shadow-lg backdrop-blur">{streetView.reason}</p> : null}
               </div>
             </div>
@@ -715,6 +725,11 @@ export function ListingMedia({ listingId, address, state, county, apn, propType,
             >
               Flood zones
             </button>
+            {floodOverlay && mapZoom < 12 ? (
+              <span className="rounded-control bg-ink/85 px-2.5 py-1.5 text-label font-semibold text-white shadow-md backdrop-blur">
+                Zoom in for FEMA flood zones
+              </span>
+            ) : null}
           </div>
           {!canShowPhoto && normalizedListingId ? (
             <div className="absolute right-4 top-4 z-10 rounded-control border border-white/70 bg-card/90 p-2 shadow backdrop-blur">

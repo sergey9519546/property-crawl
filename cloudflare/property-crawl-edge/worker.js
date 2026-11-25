@@ -306,7 +306,9 @@ export default {
 
         const isRead = request.method === 'GET' || request.method === 'HEAD';
         const isWebSocket = (request.headers.get('upgrade') || '').toLowerCase() === 'websocket';
-        const isCacheablePath = CACHEABLE_PATHS.has(url.pathname);
+        const isPublicAerialImage = url.pathname === '/api/property-image'
+          && ['aerial', 'composite'].includes((url.searchParams.get('mode') || '').toLowerCase());
+        const isCacheablePath = CACHEABLE_PATHS.has(url.pathname) || isPublicAerialImage;
         const isNoStorePath = !isCacheablePath && NO_STORE_PREFIXES.some((p) => url.pathname.startsWith(p));
         const reqCacheControl = (request.headers.get('cache-control') || '').toLowerCase();
         const bypassCache = !isRead || isWebSocket || request.headers.has('authorization') || isNoStorePath || /\bno-(?:store|cache)\b/.test(reqCacheControl);

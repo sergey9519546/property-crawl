@@ -16,6 +16,13 @@ const {
   normalizeRouteName,
 } = require('../enrichment/geocoder');
 const { distanceMeters, bearingDegrees } = require('../media/camera-geometry');
+const {
+  computeParcelFramedBbox,
+  buildAerialProviders,
+  renderParcelCompositeSvg,
+  createAerialTileCache,
+} = require('../media/parcel-visual-engine');
+const { queryArcGisRest } = require('./parcel-boundary');
 
 const GOOGLE_MAPS_HOST = 'maps.googleapis.com';
 const GOOGLE_GEOCODING_PATH = '/maps/api/geocode/json';
@@ -101,7 +108,7 @@ function timingSafeEqualString(left, right) {
 
 class FixedWindowRateLimiter {
   constructor({ maxRequests = 30, windowMs = 60_000, now = Date.now, trustedProxyCount = 0 } = {}) {
-    this.maxRequests = clampInteger(maxRequests, 1, 120, 30);
+    this.maxRequests = clampInteger(maxRequests, 1, 600, 30);
     this.windowMs = clampInteger(windowMs, 1_000, 10 * 60_000, 60_000);
     this.now = now;
     // Forwarded headers are caller-controlled without a trusted edge. When
@@ -295,7 +302,7 @@ function hasUsablePublisherPhoto(listing) {
 function hasSourceObservedProvenance(listing) {
   const provenance = listing?.provenance;
   if (!provenance || typeof provenance !== 'object') return false;
-  if (provenance.origin !== 'live' || provenance.observed !== true || provenance.recordKind !== 'source_record') {
+  if (!['live', 'email_notice'].includes(provenance.origin) || provenance.observed !== true || provenance.recordKind !== 'source_record') {
     return false;
   }
 
@@ -315,7 +322,7 @@ function hasSourceIdentifiedArchive(listing) {
 function validateListingForStreetView(listing, mode = 'metadata') {
   // Interactive tours, community alternatives, and aerial ortho view complement
   // publisher photos; automatic street-view image fallback skips when a photo exists.
-  if (mode !== 'walkthrough' && mode !== 'alternatives' && mode !== 'aerial' && hasUsablePublisherPhoto(listing)) {
+  if (mode !== 'walkthrough' && mode !== 'alternatives' && mode !== 'aerial' && mode !== 'composite' && hasUsablePublisherPhoto(listing)) {
     throw new PropertyImageError(409, 'publisher_photo_available', 'The publisher already supplies a usable property photo.');
   }
   const liveObserved=hasSourceObservedProvenance(listing),archiveIdentified=hasSourceIdentifiedArchive(listing);
@@ -925,6 +932,12 @@ function createPropertyImageService(options = {}) {
     now,
     trustedProxyCount: env.TRUSTED_PROXY_COUNT,
   });
+  const aerialRateLimiter = options.aerialRateLimiter || new FixedWindowRateLimiter({
+    maxRequests: env.AERIAL_PUBLIC_RATE_LIMIT ?? 240,
+    windowMs: env.PROPERTY_IMAGE_RATE_WINDOW_MS,
+    now,
+    trustedProxyCount: env.TRUSTED_PROXY_COUNT,
+  });
   const censusFallbackEnabled = env.PROPERTY_IMAGE_CENSUS_GEOCODER_FALLBACK === '1';
   const trustedProxyCount = Math.max(0, Math.floor(Number(env.TRUSTED_PROXY_COUNT) || 0));
   const edgeSharedSecret = safeText(env.EDGE_SHARED_SECRET, 256) || null;
@@ -947,6 +960,12 @@ function createPropertyImageService(options = {}) {
     now
   });
   const panoramaInFlight = new Map();
+  const aerialTileCache = options.aerialTileCache || createAerialTileCache({
+    maxEntries: clampInteger(env.AERIAL_CACHE_MAX_ENTRIES, 8, 512, 128),
+    ttlMs: clampInteger(env.AERIAL_CACHE_TTL_MS, 5_000, 24 * 3600_000, 30 * 60_000),
+    now,
+  });
+  const parcelLookupImpl = typeof options.parcelLookupImpl === 'function' ? options.parcelLookupImpl : null;
 
   async function coalescedPanorama(listing,coordinates,config){
     const key=`${listing.id}\n${listing.sourceObservedAt||listing.provenance?.observedAt||''}\n${coordinates.lat},${coordinates.lng}\n${config.radiusMeters}:${config.maximumDistanceMeters}`;
@@ -1086,18 +1105,42 @@ function createPropertyImageService(options = {}) {
         throw new PropertyImageError(400, 'invalid_listing_id', 'listingId is invalid.');
       }
       const mode = safeText(url.searchParams.get('mode') || 'metadata', 16)?.toLowerCase();
-      if (!['metadata', 'walkthrough', 'image', 'alternatives', 'aerial'].includes(mode)) {
-        throw new PropertyImageError(400, 'invalid_mode', 'mode must be metadata, walkthrough, image, alternatives, or aerial.');
+      if (!['metadata', 'walkthrough', 'image', 'alternatives', 'aerial', 'composite'].includes(mode)) {
+        throw new PropertyImageError(400, 'invalid_mode', 'mode must be metadata, walkthrough, image, alternatives, aerial, or composite.');
       }
 
-      limiter.consume(FixedWindowRateLimiter.clientIp(req, trustedProxyCount, edgeSharedSecret));
+      const clientIpKey = FixedWindowRateLimiter.clientIp(req, trustedProxyCount, edgeSharedSecret);
+      if (mode === 'aerial' || mode === 'composite') {
+        aerialRateLimiter.consume(clientIpKey);
+      } else {
+        limiter.consume(clientIpKey);
+      }
       const listing = await database.getListingById(listingId);
       if (!listing) throw new PropertyImageError(404, 'listing_not_found', 'Listing not found.');
 
-      if (mode === 'aerial') {
-        validateListingForStreetView(listing, 'aerial');
+      if (mode === 'aerial' || mode === 'composite') {
+        validateListingForStreetView(listing, mode);
         const listingState = safeText(listing?.state, 16)?.toUpperCase() || null;
         let aerialCoords = sourceCoordinates(listing);
+        if (!aerialCoords) {
+          // Reuse honestly stamped US Census street-interpolated coordinates already persisted on the record
+          const cachedProvCoords = listing?.provenance?.coordinates;
+          const cachedLat = validCoordinate(listing?.lat, -90, 90);
+          const cachedLng = validCoordinate(listing?.lng, -180, 180);
+          if (
+            cachedLat !== null && cachedLng !== null && !(cachedLat === 0 && cachedLng === 0)
+            && cachedProvCoords && cachedProvCoords.provider === 'US_CENSUS_GEOCODER'
+            && (!listingState || isCoordInStateBounds(cachedLat, cachedLng, listingState).ok)
+          ) {
+            aerialCoords = {
+              lat: cachedLat,
+              lng: cachedLng,
+              basis: 'census_geocoder',
+              precision: 'street_interpolated',
+              resolution: null,
+            };
+          }
+        }
         if (!aerialCoords) {
           const observedAddress = sourceObservedAddress(listing);
           if (observedAddress) {
@@ -1112,71 +1155,144 @@ function createPropertyImageService(options = {}) {
           throw new PropertyImageError(422, 'exact_location_unavailable', 'Aerial parcel imagery requires verified in-state coordinates or a complete source-observed street address with ZIP.');
         }
         return await aerialPublicGate.run(async () => {
-          const bbox = buildAerialWebMercatorBbox(aerialCoords.lat, aerialCoords.lng, 150, 112.5);
-          const timeoutMs = clampInteger(env.GOOGLE_STREETVIEW_TIMEOUT_MS, 500, 10_000, 6_500);
-          const providers = [
-            {
-              endpoint: 'https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/export',
-              provider: 'USGS National Map',
-              attribution: 'U.S. Geological Survey (The National Map)',
-            },
-            ...(isConusCoord(aerialCoords.lat, aerialCoords.lng)
-              ? [{
-                  endpoint: 'https://gis.apfo.usda.gov/arcgis/rest/services/NAIP/USDA_CONUS_PRIME/ImageServer/exportImage',
-                  provider: 'USDA NAIP',
-                  attribution: 'USDA Farm Production and Conservation (NAIP Public Domain)',
-                }]
-              : []),
-          ];
-          let sawBadTile = false;
-          for (const source of providers) {
-            const exportUrl = new URL(source.endpoint);
-            exportUrl.search = new URLSearchParams({
-              bbox,
-              bboxSR: '3857',
-              imageSR: '3857',
-              size: '640,480',
-              format: 'jpg',
-              f: 'image',
-            }).toString();
+          let parcelFeature = null;
+          if (mode === 'composite' && listingState) {
             try {
-              const aerialRes = await fetchWithTimeout(
-                fetchImpl,
-                exportUrl,
-                { method: 'GET', redirect: 'error', headers: { Accept: 'image/jpeg,image/png' } },
-                timeoutMs
-              );
-              if (!aerialRes || !aerialRes.ok) continue;
-              const buffer = await readBoundedBytes(aerialRes, MAX_IMAGE_BYTES, timeoutMs);
-              if (buffer.length < 2048 || (!imageMagicMatches('image/jpeg', buffer) && !imageMagicMatches('image/png', buffer))) {
-                sawBadTile = true;
-                continue;
+              const apn = safeText(listing?.apn || listing?.parcelNumber || listing?.parcelId || listing?.provenance?.parcelNumber, 128);
+              const county = safeText(listing?.county, 128);
+              const expectedAddress = safeText(listing?.address, 256);
+              const parcelAc = new AbortController();
+              const parcelTimer = setTimeout(() => parcelAc.abort(), 2_500);
+              try {
+                if (parcelLookupImpl) {
+                  parcelFeature = await parcelLookupImpl({
+                    lat: aerialCoords.lat,
+                    lng: aerialCoords.lng,
+                    state: listingState,
+                    apn,
+                    county,
+                    expectedAddress,
+                    signal: parcelAc.signal,
+                  });
+                } else if (aerialCoords.basis === 'source_coordinates' || apn) {
+                  parcelFeature = await queryArcGisRest(
+                    aerialCoords.lat,
+                    aerialCoords.lng,
+                    listingState,
+                    apn,
+                    county,
+                    { ...(expectedAddress ? { expectedAddress } : {}), signal: parcelAc.signal }
+                  ).catch(() => null);
+                }
+              } finally {
+                clearTimeout(parcelTimer);
               }
-              const contentType = imageMagicMatches('image/png', buffer) ? 'image/png' : 'image/jpeg';
-              const ext = contentType === 'image/png' ? 'png' : 'jpg';
-              return {
-                status: 200,
-                headers: {
-                  ...baseHeaders(),
-                  'Cache-Control': 'public, max-age=604800, stale-while-revalidate=2592000',
-                  'Content-Type': contentType,
-                  'Content-Length': String(buffer.length),
-                  'Content-Disposition': `inline; filename="aerial-${listingId}.${ext}"`,
-                  'X-Property-Image-Provider': source.provider,
-                  'X-Property-Image-Attribution': source.attribution,
-                  'X-Property-Image-Coordinate-Basis': aerialCoords.basis,
-                  'X-Property-Image-Coordinate-Precision': aerialCoords.precision || (aerialCoords.basis === 'source_coordinates' ? 'source_observed' : 'street_interpolated'),
-                },
-                body: buffer,
-              };
             } catch (_) {
-              // Cascade to next public-domain aerial source on timeout or upstream failure.
+              parcelFeature = null;
             }
           }
-          if (sawBadTile) {
-            throw new PropertyImageError(502, 'upstream_non_image', 'Aerial imagery service did not return a valid image.');
+
+          const parcelGeometry = parcelFeature?.geometry || null;
+          const frame = computeParcelFramedBbox({
+            lat: aerialCoords.lat,
+            lng: aerialCoords.lng,
+            geometry: parcelGeometry,
+            width: 640,
+            height: 480,
+          });
+          const bbox = frame.bbox;
+          const tileCacheKey = `${bbox}`;
+          const timeoutMs = clampInteger(env.GOOGLE_STREETVIEW_TIMEOUT_MS, 500, 10_000, 6_500);
+          const providers = buildAerialProviders(aerialCoords.lat, aerialCoords.lng);
+
+          const tile = await aerialTileCache.getOrLoad(tileCacheKey, async () => {
+            let sawBadTile = false;
+            for (const source of providers) {
+              const exportUrl = new URL(source.endpoint);
+              exportUrl.search = new URLSearchParams({
+                bbox,
+                bboxSR: '3857',
+                imageSR: '3857',
+                size: '640,480',
+                format: 'jpg',
+                f: 'image',
+              }).toString();
+              try {
+                const aerialRes = await fetchWithTimeout(
+                  fetchImpl,
+                  exportUrl,
+                  { method: 'GET', redirect: 'error', headers: { Accept: 'image/jpeg,image/png' } },
+                  timeoutMs
+                );
+                if (!aerialRes || !aerialRes.ok) continue;
+                const buffer = await readBoundedBytes(aerialRes, MAX_IMAGE_BYTES, timeoutMs);
+                if (buffer.length < 2048 || (!imageMagicMatches('image/jpeg', buffer) && !imageMagicMatches('image/png', buffer))) {
+                  sawBadTile = true;
+                  continue;
+                }
+                const contentType = imageMagicMatches('image/png', buffer) ? 'image/png' : 'image/jpeg';
+                return { buffer, contentType, provider: source.provider, attribution: source.attribution };
+              } catch (_) {
+                // Cascade to next public-domain aerial source on timeout or upstream failure.
+              }
+            }
+            if (sawBadTile) {
+              throw new PropertyImageError(502, 'upstream_non_image', 'Aerial imagery service did not return a valid image.');
+            }
+            throw new PropertyImageError(503, 'aerial_unavailable', 'Public-domain aerial imagery is temporarily unavailable.');
+          });
+
+          const precision = aerialCoords.precision || (aerialCoords.basis === 'source_coordinates' ? 'source_observed' : 'street_interpolated');
+          if (mode === 'composite') {
+            const svg = renderParcelCompositeSvg({
+              imageBuffer: tile.buffer,
+              contentType: tile.contentType,
+              geometry: parcelGeometry,
+              frame,
+              lat: aerialCoords.lat,
+              lng: aerialCoords.lng,
+              precision,
+              provider: tile.provider,
+              lotAcres: parcelFeature?.properties?.lotAcres ?? null,
+              lotSqft: parcelFeature?.properties?.lotSqft ?? null,
+              parcelId: parcelFeature?.properties?.parcelId ?? null,
+            });
+            const svgBuffer = Buffer.from(svg, 'utf8');
+            return {
+              status: 200,
+              headers: {
+                ...baseHeaders(),
+                'Cache-Control': 'public, max-age=604800, stale-while-revalidate=2592000',
+                'Content-Type': 'image/svg+xml; charset=utf-8',
+                'Content-Length': String(svgBuffer.length),
+                'Content-Disposition': `inline; filename="parcel-aerial-${listingId}.svg"`,
+                'X-Property-Image-Provider': tile.provider,
+                'X-Property-Image-Attribution': tile.attribution,
+                'X-Property-Image-Coordinate-Basis': aerialCoords.basis,
+                'X-Property-Image-Coordinate-Precision': precision,
+                'X-Property-Image-Parcel-Locked': frame.parcelLocked ? 'true' : 'false',
+              },
+              body: svgBuffer,
+            };
           }
-          throw new PropertyImageError(503, 'aerial_unavailable', 'Public-domain aerial imagery is temporarily unavailable.');
+
+          const ext = tile.contentType === 'image/png' ? 'png' : 'jpg';
+          return {
+            status: 200,
+            headers: {
+              ...baseHeaders(),
+              'Cache-Control': 'public, max-age=604800, stale-while-revalidate=2592000',
+              'Content-Type': tile.contentType,
+              'Content-Length': String(tile.buffer.length),
+              'Content-Disposition': `inline; filename="aerial-${listingId}.${ext}"`,
+              'X-Property-Image-Provider': tile.provider,
+              'X-Property-Image-Attribution': tile.attribution,
+              'X-Property-Image-Coordinate-Basis': aerialCoords.basis,
+              'X-Property-Image-Coordinate-Precision': precision,
+              'X-Property-Image-Parcel-Locked': 'false',
+            },
+            body: tile.buffer,
+          };
         });
       }
       const geocodingOutageCodes = new Set([
@@ -1447,7 +1563,7 @@ function createPropertyImageService(options = {}) {
     }
   }
 
-  return { resolve, circuit, geocodingCircuit, limiter, gate, aerialPublicGate, panoramaInFlight, panoramaxCache, mapillaryCache };
+  return { resolve, circuit, geocodingCircuit, limiter, gate, aerialPublicGate, aerialTileCache, panoramaInFlight, panoramaxCache, mapillaryCache };
 }
 
 function writeResult(res, result) {

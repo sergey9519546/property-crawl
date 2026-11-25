@@ -1,6 +1,7 @@
 'use strict';
 
 const { queryLocalParcelIndex } = require('./local-parcel-index');
+const { inspectImageUrl } = require('../scrapers/media-policy');
 
 /**
  * Statewide ArcGIS REST FeatureServer / MapServer Registry
@@ -1290,6 +1291,13 @@ function normalizeArcgisAttributes(attributes, config) {
   const situsRaw = primarySitusRaw || fallbackSitusRaw;
   const situsAddress = situsRaw ? String(situsRaw).replace(/\s+/g, ' ').trim() : '';
 
+  const rawPhotoCandidate = getAttributeCaseInsensitive(attributes, [
+    ...(config.photoField ? [config.photoField] : []),
+    'PHOTO_URL', 'IMAGE_URL', 'PIC_URL', 'PICTURE', 'PICTURE_URL', 'BLDG_PHOTO', 'SKETCH_URL', 'PHOTO', 'IMAGE'
+  ]);
+  const inspectedPhoto = rawPhotoCandidate ? inspectImageUrl(String(rawPhotoCandidate).trim()) : null;
+  const assessorPhotoUrl = inspectedPhoto && inspectedPhoto.accepted ? inspectedPhoto.url : null;
+
   return {
     source: 'ARCGIS_REST_PARCEL',
     countyFips: resolveFeatureCountyFips(attributes, config),
@@ -1300,6 +1308,7 @@ function normalizeArcgisAttributes(attributes, config) {
     situsAddress: situsAddress || null,
     landUse: String(getAttributeCaseInsensitive(attributes, config.landUseField) || 'UNKNOWN').trim(),
     legalDescription: String(getAttributeCaseInsensitive(attributes, config.legalDescField) || '').trim(),
+    assessorPhotoUrl,
     assessedValue: {
       total,
       land,

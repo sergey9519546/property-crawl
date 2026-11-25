@@ -45,6 +45,7 @@ export function attachBasemapFallback(
   fallbackStyle: StyleSpecification | string,
   options?: {
     basemapSourceIds?: ReadonlySet<string>;
+    shouldFallback?: () => boolean;
     onFallback?: () => void;
     onRehydrate?: () => void;
   },
@@ -54,6 +55,7 @@ export function attachBasemapFallback(
 
   const onError = (event: unknown) => {
     if (applied) return;
+    if (options?.shouldFallback && !options.shouldFallback()) return;
     if (!isBasemapErrorEvent(event, map, allowedSources)) return;
     applied = true;
     options?.onFallback?.();

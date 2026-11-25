@@ -169,6 +169,49 @@ function extractDetailImages({ source, html, sourceUrl, address }) {
   return selected;
 }
 
+/**
+ * Strips cross-building duplicate photo URLs (e.g. reused auctioneer logos or
+ * courthouse banners shared across >= minDistinctBuildings unrelated buildings)
+ * from a batch of listings in-place, preserving multi-unit condo exterior photos.
+ */
+function stripDuplicateBatchPhotos(listings, { minDistinctBuildings = 3 } = {}) {
+  const poisoned = detectDuplicatePhotoUrls(listings, { minDistinctBuildings });
+  if (poisoned.size === 0 || !Array.isArray(listings)) {
+    return { poisonedUrls: poisoned, strippedCount: 0 };
+  }
+  let strippedCount = 0;
+  for (const listing of listings) {
+    if (!listing || typeof listing !== 'object') continue;
+    let mutated = false;
+    if (typeof listing.photo === 'string' && listing.photo.trim()) {
+      const canonical = canonicalizePhotoUrl(listing.photo);
+      if (canonical && poisoned.has(canonical)) {
+        const rejectedUrl = listing.photo;
+        listing.photo = null;
+        mutated = true;
+        const prov = listing.provenance && typeof listing.provenance === 'object' ? { ...listing.provenance } : {};
+        const media = prov.media && typeof prov.media === 'object' ? { ...prov.media } : {};
+        media.photo = null;
+        media.photoRejected = { reason: 'duplicate_photo_url_poison', url: rejectedUrl };
+        prov.media = media;
+        listing.provenance = prov;
+      }
+    }
+    if (Array.isArray(listing.images) && listing.images.length > 0) {
+      const filtered = listing.images.filter((url) => {
+        const canonical = canonicalizePhotoUrl(url);
+        return !canonical || !poisoned.has(canonical);
+      });
+      if (filtered.length !== listing.images.length) {
+        listing.images = filtered;
+        mutated = true;
+      }
+    }
+    if (mutated) strippedCount += 1;
+  }
+  return { poisonedUrls: poisoned, strippedCount };
+}
+
 module.exports = {
   inspectImageUrl,
   inspectPublisherPhoto,
@@ -176,4 +219,5 @@ module.exports = {
   canonicalizePhotoUrl,
   normalizeBaseBuildingKey,
   detectDuplicatePhotoUrls,
+  stripDuplicateBatchPhotos,
 };

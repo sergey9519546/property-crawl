@@ -5,8 +5,11 @@ export const OPENFREEMAP_POSITRON_STYLE = "https://tiles.openfreemap.org/styles/
 export const FEMA_NFHL_SOURCE_ID = "fema-nfhl";
 export const FEMA_NFHL_LAYER_ID = "fema-nfhl-overlay";
 
+export const OPENFREEMAP_GLYPHS_URL = "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf";
+
 export const RASTER_STREET_STYLE: StyleSpecification = {
   version: 8,
+  glyphs: OPENFREEMAP_GLYPHS_URL,
   sources: {
     "usgs-topo": {
       type: "raster",
@@ -31,6 +34,7 @@ export const RASTER_STREET_STYLE: StyleSpecification = {
 
 export const AERIAL_IMAGERY_STYLE: StyleSpecification = {
   version: 8,
+  glyphs: OPENFREEMAP_GLYPHS_URL,
   sources: {
     "usgs-imagery": {
       type: "raster",

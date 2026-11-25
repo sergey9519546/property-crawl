@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { OPENFREEMAP_POSITRON_STYLE, RASTER_STREET_STYLE } from "@/lib/map-style";
-import { attachBasemapFallback, isBasemapErrorEvent } from "@/lib/map-controller";
+import { attachBasemapFallback, isBasemapErrorEvent, switchBasemapStyle } from "@/lib/map-controller";
 import {
   ArrowRight,
   Crosshair,
@@ -657,7 +657,11 @@ export function DealDiscoveryMap() {
             if (!fallbackApplied) {
               fallbackApplied = true;
               try {
-                map.setStyle(RASTER_STREET_STYLE, { diff: false });
+                switchBasemapStyle(map, RASTER_STREET_STYLE, () => {
+                  if (disposed) return;
+                  applyHeatLayer();
+                  setMapReady(true);
+                });
               } catch {
                 setMapUnavailable(true);
               }

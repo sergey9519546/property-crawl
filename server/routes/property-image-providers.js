@@ -74,7 +74,10 @@ const DEFAULT_PROVIDERS = [
   { id: 'google-geocoding', label: 'Google Maps Geocoding API', role: 'geocoding', keyEnvVar: 'GOOGLE_MAPS_API_KEY' },
   { id: 'google-streetview', label: 'Google Street View Static API', role: 'streetview', keyEnvVar: 'GOOGLE_MAPS_API_KEY' },
   { id: 'panoramax', label: 'Panoramax (community street-level imagery)', role: 'streetview-alternative', keyEnvVar: null, cacheable: true },
-  { id: 'mapillary', label: 'Mapillary (community street-level imagery)', role: 'streetview-alternative', keyEnvVar: 'MAPILLARY_ACCESS_TOKEN', cacheable: true }
+  { id: 'mapillary', label: 'Mapillary (community street-level imagery)', role: 'streetview-alternative', keyEnvVar: 'MAPILLARY_ACCESS_TOKEN', cacheable: true },
+  { id: 'usgs-imagery', label: 'USGS The National Map (public-domain aerial)', role: 'aerial', keyEnvVar: null, cacheable: true },
+  { id: 'usda-naip', label: 'USDA NAIP (CONUS public-domain aerial)', role: 'aerial', keyEnvVar: null, cacheable: true },
+  { id: 'census-geocoder', label: 'US Census Bureau Geocoder', role: 'geocoding', keyEnvVar: null }
 ];
 
 function createProviderStatusHandler({

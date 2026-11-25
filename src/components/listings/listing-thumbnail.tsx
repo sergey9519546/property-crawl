@@ -48,10 +48,15 @@ export function ListingThumbnail({ listingId, address, propType, source, photo, 
   const [altPayload, setAltPayload] = useState<AlternativeImageryPayload | null>(null);
   const [reason, setReason] = useState("");
   const generation = useRef(0);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const autoAerialAttempted = useRef(false);
+  const aerialUserRequested = useRef(false);
   const frame = layout === "card" ? "relative aspect-[4/3] w-full shrink-0 overflow-hidden" : "relative min-h-0 flex-1 overflow-hidden";
   const caption = "flex min-h-14 shrink-0 flex-col justify-center border-b border-line bg-paper px-4 py-2 text-label leading-4 text-ink-3";
   useEffect(() => {
     generation.current++;
+    autoAerialAttempted.current = false;
+    aerialUserRequested.current = false;
     setPhotoFailed(false);
     setAltImageFailed(false);
     setStatus("idle");
@@ -62,6 +67,28 @@ export function ListingThumbnail({ listingId, address, propType, source, photo, 
     setReason("");
     return () => { generation.current++; };
   }, [listingId, publisherPhoto]);
+
+  useEffect(() => {
+    if (!observed || (publisherPhoto && !photoFailed) || status !== "idle" || autoAerialAttempted.current) return;
+    const node = containerRef.current;
+    if (!node || typeof IntersectionObserver === "undefined") {
+      autoAerialAttempted.current = true;
+      setStatus("aerial");
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          autoAerialAttempted.current = true;
+          setStatus("aerial");
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "200px" },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [observed, photoFailed, publisherPhoto, status]);
 
   function applyAlternativeCandidate(chosen: AlternativeCandidate) {
     setAltImageFailed(false);
@@ -244,27 +271,37 @@ export function ListingThumbnail({ listingId, address, propType, source, photo, 
       <div className="flex h-full flex-col bg-paper" data-testid="listing-thumbnail-aerial">
         <div className={frame}>
           <img
-            src={`/api/property-image?listingId=${encodeURIComponent(listingId)}&mode=aerial`}
-            alt={`Aerial satellite view for ${address}`}
+            src={`/api/property-image?listingId=${encodeURIComponent(listingId)}&mode=composite`}
+            alt={`Parcel-locked aerial view for ${address}`}
             className={`absolute inset-0 h-full w-full object-cover ${status === "aerial_loaded" ? "" : "opacity-0"}`}
             onLoad={() => setStatus("aerial_loaded")}
             onError={() => {
-              setReason("Aerial satellite imagery is unavailable for this location.");
-              setStatus("unavailable");
+              if (aerialUserRequested.current) {
+                setReason("Aerial satellite imagery is unavailable for this location.");
+                setStatus("unavailable");
+              } else {
+                setStatus("idle");
+              }
             }}
           />
           {status === "aerial" ? <p role="status" className="absolute inset-0 grid place-items-center text-xs text-ink-3">Loading aerial parcel view…</p> : null}
         </div>
         <div className={caption}>
-          <span>USGS National Map / USDA NAIP (Public Domain)</span>
-          <span className="text-ink-3">Overhead satellite context · Not a publisher photo</span>
+          <div className="flex flex-wrap items-center justify-between gap-1.5">
+            <span>USGS / USDA NAIP · Parcel-locked aerial</span>
+            <span className="flex items-center gap-1.5">
+              <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); void loadStreetView(); }} className="underline underline-offset-2 hover:text-ink">Street View</button>
+              <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); void loadAlternatives(); }} className="underline underline-offset-2 hover:text-ink">Open imagery</button>
+            </span>
+          </div>
+          <span className="text-ink-3">Public-domain overhead context · Not a publisher photo</span>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex h-full w-full flex-col" data-testid="listing-thumbnail-unavailable" data-placeholder-category={placeholder.category}>
+    <div ref={containerRef} className="flex h-full w-full flex-col" data-testid="listing-thumbnail-unavailable" data-placeholder-category={placeholder.category}>
       <div className={`${frame} bg-paper`}>
         <div
           aria-hidden="true"
@@ -296,7 +333,7 @@ export function ListingThumbnail({ listingId, address, propType, source, photo, 
                   {altLoading ? <Loader2 size={14} className="animate-spin" aria-hidden /> : null}
                   {altLoading ? t.checkingOpenImagery : t.openProvidersBtn}
                 </button>
-                <button type="button" disabled={status === "loading" || altLoading} aria-label={`Load aerial view for ${address}`} onClick={(e) => { e.preventDefault(); e.stopPropagation(); setStatus("aerial"); }} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-line-strong bg-card px-3 py-2 text-xs font-semibold text-ink-2 transition hover:border-ink-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-3 disabled:opacity-60">
+                <button type="button" disabled={status === "loading" || altLoading} aria-label={`Load aerial view for ${address}`} onClick={(e) => { e.preventDefault(); e.stopPropagation(); aerialUserRequested.current = true; setStatus("aerial"); }} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-line-strong bg-card px-3 py-2 text-xs font-semibold text-ink-2 transition hover:border-ink-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-3 disabled:opacity-60">
                   Aerial view
                 </button>
               </div>

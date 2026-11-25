@@ -150,3 +150,46 @@ test("toggleFemaFloodOverlay adds and removes FEMA NFHL source and raster layer 
   assert.equal(map.sources.has(FEMA_NFHL_SOURCE_ID), false);
   assert.equal(map.layers.has(FEMA_NFHL_LAYER_ID), false);
 });
+
+test("raster and aerial styles declare glyphs so symbol layers never crash MapLibre", () => {
+  assert.match(String(RASTER_STREET_STYLE.glyphs || ""), /^https:\/\/tiles\.openfreemap\.org\/fonts\//);
+  assert.match(String(AERIAL_IMAGERY_STYLE.glyphs || ""), /^https:\/\/tiles\.openfreemap\.org\/fonts\//);
+});
+
+test("attachBasemapFallback honors shouldFallback guard so Aerial mode never silently swaps to Street Topo", () => {
+  const map = createMockMap({ initialLoaded: false });
+  let inAerial = true;
+  let fallbackCount = 0;
+
+  attachBasemapFallback(map, RASTER_STREET_STYLE, {
+    shouldFallback: () => !inAerial,
+    onFallback: () => { fallbackCount += 1; },
+  });
+
+  // Error while Aerial is active MUST NOT swap back to Street Topo
+  map.emit("error", { sourceId: "usgs-imagery" });
+  assert.equal(fallbackCount, 0);
+  assert.equal(map.setStyleCalls.length, 0);
+
+  // Once back in street mode, an openmaptiles error triggers single-shot fallback
+  inAerial = false;
+  map.emit("error", { sourceId: "openmaptiles" });
+  assert.equal(fallbackCount, 1);
+  assert.equal(map.setStyleCalls.length, 1);
+});
+
+test("map components enforce pin-before-symbol order, zoom-scaled cluster eps, switchBasemapStyle, and zero stale Esri captions", async () => {
+  const fs = await import("node:fs");
+  const discoverySrc = fs.readFileSync(new URL("../src/components/listings/discovery-map.tsx", import.meta.url), "utf8");
+  const pinIdx = discoverySrc.indexOf("id: DISCOVERY_PIN_LAYER_ID");
+  const countIdx = discoverySrc.indexOf("id: DISCOVERY_COUNT_LAYER_ID");
+  assert.ok(pinIdx > 0 && countIdx > 0 && pinIdx < countIdx, "DISCOVERY_PIN_LAYER_ID must be added before DISCOVERY_COUNT_LAYER_ID");
+  assert.match(discoverySrc, /"text-font":\s*\["Noto Sans Regular"\]/);
+  assert.match(discoverySrc, /Math\.pow\(2,\s*Math\.round\(map\.getZoom\(\)\)\s*\+\s*4\)/);
+
+  const listingMediaSrc = fs.readFileSync(new URL("../src/components/listings/listing-media.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(listingMediaSrc, /Esri \/ USGS NAIP/);
+
+  const dealMapSrc = fs.readFileSync(new URL("../src/components/site/deal-discovery-map.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(dealMapSrc, /map\.setStyle\(RASTER_STREET_STYLE/);
+});

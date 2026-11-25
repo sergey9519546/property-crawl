@@ -269,6 +269,7 @@ export function MarketMap({ listings, onUnderwrite, returnTo }: MarketMapProps) 
           }
         };
         detachFallback = attachBasemapFallback(map, RASTER_STREET_STYLE, {
+          shouldFallback: () => initializedLayerRef.current !== "aerial",
           onFallback: () => {
             fallbackApplied = true;
             fallbackUsedRef.current = true;
@@ -300,7 +301,7 @@ export function MarketMap({ listings, onUnderwrite, returnTo }: MarketMapProps) 
         map.on("error", (event: unknown) => {
           if (disposed || map.loaded()) return;
           if (!isBasemapErrorEvent(event, map)) return;
-          if (fallbackApplied && !map.isStyleLoaded()) {
+          if (fallbackApplied && !map.isStyleLoaded() && initializedLayerRef.current !== "aerial") {
             tileErrorAfterFallback = true;
             setMapUnavailable(true);
           }

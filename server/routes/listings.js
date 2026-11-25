@@ -177,6 +177,12 @@ function presentListing(listing) {
   }
   const hudSafmr = listing.hudSafmr || (listing.zip ? getHudSafmrBenchmark({ zip: listing.zip, bedrooms: listing.beds ?? 2 }) : null);
   if (hudSafmr) presented.hudSafmr = hudSafmr;
+  const assessorPhotoUrl = presented.assessorParcel?.assessorPhotoUrl
+    || presented.provenance?.derivedFields?.assessorRoll?.parcel?.assessorPhotoUrl
+    || null;
+  if (assessorPhotoUrl && !presented.assessorPhotoUrl) {
+    presented.assessorPhotoUrl = assessorPhotoUrl;
+  }
   const apn = extractRawApn(listing) ?? listing.apn ?? listing.parcelNumber ?? listing.parcelId
     ?? listing.provenance?.sourceFacts?.apn ?? listing.provenance?.sourceFacts?.parcelNumber ?? listing.provenance?.sourceFacts?.parcelId;
   const countyFips = extractCountyFips(listing) ?? listing.countyFips ?? listing.provenance?.countyFips ?? listing.provenance?.sourceFacts?.countyFips;

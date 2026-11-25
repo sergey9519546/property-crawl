@@ -1966,6 +1966,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         # nothing until asked, and the disclosure names the provider, the
         # provider's own credit, the capture date, the matched distance, and the
         # fact that the frame is street context rather than condition evidence.
+        composite_requests = []
         metadata_requests = []
         image_requests = []
         embed_requests = []
@@ -1973,14 +1974,19 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
 
         def media_response(route):
             url = route.request.url
-            if "mode=metadata" in url or "mode=walkthrough" in url:
+            if "mode=composite" in url:
+                composite_requests.append(url)
+                route.fulfill(content_type="image/png", body=tiny_png)
+            elif "mode=metadata" in url or "mode=walkthrough" in url:
                 metadata_requests.append(url)
                 route.fulfill(json={"available": True, "provider": "Google Maps",
                     "attribution": "Google", "captureDate": "2026-05", "distanceMeters": 12,
                     "panoramaLocation": {"lat": 39.5, "lng": -104.9}, "heading": 0})
-            else:
+            elif "mode=image" in url:
                 image_requests.append(url)
                 route.fulfill(content_type="image/png", body=tiny_png)
+            else:
+                route.fulfill(status=404, json={"available": False, "reason": "Unexpected media mode"})
 
         def embed_stub(route):
             # The embed is a real google.com iframe. Stub it: this file's policy is
@@ -2003,7 +2009,10 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         except Exception:
             pass
 
-        # On demand: the card asks the publisher for nothing until it is clicked.
+        # On demand: free public-domain mode=composite aerials may load, but the
+        # card must NEVER trigger billable Street View requests until clicked.
+        billable_requests = metadata_requests + image_requests + embed_requests
+        self.assertEqual(billable_requests, [], "detail card must not request billable imagery before the user asks")
         self.assertEqual(metadata_requests, [], "detail card must not request imagery before the user asks")
         self.assertEqual(image_requests, [], "detail card must not request imagery before the user asks")
 
@@ -2091,31 +2100,53 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
             provenance={"origin": "live", "observed": True, "recordKind": "source_record", "publisher": "CivilView", "recordId": "1234"})
         self.page.route("**/api/listings?**", lambda route: route.fulfill(json={"listings": [fixture], "total": 1}))
         tiny_png = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aM1cAAAAASUVORK5CYII=")
-        media_calls = []
+        composite_calls = []
+        billable_calls = []
 
-        # Only the metadata mode is probed for availability; the image mode is the
-        # picture itself. Counting metadata calls (rather than total calls) keeps
-        # an image request from ever being mistaken for the first metadata call.
+        # Free public-domain mode=composite aerials load separately from billable
+        # Street View modes (metadata/image/walkthrough). Counting metadata calls
+        # keeps an image request from being mistaken for the first metadata call.
         def media_response(route):
-            media_calls.append(route.request.url)
-            metadata_calls = sum(1 for url in media_calls if "mode=metadata" in url)
-            if metadata_calls == 1:
-                route.fulfill(json={"available": False, "reason": "Coverage temporarily unavailable"})
-            elif "mode=metadata" in route.request.url:
-                route.fulfill(json={"available": True, "provider": "Google Maps", "attribution": "Test provider attribution", "captureDate": "2012-09", "distanceMeters": 24})
-            else:
+            url = route.request.url
+            if "mode=composite" in url:
+                composite_calls.append(url)
                 route.fulfill(content_type="image/png", body=tiny_png)
+            elif "mode=metadata" in url:
+                billable_calls.append(url)
+                metadata_calls = sum(1 for call in billable_calls if "mode=metadata" in call)
+                if metadata_calls == 1:
+                    route.fulfill(json={"available": False, "reason": "Coverage temporarily unavailable"})
+                else:
+                    route.fulfill(json={"available": True, "provider": "Google Maps", "attribution": "Test provider attribution", "captureDate": "2012-09", "distanceMeters": 24})
+            elif "mode=image" in url:
+                billable_calls.append(url)
+                route.fulfill(content_type="image/png", body=tiny_png)
+            else:
+                route.fulfill(status=404, json={"available": False, "reason": "Unexpected media mode"})
 
         self.page.route("**/api/property-image?**", media_response)
         self.page.reload(wait_until="domcontentloaded")
         self.page.get_by_role("button", name="Deal Grid (1 records)", exact=True).wait_for(state="visible")
-        # On demand: nothing is fetched, and nothing is billed for, until a person asks.
-        self.assertEqual(media_calls, [], "feed must not bill for imagery before the user requests it")
+        aerial = self.page.get_by_test_id("listing-thumbnail-aerial")
+        placeholder = self.page.get_by_test_id("listing-thumbnail-unavailable")
+        expect(aerial.or_(placeholder)).to_be_visible(timeout=15_000)
+        if aerial.count() > 0 and aerial.is_visible():
+            aerial_img = aerial.locator("img")
+            expect(aerial_img).to_have_js_property("complete", True, timeout=15_000)
+            self.assertGreater(aerial_img.evaluate("node => node.naturalWidth"), 0)
+        # On demand: free aerial composites may load, but nothing billable is requested until a person asks.
+        self.assertEqual(billable_calls, [], "feed must not bill for imagery before the user requests it")
 
-        # The control renames itself once coverage is known - "Check" before,
-        # "Retry" after a refusal - so one locator could never drive both clicks.
+        # Click Street View from either the aerial view or placeholder view.
+        if aerial.count() > 0 and aerial.is_visible():
+            aerial.get_by_role("button", name="Street View", exact=True).click()
+        else:
+            placeholder.get_by_role(
+                "button",
+                name=re.compile(rf"^(?:Check|Retry) Street View for {re.escape(fixture['address'])}$"),
+            ).click()
+
         card = self.page.get_by_test_id("listing-thumbnail-unavailable")
-        card.get_by_role("button", name=f"Check Street View for {fixture['address']}", exact=True).click()
         expect(self.page.get_by_text("Coverage temporarily unavailable", exact=True)).to_be_visible(timeout=15_000)
         self.assertEqual(self.page.get_by_test_id("listing-thumbnail-streetview").count(), 0,
             "a refused coverage check must not leave a Street View preview behind")
@@ -2146,23 +2177,30 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         self.assertIn("Street context only", caption)
         self.assertEqual(image.evaluate("node => getComputedStyle(node).objectFit"), "contain")
         # No provider key in the browser URL and no third-party image host.
-        self.assertTrue(media_calls)
-        self.assertTrue(all(url.startswith(BASE_URL + "/api/property-image?") and "key=" not in url for url in media_calls),
+        self.assertTrue(billable_calls)
+        self.assertTrue(all(url.startswith(BASE_URL + "/api/property-image?") and "key=" not in url for url in billable_calls),
             "Street View imagery must be proxied same-origin with no provider key in the browser URL")
         self.page.set_viewport_size({"width": 390, "height": 844})
         self.assertLessEqual(self.page.evaluate("document.documentElement.scrollWidth"), 390)
 
     def test_street_view_image_failure_can_retry_without_substituting_stock_photos(self):
+        tiny_png = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aM1cAAAAASUVORK5CYII=")
+        billable_requests = []
         attempts = []
 
         def media_response(route):
             url = route.request.url
+            if "mode=composite" in url:
+                route.fulfill(content_type="image/png", body=tiny_png)
             # This card requests mode=walkthrough (listing-media.tsx:155), not
             # mode=metadata. Keying only on mode=metadata sent the real request
             # down the failure branch on the very first click.
-            if "mode=metadata" in url or "mode=walkthrough" in url:
+            elif "mode=metadata" in url or "mode=walkthrough" in url:
+                billable_requests.append(url)
                 route.fulfill(json={"available": True, "provider": "Google Maps", "distanceMeters": 10})
             else:
+                if "mode=image" in url:
+                    billable_requests.append(url)
                 attempts.append(url)
                 route.fulfill(status=503, content_type="application/json", body='{"error":"unavailable"}')
 
@@ -2179,6 +2217,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
             self.page.wait_for_load_state("networkidle", timeout=20_000)
         except Exception:
             pass
+        self.assertEqual(billable_requests, [], "detail card must not bill for Street View before user click")
         self.page.get_by_role("button", name="Check Street View", exact=True).click()
 
         # Both halves of this test were pointed at copy that no longer exists:

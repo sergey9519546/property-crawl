@@ -108,7 +108,8 @@ class DiscoveryUiRegression(unittest.TestCase):
         for width in (1440, 390):
             with self.subTest(width=width):
                 context, page = self.make_page({"width": width, "height": 900})
-                image_requests = []
+                composite_requests = []
+                billable_requests = []
                 metadata_attempts = 0
 
                 def listings_route(route: Route):
@@ -118,8 +119,11 @@ class DiscoveryUiRegression(unittest.TestCase):
                     nonlocal metadata_attempts
                     query = parse_qs(urlparse(route.request.url).query)
                     mode = query.get("mode", [""])[0]
-                    image_requests.append(mode)
-                    if mode == "metadata":
+                    if mode == "composite":
+                        composite_requests.append(mode)
+                        route.fulfill(status=200, headers={"Content-Type": "image/png"}, body=PNG)
+                    elif mode == "metadata":
+                        billable_requests.append(mode)
                         metadata_attempts += 1
                         if metadata_attempts == 1:
                             route.fulfill(
@@ -144,6 +148,7 @@ class DiscoveryUiRegression(unittest.TestCase):
                                 }
                             )
                     elif mode == "image":
+                        billable_requests.append(mode)
                         route.fulfill(status=200, headers={"Content-Type": "image/png"}, body=PNG)
                     else:
                         route.fulfill(status=404, json={"error": "Unexpected fixture request"})
@@ -152,14 +157,23 @@ class DiscoveryUiRegression(unittest.TestCase):
                 page.route("**/api/property-image?**", property_image_route)
                 page.goto(f"{BASE_URL}/listings", wait_until="domcontentloaded")
                 page.get_by_role("heading", name="125 Fixture Avenue").wait_for()
-                self.assertEqual(image_requests, [], "thumbnail fetched Street View before user action")
+                aerial = page.get_by_test_id("listing-thumbnail-aerial")
+                placeholder = page.get_by_test_id("listing-thumbnail-unavailable")
+                expect(aerial.or_(placeholder)).to_be_visible()
+                if aerial.count() > 0 and aerial.is_visible():
+                    aerial_img = aerial.locator("img")
+                    page.wait_for_function("img => img.complete && img.naturalWidth > 0", arg=aerial_img.element_handle())
+                self.assertEqual(billable_requests, [], "thumbnail fetched billable Street View before user action")
 
-                check = page.get_by_role(
-                    "button", name="Check Street View for 125 Fixture Avenue, Los Angeles, CA 90049"
-                )
-                check.click()
+                if aerial.count() > 0 and aerial.is_visible():
+                    aerial.get_by_role("button", name="Street View", exact=True).click()
+                else:
+                    placeholder.get_by_role(
+                        "button",
+                        name=re.compile(r"^(?:Check|Retry) Street View for 125 Fixture Avenue, Los Angeles, CA 90049$"),
+                    ).click()
                 page.get_by_text("Coverage is temporarily unavailable.", exact=True).wait_for()
-                self.assertEqual(image_requests, ["metadata"])
+                self.assertEqual(billable_requests, ["metadata"])
 
                 page.get_by_role(
                     "button", name="Retry Street View for 125 Fixture Avenue, Los Angeles, CA 90049"
@@ -168,7 +182,7 @@ class DiscoveryUiRegression(unittest.TestCase):
                 street.wait_for()
                 image = street.locator("img")
                 page.wait_for_function("img => img.complete && img.naturalWidth > 0", arg=image.element_handle())
-                self.assertEqual(image_requests, ["metadata", "metadata", "image"])
+                self.assertEqual(billable_requests, ["metadata", "metadata", "image"])
                 self.assertIn("Google Maps", street.inner_text())
                 self.assertIn("Captured April 2025", street.inner_text())
                 self.assertIn("12 m from matched location", street.inner_text())
