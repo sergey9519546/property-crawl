@@ -15,6 +15,7 @@ const { getCountyMarketTrends } = require('../enrichment/macro-valuation-data');
 const { analyzeMunicipalViolations } = require('./municipal-liens');
 const { buildDocumentEvidence } = require('./document-evidence');
 const { classifyStatusActivity } = require('../sources/observations');
+const { resolveListingSafmrRentFloor } = require('../enrichment/hud-safmr');
 
 const SIGNAL_WEIGHTS = Object.freeze({
   bidToValueRatio: 0.30,
@@ -104,16 +105,33 @@ function evaluateOpportunitySignals(listing = {}, options = {}) {
       });
     }
   } else {
-    signals.push({
-      key: 'sale_date_known',
-      label: 'Sale date unresolved',
-      status: 'unknown',
-      evidenceClass: 'unresolved',
-      sourceUrl,
-      observedAt,
-      reason: 'Auction sale date is not published in current record.',
-      nextAction: 'Check official county court docket or publisher listing.',
-    });
+    const sourceKey = String(listing.source || '').trim().toLowerCase();
+    const isContinuousOffering = ['hud', 'gsa', 'usda', 'fannie', 'freddie', 'fdic', 'va'].includes(sourceKey)
+      && publisherObserved
+      && Number(listing.openingBid) > 0;
+    if (isContinuousOffering) {
+      signals.push({
+        key: 'sale_date_known',
+        label: 'Active agency disposition (continuous offering)',
+        status: 'supported',
+        evidenceClass: 'publisher_reported',
+        sourceUrl,
+        observedAt,
+        reason: 'Direct agency REO disposition is active for rolling bids without a fixed courthouse auction date.',
+        nextAction: 'Confirm occupancy, property condition, and closing deadline directly on the agency portal.',
+      });
+    } else {
+      signals.push({
+        key: 'sale_date_known',
+        label: 'Sale date unresolved',
+        status: 'unknown',
+        evidenceClass: 'unresolved',
+        sourceUrl,
+        observedAt,
+        reason: 'Auction sale date is not published in current record.',
+        nextAction: 'Check official county court docket or publisher listing.',
+      });
+    }
   }
 
   // 2. Bid Reduction
@@ -288,11 +306,15 @@ function evaluateOpportunitySignals(listing = {}, options = {}) {
   let valuationLabel = null;
 
   if (!hasDirectRange && publisherObserved) {
-    // 1. Attempt enrolled county assessor registry conversion
+    // 1. Attempt enrolled county assessor registry conversion (parcel or enrolled listing.assessed)
     const countyKey = resolveCountyKey(listing.state, listing.county);
-    const assessorRes = countyKey ? interpretAssessorParcel({
+    const parcelOrAssessed = publicRecords?.parcel
+      || listing.assessorParcel
+      || listing.provenance?.derivedFields?.assessorRoll?.parcel
+      || (Number(listing.assessed) > 0 ? { assessedValue: { total: Number(listing.assessed) } } : null);
+    const assessorRes = countyKey && parcelOrAssessed ? interpretAssessorParcel({
       countyKey,
-      parcel: publicRecords?.parcel || listing.assessorParcel || listing.provenance?.derivedFields?.assessorRoll?.parcel,
+      parcel: parcelOrAssessed,
       openingBid: listing.openingBid,
     }) : null;
 
@@ -302,6 +324,14 @@ function evaluateOpportunitySignals(listing = {}, options = {}) {
       estHigh = Math.round(mid * 1.08);
       valuationProvenance = 'enrolled_assessor_registry';
       valuationLabel = assessorRes.citation || 'Enrolled county assessor market conversion (±8% band)';
+    } else if (bid > 1000) {
+      // 2. Fallback to HUD FY2025 SAFMR 1.20x DSCR ceiling when zip/hudSafmr exists (no estLow/estHigh mutation)
+      const safmrInfo = resolveListingSafmrRentFloor(listing);
+      if (safmrInfo && safmrInfo.rentFloor > 0) {
+        mid = safmrInfo.rentFloor;
+        valuationProvenance = 'hud_safmr_rent_floor';
+        valuationLabel = `${safmrInfo.source} 1.20x DSCR rental ceiling`;
+      }
     }
   }
 

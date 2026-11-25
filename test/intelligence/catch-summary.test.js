@@ -329,4 +329,25 @@ describe('presentListing — presentation-layer catch derivation', () => {
     assert.ok(Array.isArray(presented.catchWarnings) && presented.catchWarnings.length > 0);
     assert.match(presented.catchSummary, /1st mortgage recorded prior survives/i);
   });
+
+  test('flags negative 1.20x DSCR spread against HUD SAFMR rent ceiling and continuous federal REO copy', () => {
+    const negCashflow = computeCatchSummary({
+      source: 'hud',
+      state: 'TX',
+      openingBid: 450000,
+      saleDate: null,
+      hudSafmr: { zip: '77002', bedrooms: 2, fairMarketRent: 1500 },
+    }, [], null);
+    assert.match(negCashflow, /1\.20x DSCR HUD rent ceiling/i);
+    assert.ok(negCashflow.length < 160);
+
+    const fedReo = computeCatchSummary({
+      source: 'gsa',
+      state: 'NM',
+      openingBid: 95000,
+      saleDate: null,
+    }, [], null);
+    assert.match(fedReo, /Federal REO open at \$95,000/);
+    assert.ok(fedReo.length < 160);
+  });
 });

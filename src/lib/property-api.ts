@@ -10,7 +10,7 @@ const MAX_BYTES = 2 * 1024 * 1024;
 // button calls it (src/lib/saved-searches.ts runSavedSearch). The optional
 // segment is restricted to the literal "run" so an arbitrary sub-path still
 // fails closed rather than being waved through the gate.
-const API_PATH = /^\/api\/(?:listings(?:\/(?:compare|[^/]+(?:\/(?:assessor|packet|decision-packet))?))?|enrich|export|verify-docket|parcel-boundary|property-image(?:\/providers)?|property-intelligence|property-signals|federal-hazards|underwrite|hunts(?:\/[A-Za-z0-9_-]+(?:\/(?:evaluate|events))?)?|parse|health(?:\/ready)?|sources(?:\/(?!\.\.?(?:\/|$))[A-Za-z0-9._-]+\/collect)?|source-network(?:\/(?:intake|review|run|onboarding|unbrowse(?:\/(?:status|intake))?|jobs(?:\/job_[a-f0-9]{24})?))?|workspace(?:\/[A-Za-z0-9_-]+)*|scrapers(?:\/(?:health|run))?|alerts(?:\/[^/]+)?|alerts\/matches|saved-searches(?:\/[^/]+(?:\/run)?)?|enrichment(?:\/[A-Za-z0-9._:-]+(?:\/refresh)?)?|document-review(?:\/[^/]+)?|neighborhoods(?:\/(?!\.\.?(?:\/|$))[^/]+(?:\/(?!\.\.?(?:\/|$))[^/]+)?)?|auction-calendar|watchlist\/[^/]+\/comps|price-drops|portfolio\/dashboard|coverage)$/;
+const API_PATH = /^\/api\/(?:listings(?:\/(?:compare|[^/]+(?:\/(?:assessor|packet|decision-packet))?))?|enrich|export|verify-docket|parcel-boundary|property-image(?:\/providers)?|property-intelligence|property-signals|federal-hazards|underwrite|check-ladder|hunts(?:\/[A-Za-z0-9_-]+(?:\/(?:evaluate|events))?)?|parse|health(?:\/ready)?|sources(?:\/(?!\.\.?(?:\/|$))[A-Za-z0-9._-]+\/collect)?|source-network(?:\/(?:intake|review|run|onboarding|unbrowse(?:\/(?:status|intake))?|jobs(?:\/job_[a-f0-9]{24})?))?|workspace(?:\/[A-Za-z0-9_-]+)*|scrapers(?:\/(?:health|run))?|alerts(?:\/[^/]+)?|alerts\/matches|saved-searches(?:\/[^/]+(?:\/run)?)?|enrichment(?:\/[A-Za-z0-9._:-]+(?:\/refresh)?)?|document-review(?:\/[^/]+)?|neighborhoods(?:\/(?!\.\.?(?:\/|$))[^/]+(?:\/(?!\.\.?(?:\/|$))[^/]+)?)?|auction-calendar|watchlist\/[^/]+\/comps|price-drops|portfolio\/dashboard|coverage)$/;
 
 function jsonError(status: number, message: string) {
   return Response.json({ error: message }, { status, headers: { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" } });
@@ -141,7 +141,7 @@ export async function proxyPropertyApi(request: Request, dependencies: {
       cache: "no-store", redirect: "error", signal: AbortSignal.timeout(timeoutMs),
     });
     const responseHeaders = new Headers({ "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" });
-    for (const name of ["content-type", "content-disposition", "retry-after", "allow", "x-ratelimit-limit", "x-ratelimit-remaining", "x-ratelimit-reset", "referrer-policy", "cross-origin-resource-policy", "x-property-image-provider", "x-property-image-attribution", "x-property-image-distance-meters", "x-property-image-heading", "x-property-image-capture-date", "x-property-image-coordinate-basis", "x-property-image-coordinate-precision", "x-content-sha256", "set-cookie"]) {
+    for (const name of ["content-type", "content-disposition", "retry-after", "allow", "x-ratelimit-limit", "x-ratelimit-remaining", "x-ratelimit-reset", "referrer-policy", "cross-origin-resource-policy", "x-property-image-provider", "x-property-image-attribution", "x-property-image-distance-meters", "x-property-image-heading", "x-property-image-capture-date", "x-property-image-coordinate-basis", "x-property-image-coordinate-precision", "x-property-image-parcel-locked", "x-content-sha256", "set-cookie"]) {
       const value = upstream.headers.get(name);
       if (value) responseHeaders.set(name, value);
     }
@@ -150,7 +150,7 @@ export async function proxyPropertyApi(request: Request, dependencies: {
       request.method === "GET"
       && upstream.status === 200
       && url.pathname === "/api/property-image"
-      && url.searchParams.get("mode")?.toLowerCase() === "aerial"
+      && ["aerial", "composite"].includes(url.searchParams.get("mode")?.toLowerCase() || "")
       && (imageProvider.startsWith("USGS") || imageProvider.startsWith("USDA"))
     ) {
       responseHeaders.set(

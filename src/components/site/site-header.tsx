@@ -5,6 +5,7 @@ import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Menu,
+  Banknote,
   LayoutDashboard,
   Radar,
   Gauge,
@@ -64,7 +65,8 @@ function buildMenuGroups(m: Messages): MenuGroup[] {
         [
           { label: p.listingsLabel, desc: p.listingsDesc, icon: LayoutDashboard, href: "/listings", tint: "#e7f8f0" },
           { label: p.catchLabel, desc: p.catchDesc, icon: Target, href: "/#the-catch", tint: "#fff0e9" },
-          { label: p.underwriteLabel, desc: p.underwriteDesc, icon: Calculator, href: "/#product", tint: "#eef1ff" },
+          { label: p.underwriteLabel, desc: p.underwriteDesc, icon: Calculator, href: "/underwrite", tint: "#eef1ff" },
+          { label: p.bidSheetLabel, desc: p.bidSheetDesc, icon: Banknote, href: "/bid-sheet", tint: "#e7f8f0" },
         ],
         [
           { label: p.huntsLabel, desc: p.huntsDesc, icon: Radar, href: "/hunts", tint: "#e7f8f0" },

@@ -1,6 +1,7 @@
 'use strict';
 
 const { US_STATE_NAMES } = require('../db/us-state-query');
+const { resolveListingSafmrRentFloor } = require('../enrichment/hud-safmr');
 
 /**
  * Deterministic "Here's the Catch" one-liner — computed from fields the record
@@ -153,8 +154,21 @@ function computeCatchSummary(listing = {}, titleWarnings = [], riskLevel = null)
   const isNominalBid = bid > 0 && bid <= 500 && !hasPublishedRange;
   const bidLead = isNominalBid ? `Nominal ${money(bid)} starting bid (reserve undisclosed)` : `Opening bid ${money(bid)}`;
 
+  // 4b. Negative DSCR rental cash-flow check vs HUD SAFMR rent ceiling (when valuation band is absent)
+  if (!hasPublishedRange && bid > 1000) {
+    const safmrInfo = resolveListingSafmrRentFloor(record);
+    if (safmrInfo && safmrInfo.rentFloor > 0 && bid > safmrInfo.rentFloor * 1.15) {
+      const lead = isFederalReo ? `Asking ${money(bid)}` : `Opening ${money(bid)}`;
+      const msg = `${lead} exceeds ~${money(safmrInfo.rentFloor)} 1.20x DSCR HUD rent ceiling (${money(safmrInfo.rent)}/mo SAFMR) — negative cash flow at 7.25%.`;
+      return msg.length < 160 ? msg : `${lead} exceeds ~${money(safmrInfo.rentFloor)} 1.20x DSCR HUD rent ceiling — negative rental cash flow.`;
+    }
+  }
+
   // 5. No sale date
   if (!saleDate) {
+    if (isFederalReo) {
+      return `Federal REO open at ${money(bid)} with no fixed auction cutoff — confirm condition, portal deadline & closing terms.`;
+    }
     return isNominalBid ? `${bidLead} — no sale date is published yet.` : `${bidLead} but no sale date is published yet.`;
   }
 

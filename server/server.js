@@ -44,6 +44,7 @@ const handlePriceDrop = require('./routes/price-drop').createPriceDropHandler();
 const { handleDecisionPacket } = require('./routes/decision-packet');
 const handleFederalHazards = require('./routes/federal-hazards');
 const handleUnderwrite = require('./routes/underwrite').createUnderwriteHandler();
+const handleCheckLadder = require('./routes/check-ladder').createCheckLadderHandler();
 const scheduler = require('./scrapers/scheduler');
 const { discoveryReadiness, probeDiscoveryDatabase } = require('./discovery-readiness');
 const { captureException } = require('./telemetry/sentry');
@@ -380,6 +381,9 @@ async function handleRequest(req, res) {
       }
       if (url.pathname === '/api/underwrite') {
         return await handleUnderwrite(req, res, url);
+      }
+      if (url.pathname === '/api/check-ladder') {
+        return await handleCheckLadder(req, res, url);
       }
     } finally {
       if (webQueryTracked) db.leaveWebQuery();

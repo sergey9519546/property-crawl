@@ -10,6 +10,7 @@
 
 const { resolveCountyKey } = require('../enrichment/arcgis-parcels');
 const { interpretAssessorParcel } = require('../enrichment/assessor-reading');
+const { resolveListingSafmrRentFloor } = require('../enrichment/hud-safmr');
 
 const IDENTITY_FALLBACK_FIELDS = ['address', 'city', 'state', 'zip', 'county'];
 
@@ -175,7 +176,9 @@ function computeOpportunity(listing = {}, now = Date.now()) {
   );
   let dealScore = numberOrNull(listing.dealScore);
   let valuationBasis = mid !== null || dealScore !== null ? 'publisher_reported' : null;
-  const assessorParcel = listing.assessorParcel || listing.provenance?.derivedFields?.assessorRoll?.parcel || null;
+  const assessorParcel = listing.assessorParcel
+    || listing.provenance?.derivedFields?.assessorRoll?.parcel
+    || (Number(listing.assessed) > 0 ? { assessedValue: { total: Number(listing.assessed) } } : null);
   if (mid === null && dealScore === null && assessorParcel) {
     const countyKey = resolveCountyKey(listing.state, listing.county);
     if (countyKey) {
@@ -193,8 +196,18 @@ function computeOpportunity(listing = {}, now = Date.now()) {
       }
     }
   }
+  const safmrInfo = resolveListingSafmrRentFloor(listing);
+  const safmrRentFloor = safmrInfo?.rentFloor ?? null;
+  if (mid === null && safmrRentFloor !== null && safmrRentFloor > 0 && openingBid !== null && openingBid > 1000) {
+    mid = safmrRentFloor;
+    valuationBasis = 'hud_safmr_rent_floor';
+  }
   const saleMs = listing.saleDate ? Date.parse(`${listing.saleDate}T12:00:00Z`) : NaN;
   const daysToSale = Number.isFinite(saleMs) ? Math.ceil((saleMs - now) / 86_400_000) : null;
+  const sourceKey = String(listing.source || '').trim().toLowerCase();
+  const isContinuousFederalReo = daysToSale === null
+    && ['hud', 'gsa', 'usda', 'fannie', 'freddie', 'fdic', 'va'].includes(sourceKey)
+    && openingBid !== null && openingBid > 0;
 
   let urgency = 'unknown';
   if (daysToSale !== null) {
@@ -202,6 +215,8 @@ function computeOpportunity(listing = {}, now = Date.now()) {
     else if (daysToSale <= 7) urgency = 'imminent';
     else if (daysToSale <= 30) urgency = 'near_term';
     else urgency = 'scheduled';
+  } else if (isContinuousFederalReo) {
+    urgency = 'immediate_offer';
   }
 
   const bidSpread = openingBid !== null && mid !== null ? Math.max(0, mid - openingBid) : null;
@@ -210,6 +225,8 @@ function computeOpportunity(listing = {}, now = Date.now()) {
   let shape = 'unknown';
   if (dealScore !== null && dealScore >= 70) shape = 'deep_discount_model';
   else if (dealScore !== null && dealScore >= 45) shape = 'moderate_discount_model';
+  else if (bidToMid !== null && bidToMid <= 0.7 && mid !== null) shape = 'deep_discount_model';
+  else if (bidToMid !== null && bidToMid <= 0.85 && mid !== null) shape = 'moderate_discount_model';
   else if (bidToMid !== null && bidToMid >= 0.9) shape = 'near_value_model';
   else if (openingBid === null && listing.status) shape = 'listed_without_bid';
   else if (bidSpread !== null && bidSpread > 0) shape = 'positive_spread_model';
@@ -217,7 +234,12 @@ function computeOpportunity(listing = {}, now = Date.now()) {
   // Rank 0–100 for sorting. Models stay labeled; no fabricated ARV.
   let rank = 0;
   if (dealScore !== null) rank += dealScore * 0.55;
+  else if (bidToMid !== null && valuationBasis === 'hud_safmr_rent_floor') {
+    const safmrDiscountFraction = Math.max(0, Math.min(1, 1 - bidToMid));
+    rank += safmrDiscountFraction * 45;
+  }
   if (urgency === 'imminent') rank += 25;
+  else if (urgency === 'immediate_offer') rank += 15;
   else if (urgency === 'near_term') rank += 15;
   else if (urgency === 'scheduled') rank += 5;
   if (listing.evidenceCompleteness) {
@@ -225,24 +247,6 @@ function computeOpportunity(listing = {}, now = Date.now()) {
   }
   if (listing.hasDocuments === true) rank += 5;
   rank = Math.max(0, Math.min(100, Math.round(rank)));
-
-  const safmrRent = Number(listing?.hudSafmr?.fairMarketRent);
-  let safmrRentFloor = null;
-  if (Number.isFinite(safmrRent) && safmrRent > 0) {
-    const expenseRatio = 0.35;
-    const targetDscr = 1.20;
-    const monthlyRate = (7.25 / 100) / 12;
-    const totalMonths = 360;
-    const noiMonthly = safmrRent * (1 - expenseRatio);
-    const maxMonthlyDebt = noiMonthly / targetDscr;
-    const factor = Math.pow(1 + monthlyRate, totalMonths);
-    if (Number.isFinite(factor) && factor > 1) {
-      const maxLoan = maxMonthlyDebt * ((factor - 1) / (monthlyRate * factor));
-      if (Number.isFinite(maxLoan) && maxLoan >= 0) {
-        safmrRentFloor = Math.max(0, Math.floor(maxLoan / 0.75));
-      }
-    }
-  }
 
   const judgmentNum = Number(listing?.judgment);
   const judgmentToMidRatio = openingBid === null && Number.isFinite(judgmentNum) && judgmentNum > 0 && mid !== null && mid > 0
@@ -292,7 +296,7 @@ function annotateListing(listing, now = Date.now()) {
 function summarizeInventory(listings = [], now = Date.now()) {
   const annotated = listings.map((l) => annotateListing(l, now));
   const byQuality = { strong: 0, usable: 0, thin: 0, weak: 0 };
-  const byUrgency = { imminent: 0, near_term: 0, scheduled: 0, past_sale: 0, unknown: 0 };
+  const byUrgency = { imminent: 0, immediate_offer: 0, near_term: 0, scheduled: 0, past_sale: 0, unknown: 0 };
   const bySource = {};
   let observed = 0;
   let withBid = 0;

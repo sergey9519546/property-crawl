@@ -85,6 +85,7 @@ const KNOWN_BROWSER_REACHABLE = [
   { route: '/api/scrapers', callers: ['src/app/workspace/settings/settings-view.tsx'] },
   { route: '/api/federal-hazards', callers: ['src/components/listings/property-intelligence.tsx'] },
   { route: '/api/underwrite', callers: ['src/components/workspace/any-address-underwriter.tsx'] },
+  { route: '/api/check-ladder', callers: ['src/components/workspace/bid-sheet-view.tsx'] },
 ];
 
 // Served, admitted by the proxy, and rendered by nothing.

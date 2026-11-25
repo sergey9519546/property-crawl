@@ -820,9 +820,25 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
 
   return (
     <section className="mx-auto max-w-[1440px] px-4 py-7 sm:px-6 lg:px-8">
-      <header className="mb-4">
-        <h1 className="text-2xl font-bold tracking-tight text-ink sm:text-3xl">{lUi.title}</h1>
-        <p className="mt-1 text-sm text-ink-3">{lUi.subtitle}</p>
+      <header className="mb-4 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-ink sm:text-3xl">{lUi.title}</h1>
+          <p className="mt-1 text-sm text-ink-3">{lUi.subtitle}</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 text-xs font-semibold">
+          <Link
+            href="/underwrite"
+            className="rounded-control border border-line-strong bg-card px-3 py-1.5 text-ink transition hover:border-line hover:bg-paper"
+          >
+            {lUi.underwriteQuickLink}
+          </Link>
+          <Link
+            href="/bid-sheet"
+            className="rounded-control border border-line-strong bg-card px-3 py-1.5 text-ink transition hover:border-line hover:bg-paper"
+          >
+            {lUi.bidSheetQuickLink}
+          </Link>
+        </div>
       </header>
       <div className="rounded-2xl border border-line bg-card p-4 shadow-sm">
         <DiscoverySearchField q={filters.q} onSearch={onSearch} />

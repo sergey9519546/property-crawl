@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Fact } from "@/components/evidence/fact";
 import { cn } from "@/lib/utils";
+import { useLocale } from "@/components/i18n/locale-provider";
 
 const US_STATES = [
   "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "DC", "FL",
@@ -199,10 +200,13 @@ function fmtUsd(value: number | null | undefined): string {
   return `$${Math.round(value).toLocaleString("en-US")}`;
 }
 
-function originBadge(origin?: "supplied" | "extracted_from_notice" | "missing") {
-  if (origin === "supplied") return <Badge variant="yours">Supplied</Badge>;
-  if (origin === "extracted_from_notice") return <Badge variant="neutral">Notice extract</Badge>;
-  return <Badge variant="catch">Missing</Badge>;
+function originBadge(
+  origin: "supplied" | "extracted_from_notice" | "missing" | undefined,
+  labels: { supplied: string; extract: string; missing: string },
+) {
+  if (origin === "supplied") return <Badge variant="yours">{labels.supplied}</Badge>;
+  if (origin === "extracted_from_notice") return <Badge variant="neutral">{labels.extract}</Badge>;
+  return <Badge variant="catch">{labels.missing}</Badge>;
 }
 
 const CITATION_LABELS: Record<string, string> = {
@@ -214,6 +218,8 @@ const CITATION_LABELS: Record<string, string> = {
 };
 
 export function AnyAddressUnderwriter() {
+  const { messages } = useLocale();
+  const uw = messages.underwritePage;
   const [address, setAddress] = React.useState("");
   const [state, setState] = React.useState("OH");
   const [zip, setZip] = React.useState("");
@@ -305,21 +311,19 @@ export function AnyAddressUnderwriter() {
       <div className="mb-8 flex flex-wrap items-end justify-between gap-4 border-b border-line pb-6">
         <div>
           <p className="text-label font-bold uppercase tracking-widest text-ink-3">
-            Off-Platform Distressed Underwriter
+            {uw.eyebrow}
           </p>
           <h1 className="mt-2 text-title font-bold text-ink">
-            Any-Address Underwriting Engine
+            {uw.title}
           </h1>
           <p className="mt-2 max-w-3xl text-body text-ink-2">
-            Evaluate any off-platform property or courthouse notice against published HUD SAFMR rent ceilings,
-            enrolled county assessor ratios, statutory title survival rules, and post-sale possession timelines.
-            Missing valuations are never fabricated.
+            {uw.subtitle}
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Badge variant="neutral">Zero-Fabrication</Badge>
-          <Badge variant="yours">Your Inputs</Badge>
-          <Badge variant="catch">Catch First</Badge>
+          <Badge variant="neutral">{uw.badgeZeroFab}</Badge>
+          <Badge variant="yours">{uw.badgeYours}</Badge>
+          <Badge variant="catch">{uw.badgeCatchFirst}</Badge>
         </div>
       </div>
 
@@ -329,17 +333,17 @@ export function AnyAddressUnderwriter() {
           className="rounded-card border border-line bg-card p-5 shadow-card sm:p-6"
         >
           <div className="flex items-center justify-between gap-2">
-            <h2 className="text-lead font-semibold text-ink">Property &amp; Notice Inputs</h2>
+            <h2 className="text-lead font-semibold text-ink">{uw.formTitle}</h2>
             <Button type="button" variant="ghost" size="sm" onClick={handleReset} aria-label="Clear underwriting form">
               <RotateCcw className="size-3.5" />
-              Clear
+              {uw.clearBtn}
             </Button>
           </div>
 
           <div className="mt-5 space-y-4">
             <div>
               <label htmlFor="uw-address" className="text-xs font-semibold text-ink">
-                Street Address <span className="text-catch-ink">*</span>
+                {uw.addressLabel} <span className="text-catch-ink">*</span>
               </label>
               <input
                 id="uw-address"
@@ -348,7 +352,7 @@ export function AnyAddressUnderwriter() {
                 maxLength={240}
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
-                placeholder="e.g. 1420 Prospect Ave E, Cleveland"
+                placeholder={uw.addressPlaceholder}
                 className={inputClass}
               />
             </div>
@@ -356,7 +360,7 @@ export function AnyAddressUnderwriter() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label htmlFor="uw-state" className="text-xs font-semibold text-ink">
-                  State <span className="text-catch-ink">*</span>
+                  {uw.stateLabel} <span className="text-catch-ink">*</span>
                 </label>
                 <select
                   id="uw-state"
@@ -373,7 +377,7 @@ export function AnyAddressUnderwriter() {
               </div>
               <div>
                 <label htmlFor="uw-zip" className="text-xs font-semibold text-ink">
-                  5-Digit ZIP (HUD SAFMR)
+                  {uw.zipLabel}
                 </label>
                 <input
                   id="uw-zip"
@@ -382,7 +386,7 @@ export function AnyAddressUnderwriter() {
                   maxLength={10}
                   value={zip}
                   onChange={(e) => setZip(e.target.value)}
-                  placeholder="44115"
+                  placeholder={uw.zipPlaceholder}
                   className={cn(inputClass, "font-mono tabular-nums")}
                 />
               </div>
@@ -391,7 +395,7 @@ export function AnyAddressUnderwriter() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label htmlFor="uw-county" className="text-xs font-semibold text-ink">
-                  County
+                  {uw.countyLabel}
                 </label>
                 <input
                   id="uw-county"
@@ -399,13 +403,13 @@ export function AnyAddressUnderwriter() {
                   maxLength={120}
                   value={county}
                   onChange={(e) => setCounty(e.target.value)}
-                  placeholder="Cuyahoga"
+                  placeholder={uw.countyPlaceholder}
                   className={inputClass}
                 />
               </div>
               <div>
                 <label htmlFor="uw-beds" className="text-xs font-semibold text-ink">
-                  Bedrooms (SAFMR)
+                  {uw.bedsLabel}
                 </label>
                 <select
                   id="uw-beds"
@@ -413,12 +417,12 @@ export function AnyAddressUnderwriter() {
                   onChange={(e) => setBeds(e.target.value)}
                   className={inputClass}
                 >
-                  <option value="">Default (2 BR)</option>
-                  <option value="0">0 BR (Efficiency)</option>
-                  <option value="1">1 BR</option>
-                  <option value="2">2 BR</option>
-                  <option value="3">3 BR</option>
-                  <option value="4">4 BR</option>
+                  <option value="">{uw.bedDefault}</option>
+                  <option value="0">{uw.bed0}</option>
+                  <option value="1">{uw.bed1}</option>
+                  <option value="2">{uw.bed2}</option>
+                  <option value="3">{uw.bed3}</option>
+                  <option value="4">{uw.bed4}</option>
                 </select>
               </div>
             </div>
@@ -426,7 +430,7 @@ export function AnyAddressUnderwriter() {
             <div className="grid grid-cols-3 gap-3">
               <div>
                 <label htmlFor="uw-bid" className="text-xs font-semibold text-ink">
-                  Opening Bid ($)
+                  {uw.openingBidLabel}
                 </label>
                 <input
                   id="uw-bid"
@@ -441,7 +445,7 @@ export function AnyAddressUnderwriter() {
               </div>
               <div>
                 <label htmlFor="uw-judgment" className="text-xs font-semibold text-ink">
-                  Judgment ($)
+                  {uw.judgmentLabel}
                 </label>
                 <input
                   id="uw-judgment"
@@ -456,7 +460,7 @@ export function AnyAddressUnderwriter() {
               </div>
               <div>
                 <label htmlFor="uw-assessed" className="text-xs font-semibold text-ink">
-                  Assessed ($)
+                  {uw.assessedLabel}
                 </label>
                 <input
                   id="uw-assessed"
@@ -474,7 +478,7 @@ export function AnyAddressUnderwriter() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label htmlFor="uw-sale-date" className="text-xs font-semibold text-ink">
-                  Sale Date
+                  {uw.saleDateLabel}
                 </label>
                 <input
                   id="uw-sale-date"
@@ -486,7 +490,7 @@ export function AnyAddressUnderwriter() {
               </div>
               <div>
                 <label htmlFor="uw-source" className="text-xs font-semibold text-ink">
-                  Source Channel
+                  {uw.sourceLabel}
                 </label>
                 <select
                   id="uw-source"
@@ -505,7 +509,7 @@ export function AnyAddressUnderwriter() {
 
             <div>
               <label htmlFor="uw-program" className="text-xs font-semibold text-ink">
-                Auction / Disposition Program
+                {uw.programLabel}
               </label>
               <input
                 id="uw-program"
@@ -513,14 +517,14 @@ export function AnyAddressUnderwriter() {
                 maxLength={120}
                 value={program}
                 onChange={(e) => setProgram(e.target.value)}
-                placeholder="e.g. Sheriff Foreclosure, HUD REO, Tax Deed"
+                placeholder={uw.programPlaceholder}
                 className={inputClass}
               />
             </div>
 
             <div>
               <label htmlFor="uw-notice" className="text-xs font-semibold text-ink">
-                Courthouse / Legal Notice Text (Optional, max 20,000 chars)
+                {uw.noticeLabel}
               </label>
               <textarea
                 id="uw-notice"
@@ -528,7 +532,7 @@ export function AnyAddressUnderwriter() {
                 maxLength={20000}
                 value={noticeText}
                 onChange={(e) => setNoticeText(e.target.value)}
-                placeholder="Paste sheriff notice, trustee notice of sale, or docket snippet to extract case number, judgment, upset bid, APN/Block-Lot, and occupancy flags with exact character offsets..."
+                placeholder={uw.noticePlaceholder}
                 className={cn(inputClass, "font-mono text-xs leading-relaxed")}
               />
             </div>
@@ -537,7 +541,7 @@ export function AnyAddressUnderwriter() {
           {error && (
             <Alert variant="catch" role="alert" className="mt-4">
               <AlertTriangle className="size-4" />
-              <AlertTitle>Underwriting Request Failed</AlertTitle>
+              <AlertTitle>{uw.errorTitle}</AlertTitle>
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
@@ -547,10 +551,10 @@ export function AnyAddressUnderwriter() {
               {submitting ? (
                 <>
                   <Loader2 className="size-4 animate-spin" />
-                  Running Underwriting Engine...
+                  {uw.submittingBtn}
                 </>
               ) : (
-                "Run Off-Platform Underwrite"
+                uw.submitBtn
               )}
             </Button>
           </div>
@@ -559,23 +563,22 @@ export function AnyAddressUnderwriter() {
         <div className="space-y-6">
           {!result ? (
             <section className="rounded-card border border-line bg-card p-6 shadow-card">
-              <h2 className="text-lead font-semibold text-ink">Awaiting Property Context</h2>
+              <h2 className="text-lead font-semibold text-ink">{uw.emptyTitle}</h2>
               <p className="mt-2 text-meta text-ink-2">
-                Enter an address and 2-letter US state on the left (plus optional ZIP, county assessed figure,
-                source channel, and courthouse notice text) to generate a deterministic underwriting dossier.
+                {uw.emptyBody}
               </p>
               <div className="mt-4 grid gap-3 sm:grid-cols-3">
                 <div className="rounded-control border border-line bg-paper p-3">
-                  <p className="text-label font-bold uppercase text-ink-3">1. Published / Supplied</p>
-                  <p className="mt-1 text-meta text-ink-2">Separates caller-typed terms from notice-extracted fields and leaves ARV/Deal Score blank when unpublished.</p>
+                  <p className="text-label font-bold uppercase text-ink-3">{uw.step1Title}</p>
+                  <p className="mt-1 text-meta text-ink-2">{uw.step1Body}</p>
                 </div>
                 <div className="rounded-control border border-line bg-paper p-3">
-                  <p className="text-label font-bold uppercase text-ink-3">2. Public-Record Benchmarks</p>
-                  <p className="mt-1 text-meta text-ink-2">Cross-checks HUD SAFMR 1.20x DSCR ceiling, statutory county assessor ratio, and FHFA HPI context.</p>
+                  <p className="text-label font-bold uppercase text-ink-3">{uw.step2Title}</p>
+                  <p className="mt-1 text-meta text-ink-2">{uw.step2Body}</p>
                 </div>
                 <div className="rounded-control border border-line bg-paper p-3">
-                  <p className="text-label font-bold uppercase text-ink-3">3. Statutory Risk &amp; Carry</p>
-                  <p className="mt-1 text-meta text-ink-2">Evaluates lien survival, IRS 25-day/120-day rules, state redemption, writ timeline, and verbatim citations.</p>
+                  <p className="text-label font-bold uppercase text-ink-3">{uw.step3Title}</p>
+                  <p className="mt-1 text-meta text-ink-2">{uw.step3Body}</p>
                 </div>
               </div>
             </section>
@@ -584,7 +587,7 @@ export function AnyAddressUnderwriter() {
               {result.riskAndCarry.catchSummary && (
                 <Alert variant="catch">
                   <ShieldAlert className="size-4" />
-                  <AlertTitle>Primary Catch Summary</AlertTitle>
+                  <AlertTitle>{uw.catchTitle}</AlertTitle>
                   <AlertDescription className="text-ink font-medium">
                     {result.riskAndCarry.catchSummary}
                   </AlertDescription>
@@ -595,8 +598,8 @@ export function AnyAddressUnderwriter() {
               <section className="rounded-card border border-line bg-card p-5 shadow-card sm:p-6">
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line pb-4">
                   <div>
-                    <p className="text-label font-bold uppercase text-ink-3">Evidence Provenance</p>
-                    <h2 className="mt-1 text-lead font-semibold text-ink">Published / Supplied Terms</h2>
+                    <p className="text-label font-bold uppercase text-ink-3">{uw.evidenceEyebrow}</p>
+                    <h2 className="mt-1 text-lead font-semibold text-ink">{uw.termsTitle}</h2>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge variant="neutral">{result.inputSummary.saleType.toUpperCase()}</Badge>
@@ -609,8 +612,8 @@ export function AnyAddressUnderwriter() {
                 <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                   <div className="rounded-control border border-line bg-paper p-3">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-label font-bold uppercase text-ink-3">Opening Bid</span>
-                      {originBadge(result.inputSummary.fieldOrigins.openingBid)}
+                      <span className="text-label font-bold uppercase text-ink-3">{uw.openingBidCard}</span>
+                      {originBadge(result.inputSummary.fieldOrigins.openingBid, { supplied: uw.suppliedBadge, extract: uw.noticeExtractBadge, missing: uw.missingBadge })}
                     </div>
                     <p className="mt-1.5 font-mono text-body font-bold tabular-nums text-ink">
                       <Fact
@@ -624,8 +627,8 @@ export function AnyAddressUnderwriter() {
 
                   <div className="rounded-control border border-line bg-paper p-3">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-label font-bold uppercase text-ink-3">Court Judgment</span>
-                      {originBadge(result.inputSummary.fieldOrigins.judgment)}
+                      <span className="text-label font-bold uppercase text-ink-3">{uw.judgmentCard}</span>
+                      {originBadge(result.inputSummary.fieldOrigins.judgment, { supplied: uw.suppliedBadge, extract: uw.noticeExtractBadge, missing: uw.missingBadge })}
                     </div>
                     <p className="mt-1.5 font-mono text-body font-bold tabular-nums text-ink">
                       <Fact
@@ -639,9 +642,9 @@ export function AnyAddressUnderwriter() {
 
                   <div className="rounded-control border border-line bg-paper p-3">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-label font-bold uppercase text-ink-3">Assessed Figure</span>
+                      <span className="text-label font-bold uppercase text-ink-3">{uw.assessedCard}</span>
                       <Badge variant={result.inputSummary.assessed !== null ? "yours" : "catch"}>
-                        {result.inputSummary.assessed !== null ? "Supplied" : "Missing"}
+                        {result.inputSummary.assessed !== null ? uw.suppliedBadge : uw.missingBadge}
                       </Badge>
                     </div>
                     <p className="mt-1.5 font-mono text-body font-bold tabular-nums text-ink">
@@ -656,42 +659,42 @@ export function AnyAddressUnderwriter() {
 
                   <div className="rounded-control border border-line bg-paper p-3">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-label font-bold uppercase text-ink-3">ARV / Deal Score</span>
-                      <Badge variant="catch">Zero-Fabrication</Badge>
+                      <span className="text-label font-bold uppercase text-ink-3">{uw.arvCard}</span>
+                      <Badge variant="catch">{uw.zeroFabBadge}</Badge>
                     </div>
                     <p className="mt-1.5 text-meta font-semibold text-catch-ink">
-                      Unpublished (estLow / estHigh / dealScore = null)
+                      {uw.arvUnpublished}
                     </p>
                   </div>
                 </div>
 
                 <dl className="mt-4 grid gap-3 border-t border-line pt-4 text-meta sm:grid-cols-2 xl:grid-cols-4">
                   <div>
-                    <dt className="text-label font-bold uppercase text-ink-3">Address</dt>
+                    <dt className="text-label font-bold uppercase text-ink-3">{uw.addressTerm}</dt>
                     <dd className="mt-1 font-medium text-ink">
                       {result.inputSummary.address}, {result.inputSummary.state}
                       {result.inputSummary.zip ? ` ${result.inputSummary.zip}` : ""}
                     </dd>
                   </div>
                   <div>
-                    <dt className="text-label font-bold uppercase text-ink-3">Case / Docket</dt>
+                    <dt className="text-label font-bold uppercase text-ink-3">{uw.caseDocketTerm}</dt>
                     <dd className="mt-1 flex items-center gap-2 font-mono tabular-nums text-ink">
                       <span>{result.inputSummary.caseNumber || "—"}</span>
-                      {originBadge(result.inputSummary.fieldOrigins.caseNumber)}
+                      {originBadge(result.inputSummary.fieldOrigins.caseNumber, { supplied: uw.suppliedBadge, extract: uw.noticeExtractBadge, missing: uw.missingBadge })}
                     </dd>
                   </div>
                   <div>
-                    <dt className="text-label font-bold uppercase text-ink-3">APN / Block-Lot</dt>
+                    <dt className="text-label font-bold uppercase text-ink-3">{uw.apnTerm}</dt>
                     <dd className="mt-1 flex items-center gap-2 font-mono tabular-nums text-ink">
                       <span>{result.inputSummary.apn || "—"}</span>
-                      {originBadge(result.inputSummary.fieldOrigins.apn)}
+                      {originBadge(result.inputSummary.fieldOrigins.apn, { supplied: uw.suppliedBadge, extract: uw.noticeExtractBadge, missing: uw.missingBadge })}
                     </dd>
                   </div>
                   <div>
-                    <dt className="text-label font-bold uppercase text-ink-3">Occupancy</dt>
+                    <dt className="text-label font-bold uppercase text-ink-3">{uw.occupancyTerm}</dt>
                     <dd className="mt-1 flex items-center gap-2 text-ink">
-                      <span>{result.inputSummary.occupancy || "Unknown"}</span>
-                      {originBadge(result.inputSummary.fieldOrigins.occupancy)}
+                      <span>{result.inputSummary.occupancy || uw.unknownValue}</span>
+                      {originBadge(result.inputSummary.fieldOrigins.occupancy, { supplied: uw.suppliedBadge, extract: uw.noticeExtractBadge, missing: uw.missingBadge })}
                     </dd>
                   </div>
                 </dl>
@@ -703,18 +706,18 @@ export function AnyAddressUnderwriter() {
                   <div className="flex items-center gap-2">
                     <Landmark className="size-4 text-ink-2" />
                     <div>
-                      <p className="text-label font-bold uppercase text-ink-3">Public-Record Benchmarks</p>
-                      <h2 className="text-lead font-semibold text-ink">HUD SAFMR, Rent Ceiling &amp; Assessor Ratio</h2>
+                      <p className="text-label font-bold uppercase text-ink-3">{uw.benchmarksEyebrow}</p>
+                      <h2 className="text-lead font-semibold text-ink">{uw.benchmarksTitle}</h2>
                     </div>
                   </div>
                   <Badge variant="neutral">
-                    {result.publicBenchmarks.consensus.availableSourceCount}/3 benchmark sources
+                    {uw.benchmarkSourcesCount.replace("{count}", String(result.publicBenchmarks.consensus.availableSourceCount))}
                   </Badge>
                 </div>
 
                 <div className="mt-4 grid gap-4 md:grid-cols-3">
                   <div className="rounded-control border border-line bg-paper p-4">
-                    <p className="text-label font-bold uppercase text-ink-3">HUD SAFMR Rent Floor</p>
+                    <p className="text-label font-bold uppercase text-ink-3">{uw.safmrFloorTitle}</p>
                     {result.publicBenchmarks.hudSafmr ? (
                       <>
                         <p className="mt-1.5 font-mono text-title font-bold tabular-nums text-ink">
@@ -725,36 +728,36 @@ export function AnyAddressUnderwriter() {
                           {result.publicBenchmarks.hudSafmr.hudAreaName} ({result.publicBenchmarks.hudSafmr.asOfFiscalYear})
                         </p>
                         <p className="mt-2 font-mono text-xs tabular-nums text-ink-3">
-                          90%–110% Payment Std: {fmtUsd(result.publicBenchmarks.hudSafmr.paymentStandard90Pct)} –{" "}
+                          {uw.safmrPaymentStd} {fmtUsd(result.publicBenchmarks.hudSafmr.paymentStandard90Pct)} –{" "}
                           {fmtUsd(result.publicBenchmarks.hudSafmr.paymentStandard110Pct)}
                         </p>
                       </>
                     ) : (
                       <p className="mt-2 text-meta text-catch-ink">
-                        Supply a valid 5-digit ZIP to look up HUD SAFMR rent benchmarks.
+                        {uw.safmrMissingZip}
                       </p>
                     )}
                   </div>
 
                   <div className="rounded-control border border-line bg-paper p-4">
-                    <p className="text-label font-bold uppercase text-ink-3">1.20x DSCR Rent Ceiling</p>
+                    <p className="text-label font-bold uppercase text-ink-3">{uw.dscrCeilingTitle}</p>
                     <p className="mt-1.5 font-mono text-title font-bold tabular-nums text-ink">
                       {result.publicBenchmarks.safmrRentFloor120Dscr !== null
                         ? fmtUsd(result.publicBenchmarks.safmrRentFloor120Dscr)
-                        : "Unavailable"}
+                        : uw.dscrUnavailable}
                     </p>
                     <p className="mt-1 text-meta text-ink-2">
-                      Max rent-supported price at 1.20x DSCR (75% LTV, 7.25%, 30yr, 35% OpEx). Not an appraisal or ARV.
+                      {uw.dscrFormulaNote}
                     </p>
                     {result.publicBenchmarks.consensus.impliedGrm !== null && (
                       <p className="mt-2 font-mono text-xs tabular-nums text-ink-2">
-                        Implied GRM vs Opening Bid: {result.publicBenchmarks.consensus.impliedGrm}x
+                        {uw.impliedGrmPrefix} {result.publicBenchmarks.consensus.impliedGrm}x
                       </p>
                     )}
                   </div>
 
                   <div className="rounded-control border border-line bg-paper p-4">
-                    <p className="text-label font-bold uppercase text-ink-3">County Assessor Reading</p>
+                    <p className="text-label font-bold uppercase text-ink-3">{uw.assessorTitle}</p>
                     {result.publicBenchmarks.assessorReading ? (
                       <>
                         <p className="mt-1.5 font-mono text-title font-bold tabular-nums text-ink">
@@ -763,7 +766,7 @@ export function AnyAddressUnderwriter() {
                             : fmtUsd(result.publicBenchmarks.assessorReading.rawFigure)}
                         </p>
                         <p className="mt-1 text-meta text-ink-2">
-                          {result.publicBenchmarks.assessorReading.countyName || result.publicBenchmarks.assessorReading.countyKey || "Un-enrolled county"}
+                          {result.publicBenchmarks.assessorReading.countyName || result.publicBenchmarks.assessorReading.countyKey || uw.assessorUnenrolled}
                         </p>
                         {result.publicBenchmarks.assessorReading.citation ? (
                           <p className="mt-2 text-xs leading-relaxed text-ink-3">
@@ -777,7 +780,7 @@ export function AnyAddressUnderwriter() {
                       </>
                     ) : (
                       <p className="mt-2 text-meta text-ink-3">
-                        Supply an assessed figure to check statutory county assessment ratio rules.
+                        {uw.assessorSupplyHint}
                       </p>
                     )}
                   </div>
@@ -786,7 +789,7 @@ export function AnyAddressUnderwriter() {
                 {result.publicBenchmarks.consensus.unobservedReasons.length > 0 && (
                   <details className="mt-4 rounded-control border border-line bg-paper p-3 text-xs text-ink-2">
                     <summary className="cursor-pointer font-semibold text-ink">
-                      Unobserved Benchmark Notes ({result.publicBenchmarks.consensus.unobservedReasons.length})
+                      {uw.unobservedNotesTitle.replace("{count}", String(result.publicBenchmarks.consensus.unobservedReasons.length))}
                     </summary>
                     <ul className="mt-2 list-disc space-y-1 pl-5">
                       {result.publicBenchmarks.consensus.unobservedReasons.map((reason) => (
@@ -804,8 +807,8 @@ export function AnyAddressUnderwriter() {
                   <div className="flex items-center gap-2">
                     <Gavel className="size-4 text-ink-2" />
                     <div>
-                      <p className="text-label font-bold uppercase text-ink-3">Statutory Risk &amp; Carry</p>
-                      <h2 className="text-lead font-semibold text-ink">Title Survival, Redemption &amp; Possession Timeline</h2>
+                      <p className="text-label font-bold uppercase text-ink-3">{uw.riskEyebrow}</p>
+                      <h2 className="text-lead font-semibold text-ink">{uw.riskTitle}</h2>
                     </div>
                   </div>
                   <Badge
@@ -816,32 +819,32 @@ export function AnyAddressUnderwriter() {
                         : "neutral"
                     }
                   >
-                    Title Risk: {result.riskAndCarry.titleRisk.riskLevel}
+                    {uw.titleRiskBadge} {result.riskAndCarry.titleRisk.riskLevel}
                   </Badge>
                 </div>
 
                 <div className="mt-4 grid gap-4 md:grid-cols-2">
                   <div className="rounded-control border border-line bg-paper p-4">
-                    <p className="text-label font-bold uppercase text-ink-3">Title Arbitration</p>
+                    <p className="text-label font-bold uppercase text-ink-3">{uw.titleArbitrationTitle}</p>
                     <dl className="mt-2 space-y-2 text-meta">
                       <div className="flex justify-between gap-3">
-                        <dt className="text-ink-3">Foreclosing Party</dt>
+                        <dt className="text-ink-3">{uw.plaintiffTypeLabel}</dt>
                         <dd className="font-mono font-semibold text-ink">{result.riskAndCarry.titleRisk.plaintiffType}</dd>
                       </div>
                       <div className="flex justify-between gap-3">
-                        <dt className="text-ink-3">1st Mortgage Survives</dt>
+                        <dt className="text-ink-3">{uw.firstMortgageSurvivesLabel}</dt>
                         <dd className="font-semibold text-ink">
                           {result.riskAndCarry.titleRisk.firstMortgageSurvives === true
-                            ? "Yes (Senior debt survives)"
+                            ? uw.yesSeniorSurvives
                             : result.riskAndCarry.titleRisk.firstMortgageSurvives === false
-                              ? "No"
-                              : "Unconfirmed"}
+                              ? uw.noLabel
+                              : uw.unconfirmedLabel}
                         </dd>
                       </div>
                       <div className="flex justify-between gap-3">
-                        <dt className="text-ink-3">Statutory Redemption</dt>
+                        <dt className="text-ink-3">{uw.redemptionLabel}</dt>
                         <dd className="font-mono font-semibold tabular-nums text-ink">
-                          {result.riskAndCarry.titleRisk.statutoryRedemption.days} days
+                          {uw.daysUnit.replace("{days}", String(result.riskAndCarry.titleRisk.statutoryRedemption.days))}
                         </dd>
                       </div>
                     </dl>
@@ -854,35 +857,35 @@ export function AnyAddressUnderwriter() {
                   </div>
 
                   <div className="rounded-control border border-line bg-paper p-4">
-                    <p className="text-label font-bold uppercase text-ink-3">Post-Sale Possession &amp; Carry</p>
+                    <p className="text-label font-bold uppercase text-ink-3">{uw.possessionCarryTitle}</p>
                     <dl className="mt-2 space-y-2 text-meta">
                       <div className="flex justify-between gap-3">
-                        <dt className="text-ink-3">Disposition / Sale Type</dt>
+                        <dt className="text-ink-3">{uw.saleTypeLabel}</dt>
                         <dd className="font-mono font-semibold text-ink">
                           {result.riskAndCarry.possessionTimeline.isPostForeclosureReo
-                            ? "POST-FORECLOSURE REO"
+                            ? uw.postForeclosureReo
                             : String(result.riskAndCarry.possessionTimeline.saleType || "sheriff").toUpperCase()}
                         </dd>
                       </div>
                       <div className="flex justify-between gap-3">
-                        <dt className="text-ink-3">Writ of Possession</dt>
+                        <dt className="text-ink-3">{uw.writLabel}</dt>
                         <dd className="font-mono font-semibold tabular-nums text-ink">
                           {result.riskAndCarry.possessionTimeline.writOfPossession.minDays !== null
-                            ? `${result.riskAndCarry.possessionTimeline.writOfPossession.minDays}–${result.riskAndCarry.possessionTimeline.writOfPossession.maxDays} days`
-                            : "State un-encoded"}
+                            ? uw.daysUnit.replace("{days}", `${result.riskAndCarry.possessionTimeline.writOfPossession.minDays}–${result.riskAndCarry.possessionTimeline.writOfPossession.maxDays}`)
+                            : uw.stateUnencoded}
                         </dd>
                       </div>
                       <div className="flex justify-between gap-3">
-                        <dt className="text-ink-3">Quiet Title Window</dt>
+                        <dt className="text-ink-3">{uw.quietTitleLabel}</dt>
                         <dd className="font-mono font-semibold tabular-nums text-ink">
                           {result.riskAndCarry.possessionTimeline.quietTitle.minDays !== null
-                            ? `${result.riskAndCarry.possessionTimeline.quietTitle.minDays}–${result.riskAndCarry.possessionTimeline.quietTitle.maxDays} days`
-                            : "State un-encoded"}
+                            ? uw.daysUnit.replace("{days}", `${result.riskAndCarry.possessionTimeline.quietTitle.minDays}–${result.riskAndCarry.possessionTimeline.quietTitle.maxDays}`)
+                            : uw.stateUnencoded}
                         </dd>
                       </div>
                     </dl>
                     <p className="mt-2 text-xs text-ink-2">
-                      {result.riskAndCarry.possessionTimeline.writOfPossession.statutory || "Consult local property counsel"}
+                      {result.riskAndCarry.possessionTimeline.writOfPossession.statutory || uw.consultCounsel}
                     </p>
                     <p className="mt-2 text-xs text-ink-3">
                       {result.riskAndCarry.possessionTimeline.carryCost.basis}
@@ -910,26 +913,25 @@ export function AnyAddressUnderwriter() {
                   <div className="flex items-center gap-2">
                     <FileText className="size-4 text-ink-2" />
                     <div>
-                      <p className="text-label font-bold uppercase text-ink-3">Citation-Locked Parser</p>
-                      <h2 className="text-lead font-semibold text-ink">Verbatim Notice Extraction</h2>
+                      <p className="text-label font-bold uppercase text-ink-3">{uw.extractionEyebrow}</p>
+                      <h2 className="text-lead font-semibold text-ink">{uw.extractionTitle}</h2>
                     </div>
                   </div>
                   <Badge variant={citationsList.length > 0 ? "go" : "neutral"}>
-                    {citationsList.length} verified span{citationsList.length === 1 ? "" : "s"}
+                    {uw.verifiedSpansCount.replace("{count}", String(citationsList.length))}
                   </Badge>
                 </div>
 
                 {!result.noticeExtraction.present ? (
                   <p className="mt-4 text-meta text-ink-3">
-                    No notice text supplied. Paste a courthouse notice or legal advertisement to extract docket numbers,
-                    judgment amounts, upset bids, APNs/Block-Lots, and occupancy flags with character-offset verification.
+                    {uw.noNoticeBody}
                   </p>
                 ) : (
                   <div className="mt-4 space-y-4">
                     <div className="flex flex-wrap gap-2">
                       {citationsList.length === 0 ? (
                         <p className="text-meta text-ink-3">
-                          No structured docket, bid, judgment, APN, or occupancy patterns matched the pasted notice.
+                          {uw.noPatternMatch}
                         </p>
                       ) : (
                         citationsList.map((cit) => {
@@ -962,7 +964,7 @@ export function AnyAddressUnderwriter() {
 
                     {result.noticeExtraction.occupancyFlags.length > 0 && (
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-label font-bold uppercase text-ink-3">Occupancy Flags:</span>
+                        <span className="text-label font-bold uppercase text-ink-3">{uw.occupancyFlagsLabel}</span>
                         {result.noticeExtraction.occupancyFlags.map((item) => (
                           <Badge key={`${item.start}-${item.end}`} variant="catch">
                             {item.flag}: &ldquo;{item.quote}&rdquo; [{item.start}..{item.end}]
@@ -973,7 +975,10 @@ export function AnyAddressUnderwriter() {
 
                     <div className="rounded-control border border-line bg-paper p-3">
                       <p className="text-label font-bold uppercase text-ink-3">
-                        Source Notice Preview {activeSpan ? `(Highlighting ${activeSpan.label})` : "(Click any citation above to inspect)"}
+                        {uw.sourcePreviewTitle}{" "}
+                        {activeSpan
+                          ? uw.sourcePreviewHighlight.replace("{label}", activeSpan.label)
+                          : uw.sourcePreviewHint}
                       </p>
                       <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-ink-2">
                         {activeSpan && activeSpan.start >= 0 && activeSpan.end <= noticeText.length ? (

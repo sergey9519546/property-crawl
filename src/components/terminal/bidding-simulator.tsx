@@ -1,13 +1,15 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import Link from "next/link";
 import { Listing } from "@/data/listings";
-import { AlertTriangle, Calculator, CheckCircle2, Download, FileJson, FileText, Scale, ShieldCheck, Sparkles } from "lucide-react";
+import { AlertTriangle, Banknote, Calculator, CheckCircle2, Download, FileJson, FileText, Scale, ShieldCheck, Sparkles } from "lucide-react";
 import { classifyInvestmentStrategies, computeCashToClose, computeConstitutionalSurplus, computeDscrCoverage, computeMaxAllowableOffer, computeReassessmentShock, computeRedemptionYield, computeSafmrRentFloor, computeStatutoryDeadlinesAndCarry, computeStatutoryFeePreset, computeTargetPriceScenario, isTaxSaleContext, publishedRedemptionDays } from "@/lib/underwriting";
 import { fetchAssessorReadingCached } from "@/components/listings/assessor-reading";
 import { computeRedemptionExpectedValue } from "@/lib/redemption-ev";
 import { displayMoney, positiveNumber } from "@/lib/listing-display";
 import { readUnderwriteScenario, syncScenarioToDealFile, writeUnderwriteScenario } from "@/lib/underwrite-scenario";
+import { addLocalWatchlistId } from "@/lib/watchlist-sync";
 import { useResolvedWorkspaceSession } from "@/components/workspace/workspace-shell";
 import { StatutoryDeadlinesTimeline } from "@/components/terminal/statutory-deadlines-timeline";
 import { TitleRiskForensics } from "@/components/terminal/title-risk-forensics";
@@ -1047,6 +1049,14 @@ export function BiddingSimulator({ listing, publishedUpsetEstimate }: BiddingSim
             <FileText className="h-3.5 w-3.5 text-ink-2" />
             <span>{packetExporting === "markdown" ? "Exporting..." : "Signed POST Markdown"}</span>
           </button>
+          <Link
+            href="/bid-sheet"
+            onClick={() => addLocalWatchlistId(listing.id)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-yours/30 bg-yours-wash px-3 py-1.5 text-xs font-bold text-yours shadow-sm transition hover:bg-card"
+          >
+            <Banknote className="h-3.5 w-3.5" />
+            <span>Send to Morning Bid Sheet</span>
+          </Link>
         </div>
         {packetExportNotice && (
           <p className="text-xs text-ink-3" role="status">

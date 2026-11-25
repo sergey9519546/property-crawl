@@ -646,6 +646,11 @@ function compare(a, b, sort, resolvedState = null) {
       const bTier = actionableEvidenceTier(b);
       if (aTier !== bTier) return bTier - aTier;
     }
+    if (sort === "opportunity") {
+      const aTriage = Number(a.triagePriority ?? a.triage_priority ?? 0);
+      const bTriage = Number(b.triagePriority ?? b.triage_priority ?? 0);
+      if (aTriage !== bTriage) return bTriage - aTriage;
+    }
     const aDateRaw = a.saleDate || a.sale_date || null;
     const bDateRaw = b.saleDate || b.sale_date || null;
     const aDate = aDateRaw ? Date.parse(aDateRaw) : null;
@@ -989,6 +994,15 @@ function pgSort(f, options = {}) {
       + "WHEN sale_date >= CURRENT_DATE THEN 2e11 + (1e6 - LEAST(1e6, GREATEST(0, (sale_date - CURRENT_DATE)))) * 1e5 + LEAST(99999, GREATEST(0, coalesce(triage_priority, 0))) "
       + "WHEN sale_date < CURRENT_DATE THEN 1e5 + (1e6 - LEAST(1e6, GREATEST(0, (CURRENT_DATE - sale_date)))) * 1e5 + LEAST(99999, GREATEST(0, coalesce(triage_priority, 0))) "
       + "ELSE LEAST(99999, GREATEST(0, coalesce(triage_priority, 0))) END)";
+    if (f.sort === "opportunity") {
+      const triageBandSql = "LEAST(99, GREATEST(0, coalesce(triage_priority, 0)))";
+      return {
+        expr: `((CASE WHEN ${terminalSql} THEN -1e14::float8 ELSE 0::float8 END) + (CASE `
+          + `WHEN ${derivedScore} IS NOT NULL THEN 1e13 + (${derivedScore} * 1e10) + (${actionTierSql} * 1e8) + (${triageBandSql} * 1e6) + floor(${dateTriageSql} / 1e6) `
+          + `ELSE (${actionTierSql} * 1e12) + (${triageBandSql} * 1e9) + floor(${dateTriageSql} / 1e4) END)${stateBoostSql})`,
+        dir: sortDirection("opportunity"),
+      };
+    }
     return {
       expr: `((CASE WHEN ${terminalSql} THEN -1e14::float8 ELSE 0::float8 END) + (CASE `
         + `WHEN ${derivedScore} IS NOT NULL THEN 1e13 + (${derivedScore} * 1e10) + (${actionTierSql} * 1e8) + floor(${dateTriageSql} / 1e4) `

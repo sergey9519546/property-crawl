@@ -5,6 +5,7 @@ const { isCompatibleNjSitusAddress, enrichNjListing } = require('./nj-cadastral'
 const { parseExecutionAmount, parseDescriptionUpsetMatch } = require('../scrapers/civilview');
 const { sourceObservedAddress, resolveCensusCoordinates } = require('../routes/property-image');
 const { computeCatchSummary } = require('../intelligence/catch-summary');
+const { recomputeTriageForListings } = require('../db/observations-persistence');
 
 const DEFAULT_NJ_LIMIT = 40;
 const DEFAULT_GEOCODE_LIMIT = 25;
@@ -202,6 +203,7 @@ async function repairLiveEnrichment(options = {}) {
     countyCandidates: 0,
     countyBackfilled: 0,
     catchBackfilled: 0,
+    triageBackfilled: 0,
     timedOut: false,
     mismatchedSample: [],
     errors: [],
@@ -559,7 +561,7 @@ async function repairLiveEnrichment(options = {}) {
         const backfillAssessorFn = typeof options.backfillAssessorRolls === 'function'
           ? options.backfillAssessorRolls
           : require('./assessor-backfill').backfillAssessorRolls;
-        const assessorLimit = Math.min(100, Math.max(1, Number(options.assessorLimit) || 35));
+        const assessorLimit = Math.min(100, Math.max(1, Number(options.assessorLimit) || 60));
         const assessorBudgetMs = maxDurationMs > 0
           ? Math.max(1, remainingBeforeAssessor - PASS4_RESERVE_MS)
           : undefined;
@@ -584,6 +586,13 @@ async function repairLiveEnrichment(options = {}) {
         `SELECT id,
                 source_key AS "source",
                 state,
+                county,
+                city,
+                zip,
+                beds,
+                prop_type AS "propType",
+                assessed_value::float8 AS "assessed",
+                year_built AS "year",
                 plaintiff,
                 defendant,
                 raw_notice AS "raw",
@@ -613,7 +622,7 @@ async function repairLiveEnrichment(options = {}) {
             )
           ) OR (
             source_key IN ('hud', 'gsa', 'usda', 'fannie', 'freddie', 'fdic')
-            AND catch_summary LIKE '%until sale day%'
+            AND (catch_summary LIKE '%until sale day%' OR catch_summary LIKE '%no sale date is published%')
           )
           ORDER BY id ASC
           LIMIT $1`,
@@ -654,6 +663,52 @@ async function repairLiveEnrichment(options = {}) {
       });
     } catch (err) {
       report.errors.push(`catchBackfill: ${err?.message || err}`);
+    }
+  }
+
+  // Pass 5: Triage Priority Backfill (re-evaluates NULL or agency REO triage scores)
+  if (!dryRun && options.includeTriageBackfill !== false && !budgetExpired()) {
+    try {
+      const triageLimit = Math.min(1000, Math.max(1, Number(options.triageLimit) || 300));
+      const triageQuery = await pool.query(
+        `SELECT id,
+                source_key AS "source",
+                state, county, city, zip, address,
+                beds,
+                baths::float8 AS "baths",
+                sqft,
+                year_built AS "year",
+                prop_type AS "propType",
+                opening_bid::float8 AS "openingBid",
+                est_low::float8 AS "estLow",
+                est_high::float8 AS "estHigh",
+                assessed_value::float8 AS "assessed",
+                sale_date::text AS "saleDate",
+                status,
+                redemption_days AS "redemptionDays",
+                senior_lien_risk AS "seniorLienRisk",
+                occupancy,
+                deposit_terms AS "deposit",
+                judgment_amount::float8 AS "judgment",
+                source_url AS "sourceUrl",
+                source_observed_at::text AS "sourceObservedAt",
+                fetched_at::text AS "fetchedAt",
+                provenance
+           FROM listings
+          WHERE triage_priority IS NULL
+             OR triage_priority_refreshed_at IS NULL
+             OR source_key IN ('hud', 'gsa', 'usda', 'fannie', 'freddie', 'fdic')
+          ORDER BY (triage_priority IS NULL) DESC, triage_priority_refreshed_at ASC NULLS FIRST, id ASC
+          LIMIT $1`,
+        [triageLimit],
+      );
+      const triageRows = Array.isArray(triageQuery?.rows) ? triageQuery.rows : [];
+      if (triageRows.length > 0) {
+        const res = await recomputeTriageForListings(pool, triageRows, { now: nowMs, limit: triageLimit });
+        report.triageBackfilled += Number(res?.updated || 0);
+      }
+    } catch (err) {
+      report.errors.push(`triageBackfill: ${err?.message || err}`);
     }
   }
 

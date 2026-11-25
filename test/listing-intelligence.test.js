@@ -226,3 +226,21 @@ test('annotateListing derives opportunity dealScore and rank from enrolled count
   assert.equal(withheld.opportunity.dealScore, null);
   assert.equal(withheld.opportunity.bidSpread, null);
 });
+
+test('continuous federal REO gets immediate_offer urgency and HUD SAFMR rent-floor benchmark rank', () => {
+  const hud = annotateListing({
+    id: 'HUD-OH-1',
+    source: 'hud',
+    state: 'OH',
+    address: '10 Federal Ct, Cleveland, OH 44114',
+    openingBid: 75000,
+    saleDate: null,
+    hudSafmr: { zip: '44114', bedrooms: 2, fairMarketRent: 1450 },
+    provenance: { origin: 'live', observed: true },
+  });
+  assert.equal(hud.opportunity.urgency, 'immediate_offer');
+  assert.equal(hud.opportunity.valuationBasis, 'hud_safmr_rent_floor');
+  assert.ok(hud.opportunity.safmrRentFloor > 75000);
+  assert.ok(hud.opportunity.rank >= 25);
+  assert.equal(hud.estLow, undefined);
+});

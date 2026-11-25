@@ -1019,3 +1019,28 @@ test('treasury parseAddress: handles District of Columbia and ZIP+4 formats', ()
   assert.equal(zip4.zip, '89101');
   assert.equal(zip4.city, 'Las Vegas');
 });
+
+test('treasury scrapeFeed: returns fulfilled partial listings before deadline without throwing', async () => {
+  const s = new TreasuryForfeitureScraper({
+    useScrapling: false,
+    extractImpl: null,
+    maxRetries: 1,
+    timeoutMs: 2500,
+    maxItems: 2,
+    deadlineAt: Date.now() + 8000,
+  });
+  s.crawlJitter = async () => {};
+  s.fetchText = async (url) => {
+    if (url.endsWith('/realprop.shtml')) {
+      return '<html><body><a href="sales/1001.shtml">100 Elm St, Dallas, Texas</a><a href="sales/1002.shtml">200 Oak St, Austin, Texas</a></body></html>';
+    }
+    if (url.includes('1001.shtml')) {
+      return '<html><head><title>100 Elm St, Dallas, Texas 75201</title></head><body>Starting Bid: $125,000 Auction Date and Time: March 10, 2027</body></html>';
+    }
+    throw new Error('detail fetch timeout');
+  };
+  const out = await s.scrapeFeed();
+  assert.equal(out.length, 1);
+  assert.equal(out[0].state, 'TX');
+  assert.equal(out[0].openingBid, 125000);
+});

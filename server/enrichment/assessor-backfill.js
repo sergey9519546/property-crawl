@@ -10,7 +10,53 @@
 // harvest's own per-run limit and disk cache, and fail-open on every error.
 // A backfill failure must never affect ingest or serving.
 
+const path = require('node:path');
+const os = require('node:os');
 const { harvestAssessorRolls, loadCache, saveCache, cacheKeyFor, DEFAULT_CACHE_PATH, DEFAULT_CACHE_TTL_MS, DEFAULT_MISS_TTL_MS } = require('./assessor-harvest');
+
+const ASSESSOR_BACKFILL_RULE_VERSION = '2026-11-prop-loc-v2';
+const DB_MISS_COOLDOWN_MS = 7 * 24 * 3600 * 1000;
+
+function resolveAssessorCachePath(cachePath) {
+  if (cachePath) return cachePath;
+  if (process.env.PROPERTY_ASSESSOR_CACHE_PATH) return process.env.PROPERTY_ASSESSOR_CACHE_PATH;
+  if (process.env.VERCEL === '1' || process.env.NOW_REGION) {
+    return path.join(os.tmpdir(), 'property-crawl-cache', 'assessor-roll.json');
+  }
+  return DEFAULT_CACHE_PATH;
+}
+
+function hasRecentDbAssessorMiss(listing, nowMs = Date.now()) {
+  const stamped = listing?.provenance?.derivedFields?.assessorAttempted;
+  if (!stamped || typeof stamped !== 'object') return false;
+  if (stamped.ruleVersion !== ASSESSOR_BACKFILL_RULE_VERSION || stamped.found !== false) return false;
+  const ts = Date.parse(String(stamped.at || ''));
+  return Number.isFinite(ts) && (nowMs - ts) < DB_MISS_COOLDOWN_MS;
+}
+
+async function persistAssessorAttemptMiss(db, listingId, nowMs) {
+  if (!db?.isPg || !db?.pool || typeof db.pool.query !== 'function' || !listingId) return;
+  try {
+    const stamp = JSON.stringify({
+      at: new Date(nowMs).toISOString(),
+      ruleVersion: ASSESSOR_BACKFILL_RULE_VERSION,
+      found: false,
+    });
+    await db.pool.query(
+      `UPDATE listings
+          SET provenance = jsonb_set(
+                jsonb_set(COALESCE(provenance, '{}'::jsonb), '{derivedFields}', COALESCE(provenance->'derivedFields', '{}'::jsonb), true),
+                '{derivedFields,assessorAttempted}',
+                $2::jsonb,
+                true
+              )
+        WHERE id = $1`,
+      [listingId, stamp],
+    );
+  } catch {
+    // Non-fatal: miss durability must never break enrichment backfill.
+  }
+}
 const { extractRawApn, normalizeApn, buildParcelKey } = require('../scrapers/normalization');
 const { MARKET_CONVERSION } = require('./assessor-reading');
 const { resolveCountyKey, resolveCountyEndpoint, COUNTY_ARCGIS_REGISTRY } = require('./arcgis-parcels');
@@ -30,11 +76,12 @@ function countyEnrolled(state, county) {
   return Boolean(resolveCountyKey(state, county)) && String(state).toUpperCase() === 'FL';
 }
 
-function candidateReady(listing) {
+function candidateReady(listing, nowMs = Date.now()) {
   if (!listing || typeof listing !== 'object') return false;
   // The roll marker is the authority — rows carrying a publisher assessed figure without an attached assessorRoll remain eligible for parcel-roll harvest.
   // an assessed figure from another enrichment path) is not a backfill target.
   if (listing.assessorParcel || listing.provenance?.derivedFields?.assessorRoll) return false;
+  if (hasRecentDbAssessorMiss(listing, nowMs)) return false;
   const lat = Number(listing.lat);
   const lng = Number(listing.lng);
   const hasCoords = Number.isFinite(lat) && Number.isFinite(lng) && !(lat === 0 && lng === 0);
@@ -57,7 +104,7 @@ async function resolveNjCadastralBatch({ db, fetchFn, now, limit = 15, perStateL
   if (!db || typeof db.getListings !== 'function' || typeof db.createListing !== 'function' || limit <= 0) {
     return out;
   }
-  const effectiveCachePath = cachePath || process.env.PROPERTY_ASSESSOR_CACHE_PATH || ((process.env.VERCEL === '1' || process.env.NOW_REGION) ? path.join(require('node:os').tmpdir(), 'property-crawl-cache', 'assessor-roll.json') : DEFAULT_CACHE_PATH);
+  const effectiveCachePath = resolveAssessorCachePath(cachePath);
   const cache = loadCache(effectiveCachePath);
   const cacheTtlMs = DEFAULT_CACHE_TTL_MS;
   const missTtlMs = DEFAULT_MISS_TTL_MS;
@@ -77,6 +124,7 @@ async function resolveNjCadastralBatch({ db, fetchFn, now, limit = 15, perStateL
   for (const row of page.listings || []) {
     if (!row || typeof row !== 'object' || !row.id || String(row.state || '').toUpperCase() !== 'NJ') continue;
     if (row.assessorParcel || row.provenance?.derivedFields?.assessorRoll) continue;
+    if (hasRecentDbAssessorMiss(row, nowMs)) continue;
     const queryLine = extractNjGeocodeQuery(row);
     if (!queryLine) continue;
     const key = `NJ-GEO|${queryLine.toUpperCase()}`;
@@ -110,6 +158,7 @@ async function resolveNjCadastralBatch({ db, fetchFn, now, limit = 15, perStateL
         out.notFound += 1;
         cache[key] = { observedAt: new Date(nowMs).toISOString(), hit: false };
         cacheDirty = true;
+        await persistAssessorAttemptMiss(db, row.id, nowMs);
       }
     } catch (err) {
       out.failed += 1;
@@ -136,7 +185,8 @@ async function backfillAssessorRolls({ db, fetchFn, now, limit = 30, perStateLim
   // spent on rows that can still learn something; without this, a state whose
   // first-page rows persistently miss consumes the cap every run and starves
   // every state behind it.
-  const cache = loadCache(cachePath || DEFAULT_CACHE_PATH);
+  const effectiveCachePath = resolveAssessorCachePath(cachePath);
+  const cache = loadCache(effectiveCachePath);
   const cacheTtlMs = DEFAULT_CACHE_TTL_MS;
   const missTtlMs = DEFAULT_MISS_TTL_MS;
   const clock = typeof wallClock === 'function' ? wallClock : Date.now;
@@ -158,7 +208,7 @@ async function backfillAssessorRolls({ db, fetchFn, now, limit = 30, perStateLim
     const bucket = [];
     for (const row of page.listings || []) {
       if (!row || typeof row !== 'object' || !row.id || seen.has(row.id)) continue;
-      if (!candidateReady(row)) continue;
+      if (!candidateReady(row, nowMs)) continue;
       const countyKey = resolveCountyKey(row.state, row.county);
       const lat = Number(row.lat);
       const lng = Number(row.lng);
@@ -194,7 +244,7 @@ async function backfillAssessorRolls({ db, fetchFn, now, limit = 30, perStateLim
     const harvest = await harvestAssessorRolls(candidates, {
       fetchFn,
       now,
-      cachePath,
+      cachePath: effectiveCachePath,
       ...(budgetMs > 0 ? { maxDurationMs: Math.max(1, budgetMs - (clock() - startedAt)), wallClock: clock } : {}),
       onHarvested: async (listing) => {
         const derivedFields = listing?.provenance?.derivedFields;
@@ -222,6 +272,20 @@ async function backfillAssessorRolls({ db, fetchFn, now, limit = 30, perStateLim
     result.harvested = harvest.harvested;
     result.failed = harvest.failed;
     result.notFound = harvest.notFound;
+    if (result.notFound > 0 && db?.isPg && db?.pool) {
+      const postCache = loadCache(effectiveCachePath);
+      const expectedObservedAt = new Date(nowMs).toISOString();
+      for (const cand of candidates) {
+        if (cand?.provenance?.derivedFields?.assessorRoll) continue;
+        const countyKey = resolveCountyKey(cand.state, cand.county);
+        const cleanApn = normalizeApn(extractRawApn(cand));
+        const key = cacheKeyFor(countyKey, Number(cand.lat), Number(cand.lng), cleanApn);
+        const entry = postCache[key];
+        if (entry && !entry.parcel && entry.observedAt === expectedObservedAt) {
+          await persistAssessorAttemptMiss(db, cand.id, nowMs);
+        }
+      }
+    }
   } catch (error) {
     if (logger?.warn) logger.warn(`[AssessorBackfill] harvest failed (non-fatal): ${error.message}`);
   }
@@ -248,4 +312,13 @@ async function backfillAssessorRolls({ db, fetchFn, now, limit = 30, perStateLim
   return result;
 }
 
-module.exports = { backfillAssessorRolls, resolveNjCadastralBatch, CONVERTED_STATES, candidateReady, countyEnrolled };
+module.exports = {
+  backfillAssessorRolls,
+  resolveNjCadastralBatch,
+  resolveAssessorCachePath,
+  hasRecentDbAssessorMiss,
+  ASSESSOR_BACKFILL_RULE_VERSION,
+  CONVERTED_STATES,
+  candidateReady,
+  countyEnrolled,
+};

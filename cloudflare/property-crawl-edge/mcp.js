@@ -78,6 +78,39 @@ export const MCP_TOOLS = Object.freeze([
       },
     },
   },
+  {
+    name: 'compute_check_ladder',
+    description:
+      "Compute a Courthouse Bid Sheet and Cashier's Check Denomination Ladder separating pre-auction wire escrow from same-day at-gavel certified funds, striking postponed/stayed targets, and allocating disjoint check subsets.",
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['targets'],
+      properties: {
+        targets: {
+          type: 'array',
+          description: '1 to 50 target auction properties to include in the check ladder.',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string', description: 'Listing or target identifier.' },
+              address: { type: 'string', description: 'Street address of the target property.' },
+              state: { type: 'string', description: '2-letter US state code.' },
+              source: { type: 'string', description: 'Auction platform or source key (e.g. civilview, servicelink, sheriff, texas_tax).' },
+              saleDate: { type: 'string', description: 'Scheduled sale date (YYYY-MM-DD or ISO timestamp).' },
+              openingBid: { type: 'number', description: 'Published opening or upset bid in USD.' },
+              maxBid: { type: 'number', description: 'Buyer maximum walk-away bid in USD.' },
+              status: { type: 'string', description: 'Current docket/sale status (e.g. active, postponed, canceled, stayed).' },
+            },
+          },
+        },
+        availableCapital: {
+          type: 'number',
+          description: 'Optional liquid capital available in USD for feasibility and shortfall analysis.',
+        },
+      },
+    },
+  },
 ]);
 
 function mcpHeaders(extra = {}) {
@@ -187,7 +220,70 @@ async function executeMcpTool(name, args, env) {
     return fetchJsonUpstream(`${apiOrigin}/api/listings?${params.toString()}`, { method: 'GET' }, env);
   }
 
+  if (name === 'compute_check_ladder') {
+    if (!Array.isArray(input.targets) || input.targets.length < 1 || input.targets.length > 50) {
+      return { invalidParams: 'compute_check_ladder requires targets as an array of 1 to 50 items.' };
+    }
+    return fetchJsonUpstream(
+      `${apiOrigin}/api/check-ladder`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      },
+      env,
+    );
+  }
+
   return { unknownTool: true };
+}
+
+const MCP_RATE_WINDOW_MS = 60_000;
+const MCP_RATE_DEFAULT_LIMIT = 60;
+const MCP_RATE_MAX_KEYS = 2000;
+const mcpRateBuckets = new Map();
+
+export function resetMcpRateLimiterForTests() {
+  mcpRateBuckets.clear();
+}
+
+function resolveMcpClientIp(request) {
+  const cfIp = String(request.headers.get('cf-connecting-ip') || '').trim();
+  if (cfIp) return cfIp;
+  const xff = String(request.headers.get('x-forwarded-for') || '');
+  const firstXff = xff.split(',').map((part) => part.trim()).find(Boolean);
+  return firstXff || 'anonymous';
+}
+
+export function checkMcpRateLimit(request, env, nowMs = Date.now()) {
+  const configured = env?.MCP_RATE_LIMIT_PER_MIN;
+  const parsedLimit = configured !== undefined && configured !== null && String(configured).trim() !== ''
+    ? Number(configured)
+    : NaN;
+  const limit = Number.isFinite(parsedLimit)
+    ? Math.max(1, Math.floor(parsedLimit))
+    : MCP_RATE_DEFAULT_LIMIT;
+
+  const key = resolveMcpClientIp(request);
+  const cutoff = nowMs - MCP_RATE_WINDOW_MS;
+  const existing = mcpRateBuckets.get(key) || [];
+  const recent = existing.filter((ts) => ts > cutoff);
+
+  if (recent.length >= limit) {
+    mcpRateBuckets.delete(key);
+    mcpRateBuckets.set(key, recent);
+    return { allowed: false, limit, remaining: 0 };
+  }
+
+  recent.push(nowMs);
+  if (!mcpRateBuckets.has(key) && mcpRateBuckets.size >= MCP_RATE_MAX_KEYS) {
+    const oldestKey = mcpRateBuckets.keys().next().value;
+    if (oldestKey !== undefined) mcpRateBuckets.delete(oldestKey);
+  } else {
+    mcpRateBuckets.delete(key);
+  }
+  mcpRateBuckets.set(key, recent);
+  return { allowed: true, limit, remaining: Math.max(0, limit - recent.length) };
 }
 
 export async function handleMcpRequest(request, env) {
@@ -211,6 +307,14 @@ export async function handleMcpRequest(request, env) {
     return Response.json(
       { error: 'Method not allowed' },
       { status: 405, headers: mcpHeaders({ Allow: 'GET, POST, OPTIONS' }) },
+    );
+  }
+
+  const rateStatus = checkMcpRateLimit(request, env);
+  if (!rateStatus.allowed) {
+    return Response.json(
+      { jsonrpc: '2.0', id: null, error: { code: -32029, message: 'Rate limit exceeded' } },
+      { status: 429, headers: mcpHeaders({ 'Retry-After': '60' }) },
     );
   }
 

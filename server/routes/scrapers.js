@@ -344,6 +344,11 @@ function createScrapersHandler(dependencies = {}) {
           const countyLimit = parseBoundedLimit(body.countyLimit ?? url.searchParams.get('countyLimit'));
           const safmrLimit = parseBoundedLimit(body.safmrLimit ?? url.searchParams.get('safmrLimit'));
           const spatialLimit = parseBoundedLimit(body.spatialLimit ?? url.searchParams.get('spatialLimit'));
+          const rawTriageLimit = body.triageLimit ?? url.searchParams.get('triageLimit');
+          const parsedTriageLimit = rawTriageLimit != null && rawTriageLimit !== '' ? Number(rawTriageLimit) : NaN;
+          const triageLimit = Number.isFinite(parsedTriageLimit) && parsedTriageLimit >= 1
+            ? Math.min(1000, Math.floor(parsedTriageLimit))
+            : undefined;
           const njLimit = rawNjLimit != null && rawNjLimit !== '' ? Number(rawNjLimit) : NaN;
           const geocodeLimit = rawGeocodeLimit != null && rawGeocodeLimit !== '' ? Number(rawGeocodeLimit) : NaN;
           const catchLimit = rawCatchLimit != null && rawCatchLimit !== '' ? Number(rawCatchLimit) : NaN;
@@ -358,6 +363,7 @@ function createScrapersHandler(dependencies = {}) {
             ...(countyLimit !== undefined ? { countyLimit } : {}),
             ...(safmrLimit !== undefined ? { safmrLimit } : {}),
             ...(spatialLimit !== undefined ? { spatialLimit } : {}),
+            ...(triageLimit !== undefined ? { triageLimit } : {}),
             dryRun,
           });
           return res.json({ status: 'completed', action: 'repair-enrichment', report: repairReport });

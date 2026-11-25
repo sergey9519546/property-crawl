@@ -19,6 +19,7 @@ import { readDeviceWatchlistIds, extractAlertDealIds } from "@/lib/watchlist-syn
 import { readUnderwriteScenario } from "@/lib/underwrite-scenario";
 import { displayDate, displayMoney, knownNumber, positiveNumber } from "@/lib/listing-display";
 import { sourceDisplayText } from "@/lib/source-display";
+import { useLocale } from "@/components/i18n/locale-provider";
 import type { PropertyListing } from "@/components/terminal/property-data";
 
 const SCENARIO_V1_PREFIX = "pp:underwrite-scenario:v1:";
@@ -98,7 +99,7 @@ function formatPaymentMethod(method: string): string {
   }
 }
 
-function publishedValuationRange(listing: PropertyListing): string {
+function publishedValuationRange(listing: PropertyListing, notPublishedLabel: string): string {
   const low = positiveNumber(listing.estLow);
   const high = positiveNumber(listing.estHigh);
   if (low !== null && high !== null) {
@@ -106,10 +107,15 @@ function publishedValuationRange(listing: PropertyListing): string {
   }
   const mid = positiveNumber(listing.mid);
   if (mid !== null) return displayMoney(mid);
-  return "Not published";
+  return notPublishedLabel;
 }
 
 export function BidSheetView() {
+  const { messages } = useLocale();
+  const bs = messages.bidSheetPage;
+  const [apiVerifying, setApiVerifying] = React.useState<boolean>(false);
+  const [apiVerifyNote, setApiVerifyNote] = React.useState<string | null>(null);
+  const [apiVerifyError, setApiVerifyError] = React.useState<string | null>(null);
   const [listings, setListings] = React.useState<PropertyListing[]>([]);
   const [scenarioMap, setScenarioMap] = React.useState<Record<string, LocalScenarioOverride>>({});
   const [manualWalkAwayBids, setManualWalkAwayBids] = React.useState<Record<string, string>>({});
@@ -248,6 +254,37 @@ export function BidSheetView() {
     });
   }, [ladderTargets, parsedCapital]);
 
+  const verifyLadderViaApi = React.useCallback(async () => {
+    if (ladderTargets.length === 0) return;
+    setApiVerifying(true);
+    setApiVerifyNote(null);
+    setApiVerifyError(null);
+    try {
+      const response = await fetch("/api/check-ladder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targets: ladderTargets, availableCapital: parsedCapital }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload?.error || bs.apiVerifyError);
+      }
+      const checks = Array.isArray(payload?.checkLadder)
+        ? payload.checkLadder.reduce((sum: number, row: { count?: number }) => sum + Number(row?.count || 0), 0)
+        : 0;
+      const wires = Array.isArray(payload?.preWireSchedule) ? payload.preWireSchedule.length : 0;
+      setApiVerifyNote(
+        bs.apiVerifiedStatus
+          .replace("{checks}", String(checks))
+          .replace("{wires}", String(wires)),
+      );
+    } catch (err) {
+      setApiVerifyError(err instanceof Error ? err.message : bs.apiVerifyError);
+    } finally {
+      setApiVerifying(false);
+    }
+  }, [ladderTargets, parsedCapital, bs.apiVerifiedStatus, bs.apiVerifyError]);
+
   const { summary, checkLadder, preWireSchedule, gavelTargets, struckTargets } = ladderResult;
   const listingById = React.useMemo(() => {
     const map = new Map<string, PropertyListing & { rehabBudget?: number | null; delinquentTaxes?: number | null; customValuation?: number | null }>();
@@ -259,7 +296,7 @@ export function BidSheetView() {
     return (
       <div className="mx-auto max-w-6xl px-6 py-20 text-center">
         <Loader2 className="mx-auto mb-3 h-8 w-8 animate-spin text-ink-3" />
-        <p className="text-sm font-medium text-ink-3">Building courthouse bid sheet and check ladder…</p>
+        <p className="text-sm font-medium text-ink-3">{bs.loading}</p>
       </div>
     );
   }
@@ -269,19 +306,19 @@ export function BidSheetView() {
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4 border-b border-line pb-6">
         <div>
-          <p className="text-label font-bold uppercase text-ink-3">Execution Desk · Zero-Fabrication</p>
+          <p className="text-label font-bold uppercase text-ink-3">{bs.eyebrow}</p>
           <h1 className="mt-1 text-title font-bold text-ink">
-            Courthouse Bid Sheet &amp; Check Ladder
+            {bs.title}
           </h1>
           <p className="mt-1 text-meta text-ink-3">
-            Pre-wire escrow deadlines, same-day cashier&apos;s check denominations, and walk-away MAO ceilings for your saved auction targets.
+            {bs.subtitle}
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-3 print:hidden">
           <div className="flex flex-col gap-1">
             <label htmlFor="bid-sheet-capital" className="text-label font-bold uppercase text-ink-3">
-              Available Liquid Capital (Yours)
+              {bs.availableCapitalLabel}
             </label>
             <div className="flex items-center rounded-control border border-line-strong bg-card px-3 py-1.5 focus-within:border-yours focus-within:ring-2 focus-within:ring-yours/20">
               <Wallet className="mr-2 h-4 w-4 text-yours" />
@@ -305,19 +342,43 @@ export function BidSheetView() {
             className="mt-5 inline-flex items-center gap-1.5 rounded-control border border-line-strong bg-card px-3.5 py-2 text-xs font-semibold text-ink-2 transition hover:bg-paper"
           >
             <RefreshCw className="h-3.5 w-3.5" />
-            Refresh
+            {bs.refreshBtn}
+          </button>
+
+          <button
+            type="button"
+            disabled={apiVerifying || ladderTargets.length === 0}
+            onClick={() => void verifyLadderViaApi()}
+            className="mt-5 inline-flex items-center gap-1.5 rounded-control border border-line-strong bg-card px-3.5 py-2 text-xs font-semibold text-ink transition hover:bg-paper disabled:opacity-50"
+          >
+            <CheckCircle2 className="h-3.5 w-3.5 text-yours" />
+            {apiVerifying ? bs.verifyingApiBtn : bs.verifyApiBtn}
           </button>
 
           <button
             type="button"
             onClick={() => window.print()}
-            className="mt-5 inline-flex items-center gap-1.5 rounded-control bg-ink px-4 py-2 text-xs font-semibold text-white transition hover:bg-ink-2"
+            className="mt-5 inline-flex items-center gap-1.5 rounded-control bg-ink px-4 py-2 text-xs font-semibold text-card transition hover:bg-ink-2"
           >
             <Printer className="h-3.5 w-3.5" />
-            Print Courthouse Sheet
+            {bs.printBtn}
           </button>
         </div>
       </div>
+
+      {apiVerifyNote && (
+        <div role="status" className="mt-4 flex items-center gap-2 rounded-control border border-go/30 bg-go-wash px-4 py-2.5 text-xs font-medium text-go">
+          <CheckCircle2 className="h-4 w-4 shrink-0" />
+          <span>{apiVerifyNote}</span>
+        </div>
+      )}
+
+      {apiVerifyError && (
+        <div role="alert" className="mt-4 flex items-center gap-2 rounded-control border border-catch/30 bg-catch-wash px-4 py-2.5 text-xs font-medium text-catch-ink">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          <span>{apiVerifyError}</span>
+        </div>
+      )}
 
       {/* Capital & Error Notices */}
       {loadError && (
@@ -331,7 +392,9 @@ export function BidSheetView() {
         <div role="status" className="mt-4 flex items-center gap-2 rounded-control border border-line-strong bg-card p-3 text-xs text-ink-2">
           <AlertTriangle className="h-4 w-4 shrink-0 text-catch-ink" />
           <span>
-            {missingIds.length} saved target(s) could not be retrieved from the live listing store ({missingIds.join(", ")}).
+            {bs.missingTargetsNotice
+              .replace("{count}", String(missingIds.length))
+              .replace("{ids}", missingIds.join(", "))}
           </span>
         </div>
       )}
@@ -340,16 +403,16 @@ export function BidSheetView() {
       {listings.length === 0 ? (
         <div className="mt-10 rounded-card border border-dashed border-line-strong bg-card p-12 text-center shadow-sm">
           <Banknote className="mx-auto mb-3 h-10 w-10 text-ink-3" />
-          <h2 className="text-lg font-bold text-ink">No saved auction targets in your watchlist</h2>
+          <h2 className="text-lg font-bold text-ink">{bs.emptyTitle}</h2>
           <p className="mx-auto mt-2 max-w-md text-meta text-ink-3">
-            Save listings from the discovery grid or set walk-away underwriting scenarios on a property detail page to build your courthouse check ladder.
+            {bs.emptyBody}
           </p>
           <div className="mt-6 flex flex-wrap justify-center gap-3 print:hidden">
             <Link
               href="/listings"
-              className="rounded-control bg-ink px-5 py-2.5 text-xs font-semibold text-white transition hover:bg-ink-2"
+              className="rounded-control bg-ink px-5 py-2.5 text-xs font-semibold text-card transition hover:bg-ink-2"
             >
-              Browse Auctions
+              {bs.browseAuctionsCta}
             </Link>
             {scenarioOnlyIds.length > 0 && (
               <button
@@ -357,7 +420,7 @@ export function BidSheetView() {
                 onClick={() => void loadBidSheet(scenarioOnlyIds)}
                 className="rounded-control border border-yours/30 bg-yours-wash px-5 py-2.5 text-xs font-semibold text-yours transition hover:bg-card"
               >
-                Load {scenarioOnlyIds.length} Underwritten Scenario(s)
+                {bs.loadScenariosCta.replace("{count}", String(scenarioOnlyIds.length))}
               </button>
             )}
           </div>
@@ -365,34 +428,34 @@ export function BidSheetView() {
       ) : (
         <div className="mt-8 space-y-8">
           {/* Summary KPI Strip */}
-          <section aria-label="Capital deployment summary" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <section aria-label={bs.kpi.summaryAria} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div className="rounded-card border border-line bg-card p-5 shadow-sm">
-              <p className="text-label font-bold uppercase text-ink-3">Active Targets</p>
+              <p className="text-label font-bold uppercase text-ink-3">{bs.kpi.activeTargets}</p>
               <p className="mt-2 font-mono text-2xl font-bold tabular-nums text-ink">
                 {summary.activeTargetCount}
               </p>
               <p className="mt-1 text-xs text-ink-3">
-                {summary.struckTargetCount} struck / postponed
+                {bs.kpi.struckCountSuffix.replace("{count}", String(summary.struckTargetCount))}
               </p>
             </div>
 
             <div className="rounded-card border border-line bg-card p-5 shadow-sm">
-              <p className="text-label font-bold uppercase text-ink-3">Pre-Wire Required</p>
+              <p className="text-label font-bold uppercase text-ink-3">{bs.kpi.preWireRequired}</p>
               <p className="mt-2 font-mono text-2xl font-bold tabular-nums text-ink">
                 {displayMoney(summary.totalPreWireEscrowRequired)}
               </p>
               <p className="mt-1 text-xs text-ink-3">
-                {preWireSchedule.length} online portal wire(s)
+                {bs.kpi.portalWiresSuffix.replace("{count}", String(preWireSchedule.length))}
               </p>
             </div>
 
             <div className="rounded-card border border-line bg-card p-5 shadow-sm">
-              <p className="text-label font-bold uppercase text-ink-3">Peak At-Gavel Check Ladder</p>
+              <p className="text-label font-bold uppercase text-ink-3">{bs.kpi.peakCheckLadder}</p>
               <p className="mt-2 font-mono text-2xl font-bold tabular-nums text-ink">
                 {displayMoney(summary.checkLadderTotal)}
               </p>
               <p className="mt-1 text-xs text-ink-3">
-                Peak day need: <span className="font-mono tabular-nums">{displayMoney(summary.peakAtGavelCheckRequired)}</span>
+                {bs.kpi.peakDayNeed} <span className="font-mono tabular-nums">{displayMoney(summary.peakAtGavelCheckRequired)}</span>
                 {summary.peakSaleDay && !summary.peakSaleDay.startsWith("undated:") ? ` (${summary.peakSaleDay})` : ""}
               </p>
             </div>
@@ -407,7 +470,7 @@ export function BidSheetView() {
               }`}
             >
               <p className="text-label font-bold uppercase text-ink-3">
-                {summary.feasible === false ? "Capital Shortfall" : "Capital Surplus / Feasibility"}
+                {summary.feasible === false ? bs.kpi.shortfallTitle : bs.kpi.surplusFeasibilityTitle}
               </p>
               <p
                 className={`mt-2 font-mono text-2xl font-bold tabular-nums ${
@@ -419,7 +482,7 @@ export function BidSheetView() {
                 }`}
               >
                 {summary.availableCapital === null
-                  ? "Enter Capital"
+                  ? bs.kpi.enterCapital
                   : summary.feasible
                     ? `+${displayMoney(summary.availableCapital - summary.totalCapitalRequired)}`
                     : `-${displayMoney(summary.capitalShortfall)}`}
@@ -428,7 +491,7 @@ export function BidSheetView() {
                 {summary.feasible === true && <CheckCircle2 className="h-3.5 w-3.5 text-go" />}
                 {summary.feasible === false && <ShieldAlert className="h-3.5 w-3.5 text-catch-ink" />}
                 <span>
-                  Total needed: <strong className="font-mono tabular-nums">{displayMoney(summary.totalCapitalRequired)}</strong>
+                  {bs.kpi.totalNeeded} <strong className="font-mono tabular-nums">{displayMoney(summary.totalCapitalRequired)}</strong>
                 </span>
               </p>
             </div>
@@ -442,10 +505,10 @@ export function BidSheetView() {
                 <div>
                   <h2 className="flex items-center gap-2 text-base font-bold text-ink">
                     <Banknote className="h-4 w-4 text-ink-2" />
-                    Cashier&apos;s Check Denomination Ladder
+                    {bs.checkLadder.title}
                   </h2>
                   <p className="mt-0.5 text-xs text-ink-3">
-                    Payable to self or sheriff per county rules; decomposed for exact-subset flexibility.
+                    {bs.checkLadder.subtitle}
                   </p>
                 </div>
                 <span className="rounded-full bg-paper px-2.5 py-1 font-mono text-xs font-bold tabular-nums text-ink">
@@ -455,16 +518,16 @@ export function BidSheetView() {
 
               {checkLadder.length === 0 ? (
                 <p className="mt-4 text-xs text-ink-3">
-                  No active at-gavel cashier&apos;s check deposits are required for your current targets.
+                  {bs.checkLadder.empty}
                 </p>
               ) : (
                 <div className="mt-4 overflow-x-auto">
                   <table className="w-full text-left text-xs">
                     <thead>
                       <tr className="border-b border-line text-label uppercase text-ink-3">
-                        <th className="py-2 font-bold">Check Size</th>
-                        <th className="py-2 text-right font-bold">Qty</th>
-                        <th className="py-2 text-right font-bold">Subtotal</th>
+                        <th className="py-2 font-bold">{bs.checkLadder.colSize}</th>
+                        <th className="py-2 text-right font-bold">{bs.checkLadder.colQty}</th>
+                        <th className="py-2 text-right font-bold">{bs.checkLadder.colSubtotal}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-line">
@@ -484,7 +547,7 @@ export function BidSheetView() {
                     </tbody>
                     <tfoot>
                       <tr className="border-t border-line-strong font-bold text-ink">
-                        <td className="pt-3">Total Checks Carried</td>
+                        <td className="pt-3">{bs.checkLadder.totalRow}</td>
                         <td className="pt-3 text-right font-mono tabular-nums">
                           {checkLadder.reduce((sum, r) => sum + r.count, 0)}
                         </td>
@@ -504,10 +567,10 @@ export function BidSheetView() {
                 <div>
                   <h2 className="flex items-center gap-2 text-base font-bold text-ink">
                     <CalendarClock className="h-4 w-4 text-ink-2" />
-                    Pre-Wire Escrow Schedule
+                    {bs.preWire.title}
                   </h2>
                   <p className="mt-0.5 text-xs text-ink-3">
-                    Online platforms requiring cleared wire / ACH funds 24–48 hours before auction gavel.
+                    {bs.preWire.subtitle}
                   </p>
                 </div>
                 <span className="rounded-full bg-paper px-2.5 py-1 font-mono text-xs font-bold tabular-nums text-ink">
@@ -517,17 +580,17 @@ export function BidSheetView() {
 
               {preWireSchedule.length === 0 ? (
                 <p className="mt-4 text-xs text-ink-3">
-                  No active pre-wire targets (RealAuction, Bid4Assets, or ServiceLink) in your watchlist.
+                  {bs.preWire.empty}
                 </p>
               ) : (
                 <div className="mt-4 overflow-x-auto">
                   <table className="w-full text-left text-xs">
                     <thead>
                       <tr className="border-b border-line text-label uppercase text-ink-3">
-                        <th className="py-2 pr-3 font-bold">Property / Platform</th>
-                        <th className="py-2 pr-3 font-bold">Wire Cutoff</th>
-                        <th className="py-2 pr-3 font-bold">Sale Date</th>
-                        <th className="py-2 text-right font-bold">Required Wire</th>
+                        <th className="py-2 pr-3 font-bold">{bs.preWire.colProperty}</th>
+                        <th className="py-2 pr-3 font-bold">{bs.preWire.colCutoff}</th>
+                        <th className="py-2 pr-3 font-bold">{bs.preWire.colSaleDate}</th>
+                        <th className="py-2 text-right font-bold">{bs.preWire.colRequired}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-line">
@@ -542,10 +605,10 @@ export function BidSheetView() {
                             </p>
                           </td>
                           <td className="py-3 pr-3 font-mono text-ink-2">
-                            {item.depositDeadline ? displayDate(item.depositDeadline) : "Confirm deadline"}
+                            {item.depositDeadline ? displayDate(item.depositDeadline) : bs.preWire.confirmDeadline}
                           </td>
                           <td className="py-3 pr-3 font-mono text-ink-2">
-                            {item.saleDate ? displayDate(item.saleDate) : "Unpublished"}
+                            {item.saleDate ? displayDate(item.saleDate) : bs.preWire.unpublished}
                           </td>
                           <td className="py-3 text-right font-mono font-bold tabular-nums text-ink">
                             {displayMoney(item.requiredDeposit)}
@@ -565,14 +628,16 @@ export function BidSheetView() {
               <div>
                 <h2 className="flex items-center gap-2 text-base font-bold text-ink">
                   <Landmark className="h-4 w-4 text-ink-2" />
-                  Walk-Away MAO &amp; At-Gavel Check Allocation
+                  {bs.targets.title}
                 </h2>
                 <p className="mt-0.5 text-xs text-ink-3">
-                  Published valuation ranges stay separate from buyer walk-away ceilings (Yours) and HUD SAFMR benchmarks.
+                  {bs.targets.subtitle}
                 </p>
               </div>
               <span className="text-xs text-ink-3">
-                {gavelTargets.length} at-gavel target(s) · {preWireSchedule.length} pre-wire target(s)
+                {bs.targets.countsSummary
+                  .replace("{gavel}", String(gavelTargets.length))
+                  .replace("{preWire}", String(preWireSchedule.length))}
               </span>
             </div>
 
@@ -580,12 +645,12 @@ export function BidSheetView() {
               <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="border-b border-line text-label uppercase text-ink-3">
-                    <th className="py-2 pr-3 font-bold">Target</th>
-                    <th className="py-2 pr-3 font-bold">Published Valuation / Opening</th>
-                    <th className="py-2 pr-3 font-bold">Walk-Away Max Bid (Yours)</th>
-                    <th className="py-2 pr-3 font-bold">Rule / Timing</th>
-                    <th className="py-2 pr-3 text-right font-bold">Deposit Required</th>
-                    <th className="py-2 font-bold">Check Subset / Tender</th>
+                    <th className="py-2 pr-3 font-bold">{bs.targets.colTarget}</th>
+                    <th className="py-2 pr-3 font-bold">{bs.targets.colPublished}</th>
+                    <th className="py-2 pr-3 font-bold">{bs.targets.colWalkAway}</th>
+                    <th className="py-2 pr-3 font-bold">{bs.targets.colRuleTiming}</th>
+                    <th className="py-2 pr-3 text-right font-bold">{bs.targets.colDeposit}</th>
+                    <th className="py-2 font-bold">{bs.targets.colSubset}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line">
@@ -609,26 +674,26 @@ export function BidSheetView() {
                             {target.address}
                           </Link>
                           <p className="mt-0.5 text-label text-ink-3">
-                            {target.county ? `${target.county}, ` : ""}{target.state || "—"} · {target.saleDate ? displayDate(target.saleDate) : "Date unpublished"}
+                            {target.county ? `${target.county}, ` : ""}{target.state || "—"} · {target.saleDate ? displayDate(target.saleDate) : bs.targets.dateUnpublished}
                           </p>
                           {listing?.rehabBudget !== null && listing?.rehabBudget !== undefined && (
                             <p className="mt-0.5 text-label text-yours">
-                              Yours: Rehab {displayMoney(listing.rehabBudget)}
-                              {listing.delinquentTaxes ? ` · Taxes ${displayMoney(listing.delinquentTaxes)}` : ""}
+                              {bs.targets.yoursRehab.replace("{amount}", displayMoney(listing.rehabBudget))}
+                              {listing.delinquentTaxes ? bs.targets.yoursTaxes.replace("{amount}", displayMoney(listing.delinquentTaxes)) : ""}
                             </p>
                           )}
                         </td>
 
                         <td className="py-3 pr-3">
                           <p className="font-mono text-ink">
-                            Est: {listing ? publishedValuationRange(listing) : "Not published"}
+                            {bs.targets.estLabel} {listing ? publishedValuationRange(listing, bs.targets.unresolved) : bs.targets.unresolved}
                           </p>
                           <p className="mt-0.5 font-mono text-ink-3">
-                            Opening: {displayMoney(listing?.openingBid)}
+                            {bs.targets.openingLabel} {displayMoney(listing?.openingBid)}
                           </p>
                           {safmrRent !== null && (
                             <p className="mt-0.5 text-label text-ink-3">
-                              Benchmark SAFMR: {displayMoney(safmrRent)}/mo
+                              {bs.targets.safmrBenchmark.replace("{rent}", displayMoney(safmrRent))}
                             </p>
                           )}
                         </td>
@@ -653,7 +718,7 @@ export function BidSheetView() {
                                   [target.id]: e.target.value,
                                 }))
                               }
-                              placeholder="Enter MAO"
+                              placeholder={bs.targets.enterMaoPlaceholder}
                               className="w-28 rounded-control border border-line-strong bg-paper px-2 py-1 font-mono text-xs font-semibold tabular-nums text-ink focus:border-yours focus:outline-none"
                             />
                             <span
@@ -665,7 +730,7 @@ export function BidSheetView() {
                                     : "bg-paper text-ink-2"
                               }`}
                             >
-                              {isYoursBid ? "Yours" : target.bidBasis === "unresolved" ? "Unknown" : "Published"}
+                              {isYoursBid ? bs.targets.badgeYours : target.bidBasis === "unresolved" ? bs.targets.badgeUnknown : bs.targets.badgePublished}
                             </span>
                           </div>
                         </td>
@@ -675,12 +740,12 @@ export function BidSheetView() {
                             {sourceDisplayText(target.source)} ({Math.round(target.depositPct * 100)}%)
                           </p>
                           <p className="text-label text-ink-3">
-                            {isAtGavel ? "Due at gavel" : `Pre-wire (${target.wireLeadHours}h lead)`}
+                            {isAtGavel ? bs.targets.dueAtGavel : bs.targets.preWireLead.replace("{hours}", String(target.wireLeadHours))}
                           </p>
                         </td>
 
                         <td className="py-3 pr-3 text-right font-mono font-bold tabular-nums text-ink">
-                          {target.maxBid > 0 ? displayMoney(target.requiredDeposit) : "Unresolved"}
+                          {target.maxBid > 0 ? displayMoney(target.requiredDeposit) : bs.targets.unresolved}
                         </td>
 
                         <td className="py-3">
@@ -690,15 +755,15 @@ export function BidSheetView() {
                                 <p className="font-mono font-semibold text-ink">{subsetText}</p>
                                 {overTenderAmount !== null && overTenderAmount > 0 && (
                                   <p className="text-label text-ink-3">
-                                    Includes +{displayMoney(overTenderAmount)} rounding buffer
+                                    {bs.targets.roundingBuffer.replace("{amount}", displayMoney(overTenderAmount))}
                                   </p>
                                 )}
                               </div>
                             ) : (
-                              <span className="text-ink-3">Enter bid ceiling to size checks</span>
+                              <span className="text-ink-3">{bs.targets.enterCeiling}</span>
                             )
                           ) : (
-                            <span className="text-ink-3">Pre-auction wire (no check needed)</span>
+                            <span className="text-ink-3">{bs.targets.preAuctionWire}</span>
                           )}
                         </td>
                       </tr>
@@ -714,10 +779,10 @@ export function BidSheetView() {
             <section className="rounded-card border border-catch/30 bg-catch-wash p-6">
               <h2 className="flex items-center gap-2 text-base font-bold text-catch-ink">
                 <ShieldAlert className="h-4 w-4" />
-                Struck / Postponed Targets ({struckTargets.length})
+                {bs.struck.title.replace("{count}", String(struckTargets.length))}
               </h2>
               <p className="mt-1 text-xs text-catch-ink">
-                Automatically excluded from active capital deployment and check ladder totals.
+                {bs.struck.subtitle}
               </p>
               <div className="mt-4 divide-y divide-catch/20 rounded-control border border-catch/20 bg-card">
                 {struckTargets.map((item) => (

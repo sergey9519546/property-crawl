@@ -470,3 +470,44 @@ test('distressStage filter and facets achieve strict Postgres and in-memory pari
     await pglite.close();
   }
 });
+
+test('sort=opportunity ranks high triage_priority undated federal REO above low triage dated listing with PG/memory parity', async () => {
+  const { PGlite } = require('@electric-sql/pglite');
+  const pglite = new PGlite();
+  try {
+    await pglite.query(`CREATE TABLE listings (
+      id text PRIMARY KEY,
+      updated_at timestamptz DEFAULT now(),
+      deal_score int,
+      state text, county text, city text, address text,
+      source_key text, prop_type text, occupancy text,
+      auction_program text, lifecycle_status text, status text, transaction_outcome text,
+      has_documents boolean, provenance jsonb,
+      sale_date date, opening_bid numeric, equity_spread numeric,
+      senior_lien_risk text, redemption_days int,
+      est_low numeric, est_high numeric,
+      triage_priority int,
+      latitude float8, longitude float8
+    )`);
+    const futureDate = new Date(Date.now() + 10 * 86_400_000).toISOString().slice(0, 10);
+    const rows = [
+      { id: 'hud-high', source: 'hud', state: 'OH', openingBid: 65000, saleDate: null, triagePriority: 82, lat: 41.5, lng: -81.7, provenance: { origin: 'live', observed: true } },
+      { id: 'dated-low', source: 'sheriff', state: 'OH', openingBid: 65000, saleDate: futureDate, triagePriority: 20, lat: 41.5, lng: -81.7, provenance: { origin: 'live', observed: true } },
+    ];
+    for (const r of rows) {
+      await pglite.query(
+        'INSERT INTO listings (id, source_key, state, opening_bid, sale_date, triage_priority, latitude, longitude, provenance) VALUES ($1, $2, $3, $4, $5::date, $6, $7, $8, $9::jsonb)',
+        [r.id, r.source, r.state, r.openingBid, r.saleDate, r.triagePriority, r.lat, r.lng, JSON.stringify(r.provenance)],
+      );
+    }
+    const pgDb = { isPg: true, pool: pglite, listingSelect: 'id, source_key AS source, state, opening_bid::float8 AS "openingBid", sale_date::text AS "saleDate", triage_priority::int AS "triagePriority", latitude::float8 AS lat, longitude::float8 AS lng, provenance' };
+    const memDb = { isPg: false, getListings: async () => ({ total: rows.length, listings: rows }) };
+    const f = queryFromUrl(url('sort=opportunity&limit=10'));
+    const memRes = await search(memDb, f);
+    const pgRes = await search(pgDb, f);
+    assert.deepEqual(memRes.listings.map((l) => l.id), ['hud-high', 'dated-low']);
+    assert.deepEqual(pgRes.listings.map((l) => l.id), ['hud-high', 'dated-low']);
+  } finally {
+    await pglite.close();
+  }
+});

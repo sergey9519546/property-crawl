@@ -1072,3 +1072,41 @@ test('NJ MOD-IV normalizer prefers PROP_LOC property location over absentee-owne
   assert.equal(isCompatibleNjSitusAddress('548-550 SANDFORD AVE, NEWARK, NJ 07106', parcel.situsAddress), true);
   assert.equal(isCompatibleNjSitusAddress('548-550 SANDFORD AVE, NEWARK, NJ 07106', '62 POE AVE'), false);
 });
+
+test('backfillAssessorRolls honors durable DB assessorAttempted cooldown without hitting network fetch', async () => {
+  let fetchCalls = 0;
+  const recentMissIso = new Date(Date.now() - 3600_000).toISOString();
+  const db = fakeDb([
+    {
+      id: 'SERV-AZ-COOLDOWN',
+      source: 'servicelink',
+      state: 'AZ',
+      county: 'Maricopa',
+      address: '100 Cooldown Ave, Phoenix, AZ 85003',
+      lat: 33.45,
+      lng: -112.07,
+      provenance: {
+        origin: 'live',
+        observed: true,
+        derivedFields: {
+          assessorAttempted: {
+            at: recentMissIso,
+            found: false,
+            ruleVersion: '2026-11-prop-loc-v2',
+          },
+        },
+      },
+    },
+  ]);
+  const summary = await backfillAssessorRolls({
+    db,
+    limit: 10,
+    cachePath: temporaryCachePath(),
+    fetchFn: async () => {
+      fetchCalls += 1;
+      return { ok: true, json: async () => ({ features: [] }) };
+    },
+  });
+  assert.equal(fetchCalls, 0);
+  assert.equal(summary.harvested, 0);
+});

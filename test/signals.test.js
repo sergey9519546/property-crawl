@@ -576,4 +576,29 @@ describe('Opportunity-Signal Evaluator (Priority Upgrade 3)', () => {
     assert.equal(datePushDossier.trajectory.cumulativeBidDropPct, 25);
     }
   });
+
+  test('continuous federal REO offering earns sale_date_known points and HUD SAFMR rent-floor ratio fallback', () => {
+    const hudRes = evaluateOpportunitySignals(sampleListing({
+      id: 'HUD-381-111',
+      source: 'hud',
+      state: 'TX',
+      county: 'Harris',
+      zip: null,
+      saleDate: null,
+      openingBid: 85000,
+      estLow: null,
+      estHigh: null,
+      mid: null,
+      hudSafmr: { zip: '77002', bedrooms: 2, fairMarketRent: 1650, source: 'HUD FY2025 Small Area Fair Market Rents (SAFMR)' },
+      provenance: { origin: 'live', observed: true, publisher: 'HUD Home Store', recordId: '381-111' },
+    }));
+    const saleSig = hudRes.signals.find((s) => s.key === 'sale_date_known');
+    assert.equal(saleSig.status, 'supported');
+    assert.match(saleSig.label, /continuous offering/i);
+    assert.equal(hudRes.componentScores.saleDateKnown.earnedPoints, 20);
+    const ratioSig = hudRes.signals.find((s) => s.key === 'bid_to_value_ratio');
+    assert.equal(ratioSig.valuationProvenance, 'hud_safmr_rent_floor');
+    assert.equal(ratioSig.status, 'supported');
+    assert.ok(hudRes.triagePriority >= 30);
+  });
 });

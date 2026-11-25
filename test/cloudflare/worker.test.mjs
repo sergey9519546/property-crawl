@@ -5,6 +5,7 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
 import worker, { OperationsAgent, EmailNoticeAgent } from '../../cloudflare/property-crawl-edge/worker.js';
+import { resetMcpRateLimiterForTests } from '../../cloudflare/property-crawl-edge/mcp.js';
 
 function createMockCache() {
   const store = new Map();
@@ -514,10 +515,22 @@ test('EmailNoticeAgent archives raw MIME in R2, queues 504 failures in SQLite, a
 });
 
 test('/mcp Streamable HTTP endpoint handles GET discovery, initialize, tools/list, tools/call, and JSON-RPC error codes', async () => {
+  resetMcpRateLimiterForTests();
   const prevFetch = globalThis.fetch;
   const upstreamCalls = [];
   globalThis.fetch = async (url, init) => {
-    upstreamCalls.push({ url: String(url), method: init?.method, headers: Object.fromEntries(new Headers(init?.headers || {}).entries()) });
+    upstreamCalls.push({
+      url: String(url),
+      method: init?.method,
+      headers: Object.fromEntries(new Headers(init?.headers || {}).entries()),
+      body: init?.body ? JSON.parse(String(init.body)) : null,
+    });
+    if (String(url).endsWith('/api/check-ladder')) {
+      return new Response(JSON.stringify({ schema: 'perfectproperty.check-ladder.v1', summary: { activeTargetCount: 1 } }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
     return new Response(JSON.stringify({ schema: 'ok', hudSafmr: { fairMarketRent: 2430 } }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
@@ -534,7 +547,7 @@ test('/mcp Streamable HTTP endpoint handles GET discovery, initialize, tools/lis
     assert.equal(metaRes.status, 200);
     const meta = await metaRes.json();
     assert.equal(meta.name, 'perfectproperty-mcp');
-    assert.equal(meta.tools.length, 4);
+    assert.equal(meta.tools.length, 5);
 
     const initRes = await worker.fetch(
       new Request('https://edge.perfectproperty.bid/mcp', {
@@ -585,8 +598,158 @@ test('/mcp Streamable HTTP endpoint handles GET discovery, initialize, tools/lis
       createCtx(),
     );
     assert.equal((await unknownMethodRes.json()).error.code, -32601);
+
+    const ladderCallRes = await worker.fetch(
+      new Request('https://edge.perfectproperty.bid/mcp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 4,
+          method: 'tools/call',
+          params: {
+            name: 'compute_check_ladder',
+            arguments: {
+              targets: [{ id: 'CIV-1', address: '548 Sandford Ave', state: 'NJ', source: 'civilview', maxBid: 150000 }],
+              availableCapital: 40000,
+            },
+          },
+        }),
+      }),
+      env,
+      createCtx(),
+    );
+    const ladderCallJson = await ladderCallRes.json();
+    assert.equal(ladderCallJson.result.isError, false);
+    assert.equal(ladderCallJson.result.structuredContent.schema, 'perfectproperty.check-ladder.v1');
+    assert.equal(upstreamCalls[1].url, 'https://property-crawl-api.vercel.app/api/check-ladder');
+    assert.equal(upstreamCalls[1].method, 'POST');
+    assert.equal(upstreamCalls[1].body.availableCapital, 40000);
+  } finally {
+    resetMcpRateLimiterForTests();
+    globalThis.fetch = prevFetch;
+  }
+});
+
+test('OperationsAgent treats HTTP 200 sourceResults errors as retryable and queues exact run-source retry for next-slice', async () => {
+  const prevFetch = globalThis.fetch;
+  let mode = 'slice-timeout';
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    const body = init?.body ? JSON.parse(String(init.body)) : null;
+    calls.push({ url: String(url), body });
+    if (String(url).includes('hooks.example.test')) {
+      return new Response('alerted', { status: 200 });
+    }
+    if (mode === 'slice-timeout') {
+      return new Response(JSON.stringify({
+        status: 'completed',
+        result: { sourceResults: [{ sourceId: 'treasury', error: 'TreasuryForfeitureCollector timed out' }] },
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    if (mode === 'captcha-blocked') {
+      return new Response(JSON.stringify({
+        status: 'completed',
+        result: { sourceResults: [{ sourceId: 'landbank', error: 'HTTP 403 captcha challenge blocked' }] },
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    return new Response(JSON.stringify({ status: 'completed', result: { sourceResults: [{ sourceId: 'treasury', count: 4 }] } }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  };
+
+  try {
+    const doCtx = createDurableObjectCtx();
+    const env = {
+      API_ORIGIN: 'https://property-crawl-api.vercel.app',
+      SCRAPER_ADMIN_TOKEN: 'op-secret',
+      ALERT_WEBHOOK_URL: 'https://hooks.example.test/alert',
+    };
+    const opsAgent = new OperationsAgent(doCtx, env);
+
+    const dispatchRes = await opsAgent.fetch(new Request('https://internal/dispatch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'next-slice', payload: { action: 'next-slice' } }),
+    }));
+    assert.equal(dispatchRes.status, 202);
+    const dispatchJson = await dispatchRes.json();
+    assert.equal(dispatchJson.queuedForRetry, true);
+
+    const queuedRows = doCtx.db.prepare('SELECT action, payload_json, last_error FROM op_retry_queue').all();
+    assert.equal(queuedRows.length, 1);
+    assert.deepEqual(JSON.parse(queuedRows[0].payload_json), {
+      action: 'run-source',
+      source: 'treasury',
+      slice: true,
+    });
+    assert.match(queuedRows[0].last_error, /treasury: TreasuryForfeitureCollector timed out/);
+
+    const runsBeforeAlarm = doCtx.db.prepare('SELECT ok, error FROM op_runs ORDER BY id DESC LIMIT 1').all();
+    assert.equal(runsBeforeAlarm[0].ok, 0);
+
+    // Alarm retries exact run-source payload and clears queue on recovery
+    mode = 'ok';
+    doCtx.db.exec('UPDATE op_retry_queue SET next_run_at = 1');
+    await opsAgent.alarm();
+    assert.deepEqual(calls[1].body, { action: 'run-source', source: 'treasury', slice: true });
+    assert.equal(doCtx.db.prepare('SELECT COUNT(*) AS c FROM op_retry_queue').get().c, 0);
+
+    // Non-retryable captcha/403 sourceResults error fails immediately without queuing retry
+    mode = 'captcha-blocked';
+    const blockedRes = await opsAgent.fetch(new Request('https://internal/dispatch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'next-slice', payload: { action: 'next-slice' } }),
+    }));
+    assert.equal(blockedRes.status, 502);
+    const blockedJson = await blockedRes.json();
+    assert.equal(blockedJson.queuedForRetry, false);
+    assert.equal(doCtx.db.prepare('SELECT COUNT(*) AS c FROM op_retry_queue').get().c, 0);
   } finally {
     globalThis.fetch = prevFetch;
+  }
+});
+
+test('/mcp enforces per-IP sliding-window rate limiting with HTTP 429 and JSON-RPC -32029', async () => {
+  resetMcpRateLimiterForTests();
+  try {
+    const env = {
+      ORIGIN_URL: 'https://property-crawl-api.vercel.app',
+      MCP_RATE_LIMIT_PER_MIN: '2',
+    };
+
+    const makePost = (ip, id) => worker.fetch(
+      new Request('https://edge.perfectproperty.bid/mcp', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'cf-connecting-ip': ip,
+        },
+        body: JSON.stringify({ jsonrpc: '2.0', id, method: 'ping' }),
+      }),
+      env,
+      createCtx(),
+    );
+
+    const r1 = await makePost('198.51.100.10', 1);
+    const r2 = await makePost('198.51.100.10', 2);
+    const r3 = await makePost('198.51.100.10', 3);
+    assert.equal(r1.status, 200);
+    assert.equal(r2.status, 200);
+    assert.equal(r3.status, 429);
+    assert.equal(r3.headers.get('Retry-After'), '60');
+    const errJson = await r3.json();
+    assert.equal(errJson.jsonrpc, '2.0');
+    assert.equal(errJson.id, null);
+    assert.equal(errJson.error.code, -32029);
+
+    // Separate client IP has its own bucket
+    const otherIpRes = await makePost('198.51.100.11', 4);
+    assert.equal(otherIpRes.status, 200);
+  } finally {
+    resetMcpRateLimiterForTests();
   }
 });
 

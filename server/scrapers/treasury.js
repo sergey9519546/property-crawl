@@ -44,16 +44,18 @@ function parseOffset(value) {
 
 class TreasuryForfeitureScraper extends BaseScraper {
   constructor(options = {}) {
+    const isServerless = Boolean(process.env.VERCEL === '1' || process.env.NOW_REGION);
     super({
       ...options,
       name: 'TreasuryForfeitureCollector',
       sourceKey: 'treasury',
-      timeoutMs: options.timeoutMs ?? ((process.env.VERCEL === '1' || process.env.NOW_REGION) ? 15_000 : 15_000),
+      timeoutMs: options.timeoutMs ?? (isServerless ? 8_000 : 15_000),
     });
+    this.isServerless = isServerless;
     this.baseUrl = 'https://www.treasury.gov/auctions/treasury/rp';
     this.detailConcurrency = Math.min(4, Math.max(1, Math.floor(Number(options.detailConcurrency) || 2)));
-    this.maxRetries = Math.min(3, Math.max(1, Number(options.maxRetries || ((process.env.VERCEL === '1' || process.env.NOW_REGION) ? 2 : 2))));
-    this.maxItems = Math.max(1, Number(options.maxItems || process.env.TREASURY_MAX_ITEMS || ((process.env.VERCEL === '1' || process.env.NOW_REGION) ? 12 : 100)));
+    this.maxRetries = Math.min(3, Math.max(1, Number(options.maxRetries ?? (isServerless ? 1 : 2))));
+    this.maxItems = Math.max(1, Number(options.maxItems || process.env.TREASURY_MAX_ITEMS || (isServerless ? 6 : 100)));
     this.slugOffset = parseOffset(options.slugOffset ?? options.checkpoint ?? options.cursor ?? 0);
     this.lastRunReport = null;
     this.useScrapling = options.useScrapling ?? isScraplingEnabled('treasury');
@@ -74,10 +76,13 @@ class TreasuryForfeitureScraper extends BaseScraper {
       if (options.maxItems) this.maxItems = Math.max(1, Number(options.maxItems));
     }
     const deadlineAt = Number(options?.deadlineAt) || 0;
-    return this.executeWithRetry(async () => {
+    const runPass = async () => {
       if (this._spiderDetailCache) this._spiderDetailCache.clear();
 
-      const listHtml = await this.fetchText(`${this.baseUrl}/realprop.shtml`);
+      const listTimeoutMs = deadlineAt > 0
+        ? Math.min(this.timeoutMs, Math.max(2_500, deadlineAt - Date.now() - 2_000))
+        : this.timeoutMs;
+      const listHtml = await this.fetchText(`${this.baseUrl}/realprop.shtml`, listTimeoutMs);
 
       // Extract property slugs from .shtml links, excluding chrome/nav.
       const slugRegex = /href="([^"]+\.shtml)"/g;
@@ -116,11 +121,14 @@ class TreasuryForfeitureScraper extends BaseScraper {
         targetSlugs,
         this.detailConcurrency,
         async (slug) => {
-          if (deadlineAt && Date.now() >= deadlineAt - 1500) { deadlineStopped = true; return null; }
+          if (deadlineAt && Date.now() >= deadlineAt - 4500) { deadlineStopped = true; return null; }
           await this.crawlJitter();
-          if (deadlineAt && Date.now() >= deadlineAt - 1500) { deadlineStopped = true; return null; }
+          if (deadlineAt && Date.now() >= deadlineAt - 4500) { deadlineStopped = true; return null; }
           attemptedCount += 1;
-          return this.fetchDetail(slug);
+          const detailTimeoutMs = deadlineAt > 0
+            ? Math.min(this.timeoutMs, Math.max(2_500, deadlineAt - Date.now() - 2_000))
+            : this.timeoutMs;
+          return this.fetchDetail(slug, detailTimeoutMs);
         }
       );
       const listings = [];
@@ -165,6 +173,15 @@ class TreasuryForfeitureScraper extends BaseScraper {
         report: { value: this.lastRunReport, enumerable: false, writable: true, configurable: true },
       });
       return standardized;
+    };
+    if (deadlineAt > 0 && (this.isServerless || Date.now() >= deadlineAt - 12_000)) {
+      return runPass();
+    }
+    return this.executeWithRetry(async () => {
+      if (deadlineAt > 0 && Date.now() >= deadlineAt - 8_000) {
+        return [];
+      }
+      return runPass();
     });
   }
 
@@ -175,9 +192,9 @@ class TreasuryForfeitureScraper extends BaseScraper {
     });
   }
 
-  async fetchDetail(slug) {
+  async fetchDetail(slug, timeoutMs = this.timeoutMs) {
     const detailUrl = new URL(slug, `${this.baseUrl}/`).toString();
-    const detailHtml = await this.fetchText(detailUrl);
+    const detailHtml = await this.fetchText(detailUrl, timeoutMs);
 
     // Title is the full address: "4705 Battle Creek Road SE, Salem, Oregon 97302"
     const titleMatch = detailHtml.match(/<title>([^<]+)<\/title>/);

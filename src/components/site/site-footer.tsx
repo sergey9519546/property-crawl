@@ -27,6 +27,8 @@ function buildColumns(m: Messages): { title: string; links: { label: string; hre
         { label: l.theCatch, href: "/#the-catch" },
         { label: l.hunts, href: "/hunts" },
         { label: l.portfolio, href: "/portfolio" },
+        { label: l.underwrite, href: "/underwrite" },
+        { label: l.bidSheet, href: "/bid-sheet" },
         { label: l.activity, href: "/activity" },
         { label: l.freeVsMember, href: "/#pricing" },
       ],

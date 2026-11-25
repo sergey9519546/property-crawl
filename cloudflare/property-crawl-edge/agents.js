@@ -129,6 +129,27 @@ async function callUpstreamScraperRun(env, payload, tokenHeader = 'Authorization
       signal: typeof AbortSignal?.timeout === 'function' ? AbortSignal.timeout(55_000) : undefined,
     });
     const text = await res.text().catch(() => '');
+    if (res.ok) {
+      let parsed = null;
+      try {
+        parsed = text ? JSON.parse(text) : null;
+      } catch {}
+      const sourceResults = Array.isArray(parsed?.result?.sourceResults) ? parsed.result.sourceResults : [];
+      const failedSources = sourceResults.filter((sr) => sr && typeof sr.error === 'string' && sr.error.trim());
+      if ((parsed && typeof parsed.error === 'string' && parsed.error.trim()) || failedSources.length > 0) {
+        const firstFail = failedSources[0] || null;
+        const errMsg = firstFail ? `${firstFail.sourceId || 'source'}: ${firstFail.error}` : String(parsed.error);
+        const nonRetryable = /captcha|challenge|cloudflare|turnstile|403|blocked/i.test(errMsg);
+        return {
+          ok: false,
+          status: res.status,
+          retryable: !nonRetryable,
+          failedSourceId: firstFail?.sourceId || null,
+          error: errMsg.slice(0, 300),
+          body: text.slice(0, 500),
+        };
+      }
+    }
     return {
       ok: res.ok,
       status: res.status,
@@ -256,12 +277,15 @@ export class OperationsAgent {
       }
 
       if (result.retryable) {
+        const retryPayload = (action === 'next-slice' && result.failedSourceId)
+          ? { action: 'run-source', source: result.failedSourceId, slice: true }
+          : payload;
         const nextRunAt = Date.now() + retryDelayMs(1);
         this.sql.exec(
           `INSERT INTO op_retry_queue (action, payload_json, attempts, max_attempts, next_run_at, last_error, created_at)
            VALUES (?, ?, 1, 3, ?, ?, ?)`,
           action,
-          JSON.stringify(payload),
+          JSON.stringify(retryPayload),
           nextRunAt,
           String(result.error || result.status).slice(0, 300),
           new Date().toISOString(),

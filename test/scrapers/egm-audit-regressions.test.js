@@ -662,8 +662,9 @@ test('treasury and usda setCheckpoint unwrap object cursors and treasury sets bo
   process.env.VERCEL = '1';
   try {
     const vercelTreasury = new TreasuryForfeitureScraper({ useScrapling: false });
-    assert.equal(vercelTreasury.timeoutMs, 15_000);
-    assert.equal(vercelTreasury.maxRetries, 2);
+    assert.equal(vercelTreasury.timeoutMs, 8_000);
+    assert.equal(vercelTreasury.maxRetries, 1);
+    assert.equal(vercelTreasury.maxItems, 6);
   } finally {
     if (prevVercel === undefined) delete process.env.VERCEL;
     else process.env.VERCEL = prevVercel;

@@ -119,8 +119,51 @@ function getHudSafmrBenchmark({ zip, bedrooms = 2, benchmarksData = null } = {})
   };
 }
 
+function computeSafmrCeilingFromRent(rentMonthly) {
+  const safmrRent = Number(rentMonthly);
+  if (!Number.isFinite(safmrRent) || safmrRent <= 0) return null;
+  const expenseRatio = 0.35;
+  const targetDscr = 1.20;
+  const monthlyRate = (7.25 / 100) / 12;
+  const totalMonths = 360;
+  const noiMonthly = safmrRent * (1 - expenseRatio);
+  const maxMonthlyDebt = noiMonthly / targetDscr;
+  const factor = Math.pow(1 + monthlyRate, totalMonths);
+  if (!Number.isFinite(factor) || factor <= 1) return null;
+  const maxLoan = maxMonthlyDebt * ((factor - 1) / (monthlyRate * factor));
+  if (!Number.isFinite(maxLoan) || maxLoan < 0) return null;
+  return Math.max(0, Math.floor(maxLoan / 0.75));
+}
+
+function resolveListingSafmrRentFloor(listing = {}) {
+  const directRent = Number(listing?.hudSafmr?.fairMarketRent);
+  if (Number.isFinite(directRent) && directRent > 0) {
+    return {
+      rent: directRent,
+      rentFloor: computeSafmrCeilingFromRent(directRent),
+      zip: listing.hudSafmr.zip || listing.zip || null,
+      bedrooms: listing.hudSafmr.bedrooms ?? (Number.isFinite(Number(listing.beds)) ? Number(listing.beds) : 2),
+      source: listing.hudSafmr.source || 'HUD FY2025 Small Area Fair Market Rents (SAFMR)',
+    };
+  }
+  const zip = listing?.zip || listing?.provenance?.derivedFields?.hudSafmr?.zip || null;
+  if (!zip) return null;
+  const beds = Number.isFinite(Number(listing?.beds)) && Number(listing.beds) >= 0 ? Number(listing.beds) : 2;
+  const bench = getHudSafmrBenchmark({ zip, bedrooms: beds });
+  if (!bench || !Number.isFinite(Number(bench.fairMarketRent)) || bench.fairMarketRent <= 0) return null;
+  return {
+    rent: Number(bench.fairMarketRent),
+    rentFloor: computeSafmrCeilingFromRent(bench.fairMarketRent),
+    zip: bench.zip,
+    bedrooms: bench.bedrooms,
+    source: bench.source,
+  };
+}
+
 module.exports = {
   getHudSafmrBenchmark,
+  computeSafmrCeilingFromRent,
+  resolveListingSafmrRentFloor,
   loadBenchmarks,
   resolveZipRecord,
   hydrateBenchmarks,

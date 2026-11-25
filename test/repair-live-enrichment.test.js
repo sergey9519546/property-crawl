@@ -129,6 +129,40 @@ function makeFakePool(initialRows) {
         }
         return { rowCount: target ? 1 : 0, rows: [] };
       }
+      if (normalizedSql.startsWith('SELECT') && normalizedSql.includes('triage_priority IS NULL')) {
+        const limit = Number(params[0]) || 300;
+        return {
+          rows: rows
+            .filter((r) => r.triagePriority == null || ['hud', 'gsa', 'usda', 'fannie', 'freddie', 'fdic'].includes(r.source))
+            .slice(0, limit)
+            .map((r) => ({ ...r })),
+        };
+      }
+      if (normalizedSql.startsWith('WITH pairs AS') || normalizedSql.includes('FROM source_observations')) {
+        return { rows: [] };
+      }
+      if (normalizedSql.startsWith('UPDATE listings SET triage_priority = $1')) {
+        const [score, id] = params;
+        const target = rows.find((r) => r.id === id);
+        if (target) {
+          target.triagePriority = score;
+          updates.push({ kind: 'triage_priority', id, score });
+        }
+        return { rowCount: target ? 1 : 0, rows: [] };
+      }
+      if (normalizedSql.startsWith('UPDATE listings AS l SET triage_priority = u.score')) {
+        const [ids = [], scores = []] = params;
+        let count = 0;
+        for (let i = 0; i < ids.length; i += 1) {
+          const target = rows.find((r) => r.id === ids[i]);
+          if (target) {
+            target.triagePriority = scores[i];
+            updates.push({ kind: 'triage_priority', id: ids[i], score: scores[i] });
+            count += 1;
+          }
+        }
+        return { rowCount: count, rows: [] };
+      }
       throw new Error(`Unexpected SQL in fake pool: ${normalizedSql}`);
     },
   };
@@ -926,10 +960,11 @@ test('repairLiveEnrichment invokes backfillAssessorRolls before Pass 4 with defa
   });
 
   assert.deepEqual(callOrder, ['assessor_backfill', 'pass4_catch']);
-  assert.equal(capturedOpts.limit, 35);
+  assert.equal(capturedOpts.limit, 60);
   assert.equal(capturedOpts.maxDurationMs, 16_000, 'must reserve 4s for Pass 4');
   assert.equal(report.assessorBackfill.harvested, 1);
   assert.equal(report.catchBackfilled, 1);
+  assert.equal(report.triageBackfilled, 1);
 
   // When only 3.5s remains (< 4s reserve), assessor backfill must be skipped so Pass 4 still runs.
   let tick = 0;
