@@ -23,7 +23,7 @@ Three production runtimes plus one legacy reference:
 |---|---|---|---|---|
 | Canonical Web UI | `src/` (`src/proxy.ts` + `middleware.ts`) | Next.js 16 App Router UI, SSR/RSC pages, per-request nonce CSP, trilingual i18n (`en`, `hy`, `ru`) | `npm run dev` (port 3001) | Vercel (`https://perfectproperty.bid`) |
 | Listing API & Engine | `server/` (`server/server.js`, `server/vercel-handler.js`) | Node `http` API, scrapers, enrichment, intelligence engines, PostGIS persistence | `npm run dev:api` (port 3000) | Vercel Serverless (`https://property-crawl-api.vercel.app`) |
-| Edge Proxy, Vault & Cron | `cloudflare/property-crawl-edge/worker.js` | Edge caching, public R2 `/vault/public/*` delivery, scheduled crons (`next-slice`, `repair-enrichment`, `prune`), Cloudflare Email Routing (`email()` -> `action=email-ingest`) | `node --test test/cloudflare/worker.test.mjs` | Cloudflare Worker (`https://edge.perfectproperty.bid`) |
+| Edge Proxy, Vault, Agents & MCP | `cloudflare/property-crawl-edge/worker.js` | Edge caching, public R2 `/vault/public/*`, SQLite DO agents (`OperationsAgent`, `EmailNoticeAgent`), MCP `/mcp` server, crons & Email Routing | `node --test test/cloudflare/worker.test.mjs` | Cloudflare Worker (`https://edge.perfectproperty.bid`) |
 | v0 Legacy PWA | `index.html`, `app.js` | Legacy static reference only (not launched by `npm run dev`) | Static file | Retired reference |
 
 - **Next.js <-> Server Coupling**: `next.config.mjs` maps `@server/*` to `./server/*`; UI routes proxy API calls through `PROPERTY_API_URL`, while 18 `src/` files directly import `@server/*` modules (including `@server/db/client`, `@server/export/decision-packet`, `@server/intelligence/title-risk-engine`, and `@server/billing/stripe-checkout`).

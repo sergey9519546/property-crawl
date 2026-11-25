@@ -1,6 +1,7 @@
 name = "property-crawl-edge"
 main = "worker.js"
 compatibility_date = "2026-01-01"
+compatibility_flags = ["nodejs_compat"]
 
 [vars]
 ORIGIN_URL = "https://property-crawl-api.vercel.app"
@@ -9,6 +10,18 @@ API_ORIGIN = "https://property-crawl-api.vercel.app"
 [[r2_buckets]]
 binding = "VAULT"
 bucket_name = "property-crawl-vault"
+
+[[durable_objects.bindings]]
+name = "OPS_AGENT"
+class_name = "OperationsAgent"
+
+[[durable_objects.bindings]]
+name = "EMAIL_AGENT"
+class_name = "EmailNoticeAgent"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["OperationsAgent", "EmailNoticeAgent"]
 
 [triggers]
 crons = ["*/5 * * * *", "29 * * * *", "11 */2 * * *", "17 */6 * * *", "41 */6 * * *"]

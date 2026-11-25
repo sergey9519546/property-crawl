@@ -2,8 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 
-import worker from '../../cloudflare/property-crawl-edge/worker.js';
+import worker, { OperationsAgent, EmailNoticeAgent } from '../../cloudflare/property-crawl-edge/worker.js';
 
 function createMockCache() {
   const store = new Map();
@@ -296,4 +297,309 @@ test('Cloudflare edge worker email() rejects when token missing and forwards raw
   } finally {
     globalThis.fetch = prevFetch;
   }
+});
+
+function createDurableObjectCtx() {
+  const db = new DatabaseSync(':memory:');
+  const alarms = [];
+  return {
+    db,
+    alarms,
+    storage: {
+      sql: {
+        exec(query, ...params) {
+          if (params.length === 0 && /;\s*\S/.test(query)) {
+            db.exec(query);
+            return { toArray: () => [] };
+          }
+          const stmt = db.prepare(query);
+          if (/^\s*SELECT\b/i.test(query)) {
+            const rows = stmt.all(...params);
+            return { toArray: () => rows };
+          }
+          stmt.run(...params);
+          return { toArray: () => [] };
+        },
+      },
+      async setAlarm(ts) {
+        alarms.push(ts);
+      },
+    },
+  };
+}
+
+function createNamespace(instance) {
+  return {
+    idFromName(name) {
+      return `id:${name}`;
+    },
+    get() {
+      return {
+        fetch(input, init) {
+          const req = input instanceof Request ? input : new Request(input, init);
+          return instance.fetch(req);
+        },
+      };
+    },
+  };
+}
+
+test('OperationsAgent dispatches crons, queues 502 failures for alarm backoff recovery, alerts after max attempts, and gates /agents/operations/status', async () => {
+  const prevFetch = globalThis.fetch;
+  let upstreamMode = 'ok';
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    const body = init?.body ? JSON.parse(String(init.body)) : null;
+    calls.push({ url: String(url), body });
+    if (String(url).includes('hooks.example.test')) {
+      return new Response('alerted', { status: 200 });
+    }
+    if (upstreamMode === 'fail-502') {
+      return new Response('bad gateway', { status: 502 });
+    }
+    return new Response(JSON.stringify({ status: 'completed' }), { status: 200 });
+  };
+
+  try {
+    const doCtx = createDurableObjectCtx();
+    const env = {
+      API_ORIGIN: 'https://property-crawl-api.vercel.app',
+      ORIGIN_URL: 'https://property-crawl-api.vercel.app',
+      SCRAPER_ADMIN_TOKEN: 'op-secret',
+      EDGE_SHARED_SECRET: 'edge-sec',
+      ALERT_WEBHOOK_URL: 'https://hooks.example.test/alert',
+    };
+    const opsAgent = new OperationsAgent(doCtx, env);
+    env.OPS_AGENT = createNamespace(opsAgent);
+
+    // Unauthorized status probe fails closed
+    const unauthStatus = await worker.fetch(
+      new Request('https://edge.perfectproperty.bid/agents/operations/status'),
+      env,
+      createCtx(),
+    );
+    assert.equal(unauthStatus.status, 401);
+
+    // Authorized 200 cron run logs to op_runs with 0 pending retries
+    const okCtx = createCtx();
+    await worker.scheduled({ cron: '*/5 * * * *' }, env, okCtx);
+    await okCtx.flush();
+
+    const status1 = await (await worker.fetch(
+      new Request('https://edge.perfectproperty.bid/agents/operations/status', {
+        headers: { Authorization: 'Bearer op-secret' },
+      }),
+      env,
+      createCtx(),
+    )).json();
+    assert.equal(status1.schema, 'property-crawl.operations-agent/v1');
+    assert.equal(status1.pendingCount, 0);
+    assert.equal(status1.recentRuns[0].action, 'next-slice');
+    assert.equal(status1.recentRuns[0].ok, 1);
+
+    // 502 failure queues into op_retry_queue and schedules an alarm
+    upstreamMode = 'fail-502';
+    const failCtx = createCtx();
+    await worker.scheduled({ cron: '29 * * * *' }, env, failCtx);
+    await failCtx.flush();
+    assert.equal(doCtx.alarms.length, 1);
+
+    // Force due time to test alarm recovery
+    doCtx.db.exec('UPDATE op_retry_queue SET next_run_at = 1');
+    upstreamMode = 'ok';
+    await opsAgent.alarm();
+
+    const status2 = await (await worker.fetch(
+      new Request('https://edge.perfectproperty.bid/agents/operations/status', {
+        headers: { Authorization: 'Bearer op-secret' },
+      }),
+      env,
+      createCtx(),
+    )).json();
+    assert.equal(status2.pendingCount, 0);
+    assert.equal(status2.recentRuns[0].action, 'repair-enrichment');
+    assert.equal(status2.recentRuns[0].attempt, 2);
+    assert.equal(status2.recentRuns[0].ok, 1);
+
+    // Repeated 502s exhaust max_attempts=3 and fire operator alert
+    upstreamMode = 'fail-502';
+    const exhaustCtx = createCtx();
+    await worker.scheduled({ cron: '17 */6 * * *' }, env, exhaustCtx);
+    await exhaustCtx.flush();
+    doCtx.db.exec('UPDATE op_retry_queue SET next_run_at = 1');
+    await opsAgent.alarm(); // attempt 2
+    doCtx.db.exec('UPDATE op_retry_queue SET next_run_at = 1');
+    await opsAgent.alarm(); // attempt 3 -> exhausted -> webhook alert
+    assert.ok(calls.some((c) => c.url.includes('hooks.example.test') && c.body?.exhausted === true));
+  } finally {
+    globalThis.fetch = prevFetch;
+  }
+});
+
+test('EmailNoticeAgent archives raw MIME in R2, queues 504 failures in SQLite, and recovers on alarm()', async () => {
+  const prevFetch = globalThis.fetch;
+  let shouldFail = true;
+  const r2Objects = new Map();
+  globalThis.fetch = async () => {
+    if (shouldFail) return new Response('gateway timeout', { status: 504 });
+    return new Response(JSON.stringify({ status: 'completed', action: 'email-ingest' }), { status: 200 });
+  };
+
+  try {
+    const doCtx = createDurableObjectCtx();
+    const env = {
+      API_ORIGIN: 'https://property-crawl-api.vercel.app',
+      SCRAPER_ADMIN_TOKEN: 'op-secret',
+      EDGE_SHARED_SECRET: 'edge-sec',
+      VAULT: {
+        async put(key, value) {
+          r2Objects.set(key, String(value));
+        },
+        async get(key) {
+          const val = r2Objects.get(key);
+          if (!val) return null;
+          return { text: async () => val };
+        },
+      },
+    };
+    const emailAgent = new EmailNoticeAgent(doCtx, env);
+    env.EMAIL_AGENT = createNamespace(emailAgent);
+
+    const rawMime = 'From: alerts@njpublicnotices.com\r\nSubject: Sheriff Sale Essex\r\n\r\n548 Sandford Ave';
+    const ctx = createCtx();
+    await worker.email(
+      {
+        from: 'alerts@njpublicnotices.com',
+        to: 'notices@perfectproperty.bid',
+        headers: new Headers({ subject: 'Sheriff Sale Essex' }),
+        raw: rawMime,
+      },
+      env,
+      ctx,
+    );
+    await ctx.flush();
+
+    assert.equal(r2Objects.size, 1);
+    const [storedKey] = r2Objects.keys();
+    assert.ok(storedKey.startsWith('private/email-inbox/'));
+    assert.equal(doCtx.alarms.length, 1);
+
+    const pendingStatus = await (await worker.fetch(
+      new Request('https://edge.perfectproperty.bid/agents/email/status', {
+        headers: { 'x-scraper-admin-token': 'op-secret' },
+      }),
+      env,
+      createCtx(),
+    )).json();
+    assert.equal(pendingStatus.pendingCount, 1);
+    assert.equal(pendingStatus.pending[0].attempts, 1);
+
+    // Recover on alarm retry
+    shouldFail = false;
+    doCtx.db.exec('UPDATE email_queue SET next_run_at = 1');
+    await emailAgent.alarm();
+
+    const recoveredStatus = await (await worker.fetch(
+      new Request('https://edge.perfectproperty.bid/agents/email/status', {
+        headers: { Authorization: 'Bearer op-secret' },
+      }),
+      env,
+      createCtx(),
+    )).json();
+    assert.equal(recoveredStatus.pendingCount, 0);
+    assert.equal(recoveredStatus.dlqCount, 0);
+  } finally {
+    globalThis.fetch = prevFetch;
+  }
+});
+
+test('/mcp Streamable HTTP endpoint handles GET discovery, initialize, tools/list, tools/call, and JSON-RPC error codes', async () => {
+  const prevFetch = globalThis.fetch;
+  const upstreamCalls = [];
+  globalThis.fetch = async (url, init) => {
+    upstreamCalls.push({ url: String(url), method: init?.method, headers: Object.fromEntries(new Headers(init?.headers || {}).entries()) });
+    return new Response(JSON.stringify({ schema: 'ok', hudSafmr: { fairMarketRent: 2430 } }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  };
+
+  try {
+    const env = {
+      ORIGIN_URL: 'https://property-crawl-api.vercel.app',
+      EDGE_SHARED_SECRET: 'edge-sec',
+    };
+
+    const metaRes = await worker.fetch(new Request('https://edge.perfectproperty.bid/mcp'), env, createCtx());
+    assert.equal(metaRes.status, 200);
+    const meta = await metaRes.json();
+    assert.equal(meta.name, 'perfectproperty-mcp');
+    assert.equal(meta.tools.length, 4);
+
+    const initRes = await worker.fetch(
+      new Request('https://edge.perfectproperty.bid/mcp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} }),
+      }),
+      env,
+      createCtx(),
+    );
+    const initJson = await initRes.json();
+    assert.equal(initJson.result.protocolVersion, '2025-03-26');
+
+    const callRes = await worker.fetch(
+      new Request('https://edge.perfectproperty.bid/mcp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 2,
+          method: 'tools/call',
+          params: { name: 'underwrite_address', arguments: { address: '548-550 Sandford Ave', state: 'NJ', zip: '07106' } },
+        }),
+      }),
+      env,
+      createCtx(),
+    );
+    const callJson = await callRes.json();
+    assert.equal(callJson.result.isError, false);
+    assert.equal(callJson.result.structuredContent.hudSafmr.fairMarketRent, 2430);
+    assert.equal(upstreamCalls[0].headers['x-edge-secret'], 'edge-sec');
+
+    const badJsonRes = await worker.fetch(
+      new Request('https://edge.perfectproperty.bid/mcp', { method: 'POST', body: '{bad-json' }),
+      env,
+      createCtx(),
+    );
+    assert.equal(badJsonRes.status, 400);
+    assert.equal((await badJsonRes.json()).error.code, -32700);
+
+    const unknownMethodRes = await worker.fetch(
+      new Request('https://edge.perfectproperty.bid/mcp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 3, method: 'nonexistent/method' }),
+      }),
+      env,
+      createCtx(),
+    );
+    assert.equal((await unknownMethodRes.json()).error.code, -32601);
+  } finally {
+    globalThis.fetch = prevFetch;
+  }
+});
+
+test('wrangler.toml binds OPS_AGENT, EMAIL_AGENT, SQLite DO migration v1, and stays within 5 Workers Free crons', () => {
+  const wranglerToml = fs.readFileSync(path.resolve('cloudflare/property-crawl-edge/wrangler.toml'), 'utf8');
+  assert.match(wranglerToml, /compatibility_flags = \["nodejs_compat"\]/);
+  assert.match(wranglerToml, /name = "OPS_AGENT"/);
+  assert.match(wranglerToml, /class_name = "OperationsAgent"/);
+  assert.match(wranglerToml, /name = "EMAIL_AGENT"/);
+  assert.match(wranglerToml, /class_name = "EmailNoticeAgent"/);
+  assert.match(wranglerToml, /new_sqlite_classes = \["OperationsAgent", "EmailNoticeAgent"\]/);
+  const cronsLine = wranglerToml.split(/\r?\n/).find((line) => line.startsWith('crons ='));
+  assert.ok(cronsLine);
+  const parsedCrons = JSON.parse(cronsLine.replace(/^crons\s*=\s*/, ''));
+  assert.ok(parsedCrons.length <= 5);
 });

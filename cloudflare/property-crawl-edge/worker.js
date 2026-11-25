@@ -1,3 +1,13 @@
+import {
+  OperationsAgent,
+  EmailNoticeAgent,
+  notifyOperatorFailure,
+  timingSafeTokenMatch,
+} from './agents.js';
+import { handleMcpRequest } from './mcp.js';
+
+export { OperationsAgent, EmailNoticeAgent };
+
 const CACHEABLE_PATHS = new Set([
   '/api/coverage',
   '/api/sources',
@@ -107,6 +117,21 @@ function etagMatchesHeader(ifNoneMatch, obj) {
   return candidates.includes(httpEtag) || (rawEtag && candidates.includes(rawEtag));
 }
 
+function extractPresentedAdminToken(request) {
+  const auth = String(request.headers.get('authorization') || '').trim();
+  if (/^Bearer\s+/i.test(auth)) return auth.replace(/^Bearer\s+/i, '').trim();
+  return String(request.headers.get('x-scraper-admin-token') || '').trim();
+}
+
+async function authorizeEdgeOperator(request, env) {
+  const expected = String(env?.SCRAPER_ADMIN_TOKEN || env?.PROPERTY_OPERATOR_SECRET || '').trim();
+  if (!expected) return { authorized: false, status: 503, error: 'Operator token not configured' };
+  const presented = extractPresentedAdminToken(request);
+  if (!presented) return { authorized: false, status: 401, error: 'Operator authentication required' };
+  const matched = await timingSafeTokenMatch(presented, expected);
+  return matched ? { authorized: true } : { authorized: false, status: 401, error: 'Invalid operator credential' };
+}
+
 async function fetchUpstream(upstreamUrl, init, pathname, method) {
   const timeoutMs = getUpstreamTimeoutMs(pathname, method);
   try {
@@ -153,7 +178,31 @@ export default {
           service: 'property-crawl-edge',
           vaultBound: Boolean(env.VAULT),
           originConfigured: Boolean(env.ORIGIN_URL),
+          opsAgentBound: Boolean(env.OPS_AGENT),
+          emailAgentBound: Boolean(env.EMAIL_AGENT),
+          mcpEnabled: true,
         });
+      }
+
+      if (url.pathname === '/mcp') {
+        return handleMcpRequest(request, env);
+      }
+
+      if (url.pathname === '/agents/operations/status' || url.pathname === '/agents/email/status') {
+        if (request.method !== 'GET') {
+          return jsonResponse({ error: 'Method not allowed' }, 405, { Allow: 'GET' });
+        }
+        const auth = await authorizeEdgeOperator(request, env);
+        if (!auth.authorized) {
+          return jsonResponse({ error: auth.error }, auth.status);
+        }
+        const isOps = url.pathname === '/agents/operations/status';
+        const binding = isOps ? env.OPS_AGENT : env.EMAIL_AGENT;
+        if (!binding) {
+          return jsonResponse({ error: `${isOps ? 'OPS_AGENT' : 'EMAIL_AGENT'} Durable Object unavailable` }, 503);
+        }
+        const stub = binding.get(binding.idFromName(isOps ? 'global' : 'inbox'));
+        return stub.fetch('https://internal/status');
       }
 
       if (url.pathname.startsWith('/vault/public/')) {
@@ -364,38 +413,31 @@ export default {
                   ? ['second-look', 'dispatch-digests']
                   : (cron === '53 */6 * * *' ? ['dispatch-digests'] : ['next-slice']))));
     const edgeSecret = String(env?.EDGE_SHARED_SECRET || '').trim();
-    const notifyFailure = async (action, details) => {
-      try {
-        if (env?.ALERT_WEBHOOK_URL) {
-          await fetch(env.ALERT_WEBHOOK_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ event: 'edge_cron_failure', action, ...details }),
-            signal: AbortSignal.timeout(8_000),
-          }).catch(() => {});
-        } else if (env?.RESEND_API_KEY && env?.OPERATOR_EMAIL) {
-          await fetch('https://api.resend.com/emails', {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${env.RESEND_API_KEY}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              from: env.RESEND_FROM || 'alerts@perfectproperty.bid',
-              to: [env.OPERATOR_EMAIL],
-              subject: `[PropertyCrawl Cron Alert] ${action} failed`,
-              text: JSON.stringify(details, null, 2),
-            }),
-            signal: AbortSignal.timeout(8_000),
-          }).catch(() => {});
-        }
-      } catch {}
-    };
     const task = (async () => {
+      const opsStub = env?.OPS_AGENT && typeof env.OPS_AGENT.get === 'function'
+        ? env.OPS_AGENT.get(env.OPS_AGENT.idFromName('global'))
+        : null;
+
       for (const action of actions) {
         const payload = action === 'ai-prewarm'
           ? { action: 'ai-prewarm', limit: 3, freeOnly: true, maxDurationMs: 38000 }
           : { action };
+        if (opsStub) {
+          try {
+            const doRes = await opsStub.fetch('https://internal/dispatch', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action, payload }),
+            });
+            const doText = await doRes.text().catch(() => '');
+            console.log(JSON.stringify({ event: 'edge_cron_agent_dispatch', action, status: doRes.status, body: doText.slice(0, 300) }));
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.error(JSON.stringify({ event: 'edge_cron_agent_error', action, error: msg }));
+            await notifyOperatorFailure(env, action, { error: msg });
+          }
+          continue;
+        }
         try {
           const res = await fetch(`${apiOrigin}/api/scrapers/run`, {
             method: 'POST',
@@ -411,12 +453,12 @@ export default {
           const text = await res.text().catch(() => '');
           console.log(JSON.stringify({ event: 'edge_cron_complete', action, status: res.status, ok: res.ok, body: text.slice(0, 300) }));
           if (!res.ok) {
-            await notifyFailure(action, { status: res.status, body: text.slice(0, 500) });
+            await notifyOperatorFailure(env, action, { status: res.status, body: text.slice(0, 500) });
           }
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           console.error(JSON.stringify({ event: 'edge_cron_error', action, error: msg }));
-          await notifyFailure(action, { error: msg });
+          await notifyOperatorFailure(env, action, { error: msg });
         }
       }
     })();
@@ -446,31 +488,70 @@ export default {
       raw = message.text;
     }
     const subject = typeof message?.headers?.get === 'function' ? (message.headers.get('subject') || '') : '';
-    const task = fetch(`${apiOrigin}/api/scrapers/run`, {
-      method: 'POST',
-      headers: {
-        'X-Scraper-Admin-Token': token,
-        ...(edgeSecret ? { 'x-edge-secret': edgeSecret } : {}),
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-      },
-      body: JSON.stringify({
-        action: 'email-ingest',
-        raw,
-        from: message?.from || '',
-        to: message?.to || '',
-        subject,
-      }),
-      signal: typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(55_000) : undefined,
-    })
-      .then(async (res) => {
+    const emailHeaders = typeof message?.headers?.entries === 'function'
+      ? Object.fromEntries(message.headers.entries())
+      : {};
+    const emailId = `eml_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+
+    const task = (async () => {
+      let r2Key = null;
+      if (env?.VAULT && typeof env.VAULT.put === 'function' && raw) {
+        r2Key = `private/email-inbox/${emailId}.eml`;
+        try {
+          await env.VAULT.put(r2Key, raw, { httpMetadata: { contentType: 'message/rfc822' } });
+        } catch (vaultErr) {
+          console.error(JSON.stringify({ event: 'edge_email_vault_error', error: vaultErr instanceof Error ? vaultErr.message : String(vaultErr) }));
+          r2Key = null;
+        }
+      }
+
+      if (env?.EMAIL_AGENT && typeof env.EMAIL_AGENT.get === 'function') {
+        const stub = env.EMAIL_AGENT.get(env.EMAIL_AGENT.idFromName('inbox'));
+        const res = await stub.fetch('https://internal/enqueue', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: emailId,
+            r2Key,
+            from: message?.from || '',
+            to: message?.to || '',
+            subject,
+            headers: emailHeaders,
+            raw,
+          }),
+        });
         const text = await res.text().catch(() => '');
-        console.log(JSON.stringify({ event: 'edge_email_complete', status: res.status, ok: res.ok, body: text.slice(0, 300) }));
+        console.log(JSON.stringify({ event: 'edge_email_agent_enqueued', status: res.status, r2Key, body: text.slice(0, 300) }));
+        return;
+      }
+
+      await fetch(`${apiOrigin}/api/scrapers/run`, {
+        method: 'POST',
+        headers: {
+          'X-Scraper-Admin-Token': token,
+          ...(edgeSecret ? { 'x-edge-secret': edgeSecret } : {}),
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'email-ingest',
+          raw,
+          from: message?.from || '',
+          to: message?.to || '',
+          subject,
+        }),
+        signal: typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(55_000) : undefined,
       })
-      .catch((err) => {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.error(JSON.stringify({ event: 'edge_email_error', error: msg }));
-      });
+        .then(async (res) => {
+          const text = await res.text().catch(() => '');
+          console.log(JSON.stringify({ event: 'edge_email_complete', status: res.status, ok: res.ok, body: text.slice(0, 300) }));
+        })
+        .catch((err) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error(JSON.stringify({ event: 'edge_email_error', error: msg }));
+        });
+    })();
+
     if (ctx && typeof ctx.waitUntil === 'function') {
       ctx.waitUntil(task);
     } else {
