@@ -245,7 +245,9 @@ async function hydratePendingCandidates(database) {
     if (candidates.length >= HYDRATION_TOTAL_LIMIT) break;
     for (const doc of enumerateListingDocuments(listing)) {
       const id = documentId(doc.listingId, doc.documentIndex, doc.documentUrl);
-      if (!id || known.has(id)) continue;
+      const altUrl = doc.documentUrl && /^https?:\/\/[^/]+\/$/.test(doc.documentUrl) ? doc.documentUrl.slice(0, -1) : null;
+      const altId = altUrl ? documentId(doc.listingId, doc.documentIndex, altUrl) : null;
+      if (!id || known.has(id) || (altId && known.has(altId))) continue;
       known.add(id);
       candidates.push({
         id,

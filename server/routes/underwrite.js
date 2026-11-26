@@ -564,11 +564,11 @@ function createUnderwriteHandler(deps = {}) {
 
     // 4. Three-Way Public Benchmark Consensus
     let deedComps = null;
-    if (database?.isPg && listing.state && listing.zip) {
+    if (database?.isPg && database?.pool && listing.state && (listing.zip || listing.county)) {
       try {
-        const { loadPeerListingsForDeedComps, computeQualifiedDeedComps } = require('../enrichment/deed-comps');
-        const peerListings = await loadPeerListingsForDeedComps(database, listing);
-        deedComps = computeQualifiedDeedComps(listing, { peerListings });
+        const { loadPeerListingsForDeedComps, extractCandidateDeedRecords, computeQualifiedDeedComps } = require('../enrichment/deed-comps');
+        const peerListings = await loadPeerListingsForDeedComps(database.pool, listing);
+        deedComps = computeQualifiedDeedComps(extractCandidateDeedRecords(listing, { peerListings, assessorParcel: effectiveParcel }), { zip: listing.zip, asOf: nowFn().getTime() });
       } catch {
         deedComps = null;
       }

@@ -84,16 +84,16 @@ function resolveScenarioForListing(
   };
 }
 
-function formatPaymentMethod(method: string): string {
+function formatPaymentMethod(method: string, labels: { wire: string; credit_card_hold: string; cashiers_check: string; certified_funds: string }): string {
   switch (method) {
     case "wire":
-      return "Wire / ACH";
+      return labels.wire;
     case "credit_card_hold":
-      return "Card Hold / Wire";
+      return labels.credit_card_hold;
     case "cashiers_check":
-      return "Cashier's Check (100%)";
+      return labels.cashiers_check;
     case "certified_funds":
-      return "Certified / Cashier's Check";
+      return labels.certified_funds;
     default:
       return method.replace(/_/g, " ");
   }
@@ -636,7 +636,7 @@ export function BidSheetView() {
                               {item.address}
                             </Link>
                             <p className="text-label text-ink-3">
-                              {sourceDisplayText(item.source)} · {formatPaymentMethod(item.paymentMethod)} ({Math.round(item.depositPct * 100)}%, {item.wireLeadHours}h lead)
+                              {sourceDisplayText(item.source)} · {formatPaymentMethod(item.paymentMethod, bs.paymentMethods)} ({Math.round(item.depositPct * 100)}%, {bs.preWire.leadHours.replace("{hours}", String(item.wireLeadHours))})
                             </p>
                           </td>
                           <td className="py-3 pr-3 font-mono text-ink-2">
@@ -739,7 +739,7 @@ export function BidSheetView() {
                               type="number"
                               min={0}
                               step={1000}
-                              aria-label={`Walk-away max bid for ${target.address}`}
+                              aria-label={bs.targets.walkAwayAria.replace("{address}", target.address)}
                               value={
                                 manualWalkAwayBids[target.id] !== undefined
                                   ? manualWalkAwayBids[target.id]

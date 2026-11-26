@@ -7,7 +7,7 @@ const AiCache = require('../ai/cache');
 const ModelRouter = require('../ai/model_router');
 const { CostRecord, CostTracker, recordSpendPg, isOverBudgetDurable } = require('../ai/cost_tracker');
 let runtimeCostTracker = new CostTracker({ budgetLimitUsd: Number(process.env.AI_BUDGET_LIMIT_USD) || 5.00 });
-const { normalizeOcrText, neutralizePromptInjection } = require('../ai/notice-parser');
+const { normalizeOcrText, neutralizePromptInjection, parseLegalNoticeAsync } = require('../ai/notice-parser');
 const { requireWorkspaceIdentity } = require('../security/workspace-identity');
 
 const CACHE_VERSION = 'notice-evidence-v2';
@@ -571,7 +571,7 @@ async function handleParse(req, res, options = {}) {
   const cache = options?.cache || AiCache;
   if (!requireWorkspaceIdentity(req, res, env)) return;
 
-  let { noticeText, pdfBase64, forceLlm } = req.body || {};
+  let { noticeText, pdfBase64, forceLlm, allowAiFallback } = req.body || {};
   if (pdfBase64) {
     noticeText = extractTextFromPdf(pdfBase64);
   } else if (noticeText && (noticeText.startsWith('data:application/pdf') || noticeText.startsWith('%PDF'))) {
@@ -618,7 +618,21 @@ async function handleParse(req, res, options = {}) {
 
   const spendDb = options?.db || require('../db/client');
   const spendPool = spendDb?.isPg && spendDb?.pool?.query ? spendDb.pool : null;
-  if ((confidence < 0.75 || forceLlm === true) && route.configured && !(await isOverBudgetDurable(spendPool, runtimeCostTracker))) {
+  let hybridParcels = null;
+  if (allowAiFallback === true) {
+    hybridParcels = await parseLegalNoticeAsync(noticeText, {
+      ...(options?.parseOptions || {}),
+      allowAiFallback: true,
+      db: spendDb,
+      env,
+      fetchFn,
+      oidcToken,
+      llmExtractFn: options?.llmExtractFn,
+    });
+    if (hybridParcels?.[0]?._strategy === 'hybrid_citation_locked') {
+      strategy = 'hybrid_citation_locked';
+    }
+  } else if ((confidence < 0.75 || forceLlm === true) && route.configured && !(await isOverBudgetDurable(spendPool, runtimeCostTracker))) {
     const llmResult = await callLlmExtraction(cleanNotice, requestedModel, env, fetchFn, oidcToken);
     if (llmResult?.data) {
       model = llmResult.model || model;
@@ -649,6 +663,7 @@ async function handleParse(req, res, options = {}) {
     model,
     costUsd: cost,
     unverifiedCandidates,
+    ...(hybridParcels ? { parcels: hybridParcels } : {}),
     reviewRequired: true
   };
 

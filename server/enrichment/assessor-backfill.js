@@ -225,32 +225,41 @@ async function backfillAssessorRolls({ db, fetchFn, now, limit = 30, perStateLim
     if (logger?.warn) logger.warn(`[AssessorBackfill] HUD priority query failed (non-fatal): ${error.message}`);
   }
   const stateBuckets = [];
-  for (const state of CONVERTED_STATES) {
-    let page = { listings: [] };
-    try {
-      page = await db.getListings({ state, missingAssessorRoll: true, limit: perStateLimit });
-    } catch (error) {
-      if (logger?.warn) logger.warn(`[AssessorBackfill] ${state} query failed (non-fatal): ${error.message}`);
-      continue;
-    }
-    const bucket = [];
-    for (const row of prioritizeHudMissingSpecs(page.listings || [])) {
-      if (!row || typeof row !== 'object' || !row.id || seen.has(row.id)) continue;
-      if (!candidateReady(row, nowMs)) continue;
-      const countyKey = resolveCountyKey(row.state, row.county);
-      const lat = Number(row.lat);
-      const lng = Number(row.lng);
-      const cleanApn = normalizeApn(extractRawApn(row));
-      const key = cacheKeyFor(countyKey, lat, lng, cleanApn);
-      const entry = cache[key];
-      if (entry && Number.isFinite(Date.parse(entry.observedAt))) {
-        const age = nowMs - Date.parse(entry.observedAt);
-        if (entry.parcel ? age < cacheTtlMs : age < missTtlMs) continue;
+  if (candidates.length < limit && !budgetExpired()) {
+    for (let i = 0; i < CONVERTED_STATES.length; i += 4) {
+      if (budgetExpired()) break;
+      const batch = CONVERTED_STATES.slice(i, i + 4);
+      const batchResults = await Promise.all(batch.map(async (state) => {
+        try {
+          const page = await db.getListings({ state, missingAssessorRoll: true, limit: perStateLimit });
+          return { state, page };
+        } catch (error) {
+          if (logger?.warn) logger.warn(`[AssessorBackfill] ${state} query failed (non-fatal): ${error.message}`);
+          return { state, page: null };
+        }
+      }));
+      for (const { page } of batchResults) {
+        if (!page) continue;
+        const bucket = [];
+        for (const row of prioritizeHudMissingSpecs(page.listings || [])) {
+          if (!row || typeof row !== 'object' || !row.id || seen.has(row.id)) continue;
+          if (!candidateReady(row, nowMs)) continue;
+          const countyKey = resolveCountyKey(row.state, row.county);
+          const lat = Number(row.lat);
+          const lng = Number(row.lng);
+          const cleanApn = normalizeApn(extractRawApn(row));
+          const key = cacheKeyFor(countyKey, lat, lng, cleanApn);
+          const entry = cache[key];
+          if (entry && Number.isFinite(Date.parse(entry.observedAt))) {
+            const age = nowMs - Date.parse(entry.observedAt);
+            if (entry.parcel ? age < cacheTtlMs : age < missTtlMs) continue;
+          }
+          seen.add(row.id);
+          bucket.push(row);
+        }
+        if (bucket.length) stateBuckets.push(bucket);
       }
-      seen.add(row.id);
-      bucket.push(row);
     }
-    if (bucket.length) stateBuckets.push(bucket);
   }
   // Fair round-robin interleave across states so no single state starves the others:
   let idx = 0;

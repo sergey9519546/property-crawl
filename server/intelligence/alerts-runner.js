@@ -13,8 +13,18 @@
 'use strict';
 
 const { matchListingAgainstSearch } = require('./saved-search-alerts');
+const { detectPriceDrop } = require('./price-drop-detector');
 const { isEmail, sendOutboundMail } = require('../delivery/outbound-mail');
 const { notifySavedSearchWebhook } = require('../delivery/webhook-notify');
+
+function resolvePriorOpeningBid(listing) {
+  if (!listing || typeof listing !== 'object') return null;
+  for (const key of ['peakOpeningBid', 'initialOpeningBid', 'priorOpeningBid']) {
+    const n = Number(listing[key]);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return null;
+}
 
 // Run every active saved search for a user against a batch of
 // listings. Returns:
@@ -59,9 +69,21 @@ async function runAlertsForUser({ userId, listings, database, mailOptions, webho
     const records = await database.recordAlertMatches(userId, search.id, matchingIds);
     const newCount = Array.isArray(records) ? records.length : 0;
     total += newCount;
-    const row = { searchId: search.id, label: search.label, newMatches: newCount };
     const newIds = new Set((Array.isArray(records) ? records : []).map((record) => record.listingId));
     const fresh = listings.filter((listing) => newIds.has(listing?.id));
+    const dropByListingId = new Map();
+    let priceDrops = 0;
+    for (const l of fresh) {
+      const priorBid = resolvePriorOpeningBid(l);
+      if (priorBid !== null && Number(l?.openingBid) > 0) {
+        const drop = detectPriceDrop({ current: l, previous: { openingBid: priorBid } });
+        if (drop && drop.dropped) {
+          dropByListingId.set(l.id, drop);
+          priceDrops += 1;
+        }
+      }
+    }
+    const row = { searchId: search.id, label: search.label, newMatches: newCount, priceDrops };
     if (newCount > 0 && (search?.filters?.webhookUrl || search?.webhookUrl)) {
       try {
         row.webhook = await notifySavedSearchWebhook(search, fresh, webhookOptions || {});
@@ -80,10 +102,15 @@ async function runAlertsForUser({ userId, listings, database, mailOptions, webho
           const addr = l.address || 'Address unlisted';
           const location = [l.city, l.state].filter(Boolean).join(', ');
           const bid = l.openingBid != null ? `$${Math.round(Number(l.openingBid)).toLocaleString('en-US')}` : 'Opening bid unlisted';
+          const drop = dropByListingId.get(l.id);
+          const dropPct = drop ? Math.round(Math.abs(drop.deltaPct) * 100) : 0;
+          const dropNote = drop && drop.dropped
+            ? ` | Down ${dropPct}% from $${Math.round(Number(drop.previousBid)).toLocaleString('en-US')}`
+            : '';
           const score = l.dealScore != null ? `Score ${Math.round(Number(l.dealScore))}/99` : 'Unscored';
           const date = l.saleDate || l.auctionDate ? `Sale: ${(l.saleDate || l.auctionDate).slice(0, 10)}` : 'Sale date TBD';
           const url = `${baseUrl}/listings/${encodeURIComponent(l.id)}`;
-          return `• ${addr}${location ? ` (${location})` : ''}\n  ${bid} | ${score} | ${date}\n  Details: ${url}`;
+          return `• ${addr}${location ? ` (${location})` : ''}\n  ${bid}${dropNote} | ${score} | ${date}\n  Details: ${url}`;
         }).join('\n\n');
 
         const emailText = `${newCount} new foreclosure or auction notice(s) matching "${search.label || search.id}":\n\n${formattedItems}\n\nNotice: Listings convey "as-is, where-is". Verify all civil dockets and title encumbrances prior to bidding. Manage your alert subscriptions at ${baseUrl}/hunts.`;

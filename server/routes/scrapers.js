@@ -806,6 +806,24 @@ function createScrapersHandler(dependencies = {}) {
               }
             }
             const cadenceHours = (key) => cadenceHoursByKey.get(key) || (key === 'servicelink' ? 6 : 12);
+            try {
+              const attemptRes = await database.pool.query(
+                `SELECT cache_key, payload
+                   FROM durable_kv_cache
+                  WHERE namespace = $1
+                    AND expires_at > NOW()`,
+                ['scraper_slice_attempt']
+              );
+              for (const row of attemptRes?.rows || []) {
+                if (!row || !row.cache_key) continue;
+                const durableAt = Number(row.payload?.at) || 0;
+                if (durableAt > 0) {
+                  sliceLastRunAt.set(row.cache_key, Math.max(sliceLastRunAt.get(row.cache_key) || 0, durableAt));
+                }
+              }
+            } catch (_) {
+              // Non-fatal: durable slice attempt cache is fail-soft.
+            }
             const nowMs = Date.now();
             const attemptMs = (key) => Math.max(
               runAtBySource.get(key) || 0,
@@ -889,7 +907,16 @@ function createScrapersHandler(dependencies = {}) {
           }
         }
         try {
-          sliceLastRunAt.set(chosenSource, Date.now());
+          const attemptAt = Date.now();
+          sliceLastRunAt.set(chosenSource, attemptAt);
+          if (database?.isPg && database?.pool) {
+            try {
+              const { setDurableCache } = require('../enrichment/durable-cache');
+              await setDurableCache('scraper_slice_attempt', chosenSource, { at: attemptAt, reason }, { db: database, ttlMs: 2 * 3600 * 1000 });
+            } catch (_) {
+              // Non-fatal: durable slice attempt persistence is fail-soft.
+            }
+          }
           const sliceTimeoutRaw = Number(body.timeoutMs ?? url.searchParams.get('timeoutMs'));
           const scraperTimeoutMs = Number.isFinite(sliceTimeoutRaw) && sliceTimeoutRaw > 0
             ? Math.min(Math.floor(sliceTimeoutRaw), 120_000)

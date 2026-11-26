@@ -18,20 +18,20 @@ const US_STATES = [
   "WI", "WY",
 ] as const;
 
-const SOURCE_OPTIONS = [
-  { value: "", label: "Off-platform / Unspecified" },
-  { value: "sheriff", label: "County Sheriff Sale" },
-  { value: "civilview", label: "CivilView Sheriff Portal" },
-  { value: "trustee", label: "Non-Judicial Trustee Sale" },
-  { value: "tax-deed", label: "County Tax Deed / Tax Sale" },
-  { value: "hud", label: "HUD REO (Federal)" },
-  { value: "fannie", label: "Fannie Mae HomePath (REO)" },
-  { value: "freddie", label: "Freddie Mac HomeSteps (REO)" },
-  { value: "va", label: "VA Acquired Property (REO)" },
-  { value: "usda", label: "USDA Rural Housing REO" },
-  { value: "gsa", label: "GSA Federal Surplus" },
-  { value: "treasury", label: "U.S. Treasury Seized Property" },
-  { value: "irs", label: "IRS Seized Property Auction" },
+const SOURCE_OPTION_KEYS = [
+  { value: "", key: "unspecified" },
+  { value: "sheriff", key: "sheriff" },
+  { value: "civilview", key: "civilview" },
+  { value: "trustee", key: "trustee" },
+  { value: "tax-deed", key: "taxDeed" },
+  { value: "hud", key: "hud" },
+  { value: "fannie", key: "fannie" },
+  { value: "freddie", key: "freddie" },
+  { value: "va", key: "va" },
+  { value: "usda", key: "usda" },
+  { value: "gsa", key: "gsa" },
+  { value: "treasury", key: "treasury" },
+  { value: "irs", key: "irs" },
 ] as const;
 
 type CitationSpan = {
@@ -209,14 +209,6 @@ function originBadge(
   return <Badge variant="catch">{labels.missing}</Badge>;
 }
 
-const CITATION_LABELS: Record<string, string> = {
-  caseNumber: "Case / Docket",
-  judgment: "Judgment",
-  openingBid: "Opening / Upset Bid",
-  apn: "APN / Block-Lot",
-  occupancy: "Occupancy",
-};
-
 export function AnyAddressUnderwriter() {
   const { messages } = useLocale();
   const uw = messages.underwritePage;
@@ -304,7 +296,7 @@ export function AnyAddressUnderwriter() {
   const citationsList = result
     ? Object.entries(result.noticeExtraction.citations || {}).map(([key, span]) => ({
         key,
-        label: CITATION_LABELS[key] || key,
+        label: (uw.citationLabels as Record<string, string>)[key] || key,
         ...span,
       }))
     : [];
@@ -501,9 +493,9 @@ export function AnyAddressUnderwriter() {
                   onChange={(e) => setSource(e.target.value)}
                   className={inputClass}
                 >
-                  {SOURCE_OPTIONS.map((opt) => (
+                  {SOURCE_OPTION_KEYS.map((opt) => (
                     <option key={opt.value} value={opt.value}>
-                      {opt.label}
+                      {uw.sourceOptions[opt.key]}
                     </option>
                   ))}
                 </select>
@@ -512,7 +504,7 @@ export function AnyAddressUnderwriter() {
 
             <div>
               <label htmlFor="uw-plaintiff" className="text-xs font-semibold text-ink">
-                Foreclosing plaintiff / creditor (optional)
+                {uw.plaintiffLabel}
               </label>
               <input
                 id="uw-plaintiff"
@@ -520,7 +512,7 @@ export function AnyAddressUnderwriter() {
                 maxLength={160}
                 value={plaintiff}
                 onChange={(e) => setPlaintiff(e.target.value)}
-                placeholder="e.g. Wells Fargo Bank, N.A. or Summit HOA"
+                placeholder={uw.plaintiffPlaceholder}
                 className={inputClass}
               />
             </div>

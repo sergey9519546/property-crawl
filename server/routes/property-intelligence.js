@@ -9,6 +9,7 @@ const durableEvidence = require('../discovery/evidence');
 const { requireWorkspaceIdentity } = require('../security/workspace-identity');
 const { auditDocketEvidence, summarizeDocketHits } = require('./verify-docket');
 const { loadPeerListingsForDeedComps } = require('../enrichment/deed-comps');
+const NON_AUCTION_REO_SOURCES = new Set(['hud', 'gsa', 'usda', 'fannie', 'freddie', 'fdic', 'va']);
 
 function createPropertyIntelligenceHandler(dependencies = {}) {
   const database = dependencies.database || db;
@@ -113,7 +114,7 @@ function createPropertyIntelligenceHandler(dependencies = {}) {
         historyUnavailable = true;
       }
       let countyStats = null;
-      if (database.isPg && database.pool && listing.state && listing.county) {
+      if (!NON_AUCTION_REO_SOURCES.has(String(listing?.source || '').trim().toLowerCase()) && database.isPg && database.pool && listing.state && listing.county) {
         try {
           countyStats = await countyStatsLoader(database.pool, { state: listing.state, county: listing.county });
         } catch {

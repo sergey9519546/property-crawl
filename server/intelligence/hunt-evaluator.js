@@ -4,11 +4,11 @@ const crypto = require('crypto');
 const { matchListingAgainstSearch } = require('./saved-search-alerts');
 const { isEmail, sendOutboundMail } = require('../delivery/outbound-mail');
 
-const PLACEHOLDER_RECIPIENT = 'operator@perfectproperty.bid';
+const PLACEHOLDER_RECIPIENTS = new Set(['operator@perfectproperty.bid', 'operator@propertycrawl.com']);
 
 function huntRecipient(hunt) {
   const email = isEmail(hunt?.subscriberEmail);
-  if (!email || email === PLACEHOLDER_RECIPIENT) return null;
+  if (!email || PLACEHOLDER_RECIPIENTS.has(email.toLowerCase())) return null;
   return email;
 }
 
@@ -180,7 +180,7 @@ function generateHuntEmailDigest(hunt, matchedListings = []) {
 
 async function deliverHuntDigest(digest, options = {}) {
   const to = isEmail(digest?.to);
-  if (!to || to === PLACEHOLDER_RECIPIENT) {
+  if (!to || PLACEHOLDER_RECIPIENTS.has(to.toLowerCase())) {
     return { delivery: 'unavailable', sent: false, reason: 'no-recipient' };
   }
   return sendOutboundMail({

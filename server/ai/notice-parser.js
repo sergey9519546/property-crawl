@@ -4,7 +4,26 @@
  * multi-parcel splitting, prompt injection defense, and air-gapped deterministic fallback.
  */
 
+const crypto = require('node:crypto');
 const { detectSeniorLienSurvival, getRedemptionRule, detectBankruptcyOrAdjournment } = require('./legal-rules');
+const ModelRouter = require('./model_router');
+const { CostRecord, CostTracker, recordSpendPg, isOverBudgetDurable } = require('./cost_tracker');
+const { getDurableCache, setDurableCache } = require('../enrichment/durable-cache');
+
+const NOTICE_AI_CACHE_NAMESPACE = 'notice_ai_parse';
+const NOTICE_AI_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const HYBRID_ALLOWED_FIELDS = [
+  'property_address',
+  'case_number',
+  'apn',
+  'plaintiff_or_seller',
+  'defendant',
+  'judgment_amount',
+  'opening_bid',
+  'deposit_terms',
+  'sale_date',
+];
+const HYBRID_MONEY_FIELDS = new Set(['judgment_amount', 'opening_bid']);
 
 /**
  * Normalizes common OCR artifacts in monetary and legal notice text.
@@ -244,11 +263,318 @@ function parseLegalNotice(rawNotice = '', options = {}) {
   return parcels.map(parcelText => deterministicParse(parcelText, parseOptions));
 }
 
+let runtimeParserCostTracker = new CostTracker({ budgetLimitUsd: Number(process.env.AI_BUDGET_LIMIT_USD) || 5.00 });
+
+function parseJsonSafe(rawText) {
+  if (!rawText || typeof rawText !== 'string') return null;
+  const cleaned = rawText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+  if (!cleaned) return null;
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    return null;
+  }
+}
+
+function buildHybridExtractionPrompt(parcelText) {
+  return [
+    'Extract missing fields from the legal foreclosure notice.',
+    'Zero-Fabrication Rule: Do not invent or infer values. Every non-null field MUST include an exact verbatim "quote" substring copied character-for-character from the notice.',
+    `Return ONLY JSON: {"candidates":{"field":{"value":null,"quote":null}}}. Allowed fields: ${HYBRID_ALLOWED_FIELDS.join(', ')}.`,
+    '',
+    'NOTICE:',
+    parcelText,
+  ].join('\n');
+}
+
+async function callHybridLlmEndpoint(parcelText, options = {}) {
+  const env = options.env || process.env;
+  const fetchFn = options.fetchFn || globalThis.fetch;
+  if (typeof fetchFn !== 'function') return null;
+
+  const gatewayToken = options.oidcToken || env?.AI_GATEWAY_API_KEY || env?.VERCEL_OIDC_TOKEN || null;
+  const geminiKey = env?.GEMINI_API_KEY || env?.GOOGLE_AI_API_KEY || null;
+  const openaiKey = env?.OPENAI_API_KEY || null;
+  if (!gatewayToken && !geminiKey && !openaiKey) return null;
+
+  const spendPool = options.db?.isPg && options.db?.pool?.query ? options.db.pool : null;
+  if (await isOverBudgetDurable(spendPool, runtimeParserCostTracker)) {
+    return null;
+  }
+
+  const prompt = buildHybridExtractionPrompt(parcelText);
+  const freeOnly = String(env?.AI_GATEWAY_FREE_ONLY || '').trim() === '1';
+  const attempts = [];
+
+  if (gatewayToken) {
+    const baseUrl = ModelRouter.gatewayBaseUrl(env);
+    const chain = ModelRouter.gatewayModelChain(env);
+    for (const gwModel of chain) {
+      if (freeOnly && !ModelRouter.isFreeGatewayModel(gwModel, env)) continue;
+      attempts.push(async (signal) => {
+        const resp = await fetchFn(`${baseUrl}/chat/completions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${gatewayToken}` },
+          body: JSON.stringify({
+            model: gwModel,
+            messages: [{ role: 'user', content: prompt }],
+            temperature: 0,
+            response_format: { type: 'json_object' },
+          }),
+          signal,
+        });
+        if (!resp || !resp.ok) return null;
+        const body = await resp.json();
+        const content = body?.choices?.[0]?.message?.content;
+        const data = parseJsonSafe(content);
+        if (!data) return null;
+        return {
+          provider: 'vercel_gateway',
+          model: gwModel,
+          data,
+          inputTokens: body?.usage?.prompt_tokens || Math.ceil(prompt.length / 4),
+          outputTokens: body?.usage?.completion_tokens || Math.ceil(String(content || '').length / 4),
+        };
+      });
+    }
+  }
+
+  if (openaiKey) {
+    attempts.push(async (signal) => {
+      const model = options.model && String(options.model).startsWith('gpt-') ? options.model : 'gpt-4o-mini';
+      const resp = await fetchFn('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${openaiKey}` },
+        body: JSON.stringify({
+          model,
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0,
+          response_format: { type: 'json_object' },
+        }),
+        signal,
+      });
+      if (!resp || !resp.ok) return null;
+      const body = await resp.json();
+      const content = body?.choices?.[0]?.message?.content;
+      const data = parseJsonSafe(content);
+      if (!data) return null;
+      return {
+        provider: 'openai',
+        model,
+        data,
+        inputTokens: body?.usage?.prompt_tokens || Math.ceil(prompt.length / 4),
+        outputTokens: body?.usage?.completion_tokens || Math.ceil(String(content || '').length / 4),
+      };
+    });
+  }
+
+  if (geminiKey) {
+    attempts.push(async (signal) => {
+      const model = options.model && String(options.model).startsWith('gemini') ? options.model : 'gemini-2.0-flash-lite';
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+      const resp = await fetchFn(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': geminiKey },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0, responseMimeType: 'application/json' },
+        }),
+        signal,
+      });
+      if (!resp || !resp.ok) return null;
+      const body = await resp.json();
+      const content = body?.candidates?.[0]?.content?.parts
+        ?.map((p) => (typeof p?.text === 'string' ? p.text : ''))
+        .join('') || '';
+      const data = parseJsonSafe(content);
+      if (!data) return null;
+      return {
+        provider: 'gemini',
+        model,
+        data,
+        inputTokens: body?.usageMetadata?.promptTokenCount || Math.ceil(prompt.length / 4),
+        outputTokens: body?.usageMetadata?.candidatesTokenCount || Math.ceil(content.length / 4),
+      };
+    });
+  }
+
+  for (const attempt of attempts) {
+    if (options.signal?.aborted) break;
+    const controller = options.signal ? null : new AbortController();
+    const timeout = controller ? setTimeout(() => controller.abort(), Number(options.timeoutMs) || 8000) : null;
+    try {
+      const res = await attempt(options.signal || controller.signal);
+      if (res && res.data) {
+        const costUsd = CostTracker.calculateCost(res.model, res.inputTokens, res.outputTokens);
+        const record = new CostRecord({
+          provider: res.provider,
+          model: res.model,
+          inputTokens: res.inputTokens,
+          outputTokens: res.outputTokens,
+          costUsd,
+        });
+        runtimeParserCostTracker = runtimeParserCostTracker.add(record);
+        await recordSpendPg(spendPool, record, { route: 'notice-parser-hybrid' });
+        return res.data;
+      }
+    } catch {
+      // Fail soft to next provider or deterministic fallback
+    } finally {
+      if (timeout) clearTimeout(timeout);
+    }
+  }
+  return null;
+}
+
+function extractCandidateEntries(rawPayload) {
+  if (!rawPayload || typeof rawPayload !== 'object' || Array.isArray(rawPayload)) return null;
+  if (rawPayload.candidates && typeof rawPayload.candidates === 'object' && !Array.isArray(rawPayload.candidates)) {
+    return rawPayload.candidates;
+  }
+  if (rawPayload.fields && typeof rawPayload.fields === 'object' && !Array.isArray(rawPayload.fields)) {
+    return rawPayload.fields;
+  }
+  return rawPayload;
+}
+
+function applyCitationLockedCandidates(parcelText, baseParsed, rawPayload) {
+  const candidates = extractCandidateEntries(rawPayload);
+  if (!candidates) return null;
+
+  const merged = { ...baseParsed };
+  const mergedSpans = { ...(baseParsed.evidenceSpans || {}) };
+
+  for (const field of HYBRID_ALLOWED_FIELDS) {
+    const entry = candidates[field];
+    if (!entry || typeof entry !== 'object') continue;
+    const rawQuote = entry.quote ?? entry.evidence ?? entry.verbatim ?? '';
+    if (typeof rawQuote !== 'string' || !rawQuote.trim()) continue;
+
+    // STRICT VERBATIM SPAN GATE: reject any field whose quote fails verifyVerbatimSpan
+    const span = verifyVerbatimSpan(parcelText, rawQuote);
+    if (!span || !span.verified) continue;
+
+    if (HYBRID_MONEY_FIELDS.has(field)) {
+      const num = typeof entry.value === 'number'
+        ? entry.value
+        : Number(String(entry.value ?? '').replace(/[$,\s]/g, ''));
+      if (!Number.isFinite(num) || num <= 0) continue;
+      const quoteNums = (span.quote.match(/[0-9][0-9,]*(?:\.\d+)?/g) || [])
+        .map((t) => Number(t.replace(/,/g, '')));
+      if (!quoteNums.some((qNum) => Number.isFinite(qNum) && qNum === num)) continue;
+      if (!mergedSpans[field] || !merged[field]) {
+        merged[field] = num;
+        mergedSpans[field] = span;
+      }
+    } else {
+      const val = typeof entry.value === 'string' ? entry.value.trim() : String(entry.value ?? '').trim();
+      if (!val) continue;
+      if (!mergedSpans[field] || !merged[field]) {
+        merged[field] = val;
+        mergedSpans[field] = span;
+      }
+    }
+  }
+
+  const coreFound = [
+    Boolean(mergedSpans.property_address),
+    Boolean(mergedSpans.case_number),
+    Boolean(mergedSpans.judgment_amount || mergedSpans.opening_bid),
+    Boolean(mergedSpans.plaintiff_or_seller),
+    Boolean(mergedSpans.sale_date),
+  ].filter(Boolean).length;
+
+  return {
+    ...merged,
+    confidence_score: Math.round((coreFound / 5) * 100) / 100,
+    evidenceSpans: mergedSpans,
+    _strategy: 'hybrid_citation_locked',
+  };
+}
+
+/**
+ * Citation-locked async notice parser. Runs deterministic parseLegalNotice first,
+ * and only invokes AI fallback for parcels below 0.8 confidence when allowAiFallback === true.
+ * Every LLM-extracted field must pass verifyVerbatimSpan(parcelText, quote).
+ * @param {string} rawNotice
+ * @param {object} [options]
+ * @returns {Promise<Array<object>>}
+ */
+async function parseLegalNoticeAsync(rawNotice = '', options = {}) {
+  const explicitState = options.defaultState !== undefined
+    ? options.defaultState
+    : (options.state ? String(options.state).trim().toUpperCase() : null);
+  const parseOptions = { ...options, defaultState: explicitState };
+  const parcels = splitMultiParcelNotice(rawNotice, parseOptions);
+  const deterministic = parcels.map((parcelText) => deterministicParse(parcelText, parseOptions));
+
+  if (options.allowAiFallback !== true || deterministic.every((p) => p.confidence_score >= 0.8)) {
+    return deterministic;
+  }
+
+  const results = [];
+  for (let i = 0; i < parcels.length; i++) {
+    const baseParsed = deterministic[i];
+    if (baseParsed.confidence_score >= 0.8) {
+      results.push(baseParsed);
+      continue;
+    }
+
+    const parcelText = parcels[i];
+    const hash = crypto.createHash('sha256').update(String(parcelText)).digest('hex');
+
+    try {
+      const cached = await getDurableCache(NOTICE_AI_CACHE_NAMESPACE, hash, { db: options.db });
+      if (cached && typeof cached === 'object' && cached.evidenceSpans) {
+        results.push(cached);
+        continue;
+      }
+    } catch {
+      // Cache read failure is non-fatal
+    }
+
+    let llmPayload = null;
+    try {
+      if (typeof options.llmExtractFn === 'function') {
+        llmPayload = await options.llmExtractFn(parcelText, parseOptions);
+      } else {
+        llmPayload = await callHybridLlmEndpoint(parcelText, options);
+      }
+    } catch {
+      llmPayload = null;
+    }
+
+    if (!llmPayload) {
+      results.push(baseParsed);
+      continue;
+    }
+
+    const hybrid = applyCitationLockedCandidates(parcelText, baseParsed, llmPayload);
+    if (!hybrid) {
+      results.push(baseParsed);
+      continue;
+    }
+
+    try {
+      await setDurableCache(NOTICE_AI_CACHE_NAMESPACE, hash, hybrid, {
+        db: options.db,
+        ttlMs: NOTICE_AI_CACHE_TTL_MS,
+      });
+    } catch {
+      // Cache write failure is non-fatal
+    }
+    results.push(hybrid);
+  }
+
+  return results;
+}
+
 module.exports = {
   normalizeOcrText,
   neutralizePromptInjection,
   splitMultiParcelNotice,
   verifyVerbatimSpan,
   deterministicParse,
-  parseLegalNotice
+  parseLegalNotice,
+  parseLegalNoticeAsync
 };

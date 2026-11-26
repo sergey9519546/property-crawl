@@ -15,8 +15,8 @@ interface NearbyCompsProps {
   targetOpeningBid?: number | null;
 }
 
-function formatMoney(amount: number | null | undefined): string {
-  if (amount == null || !Number.isFinite(amount)) return "Not published";
+function formatMoney(amount: number | null | undefined, notPublishedLabel: string): string {
+  if (amount == null || !Number.isFinite(amount)) return notPublishedLabel;
   return `$${Math.round(amount).toLocaleString()}`;
 }
 
@@ -26,7 +26,7 @@ export function NearbyComps({
   targetSqft,
   targetOpeningBid,
 }: NearbyCompsProps) {
-  const { messages: m, plural } = useLocale();
+  const { messages: m, plural, format } = useLocale();
   const [data, setData] = React.useState<WatchlistCompsResponse | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -44,14 +44,14 @@ export function NearbyComps({
       })
       .catch((err) => {
         if (!active) return;
-        setError(err instanceof Error ? err.message : "Failed to load comparable properties");
+        setError(err instanceof Error ? err.message : m.detailUi.nearbyCompsFailedLoad);
         setLoading(false);
       });
 
     return () => {
       active = false;
     };
-  }, [listingId]);
+  }, [listingId, m.detailUi.nearbyCompsFailedLoad]);
 
   if (loading) {
     return (
@@ -87,7 +87,7 @@ export function NearbyComps({
             {m.detailUi.nearbyCompsTitle}
           </h2>
           <p className="mt-1 text-xs text-ink-3">
-            Active distressed listings within 8 km with ±30% interior area matching {targetAddress || "this subject"}.
+            {format(m.detailUi.nearbyCompsSubtitle, { target: targetAddress || m.detailUi.nearbyCompsSubjectFallback })}
           </p>
         </div>
         {comps.length > 0 && (
@@ -97,7 +97,7 @@ export function NearbyComps({
             </span>
             {data.stats.medianOpeningBid !== null && (
               <span className="rounded-control bg-line px-2.5 py-1 font-medium text-ink-2">
-                {m.detailUi.medianLabel} {formatMoney(data.stats.medianOpeningBid)}
+                {m.detailUi.medianLabel} {formatMoney(data.stats.medianOpeningBid, m.detailUi.nearbyCompsNotPublished)}
               </span>
             )}
           </div>
@@ -107,17 +107,17 @@ export function NearbyComps({
       {comps.length === 0 ? (
         <div className="mt-4 rounded-control border border-dashed border-line bg-paper p-4 text-center">
           <p className="text-xs text-ink-3">
-            No active distressed comparables observed within an 8 km radius matching the size profile.
+            {m.detailUi.nearbyCompsEmpty}
           </p>
           <p className="mt-1 text-label text-ink-3">
-            Comps update continuously as county sheriff and foreclosure dockets are ingested.
+            {m.detailUi.nearbyCompsEmptyHint}
           </p>
         </div>
       ) : (
         <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {comps.map((comp) => {
             const id = comp.id || comp.listing?.id;
-            const address = comp.address || comp.listing?.address || "Address not published";
+            const address = comp.address || comp.listing?.address || m.detailUi.nearbyCompsAddressNotPub;
             const city = comp.city || comp.listing?.city;
             const state = comp.state || comp.listing?.state;
             const openingBid = comp.openingBid ?? comp.listing?.openingBid;
@@ -137,11 +137,11 @@ export function NearbyComps({
                   <div className="flex items-center justify-between text-xs font-semibold text-ink-3">
                     <span className="flex items-center gap-1">
                       <MapPin className="h-3 w-3 text-ink-3" />
-                      {distance ? `${distance} away` : "Nearby"}
+                      {distance ? format(m.detailUi.nearbyCompsDistanceAway, { distance }) : m.detailUi.nearbyCompsNearby}
                     </span>
                     {dealScore != null && (
                       <span className="rounded-control bg-line px-1.5 py-0.5 text-label font-bold text-ink" style={{ color: bandForScore(dealScore)?.color }}>
-                        Score {Math.round(dealScore)}
+                        {format(m.detailUi.nearbyCompsScoreLabel, { score: Math.round(dealScore) })}
                       </span>
                     )}
                   </div>
@@ -156,12 +156,12 @@ export function NearbyComps({
                 <div className="mt-4 flex items-center justify-between border-t border-line pt-3 text-xs">
                   <div>
                     <span className="block text-meta text-ink-3 uppercase font-medium">{m.listingsUi.openingAmountLabel}</span>
-                    <span className="font-bold text-ink">{formatMoney(openingBid)}</span>
+                    <span className="font-bold text-ink">{formatMoney(openingBid, m.detailUi.nearbyCompsNotPublished)}</span>
                   </div>
                   {sqft != null && sqft > 0 && (
                     <div className="text-right">
-                      <span className="block text-meta text-ink-3 uppercase font-medium">Area</span>
-                      <span className="font-semibold text-ink-2">{sqft.toLocaleString()} sq ft</span>
+                      <span className="block text-meta text-ink-3 uppercase font-medium">{m.detailUi.nearbyCompsAreaLabel}</span>
+                      <span className="font-semibold text-ink-2">{sqft.toLocaleString()} {m.detailUi.nearbyCompsSqFtUnit}</span>
                     </div>
                   )}
                 </div>

@@ -564,17 +564,17 @@ export default async function ListingPage({ params, searchParams }: Props) {
                 {publishedUpsetAmount !== null && (
                   <div>
                     <div className="flex items-baseline justify-between gap-2">
-                      <span className="font-semibold text-ink-2">Approx. upset estimate:</span>
+                      <span className="font-semibold text-ink-2">{dUi.approxUpsetEstimate}</span>
                       <span className="text-sm font-bold text-ink">{formatMoney(publishedUpsetAmount)}</span>
                     </div>
                     <p className="mt-0.5 text-ink-3 leading-relaxed">
-                      Qualified sheriff/plaintiff estimate, not a guaranteed opening bid{publishedUpsetSource ? ` (${sourceDisplayText(publishedUpsetSource)})` : ""}.
+                      {dUi.qualifiedUpsetNote}{publishedUpsetSource ? ` (${sourceDisplayText(publishedUpsetSource)})` : ""}.
                     </p>
                   </div>
                 )}
                 {publishedJudgmentAmount !== null && (
                   <div className={publishedUpsetAmount !== null ? "border-t border-line pt-2 flex items-baseline justify-between gap-2" : "flex items-baseline justify-between gap-2"}>
-                    <span className="font-semibold text-ink-2">Execution judgment:</span>
+                    <span className="font-semibold text-ink-2">{dUi.executionJudgmentLabel}</span>
                     <span className="text-sm font-bold text-ink">{formatMoney(publishedJudgmentAmount)}</span>
                   </div>
                 )}

@@ -133,6 +133,9 @@ function candidateToIntake(candidate, options = {}) {
       notes: validated.evidence.notes || null,
     }],
   }, { ...options, now });
+  if (result && typeof result.then === 'function') {
+    return result.then((resolved) => ({ ...resolved, provenance: 'unbrowse-route-candidate', candidateSchema: CANDIDATE_SCHEMA }));
+  }
   return { ...result, provenance: 'unbrowse-route-candidate', candidateSchema: CANDIDATE_SCHEMA };
 }
 

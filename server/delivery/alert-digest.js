@@ -14,7 +14,22 @@ const crypto = require('node:crypto');
 const { listHunts, evaluateInventory, sortHuntResults, MAX_RETURNED_RESULTS } = require('../intelligence/hunts');
 const { loadStore, mutateStore, MAX_EVENTS } = require('../intelligence/hunt-store');
 const { matchListingAgainstSearch } = require('../intelligence/saved-search-alerts');
+const { detectPriceDrop } = require('../intelligence/price-drop-detector');
 const { sendHuntDigest } = require('./resend-client');
+const { isEmail, sendOutboundMail } = require('./outbound-mail');
+const { getDurableCache, setDurableCache } = require('../enrichment/durable-cache');
+
+const PRICE_DROP_CACHE_NAMESPACE = 'price_drop_digest';
+const PRICE_DROP_CACHE_TTL_MS = 90 * 24 * 60 * 60 * 1000;
+
+function resolvePriorOpeningBid(listing) {
+  if (!listing || typeof listing !== 'object') return null;
+  for (const key of ['peakOpeningBid', 'initialOpeningBid', 'priorOpeningBid']) {
+    const n = Number(listing[key]);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return null;
+}
 
 function formatCurrency(amount) {
   if (amount == null || amount === '') return 'Not published';
@@ -82,6 +97,7 @@ function generateInvestorDigestReport({ hunt, evaluation, listings = [], options
   const matchedRecords = (evaluation?.results || []).filter((r) => r.status === 'match');
   const matchedListings = [];
   const priceDrops = [];
+  const dropByListingId = new Map();
 
   for (const record of matchedRecords) {
     const listing = listingMap.get(record.listingId) || {
@@ -91,12 +107,31 @@ function generateInvestorDigestReport({ hunt, evaluation, listings = [], options
     };
     matchedListings.push(listing);
 
-    // Check for price drop if prior baseline record exists
+    // Check for price drop if prior baseline record exists, or fall back to listing peak/initial/prior bid
     const prior = evaluation?.previousBaseline?.records?.[record.identityKey]
       || evaluation?.baseline?.records?.[record.identityKey];
-    if (prior) {
-      const drop = evaluatePriceDrop(listing, prior);
-      if (drop) priceDrops.push(drop);
+    let drop = prior ? evaluatePriceDrop(listing, prior) : null;
+    if (!drop) {
+      const priorBid = resolvePriorOpeningBid(listing);
+      if (priorBid !== null && Number(listing?.openingBid) > 0) {
+        const detected = detectPriceDrop({ current: listing, previous: { openingBid: priorBid } });
+        if (detected && detected.dropped) {
+          const dropPct = Math.round(Math.abs(detected.deltaPct) * 1000) / 10;
+          drop = {
+            listingId: listing.id,
+            address: listing.address,
+            previousBid: detected.previousBid,
+            currentBid: detected.currentBid,
+            dropAmount: Math.abs(detected.delta),
+            dropPct,
+            reconsiderationTrigger: dropPct >= 10,
+          };
+        }
+      }
+    }
+    if (drop) {
+      priceDrops.push(drop);
+      dropByListingId.set(listing.id, drop);
     }
   }
 
@@ -113,7 +148,10 @@ function generateInvestorDigestReport({ hunt, evaluation, listings = [], options
 
   for (const item of matchedListings) {
     const loc = [item.county ? `${item.county} Co.` : '', item.city, item.state].filter(Boolean).join(', ') || 'N/A';
-    const bid = formatCurrency(item.openingBid);
+    const dropInfo = dropByListingId.get(item.id);
+    const bid = dropInfo
+      ? `${formatCurrency(item.openingBid)} (Down ${dropInfo.dropPct}% from ${formatCurrency(dropInfo.previousBid)})`
+      : formatCurrency(item.openingBid);
     const score = item.dealScore != null ? `${item.dealScore}/99` : 'Unrated';
     const date = item.saleDate || item.auctionDate || 'Scheduled date pending';
     const link = `[View Dossier](${appUrl}/listings/${encodeURIComponent(String(item.id))})`;
@@ -141,7 +179,10 @@ function generateInvestorDigestReport({ hunt, evaluation, listings = [], options
     const score = Number.isFinite(rawScore) ? rawScore : null;
     const badge = score !== null ? `${score}/99` : '—';
     const scoreColor = score && score >= 80 ? '#059669' : score && score >= 65 ? '#2563eb' : '#d97706';
-    const bid = formatCurrency(item.openingBid);
+    const dropInfo = dropByListingId.get(item.id);
+    const bid = dropInfo
+      ? `${formatCurrency(item.openingBid)} <div style="font-size:11px;color:#38bdf8;font-weight:500;">Down ${dropInfo.dropPct}% from ${formatCurrency(dropInfo.previousBid)}</div>`
+      : formatCurrency(item.openingBid);
     const link = escapeHtml(`${appUrl}/listings/${encodeURIComponent(String(item.id))}`);
     return `<tr style="border-bottom:1px solid #1e293b;">
       <td style="padding:12px 8px;font-size:13px;color:#ffffff;font-weight:500;">
@@ -671,6 +712,15 @@ async function runAllHuntDigests({ listings = [], options = {} }) {
     countyAlerts = await runCountyAlertDigests({ listings, options });
   }
 
+  let watchlistPriceDrops = null;
+  if (options.includeWatchlistPriceDrops !== false && options.database?.isPg && options.database?.pool) {
+    try {
+      watchlistPriceDrops = await runWatchlistPriceDropDigests(options.database, options);
+    } catch (err) {
+      watchlistPriceDrops = { error: err?.message || String(err), checked: 0, sent: 0 };
+    }
+  }
+
   return {
     evaluatedAt: new Date().toISOString(),
     totalHunts: hunts.length,
@@ -679,6 +729,176 @@ async function runAllHuntDigests({ listings = [], options = {} }) {
     digestsDispatched,
     results,
     ...(countyAlerts ? { countyAlerts } : {}),
+    ...(watchlistPriceDrops ? { watchlistPriceDrops } : {}),
+  };
+}
+
+/**
+ * Queries watched listings (saved_deals / alert_matches) where opening_bid > 0
+ * and opening_bid < GREATEST(COALESCE(peak_opening_bid, 0), COALESCE(initial_opening_bid, 0)),
+ * deduplicates per (userId, listingId, currentBid) in durable_kv_cache ('price_drop_digest', 90d TTL),
+ * and sends verified email alerts matching alert-digest's verified-recipient rules.
+ */
+async function runWatchlistPriceDropDigests(database, options = {}) {
+  const evaluatedAt = typeof options.now === 'string' ? options.now : new Date().toISOString();
+  const env = options.env || process.env;
+  if (!database?.pool || typeof database.pool.query !== 'function') {
+    return {
+      evaluatedAt,
+      skipped: 'database_unavailable',
+      checked: 0,
+      sent: 0,
+      deduplicated: 0,
+      skippedUnverified: 0,
+      results: [],
+    };
+  }
+
+  const readCache = typeof options.getDurableCache === 'function' ? options.getDurableCache : getDurableCache;
+  const writeCache = typeof options.setDurableCache === 'function' ? options.setDurableCache : setDurableCache;
+  const baseUrl = getCanonicalOrigin(options.appUrl);
+
+  const sql = `
+    WITH watched AS (
+      SELECT DISTINCT user_id, listing_id FROM saved_deals
+      UNION
+      SELECT DISTINCT user_id, listing_id FROM alert_matches
+    ),
+    verified_recipients AS (
+      SELECT DISTINCT ON (user_id)
+        user_id,
+        COALESCE(NULLIF(TRIM(filters->>'notifyEmail'), ''), NULLIF(TRIM(filters->>'email'), '')) AS email
+      FROM saved_searches
+      WHERE is_active = TRUE
+        AND COALESCE(filters->>'verified', 'false') = 'true'
+        AND COALESCE(NULLIF(TRIM(filters->>'notifyEmail'), ''), NULLIF(TRIM(filters->>'email'), '')) IS NOT NULL
+      ORDER BY user_id, updated_at DESC NULLS LAST, created_at DESC NULLS LAST
+    )
+    SELECT
+      w.user_id AS "userId",
+      vr.email AS "notifyEmail",
+      l.id AS "listingId",
+      l.address,
+      l.city,
+      l.state,
+      l.opening_bid AS "openingBid",
+      l.peak_opening_bid AS "peakOpeningBid",
+      l.initial_opening_bid AS "initialOpeningBid",
+      l.deal_score AS "dealScore",
+      l.sale_date AS "saleDate"
+    FROM watched w
+    JOIN listings l ON l.id = w.listing_id
+    LEFT JOIN verified_recipients vr ON vr.user_id = w.user_id
+    WHERE l.opening_bid > 0
+      AND l.opening_bid < GREATEST(COALESCE(l.peak_opening_bid, 0), COALESCE(l.initial_opening_bid, 0))
+    ORDER BY w.user_id, l.id
+    LIMIT 500
+  `;
+
+  const res = await database.pool.query(sql);
+  const rows = Array.isArray(res?.rows) ? res.rows : [];
+  const results = [];
+  let checked = 0;
+  let sent = 0;
+  let deduplicated = 0;
+  let skippedUnverified = 0;
+
+  for (const row of rows) {
+    checked++;
+    const recipient = isEmail(row.notifyEmail);
+    if (!recipient) {
+      skippedUnverified++;
+      results.push({
+        userId: row.userId,
+        listingId: row.listingId,
+        skipped: true,
+        reason: 'UNVERIFIED_RECIPIENT',
+      });
+      continue;
+    }
+
+    const priorBid = resolvePriorOpeningBid(row);
+    if (priorBid === null || !(Number(row.openingBid) > 0)) continue;
+    const drop = detectPriceDrop({
+      current: { openingBid: row.openingBid },
+      previous: { openingBid: priorBid },
+    });
+    if (!drop || !drop.dropped) continue;
+
+    const dedupKey = `${row.userId}:${row.listingId}:${drop.currentBid}`;
+    const alreadySent = await readCache(PRICE_DROP_CACHE_NAMESPACE, dedupKey, { db: database });
+    if (alreadySent) {
+      deduplicated++;
+      results.push({
+        userId: row.userId,
+        listingId: row.listingId,
+        deduplicated: true,
+        currentBid: drop.currentBid,
+      });
+      continue;
+    }
+
+    const dropPct = Math.round(Math.abs(drop.deltaPct) * 1000) / 10;
+    const addr = row.address || row.listingId;
+    const location = [row.city, row.state].filter(Boolean).join(', ');
+    const listingUrl = `${baseUrl}/listings/${encodeURIComponent(String(row.listingId))}`;
+    const subject = `[PerfectProperty] Price Drop Alert: ${addr} (Down ${dropPct}%)`;
+    const text = [
+      `Price drop detected on your watched listing: ${addr}${location ? ` (${location})` : ''}`,
+      `Opening bid dropped ${dropPct}% from ${formatCurrency(drop.previousBid)} to ${formatCurrency(drop.currentBid)}.`,
+      row.saleDate ? `Sale Date: ${String(row.saleDate).slice(0, 10)}` : null,
+      `View Dossier: ${listingUrl}`,
+      '',
+      'Zero-Fabrication Notice: Verify current docket status and senior liens prior to bidding.',
+    ].filter((line) => line !== null).join('\n');
+
+    const mailOpts = {
+      ...(options.mailOptions || {}),
+      env: options.mailOptions?.env || env,
+      ...(options.fetchImpl && !options.mailOptions?.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
+    };
+    const mail = await sendOutboundMail({
+      to: recipient,
+      subject,
+      text,
+      kind: 'price-drop-digest',
+    }, mailOpts);
+
+    if (mail.sent || mail.delivery === 'sent') {
+      sent++;
+      await writeCache(
+        PRICE_DROP_CACHE_NAMESPACE,
+        dedupKey,
+        {
+          sentAt: evaluatedAt,
+          userId: row.userId,
+          listingId: row.listingId,
+          previousBid: drop.previousBid,
+          currentBid: drop.currentBid,
+          deltaPct: drop.deltaPct,
+        },
+        { db: database, ttlMs: PRICE_DROP_CACHE_TTL_MS },
+      );
+    }
+
+    results.push({
+      userId: row.userId,
+      listingId: row.listingId,
+      previousBid: drop.previousBid,
+      currentBid: drop.currentBid,
+      dropPct,
+      mailDelivery: mail.delivery,
+      sent: Boolean(mail.sent),
+    });
+  }
+
+  return {
+    evaluatedAt,
+    checked,
+    sent,
+    deduplicated,
+    skippedUnverified,
+    results,
   };
 }
 
@@ -688,5 +908,6 @@ module.exports = {
   generateInvestorDigestReport,
   dispatchInvestorAlertDigest,
   runCountyAlertDigests,
+  runWatchlistPriceDropDigests,
   runAllHuntDigests,
 };

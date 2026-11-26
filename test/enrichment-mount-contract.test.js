@@ -59,8 +59,11 @@ test('the empty state names the parcelKey, so the conditional is observable', ()
   // This is the branch every parcel-bearing record actually renders. A guard
   // that only looked for the populated heading proved nothing.
   const view = fs.readFileSync(VIEW, 'utf8');
-  assert.match(view, /shares the parcelKey/,
-    'the empty state must name the key, which is what makes the mount visible in HTML');
+  const enMessages = fs.readFileSync(path.join(ROOT, 'src', 'lib', 'i18n', 'messages', 'en.ts'), 'utf8');
+  assert.match(view, /enrichmentNoSharedSource[\s\S]*<code>\{parcelKey\}<\/code>/,
+    'the empty state must render enrichmentNoSharedSource naming the parcelKey');
+  assert.match(enMessages, /shares the parcelKey/,
+    'en.ts must keep the parcelKey phrasing for the empty state');
   assert.match(view, /id="enrichment-view-heading"/,
     'the populated branch must keep its heading id');
 });

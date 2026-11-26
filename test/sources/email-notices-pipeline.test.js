@@ -193,7 +193,12 @@ test('standardize output produces canonical listing objects with full provenance
   assert.equal(canonical.address, '100 Main St, Columbus, OH 43215');
   assert.equal(canonical.openingBid, 95000);
   assert.equal(canonical.judgment, 140000);
-  assert.ok(canonical.sourceUrl.startsWith('https://www.publicnoticesohio.com/notice/'));
+  assert.equal(canonical.sourceUrl, 'https://www.publicnoticesohio.com');
+  const explicitCanonical = await standardizeEmailNoticeListing(
+    { ...parsed, source_url: 'https://www.publicnoticesohio.com/Details.aspx?ID=998811' },
+    { ...meta, skipVault: true }
+  );
+  assert.equal(explicitCanonical.sourceUrl, 'https://www.publicnoticesohio.com/Details.aspx?ID=998811');
   assert.equal(canonical.provenance.origin, 'email_notice');
   assert.equal(canonical.provenance.observed, true);
   assert.equal(canonical.provenance.recordId, canonical.id);

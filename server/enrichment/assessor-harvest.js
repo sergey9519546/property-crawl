@@ -159,8 +159,8 @@ function applyHarvest(candidate, parcel, observedAt) {
   // county conversion need, without rawAttributes (large, and only the tax
   // year was read from it — captured explicitly below).
   const rawAttrs = parcel.rawAttributes && typeof parcel.rawAttributes === 'object' ? parcel.rawAttributes : {};
-  const lastSalePrice = parcel.lastSalePrice ?? parcel.salePrice ?? rawAttrs.SALE_PRICE ?? rawAttrs.SALE_PRC1 ?? null;
-  let lastSaleDate = parcel.lastSaleDate ?? parcel.saleDate ?? rawAttrs.DEED_DATE ?? rawAttrs.LAST_SALE_DATE ?? null;
+  const lastSalePrice = parcel.lastSalePrice ?? parcel.recordedSalePrice ?? parcel.salePrice ?? rawAttrs.SALE_PRICE ?? rawAttrs.SALE_PRC1 ?? null;
+  let lastSaleDate = parcel.lastSaleDate ?? parcel.deedDate ?? parcel.saleDate ?? rawAttrs.DEED_DATE ?? rawAttrs.LAST_SALE_DATE ?? null;
   if (!lastSaleDate && rawAttrs.SALE_YR1 && rawAttrs.SALE_MO1) {
     const sy = Number(rawAttrs.SALE_YR1);
     const sm = Number(rawAttrs.SALE_MO1);
@@ -168,7 +168,7 @@ function applyHarvest(candidate, parcel, observedAt) {
       lastSaleDate = `${sy}-${String(sm).padStart(2, '0')}-01`;
     }
   }
-  const nuCode = parcel.nuCode ?? rawAttrs.NU_CODE ?? rawAttrs.SALE_NU ?? null;
+  const nuCode = parcel.nuCode ?? parcel.salesCode ?? rawAttrs.NU_CODE ?? rawAttrs.SALE_NU ?? rawAttrs.SALES_CODE ?? null;
   const qualCode = parcel.qualCode ?? rawAttrs.QUAL_CD1 ?? null;
   const livingAreaSqft = Number(parcel.livingAreaSqft ?? parcel.sqft ?? rawAttrs.TOT_LVG_AREA ?? rawAttrs.TOT_LVG_AR);
   const validSqft = Number.isFinite(livingAreaSqft) && livingAreaSqft > 0 ? Math.round(livingAreaSqft) : null;
@@ -181,8 +181,8 @@ function applyHarvest(candidate, parcel, observedAt) {
     rawApn: parcel.rawApn,
     canonicalApn: parcel.canonicalApn,
     ...(parcel.situsAddress ? { situsAddress: parcel.situsAddress } : {}),
-    ...(lastSalePrice != null ? { lastSalePrice } : {}),
-    ...(lastSaleDate != null ? { lastSaleDate } : {}),
+    ...(lastSalePrice != null ? { lastSalePrice, recordedSalePrice: lastSalePrice } : {}),
+    ...(lastSaleDate != null ? { lastSaleDate, deedDate: lastSaleDate } : {}),
     ...(nuCode != null ? { nuCode } : {}),
     ...(qualCode != null ? { qualCode } : {}),
     ...(validSqft ? { livingAreaSqft: validSqft } : {}),

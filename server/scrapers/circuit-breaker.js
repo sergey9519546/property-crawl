@@ -52,6 +52,7 @@ class ScraperCircuitBreaker {
    * @param {number} [options.cooldownMs]
    */
   constructor(options = {}) {
+    this.sourceKey = options.sourceKey || options.key || null;
     this.minPayloadBytes = options.minPayloadBytes ?? 1;
     this.failureThreshold = options.failureThreshold ?? 3;
     const envCooldown = Number(process.env.SCRAPER_CIRCUIT_BREAKER_COOLDOWN_MS);
@@ -220,6 +221,38 @@ class ScraperCircuitBreaker {
     this.lastFailureReason = null;
     this.lastFailureAt = null;
     this.lastTrippedAt = null;
+  }
+
+  async hydrateFromDurableCache(db, cacheKey = this.sourceKey || 'default') {
+    if (!db) return false;
+    try {
+      const { getDurableCache } = require('../enrichment/durable-cache');
+      const payload = await getDurableCache('scraper_breaker', String(cacheKey || this.sourceKey || 'default'), { db });
+      if (!payload || typeof payload !== 'object') return false;
+      if (typeof payload.consecutiveFailures === 'number') this.consecutiveFailures = payload.consecutiveFailures;
+      if (payload.lastFailureReason !== undefined) this.lastFailureReason = payload.lastFailureReason;
+      if (payload.lastFailureAt !== undefined) this.lastFailureAt = payload.lastFailureAt;
+      if (payload.lastTrippedAt !== undefined) this.lastTrippedAt = payload.lastTrippedAt;
+      if (payload.state === 'OPEN' || payload.state === 'HALF-OPEN' || payload.state === 'CLOSED') {
+        this._state = payload.state;
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async persistToDurableCache(db, cacheKey = this.sourceKey || 'default') {
+    if (!db) return false;
+    try {
+      const { setDurableCache } = require('../enrichment/durable-cache');
+      return await setDurableCache('scraper_breaker', String(cacheKey || this.sourceKey || 'default'), this.toJSON(), {
+        db,
+        ttlMs: 3600 * 1000
+      });
+    } catch {
+      return false;
+    }
   }
 
   toJSON() {

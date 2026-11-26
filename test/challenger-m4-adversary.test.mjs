@@ -271,7 +271,7 @@ test('Title Defect Tripping: Explicit "subject to senior mortgage" notice trips 
 });
 
 test('Title Defect Tripping: Non-super-priority HOA foreclosure trips CRITICAL first mortgage survival', () => {
-  const nonSuperPriorityStates = ['TX', 'CA', 'NC', 'AZ', 'GA', 'OH', 'VA', 'SC'];
+  const nonSuperPriorityStates = ['TX', 'CA', 'NC', 'AZ', 'GA', 'OH', 'VA', 'SC', 'NY'];
   for (const st of nonSuperPriorityStates) {
     const risk = arbitrateTitleRisk({
       plaintiff: 'Highland Ridge Homeowners Association, Inc.',
@@ -300,11 +300,11 @@ test('Title Defect Tripping: Non-super-priority HOA foreclosure trips CRITICAL f
   }
 });
 
-test('Title Defect Tripping: 22 UCIOA HOA super-priority states correctly evaluate assessment protection', () => {
+test('Title Defect Tripping: 21 UCIOA HOA super-priority states correctly evaluate assessment protection', () => {
   const expectedSuperPriorityStates = [
     'NV', 'CO', 'CT', 'FL', 'WA', 'DC', 'MD', 'MA',
     'MN', 'MO', 'NJ', 'OR', 'PA', 'RI', 'TN', 'VT',
-    'WV', 'AL', 'AK', 'HI', 'IL', 'NY'
+    'WV', 'AL', 'AK', 'HI', 'IL'
   ];
 
   for (const st of expectedSuperPriorityStates) {

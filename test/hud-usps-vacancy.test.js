@@ -278,7 +278,7 @@ test('never fabricates a bid, sale date, occupancy, or property classification',
 test('falls back to geometry coordinates when LATITUDE/LONGITUDE are missing', async () => {
   const scraper = makeScraper({
     fetchImpl: async () => jsonResponse(200, queryResponse([
-      feature({ OBJECTID: 1, LATITUDE: undefined, LONGITUDE: undefined, geometry: { x: -122.4194, y: 37.7749 } })
+      feature({ OBJECTID: 1, GEOID: '06075010100', STATE: 'CA', COUNTY: 'San Francisco', LATITUDE: undefined, LONGITUDE: undefined, geometry: { x: -122.4194, y: 37.7749 } })
     ]))
   });
   const [listing] = await scraper.scrapeFeed();

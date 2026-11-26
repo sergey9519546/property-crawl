@@ -181,7 +181,7 @@ export const DiscoveryCard = React.memo(function DiscoveryCard({ listing, href, 
               const bid = knownNumber(listing.openingBid);
               const priorRaw = knownNumber((listing as { peakOpeningBid?: unknown; initialOpeningBid?: unknown }).peakOpeningBid)
                 ?? knownNumber((listing as { initialOpeningBid?: unknown }).initialOpeningBid);
-              return bid !== null && priorRaw !== null && priorRaw > bid ? (
+              return bid !== null && bid > 0 && priorRaw !== null && priorRaw > bid ? (
                 <span className="ml-1.5 text-xs font-normal text-ink-3 line-through">${Math.round(priorRaw).toLocaleString("en-US")}</span>
               ) : null;
             })()}

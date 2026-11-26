@@ -319,7 +319,7 @@ function hasSourceRecordShape(source, url) {
       return path.endsWith('/sfhpropertydetail') && url.searchParams.has('id');
     case 'email-notices':
     case 'public-notices-email':
-      return path !== '/' && path !== '/search';
+      return path !== '/search';
     case 'government-land':
     case 'local-surplus':
     case 'socrata-code-enforcement':

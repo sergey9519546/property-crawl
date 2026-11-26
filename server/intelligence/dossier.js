@@ -23,6 +23,7 @@ const { evaluateEnvironmentalLiability, loadCache: loadEpaCache } = require('../
 const { classifySlope, loadCache: loadTerrainCache } = require('../enrichment/usgs-terrain');
 const { isCompatibleNjSitusAddress } = require('../enrichment/nj-cadastral');
 const { computeQualifiedDeedComps, extractCandidateDeedRecords } = require('../enrichment/deed-comps');
+const NON_AUCTION_REO_SOURCES = new Set(['hud', 'gsa', 'usda', 'fannie', 'freddie', 'fdic', 'va']);
 
 function coordHash(coords, suffix = '') {
   const base = `${coords.lat},${coords.lng}${suffix ? `,${suffix}` : ''}`;
@@ -401,9 +402,12 @@ function buildPropertyDossier(listing, options = {}) {
       : Array.isArray(listing.historicalEvents)
         ? listing.historicalEvents
         : null;
-  const docketClearingAnalytics = rawDocketHistory
-    ? calculateDocketClearingAnalytics(rawDocketHistory, { county: listing.county, state: listing.state })
-    : (countyStats && typeof countyStats === 'object' && Number.isFinite(countyStats.totalDockets) ? countyStats : null);
+  const isNonAuctionReo = NON_AUCTION_REO_SOURCES.has(String(listing?.source || '').trim().toLowerCase());
+  const docketClearingAnalytics = isNonAuctionReo
+    ? null
+    : rawDocketHistory
+      ? calculateDocketClearingAnalytics(rawDocketHistory, { county: listing.county, state: listing.state })
+      : (countyStats && typeof countyStats === 'object' && Number.isFinite(countyStats.totalDockets) ? countyStats : null);
   const effectiveCountyStats = countyStats || listing.countyStats || (docketClearingAnalytics && docketClearingAnalytics.sampleSufficient ? docketClearingAnalytics : null);
   const effectiveTrajectory = trajectoryOverride
     ? {
