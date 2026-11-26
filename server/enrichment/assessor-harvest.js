@@ -113,7 +113,7 @@ function readYearField(rawAttributes, field) {
 
 function candidateListing(listing, now = Date.now()) {
   if (!listing || typeof listing !== 'object') return null;
-  if (!listing.provenance || listing.provenance.origin !== 'live') return null;
+  if (!listing.provenance || !['live', 'email_notice'].includes(listing.provenance.origin)) return null;
   if (listing.assessorParcel) return null;
   const roll = listing.provenance.derivedFields?.assessorRoll;
   if (roll) {
@@ -158,12 +158,35 @@ function applyHarvest(candidate, parcel, observedAt) {
   // Durable copy for the provenance JSONB: everything the evaluator and the
   // county conversion need, without rawAttributes (large, and only the tax
   // year was read from it — captured explicitly below).
+  const rawAttrs = parcel.rawAttributes && typeof parcel.rawAttributes === 'object' ? parcel.rawAttributes : {};
+  const lastSalePrice = parcel.lastSalePrice ?? parcel.salePrice ?? rawAttrs.SALE_PRICE ?? rawAttrs.SALE_PRC1 ?? null;
+  let lastSaleDate = parcel.lastSaleDate ?? parcel.saleDate ?? rawAttrs.DEED_DATE ?? rawAttrs.LAST_SALE_DATE ?? null;
+  if (!lastSaleDate && rawAttrs.SALE_YR1 && rawAttrs.SALE_MO1) {
+    const sy = Number(rawAttrs.SALE_YR1);
+    const sm = Number(rawAttrs.SALE_MO1);
+    if (Number.isInteger(sy) && sy >= 1900 && sy <= 2100 && Number.isInteger(sm) && sm >= 1 && sm <= 12) {
+      lastSaleDate = `${sy}-${String(sm).padStart(2, '0')}-01`;
+    }
+  }
+  const nuCode = parcel.nuCode ?? rawAttrs.NU_CODE ?? rawAttrs.SALE_NU ?? null;
+  const qualCode = parcel.qualCode ?? rawAttrs.QUAL_CD1 ?? null;
+  const livingAreaSqft = Number(parcel.livingAreaSqft ?? parcel.sqft ?? rawAttrs.TOT_LVG_AREA ?? rawAttrs.TOT_LVG_AR);
+  const validSqft = Number.isFinite(livingAreaSqft) && livingAreaSqft > 0 ? Math.round(livingAreaSqft) : null;
+  const rawYearBuilt = Number(parcel.yearBuilt ?? parcel.year ?? rawAttrs.YR_CONSTR ?? rawAttrs.ACT_YR_BLT);
+  const validYearBuilt = Number.isInteger(rawYearBuilt) && rawYearBuilt >= 1800 && rawYearBuilt <= 2100 ? rawYearBuilt : null;
   const durableParcel = {
     source: parcel.source,
     countyFips: parcel.countyFips,
     countyName: parcel.countyName,
     rawApn: parcel.rawApn,
     canonicalApn: parcel.canonicalApn,
+    ...(parcel.situsAddress ? { situsAddress: parcel.situsAddress } : {}),
+    ...(lastSalePrice != null ? { lastSalePrice } : {}),
+    ...(lastSaleDate != null ? { lastSaleDate } : {}),
+    ...(nuCode != null ? { nuCode } : {}),
+    ...(qualCode != null ? { qualCode } : {}),
+    ...(validSqft ? { livingAreaSqft: validSqft } : {}),
+    ...(validYearBuilt ? { yearBuilt: validYearBuilt } : {}),
     landUse: parcel.landUse,
     legalDescription: parcel.legalDescription,
     ...(parcel.assessorPhotoUrl ? { assessorPhotoUrl: parcel.assessorPhotoUrl } : {}),
@@ -193,6 +216,8 @@ function applyHarvest(candidate, parcel, observedAt) {
     if (!(Number(listing.assessed) > 0)) listing.assessed = total;
     if (assessmentYear && !listing.assessmentYear) listing.assessmentYear = assessmentYear;
   }
+  if (validSqft && !(Number(listing.sqft) > 0)) listing.sqft = validSqft;
+  if (validYearBuilt && !(Number(listing.year) > 0)) listing.year = validYearBuilt;
 }
 
 async function harvestAssessorRolls(listings, options = {}) {
@@ -348,6 +373,8 @@ module.exports = {
   DEFAULT_HARVEST_LIMIT,
   cacheKeyFor,
   candidateListing,
+  applyHarvest,
+  harvestAssessorRolls,
   harvestAssessorRolls,
   loadCache,
   saveCache,

@@ -15,6 +15,13 @@
  * - City of Kansas City (MO): data.kcmo.org dataset ax3m-jhxx
  */
 
+const {
+  SOCRATA_PORTALS,
+  DEMOLITION_KEYWORDS: SOCRATA_DEMOLITION_KEYWORDS,
+  isDemolitionOrCondemnation: isSocrataDemolition,
+  parseSocrataRecord,
+} = require('../sources/socrata-code-enforcement');
+
 const MUNICIPAL_PORTALS = Object.freeze({
   orlando: {
     key: 'orlando',
@@ -177,6 +184,25 @@ const MUNICIPAL_PORTALS = Object.freeze({
     statusField: 'case_status',
     dateField: 'violation_entry_date',
     inspectionDateField: 'last_action_date'
+  },
+  losangeles: {
+    key: 'losangeles',
+    source: 'SOCRATA_LOS_ANGELES',
+    name: 'City of Los Angeles Building & Safety Code Orders',
+    host: 'data.lacity.org',
+    datasetId: 'fd5a-kuh3',
+    endpoint: SOCRATA_PORTALS.losangeles.endpoint,
+    states: ['CA'],
+    cities: ['LOS ANGELES', 'LA'],
+    counties: ['LOS ANGELES'],
+    addressField: SOCRATA_PORTALS.losangeles.addressField,
+    parcelField: 'apn',
+    codeField: SOCRATA_PORTALS.losangeles.typeField,
+    descField: SOCRATA_PORTALS.losangeles.typeField,
+    statusField: SOCRATA_PORTALS.losangeles.statusField,
+    dateField: SOCRATA_PORTALS.losangeles.dateField,
+    fineField: SOCRATA_PORTALS.losangeles.fineField,
+    inspectionDateField: SOCRATA_PORTALS.losangeles.dateField
   }
 });
 
@@ -212,7 +238,8 @@ const VACANCY_KEYWORDS = Object.freeze([
   'vbr'
 ]);
 
-const DEMOLITION_KEYWORDS = Object.freeze([
+const DEMOLITION_KEYWORDS = Object.freeze([...new Set([
+  ...SOCRATA_DEMOLITION_KEYWORDS,
   'condemn',
   'demolition',
   'unsafe structure',
@@ -226,9 +253,10 @@ const DEMOLITION_KEYWORDS = Object.freeze([
   'dangerous building',
   'structure unfit',
   'collapse hazard'
-]);
+])]);
 
 function isDemolitionOrCondemnationText(text = '') {
+  if (isSocrataDemolition(text)) return true;
   const lower = String(text || '').toLowerCase();
   return DEMOLITION_KEYWORDS.some((kw) => lower.includes(kw));
 }
@@ -645,6 +673,7 @@ module.exports = {
   buildMunicipalQueryUrl,
   isOpenStatus,
   isVacantNotice,
+  parseSocrataRecord,
   parseCodeViolationsResponse,
   lookupCodeViolations
 };

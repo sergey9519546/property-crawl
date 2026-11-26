@@ -787,6 +787,53 @@ function computeQualifiedDeedComps(recordsOrListing = [], options = {}) {
   };
 }
 
+/**
+ * Loads peer listings with persisted assessor rolls from PostgreSQL for L2 deed-comp benchmarking.
+ * Fails soft to an empty array if the pool is unavailable or the query errors.
+ */
+async function loadPeerListingsForDeedComps(pool, listing, options = {}) {
+  if (!pool || typeof pool.query !== 'function' || !listing?.state) return [];
+  const state = normalizeStateCode(listing.state);
+  const zip = normalizeZip5(listing.zip);
+  const countyNorm = listing.county
+    ? String(listing.county).trim().toLowerCase().replace(/\s+county$/i, '').replace(/[^a-z0-9]+/g, ' ').trim()
+    : null;
+  if (!state || (!zip && !countyNorm)) return [];
+  const limit = Math.max(1, Math.min(250, Number(options.limit) || 150));
+  const excludeId = listing.id ? String(listing.id) : '';
+  try {
+    const res = await pool.query(
+      `SELECT id, state, county, city, zip, address, sqft,
+              provenance->'derivedFields'->'assessorRoll'->'parcel' AS assessor_parcel
+         FROM listings
+        WHERE state = $1
+          AND id <> $2
+          AND provenance->'derivedFields'->'assessorRoll'->'parcel' IS NOT NULL
+          AND (
+            ($3::text IS NOT NULL AND LEFT(REGEXP_REPLACE(COALESCE(zip, ''), '[^0-9]', '', 'g'), 5) = $3)
+            OR ($4::text IS NOT NULL AND LOWER(REGEXP_REPLACE(REGEXP_REPLACE(COALESCE(county, ''), '\\s+county$', '', 'i'), '[^a-zA-Z0-9]+', ' ', 'g')) = $4)
+          )
+        ORDER BY
+          CASE WHEN $3::text IS NOT NULL AND LEFT(REGEXP_REPLACE(COALESCE(zip, ''), '[^0-9]', '', 'g'), 5) = $3 THEN 0 ELSE 1 END,
+          source_observed_at DESC NULLS LAST
+        LIMIT $5`,
+      [state, excludeId, zip, countyNorm, limit],
+    );
+    return (Array.isArray(res?.rows) ? res.rows : []).map((row) => ({
+      id: row.id,
+      state: row.state,
+      county: row.county,
+      city: row.city,
+      zip: row.zip,
+      address: row.address,
+      sqft: row.sqft,
+      assessorParcel: row.assessor_parcel,
+    }));
+  } catch {
+    return [];
+  }
+}
+
 module.exports = {
   MIN_QUALIFIED_COMPS,
   DEFAULT_WINDOW_MONTHS,
@@ -794,4 +841,5 @@ module.exports = {
   DEED_COMPS_CAVEAT,
   extractCandidateDeedRecords,
   computeQualifiedDeedComps,
+  loadPeerListingsForDeedComps,
 };

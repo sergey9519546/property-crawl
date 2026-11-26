@@ -36,6 +36,7 @@ const { collectionScope } = require('./collection-scope');
 // so its collector never gets a run slot. Uncataloged keys fail closed too.
 const BaseScraper = require('./base');
 const { listingSourceAdmission, SOURCE_CATALOG } = require('../sources/catalog');
+const { CollectorRegistry } = require('../sources/collector-registry');
 const { validateScraperAdapters } = require('./scraper-interface');
 const { hash: scopeHash } = require('../discovery/store');
 
@@ -402,6 +403,12 @@ class IngestionScheduler {
     // Logged once per scheduler construction.
     this.gateBlockedSources = options.gateBlocked !== undefined ? Boolean(options.gateBlocked) : !options.realScrapers;
     this.listingServingScrapers = admitListingsScrapers(this.realScrapers, { gateBlocked: this.gateBlockedSources });
+    this.collectorRegistry = options.collectorRegistry || new CollectorRegistry();
+    for (const s of this.listingServingScrapers) {
+      if (s?.sourceKey) {
+        this.collectorRegistry.registerCollector(s.sourceKey, async (ctx) => s.scrapeFeed(ctx));
+      }
+    }
     this.isRunning = false; this.inFlight = new Map(); this.sourceLastRun = new Map(); this.cadenceAware = options.cadenceAware === true; this.scraperTimeoutMs = (() => { const t = Number(options.scraperTimeoutMs ?? (options.env || process.env).SCRAPER_TIMEOUT_MS); return Number.isFinite(t) && t >= 0 ? t : DEFAULT_SCRAPER_TIMEOUT_MS; })();
     this.cycleStartedAt = null;
     this.lastCycleFinishedAt = null;
@@ -755,8 +762,24 @@ class IngestionScheduler {
           this.sourceLastRun.set(scraper.sourceKey, { at: Date.now(), partial: hasPendingContinuation, failed: false, retries: 0 });
           const truncated = Boolean(coverage.truncated === true || rawReport.truncated === true || items?.truncated === true || hasPendingContinuation);
           const hasFailures = hasReportFailures(rawReport);
-          const complete = (hasPendingContinuation || hasFailures) ? false : (coverage.complete === true || rawReport.complete === true);
-          const fullSweepComplete = (isPartial || hasFailures) ? false : (coverage.fullSweepComplete === true || rawReport.fullSweepComplete === true);
+          let anomalousZeroDrop = false;
+          if (!reportOnly && this.collectorRegistry?.getCircuitBreaker(scraper.sourceKey)) {
+            if (accepted.length > 0 && !isPartial) {
+              this.collectorRegistry.saveSnapshot(scraper.sourceKey, accepted.map((l) => ({ id: l.id })));
+              this.collectorRegistry.getCircuitBreaker(scraper.sourceKey).reset();
+            } else if (!isPartial && accepted.length === 0 && !hasFailures) {
+              const priorSnap = this.collectorRegistry.getSnapshot(scraper.sourceKey);
+              if (priorSnap.length > 0) {
+                anomalousZeroDrop = true;
+                this.collectorRegistry.getCircuitBreaker(scraper.sourceKey).trip(
+                  `Anomalous zero-count collection (previous: ${priorSnap.length} listings)`
+                );
+                console.warn(`[Scheduler] ${scraper.name} returned 0 listings after ${priorSnap.length} previously verified; suppressing absence wipe`);
+              }
+            }
+          }
+          const complete = (hasPendingContinuation || hasFailures || anomalousZeroDrop) ? false : (coverage.complete === true || rawReport.complete === true);
+          const fullSweepComplete = (isPartial || hasFailures || anomalousZeroDrop) ? false : (coverage.fullSweepComplete === true || rawReport.fullSweepComplete === true);
           const report = (scraper.lastRunReport && typeof scraper.lastRunReport === 'object') || isPartial || items?.report || isListingEnvelope
             ? { outcome: coverage.outcome || (hasPendingContinuation ? 'partial' : null), truncated, complete, fullSweepComplete, partialSweep, nextCursor, continuationToken, nextContinuationToken, scope: coverage.acquisitionScope || null, coverage, ...(rawReport.county ? { county: rawReport.county } : {}), ...(rawReport.state ? { state: rawReport.state } : {}), ...(Array.isArray(rawReport.completedCounties) ? { completedCounties: rawReport.completedCounties } : {}), ...(Array.isArray(rawReport.attemptedStates) ? { attemptedStates: rawReport.attemptedStates } : {}), ...(Array.isArray(rawReport.completedStates) ? { completedStates: rawReport.completedStates } : {}), ...(Array.isArray(rawReport.failures) && rawReport.failures.length ? { failures: rawReport.failures } : {}), ...(Array.isArray(rawReport.statesFailed) && rawReport.statesFailed.length ? { statesFailed: rawReport.statesFailed } : {}), ...(Array.isArray(rawReport.failedCounties) && rawReport.failedCounties.length ? { failedCounties: rawReport.failedCounties } : {}), ...(rawReport.sweepStartedAt ? { sweepStartedAt: rawReport.sweepStartedAt } : {}), ...(rawReport.pagesPreviouslyCommitted != null ? { pagesPreviouslyCommitted: rawReport.pagesPreviouslyCommitted } : {}), ...(rawReport.statesPreviouslyCompleted != null ? { statesPreviouslyCompleted: rawReport.statesPreviouslyCompleted } : {}), ...(typeof rawReport.resumedFromCheckpoint === 'boolean' ? { resumedFromCheckpoint: rawReport.resumedFromCheckpoint } : {}), ...(driftAlarm && driftAlarm.hasDrift ? { driftAlarm } : {}) }
             : (driftAlarm && driftAlarm.hasDrift ? { driftAlarm } : null);
@@ -866,6 +889,10 @@ class IngestionScheduler {
     } finally {
       stopCycle();
     }
+  }
+
+  getCollectorRegistryTelemetry() {
+    return this.collectorRegistry ? this.collectorRegistry.getAllTelemetry() : {};
   }
 }
 

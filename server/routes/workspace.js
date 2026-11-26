@@ -9,6 +9,7 @@ const { loadObservationsForRecord } = require('../db/observations-persistence');
 const intake = require('../sources/intake');
 const intakeStore = require('../sources/store');
 const { memberAccountId } = require('../security/workspace-identity');
+const { loadPeerListingsForDeedComps } = require('../enrichment/deed-comps');
 
 function createWorkspaceHandler(dependencies = {}) {
   const database = dependencies.database || db;
@@ -34,9 +35,14 @@ function createWorkspaceHandler(dependencies = {}) {
     } else {
       historyUnavailable = true;
     }
+    let peerListings = [];
+    if (database.isPg && database.pool && listing.state && (listing.zip || listing.county)) {
+      try { peerListings = await loadPeerListingsForDeedComps(database.pool, listing); }
+      catch { peerListings = []; }
+    }
     const dossierNow = timestamp instanceof Date ? timestamp.getTime()
       : (typeof timestamp === 'number' ? timestamp : Date.parse(timestamp));
-    return { ...dossierBuilder(listing, { observations, now: dossierNow, historyUnavailable }), historyUnavailable };
+    return { ...dossierBuilder(listing, { observations, now: dossierNow, historyUnavailable, peerListings }), historyUnavailable };
   }
 
   return async function handleWorkspace(req, res, urlInput) {

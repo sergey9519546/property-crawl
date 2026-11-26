@@ -5,6 +5,11 @@
  * cash-to-close outputs are explicitly labeled models.
  */
 
+const {
+  JURISDICTION_FEE_SCHEDULES,
+  computeStatutoryStateFees,
+} = require('../intelligence/statutory-fees');
+
 // 50-State Statutory Redemption Periods & Rules
 const STATE_REDEMPTION_RULES = {
   AL: { days: 180, label: '180-Day Statutory Right of Redemption (Ala. Code § 6-5-248)' },
@@ -687,13 +692,76 @@ ${gapSummary}
 NO BID RECOMMENDATION. Do not place a deposit or authorize a bid from this draft. Confirm the exact source listing, current sale status and terms, title and lien priority, redemption or objection rights, occupancy, property condition, and every buyer-supplied financial assumption with qualified professionals.`;
 }
 
+/**
+ * Calculates complete itemized statutory cash-to-close fee schedule (merged from cash-to-close.js).
+ */
+function calculateCompleteCashToClose(params = {}) {
+  const winningBid = Math.max(0, Number(params.winningBid || params.purchasePrice || params.openingBid || 0));
+  const state = String(params.state || 'OH').toUpperCase();
+  const baseFees = computeStatutoryStateFees({
+    purchasePrice: winningBid,
+    state,
+    source: params.source,
+    distressType: params.distressType,
+    isTaxSale: params.isTaxSale,
+    isMarketplace: params.isMarketplace,
+  });
+
+  let buyersPremium = baseFees.buyersPremium;
+  if (!baseFees.isMarketplace && params.buyersPremium != null) {
+    buyersPremium = Math.max(0, Number(params.buyersPremium));
+  }
+
+  const sheriffPoundage = params.sheriffPoundage != null
+    ? Math.max(0, Number(params.sheriffPoundage))
+    : baseFees.sheriffPoundage;
+
+  const transferTax = params.transferTax != null
+    ? Math.max(0, Number(params.transferTax))
+    : baseFees.transferTax;
+
+  const delinquentTaxes = Math.max(0, Number(params.delinquentTaxes || 0));
+  const recordingFees = params.recordingFees != null
+    ? Math.max(0, Number(params.recordingFees))
+    : baseFees.defaultRecordingFee;
+
+  const totalAcquisitionCost = winningBid + buyersPremium + sheriffPoundage + transferTax + delinquentTaxes + recordingFees;
+  const creditedDeposit = Math.max(0, Number(params.creditedDeposit || params.deposit || 0));
+  const netCashDueAtSettlement = Math.max(0, totalAcquisitionCost - creditedDeposit);
+
+  return {
+    state,
+    jurisdictionName: baseFees.schedule.name,
+    supported: baseFees.supported,
+    notice: baseFees.supported ? null : `Statutory fee preset unavailable for state ${state}`,
+    winningBid,
+    buyersPremium,
+    sheriffPoundage,
+    transferTax,
+    delinquentTaxes,
+    recordingFees,
+    totalAcquisitionCost,
+    creditedDeposit,
+    netCashDueAtSettlement,
+    settlementWindowHours: baseFees.settlementWindowHours,
+    statutoryNotes: baseFees.statutoryNotes,
+    isMarketplace: baseFees.isMarketplace,
+    computedAt: typeof params.computedAt === 'string' && params.computedAt.trim()
+      ? params.computedAt.trim()
+      : new Date().toISOString(),
+  };
+}
+
 module.exports = {
   STATE_REDEMPTION_RULES,
   SUPER_PRIORITY_HOA_STATES,
+  JURISDICTION_FEE_SCHEDULES,
   parseCurrency,
   getRedemptionRule,
   detectSeniorLienSurvival,
   computeCashToClose,
+  calculateCompleteCashToClose,
+  computeStatutoryCashToClosePreset: calculateCompleteCashToClose,
   detectBankruptcyOrAdjournment,
   parseRentRollSchedule,
   generateLetterOfIntent,

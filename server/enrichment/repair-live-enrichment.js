@@ -172,7 +172,7 @@ async function repairLiveEnrichment(options = {}) {
     : DEFAULT_GEOCODE_LIMIT;
   const countyLimit = Number.isInteger(Number(options.countyLimit)) && Number(options.countyLimit) > 0
     ? Number(options.countyLimit)
-    : 40;
+    : 60;
   const resolveCountyFn = options.resolveCountyFn || resolveCensusCountyFromCoords;
   const catchLimit = Number.isInteger(Number(options.catchLimit)) && Number(options.catchLimit) > 0
     ? Math.min(4000, Number(options.catchLimit))
@@ -371,6 +371,7 @@ async function repairLiveEnrichment(options = {}) {
             OR (provenance->'derivedFields'->>'geocodeAttemptedAt')::timestamptz < NOW() - INTERVAL '7 days'
           )
         ORDER BY CASE
+          WHEN source_key = 'hud' THEN 0
           WHEN source_key = 'civilview' THEN 1
           WHEN source_key = 'sheriff' THEN 2
           WHEN source_key = 'gsa' THEN 3
@@ -495,7 +496,11 @@ async function repairLiveEnrichment(options = {}) {
             AND latitude IS NOT NULL
             AND longitude IS NOT NULL
             AND NOT (latitude = 0 AND longitude = 0)
-            AND (provenance->'derivedFields'->>'countyLookupAttemptedAt') IS NULL
+            AND (
+              (provenance->'derivedFields'->>'countyLookupAttemptedAt') IS NULL
+              OR NOT ((provenance->'derivedFields'->>'countyLookupAttemptedAt') ~ '^20[0-9]{2}-')
+              OR (provenance->'derivedFields'->>'countyLookupAttemptedAt')::timestamptz < NOW() - INTERVAL '7 days'
+            )
           ORDER BY CASE WHEN source_key = 'hud' THEN 0 ELSE 1 END,
                    source_observed_at DESC NULLS LAST
           LIMIT $1`,

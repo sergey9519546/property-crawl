@@ -564,7 +564,10 @@ function parseLaSearchHtml(html = '', options = {}) {
 function parseLaDocumentIntake(documentContent, options = {}) {
   if (!documentContent) return [];
   const text = typeof documentContent === 'string' ? documentContent : JSON.stringify(documentContent);
-  return parseLaSearchHtml(text, options);
+  const rows = parseLaSearchHtml(text, options);
+  if (rows.length > 0) return rows;
+  const single = parseLaRecordRow(text, options);
+  return single ? [single] : [];
 }
 
 // ---------------------------------------------------------------------------

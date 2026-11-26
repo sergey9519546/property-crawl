@@ -26,6 +26,7 @@ const {
   neutralizePromptInjection,
   normalizeOcrText,
 } = require('../ai/notice-parser');
+const { parseLaDocumentIntake } = require('./adapters/la-recorder');
 
 const SOURCE_KEY = 'public-notices-email';
 const SOURCE_ID = 'press-association-email';
@@ -195,7 +196,22 @@ function messageToPackets(message, { keywords = DEFAULT_KEYWORDS, observedAt = n
 
   const cleaned = neutralizePromptInjection(normalizeOcrText(body || subject));
   const parsedParcels = parseLegalNotice(cleaned);
-  const packets = parsedParcels.map((fields, index) => {
+  const looksLikeLaNotice = /\b(?:los\s+angeles|la\s+county|lavote\.gov)\b/i.test(cleaned) || /\b\d{4}-\d{3}-\d{3}\b/.test(cleaned);
+  const laRecords = looksLikeLaNotice ? parseLaDocumentIntake(cleaned) : [];
+  const packets = parsedParcels.map((rawFields, index) => {
+    const laMatch = laRecords[index] || laRecords[0] || null;
+    const fields = laMatch
+      ? {
+          ...rawFields,
+          apn: rawFields.apn || laMatch.ain || null,
+          caseNumber: rawFields.caseNumber || laMatch.caseNumber || null,
+          county: rawFields.county || (laMatch.county ? 'Los Angeles' : null),
+          state: rawFields.state || laMatch.state || null,
+          distressStage: rawFields.distressStage || laMatch.distressStage || null,
+          grantor: rawFields.grantor || laMatch.grantor || null,
+          grantee: rawFields.grantee || laMatch.grantee || null,
+        }
+      : rawFields;
     const noticeText = cleaned;
     return {
       sourceKey: SOURCE_KEY,

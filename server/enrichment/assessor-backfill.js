@@ -99,6 +99,14 @@ function candidateReady(listing, nowMs = Date.now()) {
   return countyEnrolled(listing.state, listing.county);
 }
 
+function prioritizeHudMissingSpecs(rows = []) {
+  return [...rows].sort((a, b) => {
+    const aHudMissing = a?.source === 'hud' && (!(Number(a.assessed) > 0) || !(Number(a.sqft) > 0) || !(Number(a.year) > 0)) ? 0 : 1;
+    const bHudMissing = b?.source === 'hud' && (!(Number(b.assessed) > 0) || !(Number(b.sqft) > 0) || !(Number(b.year) > 0)) ? 0 : 1;
+    return aHudMissing - bHudMissing;
+  });
+}
+
 async function resolveNjCadastralBatch({ db, fetchFn, now, limit = 15, perStateLimit = 60, cachePath, logger = null, maxDurationMs, wallClock } = {}) {
   const out = { considered: 0, njEnriched: 0, persisted: 0, failed: 0, notFound: 0 };
   if (!db || typeof db.getListings !== 'function' || typeof db.createListing !== 'function' || limit <= 0) {
@@ -121,7 +129,7 @@ async function resolveNjCadastralBatch({ db, fetchFn, now, limit = 15, perStateL
     return out;
   }
   const candidates = [];
-  for (const row of page.listings || []) {
+  for (const row of prioritizeHudMissingSpecs(page.listings || [])) {
     if (!row || typeof row !== 'object' || !row.id || String(row.state || '').toUpperCase() !== 'NJ') continue;
     if (row.assessorParcel || row.provenance?.derivedFields?.assessorRoll) continue;
     if (hasRecentDbAssessorMiss(row, nowMs)) continue;
@@ -196,6 +204,26 @@ async function backfillAssessorRolls({ db, fetchFn, now, limit = 30, perStateLim
   const budgetExpired = () => budgetMs > 0 && (clock() - startedAt) >= budgetMs;
   const seen = new Set();
   const candidates = [];
+  try {
+    const hudPage = await db.getListings({ source: 'hud', missingAssessorRoll: true, limit: Math.min(limit, 30) });
+    for (const row of prioritizeHudMissingSpecs(hudPage?.listings || [])) {
+      if (!row || typeof row !== 'object' || !row.id || seen.has(row.id)) continue;
+      if (!candidateReady(row, nowMs)) continue;
+      const countyKey = resolveCountyKey(row.state, row.county);
+      const cleanApn = normalizeApn(extractRawApn(row));
+      const key = cacheKeyFor(countyKey, Number(row.lat), Number(row.lng), cleanApn);
+      const entry = cache[key];
+      if (entry && Number.isFinite(Date.parse(entry.observedAt))) {
+        const age = nowMs - Date.parse(entry.observedAt);
+        if (entry.parcel ? age < cacheTtlMs : age < missTtlMs) continue;
+      }
+      seen.add(row.id);
+      candidates.push(row);
+      if (candidates.length >= limit) break;
+    }
+  } catch (error) {
+    if (logger?.warn) logger.warn(`[AssessorBackfill] HUD priority query failed (non-fatal): ${error.message}`);
+  }
   const stateBuckets = [];
   for (const state of CONVERTED_STATES) {
     let page = { listings: [] };
@@ -206,7 +234,7 @@ async function backfillAssessorRolls({ db, fetchFn, now, limit = 30, perStateLim
       continue;
     }
     const bucket = [];
-    for (const row of page.listings || []) {
+    for (const row of prioritizeHudMissingSpecs(page.listings || [])) {
       if (!row || typeof row !== 'object' || !row.id || seen.has(row.id)) continue;
       if (!candidateReady(row, nowMs)) continue;
       const countyKey = resolveCountyKey(row.state, row.county);

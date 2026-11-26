@@ -8,12 +8,15 @@ const { validateListingForIngestion } = require('../scrapers/validation');
 const durableEvidence = require('../discovery/evidence');
 const { requireWorkspaceIdentity } = require('../security/workspace-identity');
 const { auditDocketEvidence, summarizeDocketHits } = require('./verify-docket');
+const { loadPeerListingsForDeedComps } = require('../enrichment/deed-comps');
 
 function createPropertyIntelligenceHandler(dependencies = {}) {
   const database = dependencies.database || db;
   const publicRecords = dependencies.buildPublicRecordEvidence || ((listing) => require('../public-records').buildPublicRecordEvidence(listing, { allowNetwork: true, timeoutMs: 7000 }));
   const evidenceStore = dependencies.durableEvidence || durableEvidence;
   const countyStatsLoader = dependencies.loadCountyObservationStats || loadCountyObservationStats;
+  const peerListingsLoader = dependencies.loadPeerListingsForDeedComps || loadPeerListingsForDeedComps;
+  const dagRunner = dependencies.executeDag || executeDag;
   const env = dependencies.env || process.env;
   const cache = new Map();
   const inFlight = new Map();
@@ -46,6 +49,8 @@ function createPropertyIntelligenceHandler(dependencies = {}) {
       if (req.method === 'POST' && !evidence) {
         if (!inFlight.has(key) && inFlight.size >= 2) return res.status(429).json({ error: 'Two property investigations are already running. Retry shortly.' });
         if (!inFlight.has(key)) {
+          const dagAllowNetwork = dependencies.allowDagNetwork === true
+            || (dependencies.allowDagNetwork !== false && (typeof dependencies.fetchFn === 'function' || process.env.NODE_ENV !== 'test'));
           const work = Promise.resolve().then(() => publicRecords(listing)).then(async (result) => {
             if (result && !result.docketVerification && (dependencies.courtlistenerClient || env.COURTLISTENER_VERIFY_DOCKET === '1')) {
               try {
@@ -58,9 +63,35 @@ function createPropertyIntelligenceHandler(dependencies = {}) {
                 // Non-fatal: fail closed without blocking public-record research
               }
             }
-            if (database.isPg) await evidenceStore.saveResearch(database.pool, listing.id, key, result);
+            let cachedExecution = null;
+            if (dagAllowNetwork) {
+              try {
+                const dagExec = await dagRunner({
+                  ...listing,
+                  property: listing,
+                  parcel: result?.parcel || null,
+                  countyParcel: result?.countyParcel || null,
+                  municipalRecords: result?.municipalRecords || null,
+                }, {
+                  allowNetwork: true,
+                  nodeTimeoutMs: 4500,
+                  ...(dependencies.fetchFn ? { fetchFn: dependencies.fetchFn } : {}),
+                });
+                cachedExecution = {
+                  success: dagExec.success,
+                  dossier: dagExec.context.dossier || null,
+                  telemetry: dagExec.telemetry,
+                };
+              } catch {
+                cachedExecution = null;
+              }
+            }
+            const toPersist = cachedExecution && result && typeof result === 'object'
+              ? { ...result, _enrichmentExecution: cachedExecution }
+              : result;
+            if (database.isPg) await evidenceStore.saveResearch(database.pool, listing.id, key, toPersist);
             if (cache.size >= 100) cache.delete(cache.keys().next().value);
-            const entry = { savedAt: Date.now(), result }; cache.set(key, entry); return entry;
+            const entry = { savedAt: Date.now(), result, enrichmentExecution: cachedExecution }; cache.set(key, entry); return entry;
           }).finally(() => inFlight.delete(key));
           inFlight.set(key, work);
         }
@@ -128,11 +159,25 @@ function createPropertyIntelligenceHandler(dependencies = {}) {
           })
         : null;
 
+      let peerListings = [];
+      if (database.isPg && database.pool && listing.state && (listing.zip || listing.county)) {
+        try {
+          peerListings = await peerListingsLoader(database.pool, listing);
+        } catch {
+          peerListings = [];
+        }
+      }
+      const rawPublicRecords = authorized ? (evidence?.result || null) : null;
+      const persistedExecution = evidence?.enrichmentExecution || rawPublicRecords?._enrichmentExecution || null;
+      const sanitizedPublicRecords = rawPublicRecords && typeof rawPublicRecords === 'object' && Object.hasOwn(rawPublicRecords, '_enrichmentExecution')
+        ? (({ _enrichmentExecution: _omit, ...rest }) => rest)(rawPublicRecords)
+        : rawPublicRecords;
       const publicPayload = buildPropertyDossier(listing, {
         observations: scopedObservations,
-        publicRecords: authorized ? (evidence?.result || null) : null,
+        publicRecords: sanitizedPublicRecords,
         historyUnavailable,
         countyStats,
+        peerListings,
         docketSummary,
         trajectoryOverride: authorized ? null : postponementCounts,
       });
@@ -144,23 +189,27 @@ function createPropertyIntelligenceHandler(dependencies = {}) {
           researchRestricted: true,
         });
       }
-      const execution = await executeDag({
-        ...listing,
-        property: listing,
-        parcel: evidence?.result?.parcel || null,
-        countyParcel: evidence?.result?.countyParcel || null,
-        observations: scopedObservations,
-      }, { allowNetwork: false });
+      const enrichmentExecution = persistedExecution || await (async () => {
+        const execution = await dagRunner({
+          ...listing,
+          property: listing,
+          parcel: sanitizedPublicRecords?.parcel || null,
+          countyParcel: sanitizedPublicRecords?.countyParcel || null,
+          municipalRecords: sanitizedPublicRecords?.municipalRecords || null,
+          observations: scopedObservations,
+        }, { allowNetwork: false });
+        return {
+          success: execution.success,
+          dossier: execution.context.dossier || null,
+          telemetry: execution.telemetry,
+        };
+      })();
       return res.json({
         ...publicPayload,
         ...extensions,
         postponementCounts,
         historyUnavailable,
-        enrichmentExecution: {
-          success: execution.success,
-          dossier: execution.context.dossier || null,
-          telemetry: execution.telemetry,
-        },
+        enrichmentExecution,
       });
     } catch (error) {
       console.error('[Property Intelligence]', error.message);

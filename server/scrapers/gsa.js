@@ -163,6 +163,10 @@ class GsaSurplusScraper extends BaseScraper {
     this.useScrapling = options.useScrapling ?? isScraplingEnabled('gsa');
     this.extract = options.extractImpl || extractWithScrapling;
     this.useApi = options.useApi ?? (process.env.GSA_USE_OPEN_DATA_API === '1');
+    this.enableOpenDataAugment = options.enableOpenDataAugment ?? (
+      process.env.GSA_USE_OPEN_DATA_API !== '0'
+      && (Boolean(options.apiFetchImpl) || process.env.NODE_ENV !== 'test')
+    );
     this.apiFetchImpl = options.apiFetchImpl || null;
     // Known property ids to refresh through the permitted /asset-details path.
     this.propertyIds = this.normalizePropertyIds(options.propertyIds);
@@ -263,7 +267,38 @@ class GsaSurplusScraper extends BaseScraper {
           return this.scrapeByIds(this.propertyIds);
         }
         console.warn(`[${this.name}] Refusing to crawl ${this.baseUrl}${excludedPath}. Reading the robots-allowed GSA accelerated-disposition list instead.`);
-        return this.collectDispositionList();
+        const dispositionListings = await this.collectDispositionList();
+        const dispositionReport = this.lastRunReport;
+        if (!this.enableOpenDataAugment) {
+          return dispositionListings;
+        }
+        try {
+          const apiListings = await this.scrapeApi({ maxPages: 2 });
+          const seen = new Set(dispositionListings.map((l) => l.provenance?.recordId || l.id).filter(Boolean));
+          const merged = [...dispositionListings];
+          let addedFromApi = 0;
+          for (const item of apiListings) {
+            const key = item.provenance?.recordId || item.id;
+            if (key && seen.has(key)) continue;
+            if (key) seen.add(key);
+            merged.push(item);
+            addedFromApi += 1;
+          }
+          if (dispositionReport) {
+            this.lastRunReport = {
+              ...dispositionReport,
+              recordsDiscovered: (dispositionReport.recordsDiscovered || 0) + apiListings.length,
+              recordsEmitted: merged.length,
+              openDataApiAugmented: true,
+              openDataApiCount: addedFromApi,
+            };
+          }
+          return merged;
+        } catch (err) {
+          console.warn(`[${this.name}] GSA Open-Data API augmentation failed (non-fatal): ${err.message}`);
+          if (dispositionReport) this.lastRunReport = dispositionReport;
+          return dispositionListings;
+        }
       }
       console.warn(`[${this.name}] SCRAPER_RESPECT_ROBOTS=0 set; operator override active for catalog-declared robots exclusion (${excludedPath}).`);
     }

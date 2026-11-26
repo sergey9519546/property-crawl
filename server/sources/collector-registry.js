@@ -17,6 +17,7 @@ const DEFAULT_SNAPSHOT_DIR = path.resolve(__dirname, '..', '..', '.cache', 'coll
 class CollectorRegistry {
   constructor(options = {}) {
     this.snapshotDir = options.snapshotDir || process.env.PROPERTY_COLLECTOR_SNAPSHOT_DIR || ((process.env.VERCEL === '1' || process.env.NOW_REGION) ? path.join(require('node:os').tmpdir(), 'property-crawl-cache', 'collector-snapshots') : DEFAULT_SNAPSHOT_DIR);
+    this.disableDisk = options.disableDisk ?? (process.env.NODE_ENV === 'test' && !options.snapshotDir && !process.env.PROPERTY_COLLECTOR_SNAPSHOT_DIR);
     this.collectors = new Map();
     this.circuitBreakers = new Map();
     this.snapshots = new Map();
@@ -80,6 +81,7 @@ class CollectorRegistry {
       return this.snapshots.get(key);
     }
 
+    if (this.disableDisk) return [];
     const filePath = path.join(this.snapshotDir, `${key}-snapshot.json`);
     if (fs.existsSync(filePath)) {
       try {
@@ -100,12 +102,14 @@ class CollectorRegistry {
   saveSnapshot(sourceKey, listings = []) {
     const key = String(sourceKey || '').toLowerCase();
     this.snapshots.set(key, listings);
+    if (this.disableDisk) return;
 
     try {
       if (!fs.existsSync(this.snapshotDir)) {
         fs.mkdirSync(this.snapshotDir, { recursive: true });
       }
-      const filePath = path.join(this.snapshotDir, `${key}-snapshot.json`);
+      if (this.disableDisk) return [];
+    const filePath = path.join(this.snapshotDir, `${key}-snapshot.json`);
       fs.writeFileSync(filePath, JSON.stringify({
         version: 1,
         sourceKey: key,

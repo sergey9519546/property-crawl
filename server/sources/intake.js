@@ -2,6 +2,7 @@ const crypto = require('node:crypto');
 const net = require('node:net');
 const { loadStore, putRecord, queryRecords, updateRecord } = require('./store');
 const { identifyAdapterForSource } = require('./platform-fingerprinter');
+const { parseLaDocumentIntake } = require('../scrapers/adapters/la-recorder');
 
 const ALLOWED_KINDS = new Set(['text', 'csv', 'json']);
 const MAX_BODY_BYTES = 512 * 1024;
@@ -318,6 +319,18 @@ function submitEvidence(input, options = {}) {
     original: value.original,
     review: null,
   };
+  if (value.kind === 'text' && (value.platformFingerprint?.adapter === 'la-recorder' || value.sourceId === 'la-recorder' || /lavote\.gov/i.test(value.sourceUrl))) {
+    const extracted = parseLaDocumentIntake(value.original?.body || '', { baseUrl: value.sourceUrl });
+    if (extracted.length > 0) {
+      record.content.extractedRecorderRecords = extracted.length;
+      record.provenance.recorderIntake = {
+        adapter: 'la-recorder',
+        recordCount: extracted.length,
+        ainSample: extracted.map((r) => r.ain).filter(Boolean).slice(0, 10),
+        distressStages: [...new Set(extracted.map((r) => r.distressStage).filter(Boolean))],
+      };
+    }
+  }
   const stored = putRecord(record, { filePath: options.storePath, staleLockMs: options.staleLockMs });
   return { record: getSummary(stored.record), deduplicated: stored.deduplicated };
 }
