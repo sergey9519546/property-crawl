@@ -115,16 +115,19 @@ function computePortfolioDashboard(savedListings, options = {}) {
     .slice(0, upcomingLimit)
     .map((entry) => entry.listing);
 
+  const valuedEquities = listings
+    .map((l) => {
+      const opening = finiteOrNull(l.openingBid);
+      const mid = finiteOrNull(l.mid);
+      return Number.isFinite(opening) && Number.isFinite(mid) ? (mid - opening) : null;
+    })
+    .filter(Number.isFinite);
+
   return {
     userId: typeof options.userId === 'string' ? options.userId : null,
     count: listings.length,
     totalEstimatedValue: mids.length ? sum(mids) : null,
-    totalEstimatedEquity: listings.reduce((acc, l) => {
-      const opening = finiteOrNull(l.openingBid);
-      const mid = finiteOrNull(l.mid);
-      if (Number.isFinite(opening) && Number.isFinite(mid)) return acc + (mid - opening);
-      return acc;
-    }, 0),
+    totalEstimatedEquity: valuedEquities.length ? sum(valuedEquities) : null,
     medianOpeningBid: median(openings),
     medianMid: median(mids),
     medianDealScore: median(scores),

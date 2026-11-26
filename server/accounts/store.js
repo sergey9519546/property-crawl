@@ -34,6 +34,13 @@ function isEntitled(account, now = Date.now()) {
   return Date.parse(account.currentPeriodEnd) > now;
 }
 
+function tierQuotas(tier) {
+  const normalized = normalizeBillingTier(tier);
+  if (normalized === 'desk') return { tier: 'desk', maxHunts: 100, maxSavedSearches: 100 };
+  if (normalized === 'pro') return { tier: 'pro', maxHunts: 20, maxSavedSearches: 20 };
+  return { tier: 'free', maxHunts: 0, maxSavedSearches: 5 };
+}
+
 function publicAccount(account, now = Date.now()) {
   if (!account) return null;
   return {
@@ -303,4 +310,5 @@ module.exports = {
   createPgBackend,
   isEntitled,
   normalizeEmail,
+  tierQuotas,
 };

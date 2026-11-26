@@ -278,7 +278,7 @@ export class OperationsAgent {
 
       if (result.retryable) {
         const retryPayload = (action === 'next-slice' && result.failedSourceId)
-          ? { action: 'run-source', source: result.failedSourceId, slice: true }
+          ? { action: 'run-source', source: result.failedSourceId, slice: true, timeoutMs: 25000 }
           : payload;
         const nextRunAt = Date.now() + retryDelayMs(1);
         this.sql.exec(
@@ -404,7 +404,7 @@ export class EmailNoticeAgent {
 
   async scheduleNextAlarm() {
     if (!this.sql || typeof this.ctx?.storage?.setAlarm !== 'function') return;
-    const rows = this.sql.exec(`SELECT MIN(next_run_at) AS next_at FROM email_queue WHERE attempts > 0`).toArray();
+    const rows = this.sql.exec(`SELECT MIN(next_run_at) AS next_at FROM email_queue WHERE attempts >= 0`).toArray();
     const nextAt = Number(rows?.[0]?.next_at);
     if (Number.isFinite(nextAt) && nextAt > 0) {
       await this.ctx.storage.setAlarm(nextAt);
@@ -464,9 +464,10 @@ export class EmailNoticeAgent {
         to,
         subject,
         r2Key ? '' : raw,
-        Date.now(),
+        Date.now() + 120_000,
         nowIso,
       );
+      await this.scheduleNextAlarm();
 
       const result = await callUpstreamScraperRun(
         this.env,
@@ -517,7 +518,7 @@ export class EmailNoticeAgent {
     const due = this.sql.exec(
       `SELECT id, r2_key, from_addr, to_addr, subject, raw_mime, attempts, max_attempts
        FROM email_queue
-       WHERE attempts > 0 AND next_run_at <= ?
+       WHERE attempts >= 0 AND next_run_at <= ?
        ORDER BY next_run_at ASC
        LIMIT 5`,
       now,

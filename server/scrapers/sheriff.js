@@ -548,8 +548,14 @@ class SheriffSaleScraper extends BaseScraper {
       // If initial page has no parseable rows, execute ColdFusion session + AJAX load protocol
       if (listings.length === 0 && !html.includes('nonstandard skin') && !html.includes('<div id="root">')) {
         try {
+          const countyBreaker = this.getCountyCircuitBreaker(county);
           const fetcher = this.fetchImpl || globalThis.fetch;
           const fetchAjax = async (targetUrl, init = {}) => {
+            if (countyBreaker.isOpen()) {
+              const openErr = new Error(`Circuit breaker open for ${county.name}`);
+              openErr.code = 'CIRCUIT_OPEN';
+              throw openErr;
+            }
             const urlCheck = assertFetchableUrl(targetUrl);
             if (!urlCheck.ok) {
               const err = new Error(`Refused unfetchable RealAuction URL (${urlCheck.reason}): ${targetUrl}`);
@@ -566,14 +572,18 @@ class SheriffSaleScraper extends BaseScraper {
                 ? AbortSignal.timeout(timeoutMs)
                 : undefined);
               try {
+                if (attempt > 1) await this.crawlJitter();
                 const res = await fetcher(targetUrl, { ...init, ...(signal ? { signal } : {}) });
                 if (res && typeof res.status === 'number' && res.status >= 500 && attempt < maxAttempts) {
                   continue;
                 }
+                if (res && typeof res.status === 'number' && typeof countyBreaker.validateResponse === 'function') {
+                  countyBreaker.validateResponse(targetUrl, res.status, '');
+                }
                 return res;
               } catch (err) {
                 lastErr = err;
-                if (attempt >= maxAttempts || err?.code === 'SSRF_BLOCKED') throw err;
+                if (attempt >= maxAttempts || err?.code === 'SSRF_BLOCKED' || err?.code === 'CIRCUIT_OPEN') throw err;
               }
             }
             throw lastErr;

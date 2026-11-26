@@ -151,8 +151,14 @@ function createHuntsHandler(dependencies = {}) {
         if (!visible(existing)) return res.status(404).json({ error: 'Hunt was not found' });
       }
       if (owner && url.pathname === '/api/hunts' && req.method === 'POST') {
+        const { accountServiceFor, tierQuotas } = require('../accounts/store');
+        let huntLimit = MEMBER_HUNT_LIMIT;
+        try {
+          const acct = await accountServiceFor(database).get(owner);
+          if (acct) huntLimit = tierQuotas(acct.billingTier || 'pro').maxHunts;
+        } catch (_) {}
         const mine = (durable ? await durable.list() : hunts.listHunts({ filePath })).filter(visible);
-        if (mine.length >= MEMBER_HUNT_LIMIT) return res.status(409).json({ error: `Members can keep up to ${MEMBER_HUNT_LIMIT} hunts`, code: 'HUNT_LIMIT' });
+        if (mine.length >= huntLimit) return res.status(409).json({ error: `Members can keep up to ${huntLimit} hunts on this plan`, code: 'HUNT_LIMIT' });
       }
       if (durable) {
         if (url.pathname === '/api/hunts' && req.method === 'GET') return res.json({items:(await durable.list()).filter(visible)});

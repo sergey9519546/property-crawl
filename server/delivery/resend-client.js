@@ -343,7 +343,7 @@ async function sendHuntDigest(options = {}) {
   return dispatchEmail({
     to,
     from: config.from,
-    subject: subject || `[PropertyCrawl] Deal Alert: ${huntName || 'Hunt Results'}`,
+    subject: subject || `[PerfectProperty] Deal Alert: ${huntName || 'Hunt Results'}`,
     html,
     text: text || '',
     apiKey: config.apiKey,

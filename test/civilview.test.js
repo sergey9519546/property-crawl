@@ -95,7 +95,7 @@ test('CivilView detail parser uses published facts and leaves unavailable facts 
   assert.equal(listing.saleDate, '2026-09-11');
   assert.equal(listing.address, '19 WEST PARK AVENUE, PARK RIDGE, NJ 07656');
   assert.equal(listing.attorney, 'GOLDMAN & BESLOW, LLC');
-  assert.equal(listing.occupancy, 'OWNER OCCUPIED');
+  assert.equal(listing.occupancy, 'Owner-Occupied');
   assert.equal(listing.lat, null);
   assert.equal(listing.lng, null);
   assert.equal(listing.estLow, null);
@@ -548,7 +548,7 @@ test('CivilView extracts Plaintiff Upset Price, Lot/Block, description occupancy
     source: 'CivilView Description — Plaintiff Upset Price',
   });
   assert.equal(listing.sourceFacts.upsetPrice, 249593.48);
-  assert.equal(listing.occupancy, 'OWNER OCCUPIED');
+  assert.equal(listing.occupancy, 'Owner-Occupied');
   assert.equal(listing.apn, 'Lot 6, Block 2002');
   assert.equal(listing.provenance.parcelNumber, 'Lot 6, Block 2002');
   assert.deepEqual(listing.sourceFacts.lotBlock, { block: '2002', lot: '6' });

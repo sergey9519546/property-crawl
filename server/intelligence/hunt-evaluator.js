@@ -165,7 +165,7 @@ function generateHuntEmailDigest(hunt, matchedListings = []) {
     return `- ${l.address || 'Address Unrecorded'} (${l.city || ''}, ${l.state || ''}) — Bid: ${bid} ${score ? `· ${score}` : ''}`;
   });
 
-  const appOrigin = (process.env.PUBLIC_APP_ORIGIN || 'https://propertycrawl.com').replace(/\/+$/, '');
+  const appOrigin = (process.env.PUBLIC_APP_ORIGIN || 'https://perfectproperty.bid').replace(/\/+$/, '');
   const textBody = `New distressed opportunities matched your hunt "${huntTitle}":\n\n${summaryRows.join('\n')}\n\nView and underwrite in your workspace:\n${appOrigin}/hunts`;
 
   return {

@@ -118,7 +118,24 @@ export function BidSheetView() {
   const [apiVerifyError, setApiVerifyError] = React.useState<string | null>(null);
   const [listings, setListings] = React.useState<PropertyListing[]>([]);
   const [scenarioMap, setScenarioMap] = React.useState<Record<string, LocalScenarioOverride>>({});
-  const [manualWalkAwayBids, setManualWalkAwayBids] = React.useState<Record<string, string>>({});
+  const [manualWalkAwayBids, setManualWalkAwayBids] = React.useState<Record<string, string>>(() => {
+    if (typeof window === "undefined") return {};
+    try {
+      const raw = window.localStorage.getItem("pp_bid_sheet_manual_bids_v1");
+      const parsed = raw ? JSON.parse(raw) : null;
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
+  });
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem("pp_bid_sheet_manual_bids_v1", JSON.stringify(manualWalkAwayBids));
+    } catch {
+      // Ignore quota errors
+    }
+  }, [manualWalkAwayBids]);
   const [availableCapitalInput, setAvailableCapitalInput] = React.useState<string>("150000");
   const [loading, setLoading] = React.useState<boolean>(true);
   const [loadError, setLoadError] = React.useState<string | null>(null);
@@ -260,10 +277,11 @@ export function BidSheetView() {
     setApiVerifyNote(null);
     setApiVerifyError(null);
     try {
+      const apiTargets = ladderTargets.slice(0, 50);
       const response = await fetch("/api/check-ladder", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ targets: ladderTargets, availableCapital: parsedCapital }),
+        body: JSON.stringify({ targets: apiTargets, availableCapital: parsedCapital }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {

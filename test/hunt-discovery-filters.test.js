@@ -45,7 +45,8 @@ test('saved discovery criteria uses canonical unknown, date, program, and docume
 });
 
 test('saved discovery criteria rejects unknown keys and invalid values', () => {
-  assert.equal(hunts.validateHuntInput({ name: 'bad', criteria: { discoveryFilters: { bbox: '-1,-1,1,1' } } }).isValid, false);
+  assert.equal(hunts.validateHuntInput({ name: 'bad', criteria: { discoveryFilters: { unsupportedFilterKey: '123' } } }).isValid, false);
+  assert.equal(hunts.validateHuntInput({ name: 'ok-bbox', criteria: { discoveryFilters: { bbox: '-74.5,40.4,-73.8,41.0', priceDropped: 'true', excludeTerminal: 'true' } } }).isValid, true);
   assert.equal(hunts.validateHuntInput({ name: 'bad', criteria: { discoveryFilters: { hasDocuments: 'maybe' } } }).isValid, false);
   assert.equal(hunts.validateHuntInput({ name: 'bad', criteria: { discoveryFilters: { saleFrom: '2026-02-30' } } }).isValid, false);
 });

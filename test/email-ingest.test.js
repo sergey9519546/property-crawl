@@ -260,3 +260,28 @@ test('extractImapFetchPayload stitches header + body literals and parseRfc822 pr
   assert.equal(bodyOnly.subject, '');
   assert.match(bodyOnly.body, /500 Pine Rd, Tampa, FL 33602/);
 });
+
+test('parseRfc822 decodes quoted-printable and base64 MIME transfer encodings cleanly', () => {
+  const qpMsg = [
+    'From: notices@press.example.org',
+    'Subject: Sheriff Sale',
+    'Content-Type: text/plain; charset=utf-8',
+    'Content-Transfer-Encoding: quoted-printable',
+    '',
+    'Foreclosure auction at 123 Main=20St, Newark, NJ 07102 Case=\r\n No. F-102-26 opening bid $75,000.',
+  ].join('\r\n');
+  const parsedQp = parseRfc822(qpMsg);
+  assert.match(parsedQp.body, /123 Main St, Newark, NJ 07102 Case No\. F-102-26/);
+
+  const b64Payload = Buffer.from('Notice of Sale at 890 Elm Ave, Columbus, OH 43215 Case 26-CV-55', 'utf8').toString('base64');
+  const b64Msg = [
+    'From: notices@press.example.org',
+    'Subject: Foreclosure Notice',
+    'Content-Type: text/plain; charset=utf-8',
+    'Content-Transfer-Encoding: base64',
+    '',
+    b64Payload,
+  ].join('\r\n');
+  const parsedB64 = parseRfc822(b64Msg);
+  assert.match(parsedB64.body, /890 Elm Ave, Columbus, OH 43215 Case 26-CV-55/);
+});

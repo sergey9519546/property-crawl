@@ -87,7 +87,7 @@ test('air-gapped notice parser handles corrupted inputs without crashing', () =>
   const { deterministicParse } = require('../server/ai/notice-parser');
   const corrupt = 'Notice without valid address or bid amounts. Subject to review.';
   const parsed = deterministicParse(corrupt);
-  assert.strictEqual(parsed.state, 'OH'); // Default fallback state
+  assert.strictEqual(parsed.state, null); // Unknown state stays null (no fabricated 'OH' default)
   assert.strictEqual(parsed.opening_bid, 0);
   assert.strictEqual(parsed.judgment_amount, 0);
 });

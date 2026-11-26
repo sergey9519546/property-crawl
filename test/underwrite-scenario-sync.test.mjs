@@ -249,3 +249,43 @@ test('computeOpportunity computes safmrRentFloor matching underwriting.ts and ju
   assert.equal(oppWithBid.judgmentToMidRatio, null);
   assert.equal(oppWithBid.bidToMidRatio, Number((100000 / 220000).toFixed(4)));
 });
+
+test('syncScenarioToDealFile forwards populated cash-to-close and financing fields without breaking minimal scenarios', async () => {
+  await withMockBrowser(async () => {
+    const requests = [];
+    await syncScenarioToDealFile(
+      'L-DEAL-FULL',
+      {
+        registrationFunds: '5000',
+        creditedDeposit: '5000',
+        buyersPremium: '1500',
+        sheriffPoundage: '800',
+        transferTax: '1200',
+        delinquentTaxes: '2100',
+        settlementCosts: '950',
+        rehabBudget: 25000,
+        targetMargin: 25,
+        holdingMonths: 6,
+        isHomestead: false,
+        ltvPct: 75,
+        interestRatePct: 8.5,
+        monthlyInsurance: 220,
+        redemptionProbabilityPct: 15,
+        maxAllowableOffer: 140000,
+      },
+      {
+        fetchImpl: async (url, init) => {
+          requests.push(JSON.parse(String(init.body)));
+          return new Response(JSON.stringify({ created: true }), { status: 201 });
+        },
+      },
+    );
+    assert.equal(requests.length, 1);
+    const s = requests[0].underwriteScenario;
+    assert.equal(s.registrationFunds, '5000');
+    assert.equal(s.settlementCosts, '950');
+    assert.equal(s.holdingMonths, 6);
+    assert.equal(s.isHomestead, false);
+    assert.equal(s.ltvPct, 75);
+  });
+});

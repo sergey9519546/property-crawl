@@ -59,10 +59,15 @@ function normalizedStates(search) {
   return [...new Set(states.map((s) => s.trim().toUpperCase()))];
 }
 
+function normalizeCountyName(value) {
+  if (typeof value !== 'string') return '';
+  return value.trim().toLowerCase().replace(/['’.]/g, '').replace(/\s+(?:county|parish|borough)$/i, '').replace(/\s+/g, ' ').trim();
+}
+
 function normalizedCounties(search) {
   const counties = getFilter(search, 'counties');
   if (!isStringArray(counties) || counties.length === 0) return null;
-  return [...new Set(counties.map((c) => c.trim().toLowerCase().replace(/\s+(?:county|parish|borough)$/i, '').trim()).filter(Boolean))];
+  return [...new Set(counties.map(normalizeCountyName).filter(Boolean))];
 }
 
 function normalizedSources(search) {
@@ -176,9 +181,7 @@ function matchListingAgainstSearch(listing, search) {
 
   const counties = normalizedCounties(search);
   if (counties) {
-    const listingCounty = typeof listing.county === 'string'
-      ? listing.county.trim().toLowerCase().replace(/\s+(?:county|parish|borough)$/i, '').trim()
-      : '';
+    const listingCounty = normalizeCountyName(listing.county);
     if (!listingCounty || !counties.includes(listingCounty)) {
       return { match: false, reason: 'county_mismatch' };
     }

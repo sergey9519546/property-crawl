@@ -124,7 +124,8 @@ function scoreCandidate(target, candidate, distanceKm) {
   const price = (Number.isFinite(target.openingBid) && target.openingBid > 0 && Number.isFinite(candidate.openingBid) && candidate.openingBid > 0)
     ? safeBandPct(candidate.openingBid / target.openingBid, PRICE_BAND_TOLERANCE)
     : 0.5;
-  const type = target.propType && candidate.propType && target.propType === candidate.propType ? 1 : 0;
+  const normType = (v) => (typeof v === 'string' ? v.trim().toLowerCase().replace(/\s+/g, ' ') : '');
+  const type = target.propType && candidate.propType && normType(target.propType) === normType(candidate.propType) ? 1 : 0;
   return prox * WEIGHT_PROXIMITY
     + size * WEIGHT_SIZE
     + price * WEIGHT_PRICE

@@ -162,6 +162,7 @@ class ScraperTelemetry {
     driftReport.changedPages = changedPages;
     state.driftReport = driftReport;
     state.driftDetected = driftReport.hasDrift;
+    state.driftAlarm = metadata.driftAlarm || null;
     if (listings.length > 0 && !driftReport.hasDrift) {
       state.baselines[scopeKey] = {version:1, fieldYield:calculateFieldYield(listings).fieldYield, domHashes:{...(baseline?.domHashes || {}),...domHashes}, capturedAt:state.lastRunAt};
       // Bound source scope history; never retain publisher HTML in health telemetry.
@@ -230,6 +231,7 @@ class ScraperTelemetry {
       scrapersInFault: 0,
       scrapersChallengeGated: 0,
       scrapersWithDrift: 0,
+      activeDriftAlarms: 0,
       details: {}
     };
 
@@ -244,6 +246,7 @@ class ScraperTelemetry {
         report.scrapersInFault += 1;
       }
       if (state.driftDetected) report.scrapersWithDrift += 1;
+      if (state.driftAlarm?.alarmTriggered) report.activeDriftAlarms += 1;
       
       report.details[sourceName] = {
         runs: state.runs,
@@ -258,6 +261,7 @@ class ScraperTelemetry {
         lastRejectedCount: state.lastRejectedCount,
         circuitBreakerTripped: state.circuitBreakerTripped,
         driftDetected: state.driftDetected,
+        ...(state.driftAlarm ? { driftAlarm: state.driftAlarm } : {}),
         lastErrorCode: state.lastErrorCode,
         circuitBreakerReason: state.circuitBreakerReason,
         media: state.media || undefined,

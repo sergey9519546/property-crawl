@@ -210,15 +210,10 @@ test('Cloudflare edge worker scheduled() maps cron expressions to actions, abort
     assert.equal(calls[4].body.action, 'second-look');
     assert.equal(calls[5].body.action, 'dispatch-digests');
 
-    const ctxDigests = createCtx();
-    await worker.scheduled({ cron: '53 */6 * * *' }, env, ctxDigests);
-    await ctxDigests.flush();
-    assert.equal(calls[6].body.action, 'dispatch-digests');
-
     const ctxPrewarm = createCtx();
     await worker.scheduled({ cron: '11 */2 * * *' }, env, ctxPrewarm);
     await ctxPrewarm.flush();
-    assert.deepEqual(calls[7].body, {
+    assert.deepEqual(calls[6].body, {
       action: 'ai-prewarm',
       limit: 3,
       freeOnly: true,
@@ -483,7 +478,7 @@ test('EmailNoticeAgent archives raw MIME in R2, queues 504 failures in SQLite, a
     assert.equal(r2Objects.size, 1);
     const [storedKey] = r2Objects.keys();
     assert.ok(storedKey.startsWith('private/email-inbox/'));
-    assert.equal(doCtx.alarms.length, 1);
+    assert.equal(doCtx.alarms.length, 2);
 
     const pendingStatus = await (await worker.fetch(
       new Request('https://edge.perfectproperty.bid/agents/email/status', {
@@ -683,6 +678,7 @@ test('OperationsAgent treats HTTP 200 sourceResults errors as retryable and queu
       action: 'run-source',
       source: 'treasury',
       slice: true,
+      timeoutMs: 25000,
     });
     assert.match(queuedRows[0].last_error, /treasury: TreasuryForfeitureCollector timed out/);
 
@@ -693,7 +689,7 @@ test('OperationsAgent treats HTTP 200 sourceResults errors as retryable and queu
     mode = 'ok';
     doCtx.db.exec('UPDATE op_retry_queue SET next_run_at = 1');
     await opsAgent.alarm();
-    assert.deepEqual(calls[1].body, { action: 'run-source', source: 'treasury', slice: true });
+    assert.deepEqual(calls[1].body, { action: 'run-source', source: 'treasury', slice: true, timeoutMs: 25000 });
     assert.equal(doCtx.db.prepare('SELECT COUNT(*) AS c FROM op_retry_queue').get().c, 0);
 
     // Non-retryable captcha/403 sourceResults error fails immediately without queuing retry
@@ -765,4 +761,10 @@ test('wrangler.toml binds OPS_AGENT, EMAIL_AGENT, SQLite DO migration v1, and st
   assert.ok(cronsLine);
   const parsedCrons = JSON.parse(cronsLine.replace(/^crons\s*=\s*/, ''));
   assert.ok(parsedCrons.length <= 5);
+});
+
+test('agents.js: EmailNoticeAgent crash-recovery alarm includes attempts >= 0 and OperationsAgent retries pass timeoutMs: 25000', () => {
+  const agentsSrc = fs.readFileSync(path.resolve('cloudflare/property-crawl-edge/agents.js'), 'utf8');
+  assert.match(agentsSrc, /WHERE attempts >= 0 AND next_run_at <= \?/);
+  assert.match(agentsSrc, /timeoutMs:\s*25000/);
 });

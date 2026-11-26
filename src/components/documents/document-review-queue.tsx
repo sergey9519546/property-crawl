@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { Check, Columns2, FileWarning, Inbox, LayoutList, Loader2, MessageSquareWarning, RefreshCw, ShieldQuestion, ThumbsDown } from "lucide-react";
 import { PrivateWorkspaceGate, useWorkspaceSession } from "@/components/workspace/workspace-shell";
 import { ReviewSplitPane } from "@/components/workspace/review-split-pane";
@@ -141,8 +142,10 @@ export function DocumentReviewQueue() {
 
   React.useEffect(() => {
     if (!session.authenticated) return;
-    if (document.visibilityState !== "visible") return;
-    const timer = window.setInterval(() => { void refresh(true); }, 12_000);
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      void refresh(true);
+    }, 12_000);
     return () => window.clearInterval(timer);
   }, [refresh, session.authenticated]);
 
@@ -369,7 +372,11 @@ export function DocumentReviewQueue() {
                         </span>
                       )}
                     </div>
-                    <h2 className="mt-3 font-mono text-sm font-semibold">{entry.listingId}</h2>
+                    <h2 className="mt-3 font-mono text-sm font-semibold">
+                      <Link href={`/listings/${encodeURIComponent(entry.listingId)}`} className="hover:underline">
+                        {entry.listingId}
+                      </Link>
+                    </h2>
                     {href && (
                       <a href={href} target="_blank" rel="noreferrer" className="mt-1 inline-flex max-w-full break-all text-xs text-ink-2 underline decoration-line-strong underline-offset-4 hover:decoration-ink">
                         {href}

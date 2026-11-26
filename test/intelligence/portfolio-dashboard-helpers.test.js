@@ -62,7 +62,7 @@ test('computePortfolioDashboard: empty listings -> zeros + generatedAt', () => {
   const result = computePortfolioDashboard([], { nowMs: NOW });
   assert.equal(result.count, 0);
   assert.equal(result.totalEstimatedValue, null);
-  assert.equal(result.totalEstimatedEquity, 0);
+  assert.equal(result.totalEstimatedEquity, null);
   assert.equal(result.medianOpeningBid, null);
   assert.equal(result.medianMid, null);
   assert.equal(result.medianDealScore, null);

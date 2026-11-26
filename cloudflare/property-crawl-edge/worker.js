@@ -411,9 +411,7 @@ export default {
           ? ['repair-enrichment']
           : (cron === '11 */2 * * *'
               ? ['ai-prewarm']
-              : (cron === '41 */6 * * *'
-                  ? ['second-look', 'dispatch-digests']
-                  : (cron === '53 */6 * * *' ? ['dispatch-digests'] : ['next-slice']))));
+              : (cron === '41 */6 * * *' ? ['second-look', 'dispatch-digests'] : ['next-slice'])));
     const edgeSecret = String(env?.EDGE_SHARED_SECRET || '').trim();
     const task = (async () => {
       const opsStub = env?.OPS_AGENT && typeof env.OPS_AGENT.get === 'function'

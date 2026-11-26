@@ -323,6 +323,23 @@ function positiveInt(value, fallback) {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+function parseCivilViewCursor(value) {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        return parseCivilViewCursor(parsed);
+      } catch (_) {
+        return { countyOffset: 0, detailOffset: 0 };
+      }
+    }
+  }
+  const countyOffset = parseCountyOffset(value) ?? 0;
+  const detailOffset = value && typeof value === 'object' ? (parseCountyOffset(value.detailOffset) ?? 0) : 0;
+  return { countyOffset, detailOffset };
+}
+
 function parseCountyOffset(value) {
   if (value == null) return null;
   if (typeof value === 'number') {
@@ -505,10 +522,11 @@ class CivilViewScraper extends BaseScraper {
     this.lastRunReport = null;
     // Which county the next run starts from. Supports options.countyOffset,
     // options.cursor, or options.checkpoint.
-    const initialOffset = parseCountyOffset(
+    const initialCursor = parseCivilViewCursor(
       options.countyOffset ?? options.cursor ?? options.continuationToken ?? options.checkpoint
     );
-    this.countyRotationOffset = initialOffset != null ? initialOffset : 0;
+    this.countyRotationOffset = initialCursor.countyOffset;
+    this.detailOffset = initialCursor.detailOffset;
   }
 
   /**
@@ -518,8 +536,9 @@ class CivilViewScraper extends BaseScraper {
    * rather than guessing.
    */
   setCheckpoint(checkpoint) {
-    const offset = parseCountyOffset(checkpoint);
-    this.countyRotationOffset = offset != null ? offset : 0;
+    const cursor = parseCivilViewCursor(checkpoint);
+    this.countyRotationOffset = cursor.countyOffset;
+    this.detailOffset = cursor.detailOffset;
     return this;
   }
 
@@ -617,6 +636,8 @@ class CivilViewScraper extends BaseScraper {
       const emitted = [];
       const seenPropertyIds = new Set();
       let remainingDetailBudget = this.maxDetailPages;
+      const startDetailOffset = Number.isInteger(this.detailOffset) && this.detailOffset > 0 ? this.detailOffset : 0;
+      let nextDetailCursor = null;
 
       for (let index = 0; index < ordered.length; index += 1) {
         const county = ordered[index];
@@ -634,7 +655,12 @@ class CivilViewScraper extends BaseScraper {
             discovered.summaries.length,
             Math.ceil(remainingDetailBudget / Math.max(1, countiesRemaining)),
           );
-          const selected = this.prioritizeSummaries(discovered.summaries, county).slice(0, countyBudget);
+          const prioritized = this.prioritizeSummaries(discovered.summaries, county);
+          const countyDetailOffset = index === 0 ? Math.min(startDetailOffset, prioritized.length) : 0;
+          const selected = prioritized.slice(countyDetailOffset, countyDetailOffset + countyBudget);
+          if (index === 0 && (countyDetailOffset + selected.length) < prioritized.length) {
+            nextDetailCursor = { countyOffset: startOffsetSnapshot, detailOffset: countyDetailOffset + selected.length };
+          }
           countyAborted = false;
           const prefetchedHtml = new Map();
           if (this.detailConcurrency > 1 && selected.length > 0) {
@@ -755,12 +781,18 @@ class CivilViewScraper extends BaseScraper {
       // token means the window already covered every county, so the rotation
       // restarts from the priority list rather than staying wedged.
       const tailCompleted = isSliceMode && !abortedForDeadline && rotationTotal > 0 && ((startOffsetSnapshot % rotationTotal) + this.maxCounties) >= rotationTotal;
-      if (rotationTotal > this.maxCounties && !tailCompleted) {
+      if (isSliceMode && nextDetailCursor && !abortedForDeadline) {
+        this.countyRotationOffset = nextDetailCursor.countyOffset;
+        this.detailOffset = nextDetailCursor.detailOffset;
+        report.nextContinuationToken = JSON.stringify(nextDetailCursor);
+      } else if (rotationTotal > this.maxCounties && !tailCompleted) {
         const nextOffset = (startOffsetSnapshot + this.maxCounties) % rotationTotal;
         this.countyRotationOffset = nextOffset;
+        this.detailOffset = 0;
         report.nextContinuationToken = String(nextOffset);
       } else {
         if (rotationTotal > 0) this.countyRotationOffset = 0;
+        this.detailOffset = 0;
         report.nextContinuationToken = null;
       }
       const stoppedAtCountyCap = rotationTotal > this.maxCounties;

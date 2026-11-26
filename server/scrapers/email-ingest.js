@@ -86,6 +86,33 @@ function isConfigured(env = process.env) {
  * Parse a raw RFC822 message (or body-only fixture) into headers + text body.
  * @param {string} raw
  */
+function decodeTransferEncoding(rawBody, encoding) {
+  const text = String(rawBody || '');
+  const enc = String(encoding || '').trim().toLowerCase();
+  if (enc === 'base64') {
+    try {
+      return Buffer.from(text.replace(/\s+/g, ''), 'base64').toString('utf8');
+    } catch (_) {
+      return text;
+    }
+  }
+  if (enc === 'quoted-printable') {
+    const unfolded = text.replace(/=\r?\n/g, '');
+    const bytes = [];
+    for (let i = 0; i < unfolded.length; i++) {
+      if (unfolded[i] === '=' && /^[0-9A-Fa-f]{2}$/.test(unfolded.slice(i + 1, i + 3))) {
+        bytes.push(Number.parseInt(unfolded.slice(i + 1, i + 3), 16));
+        i += 2;
+      } else {
+        const chBuf = Buffer.from(unfolded[i], 'utf8');
+        for (const b of chBuf) bytes.push(b);
+      }
+    }
+    return Buffer.from(bytes).toString('utf8');
+  }
+  return text;
+}
+
 function parseRfc822(raw) {
   const text = String(raw || '');
   const split = text.indexOf('\r\n\r\n') >= 0 ? '\r\n\r\n' : '\n\n';
@@ -113,12 +140,22 @@ function parseRfc822(raw) {
   }
   const ct = headers['content-type'] || '';
   if (/multipart\//i.test(ct)) {
-    // Prefer the first text/plain part; keep raw body if none found.
+    // Prefer the first text/plain part; decode MIME Content-Transfer-Encoding cleanly.
     const parts = body.split(/--[^\r\n]+/g)
-      .map((p) => p.replace(/^\s*Content-Type:[^\n]*\n/gi, '').replace(/^\s*Content-Transfer-Encoding:[^\n]*\n/gi, '').replace(/^\s*Content-Disposition:[^\n]*\n/gi, '').trim())
+      .map((partRaw) => {
+        const encMatch = partRaw.match(/^\s*Content-Transfer-Encoding:\s*([^\r\n]+)/im);
+        const stripped = partRaw
+          .replace(/^\s*Content-Type:[^\n]*\n/gi, '')
+          .replace(/^\s*Content-Transfer-Encoding:[^\n]*\n/gi, '')
+          .replace(/^\s*Content-Disposition:[^\n]*\n/gi, '')
+          .trim();
+        return decodeTransferEncoding(stripped, encMatch?.[1]);
+      })
       .filter((p) => p && !/^--/.test(p) && !/^Content-Type:/i.test(p));
     const plain = parts.find((p) => !/html/i.test(p) && p.length > 20);
     if (plain) bodyText = plain;
+  } else if (headers['content-transfer-encoding']) {
+    bodyText = decodeTransferEncoding(bodyText, headers['content-transfer-encoding']);
   }
   bodyText = bodyText
     .replace(/<style[\s\S]*?<\/style>/gi, ' ')

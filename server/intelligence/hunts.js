@@ -176,7 +176,7 @@ function validateCriteria(criteria, errors = []) {
       errors.push('criteria.discoveryFilters must be an object');
       return null;
     }
-    const allowed = new Set(['q', 'state', 'county', 'source', 'type', 'program', 'lifecycle', 'saleFrom', 'saleTo', 'maxBid', 'minScore', 'minEquity', 'occupancy', 'freshness', 'hasDocuments', 'seniorLien', 'redemption', 'distressStage', 'minQuality']);
+    const allowed = new Set(['q', 'state', 'county', 'source', 'type', 'program', 'lifecycle', 'saleFrom', 'saleTo', 'maxBid', 'minScore', 'minEquity', 'occupancy', 'freshness', 'hasDocuments', 'seniorLien', 'redemption', 'distressStage', 'minQuality', 'excludeTerminal', 'priceDropped', 'isNew', 'hasPhoto', 'occupancyKnown', 'enrolledOnly', 'bbox', 'lat', 'lng', 'radiusKm']);
     const params = new URLSearchParams();
     let normalizedDistressStage;
     let normalizedMinQuality;
@@ -246,8 +246,10 @@ function validateCriteria(criteria, errors = []) {
         normalizedMinQuality = String(num);
         continue;
       }
-      if (typeof raw !== 'string' || raw.length > 256) { errors.push(`criteria.discoveryFilters.${key} must be a string`); continue; }
-      if (raw.trim()) params.set(key, raw.trim());
+      if (typeof raw !== 'string' && typeof raw !== 'number' && typeof raw !== 'boolean') { errors.push(`criteria.discoveryFilters.${key} must be a string, number, or boolean`); continue; }
+      const rawStr = typeof raw === 'string' ? raw : String(raw);
+      if (rawStr.length > 256) { errors.push(`criteria.discoveryFilters.${key} is too long`); continue; }
+      if (rawStr.trim()) params.set(key, rawStr.trim());
     }
     if (errors.length) return null;
     try {
@@ -256,7 +258,9 @@ function validateCriteria(criteria, errors = []) {
       for (const key of allowed) {
         if (key === 'distressStage' || key === 'minQuality') continue;
         const value = parsed[key];
-        if (value !== null && value !== '' && value !== 'all') normalized[key] = typeof value === 'boolean' ? String(value) : String(value);
+        const explicitOnlyKeys = new Set(['excludeTerminal', 'priceDropped', 'isNew', 'hasPhoto', 'occupancyKnown', 'enrolledOnly', 'bbox', 'lat', 'lng', 'radiusKm']);
+        if (explicitOnlyKeys.has(key) && !params.has(key)) continue;
+        if (value !== null && value !== undefined && value !== '' && value !== 'all') normalized[key] = typeof value === 'boolean' ? String(value) : String(value);
       }
       if (normalizedDistressStage !== undefined) normalized.distressStage = normalizedDistressStage;
       if (normalizedMinQuality !== undefined) normalized.minQuality = normalizedMinQuality;

@@ -277,19 +277,20 @@ async function reconcileCrossSourceDuplicates(db, options = {}) {
     .replace(/[^a-z0-9]+/g, ' ')
     .trim();
 
-  const groupKeyFor = (row) => {
-    if (!row || typeof row !== 'object') return null;
+  const keysForRow = (row) => {
+    if (!row || typeof row !== 'object') return [];
     const st = String(row.state || '').trim().toUpperCase();
-    if (!st) return null;
+    if (!st) return [];
     const unit = extractUnitToken(row.address);
+    const keys = [];
     const pk = String(row.parcelKey || row.provenance?.parcelKey || '').trim();
-    if (pk) return `PK|${st}|${pk}|${unit}`;
+    if (pk) keys.push(`PK|${st}|${pk}|${unit}`);
     const zip5 = String(row.zip || '').trim().slice(0, 5);
     const street = normalizeStreetKey(row.address);
     if (zip5.length === 5 && street.length >= 6) {
-      return `ADDR|${st}|${zip5}|${street}|${unit}`;
+      keys.push(`ADDR|${st}|${zip5}|${street}|${unit}`);
     }
-    return null;
+    return keys;
   };
 
   const scoreWinner = (a, b) => {
@@ -328,12 +329,40 @@ async function reconcileCrossSourceDuplicates(db, options = {}) {
     return { superseded: 0, cleared: 0 };
   }
 
+  // Transitive Union-Find across both PK| and ADDR| keys so APN-bearing and APN-less sources merge cleanly.
+  const parent = rows.map((_, i) => i);
+  const findRoot = (x) => {
+    while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; }
+    return x;
+  };
+  const unionIdx = (a, b) => {
+    const ra = findRoot(a);
+    const rb = findRoot(b);
+    if (ra !== rb) parent[rb] = ra;
+  };
+  const firstIndexByKey = new Map();
+  const rootKeyLabel = new Map();
+  for (let i = 0; i < rows.length; i += 1) {
+    const keys = keysForRow(rows[i]);
+    if (keys.length === 0) continue;
+    for (const k of keys) {
+      const existing = firstIndexByKey.get(k);
+      if (existing === undefined) {
+        firstIndexByKey.set(k, i);
+      } else {
+        unionIdx(existing, i);
+      }
+    }
+    rootKeyLabel.set(findRoot(i), keys[0]);
+  }
   const groups = new Map();
-  for (const row of rows) {
-    const k = groupKeyFor(row);
-    if (!k) continue;
-    if (!groups.has(k)) groups.set(k, []);
-    groups.get(k).push(row);
+  for (let i = 0; i < rows.length; i += 1) {
+    const keys = keysForRow(rows[i]);
+    if (keys.length === 0) continue;
+    const root = findRoot(i);
+    const label = rootKeyLabel.get(root) || keys[0];
+    if (!groups.has(label)) groups.set(label, []);
+    groups.get(label).push(rows[i]);
   }
 
   const toSupersede = [];

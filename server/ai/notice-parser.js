@@ -142,7 +142,7 @@ function deterministicParse(rawNotice = '', options = {}) {
 
   const explicitlyOhio = /\bOhio\b|\bOhio\s+Rev\.?\s*Code\b|\bO\.?R\.?C\.?\s*§?\s*2329\b|\bR\.?C\.?\s*2329\b/i.test(clean);
   const explicitStateValue = options.state ? String(options.state).trim().toUpperCase() : null;
-  const fallbackState = options.defaultState !== undefined ? options.defaultState : 'OH';
+  const fallbackState = options.defaultState !== undefined ? options.defaultState : null;
   const state = addressMatch
     ? addressMatch[3].toUpperCase()
     : (options.hintState
@@ -153,8 +153,8 @@ function deterministicParse(rawNotice = '', options = {}) {
   const judgmentNum = judgmentMatch ? parseFloat(judgmentMatch[1].replace(/,/g, '')) : 0;
   let bidNum = bidMatch ? parseFloat(bidMatch[1].replace(/,/g, '')) : 0;
   // Guard against debt-as-price hallucination:
-  // When an ambiguous parse equates bid with judgment debt without explicit bid phrasing, drop bid to 0.
-  if (bidNum > 0 && judgmentNum > 0 && bidNum === judgmentNum && !clean.match(/(?:opening\s+bid|minimum\s+bid|upset\s+price|starting\s+bid)\s*(?:of|is|:)?\s*\$([0-9,]+(?:\.[0-9]{2})?)/i)) {
+  // When an ambiguous parse equates bid with judgment debt without explicit distinct opening-bid phrasing, drop bid to 0.
+  if (bidNum > 0 && judgmentNum > 0 && bidNum === judgmentNum && !/\b(?:opening\s+bid|minimum\s+bid|upset\s+price)\s*(?:of|is|:)?\s*\$/i.test(clean)) {
     bidNum = 0;
   }
 

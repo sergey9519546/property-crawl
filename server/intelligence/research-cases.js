@@ -270,6 +270,22 @@ function sanitizeUnderwriteScenario(raw) {
     }
   }
 
+  if (typeof raw.isHomestead === 'boolean') {
+    result.isHomestead = raw.isHomestead;
+    hasAny = true;
+  }
+
+  for (const [field, max] of [['ltvPct', 100], ['interestRatePct', 50], ['monthlyInsurance', 100_000], ['redemptionProbabilityPct', 100]]) {
+    const val = raw[field];
+    if (val !== undefined && val !== null && val !== '') {
+      const num = Number(val);
+      if (Number.isFinite(num) && num >= 0 && num <= max) {
+        result[field] = num;
+        hasAny = true;
+      }
+    }
+  }
+
   return hasAny ? result : null;
 }
 
@@ -656,15 +672,17 @@ function updateCase(id, input, options = {}) {
       return { changed: false, value: caseSummary(item) };
     }
     const previousState = item.state;
+    const preserveSecondLook = Boolean(options && options.preserveSecondLookTrigger === true && input.reconsiderationRequired === true && input.latestTrigger);
     item.state = input.state;
     item.decision = decision;
-    item.reconsideration = reconsideration;
+    if (!(preserveSecondLook && input.state === 'inbox' && item.reconsideration)) {
+      item.reconsideration = reconsideration;
+    }
     if (scenarioChanged) {
       item.underwriteScenario = sanitizeUnderwriteScenario(input.underwriteScenario);
     }
     item.revision += 1;
     item.updatedAt = timestamp;
-    const preserveSecondLook = Boolean(options && options.preserveSecondLookTrigger === true && input.reconsiderationRequired === true && input.latestTrigger);
     item.reconsiderationRequired = preserveSecondLook;
     item.latestTrigger = preserveSecondLook ? structuredClone(input.latestTrigger) : null;
     item.history.unshift(historyEvent('decision_changed', item, timestamp, { previousState, currentState: item.state, reasonCodes }));

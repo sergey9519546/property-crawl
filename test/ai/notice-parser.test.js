@@ -126,9 +126,9 @@ test('deterministicParse: extracts address, case, plaintiff/defendant, judgment,
   assert.equal(parsed._strategy, 'deterministic_fallback');
 });
 
-test('deterministicParse: falls back to OH when state cannot be parsed', () => {
+test('deterministicParse: returns null state when state cannot be parsed', () => {
   const parsed = deterministicParse('Notice without a parsable address at all.');
-  assert.equal(parsed.state, 'OH');
+  assert.equal(parsed.state, null);
   assert.equal(parsed.zip, '');
   assert.equal(parsed.opening_bid, 0);
   assert.equal(parsed.judgment_amount, 0);

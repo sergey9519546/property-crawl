@@ -161,6 +161,11 @@ export function PortfolioView() {
   const [error, setError] = React.useState<string | null>(null);
   const [refreshing, setRefreshing] = React.useState(false);
   const [escrowCapital, setEscrowCapital] = React.useState("100000");
+  const [debouncedEscrowCapital, setDebouncedEscrowCapital] = React.useState("100000");
+  React.useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedEscrowCapital(escrowCapital), 300);
+    return () => window.clearTimeout(t);
+  }, [escrowCapital]);
   const [escrowSortBy, setEscrowSortBy] = React.useState<"priority" | "chronological" | "bidding_power">("priority");
   const [allowRecycling, setAllowRecycling] = React.useState(true);
 
@@ -188,14 +193,18 @@ export function PortfolioView() {
     });
   }, []);
 
+  const loadAbortRef = React.useRef<AbortController | null>(null);
   const loadData = React.useCallback(async () => {
     if (!session.memberTools) {
       setLoading(false);
       return;
     }
+    loadAbortRef.current?.abort();
+    const controller = new AbortController();
+    loadAbortRef.current = controller;
     setError(null);
     try {
-      const parsedCap = Number(escrowCapital);
+      const parsedCap = Number(debouncedEscrowCapital);
       const capParam = Number.isFinite(parsedCap) && parsedCap >= 0 ? parsedCap : 100000;
       const dashQuery = new URLSearchParams({
         capital: String(capParam),
@@ -203,10 +212,14 @@ export function PortfolioView() {
         allowRecycling: String(allowRecycling),
       }).toString();
       const [dashRes, dropsRes, alertsRes] = await Promise.all([
-        fetch(`/api/portfolio/dashboard?${dashQuery}`, { cache: "no-store", credentials: "same-origin" }),
-        fetch("/api/price-drops", { cache: "no-store", credentials: "same-origin" }),
-        fetch("/api/alerts", { cache: "no-store", credentials: "same-origin" }),
+        fetch(`/api/portfolio/dashboard?${dashQuery}`, { cache: "no-store", credentials: "same-origin", signal: controller.signal }),
+        fetch("/api/price-drops", { cache: "no-store", credentials: "same-origin", signal: controller.signal }),
+        fetch("/api/alerts", { cache: "no-store", credentials: "same-origin", signal: controller.signal }),
       ]);
+      if (!dashRes.ok || !dropsRes.ok || !alertsRes.ok) {
+        const badStatus = !dashRes.ok ? dashRes.status : (!alertsRes.ok ? alertsRes.status : dropsRes.status);
+        setError(`${pv.loadError} (HTTP ${badStatus})`);
+      }
 
       if (dashRes.ok) {
         const dashData = await dashRes.json();
@@ -261,12 +274,13 @@ export function PortfolioView() {
         );
       }
     } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") return;
       setError(err instanceof Error ? err.message : pv.loadError);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [session.memberTools, escrowCapital, escrowSortBy, allowRecycling, pv.loadError]);
+  }, [session.memberTools, debouncedEscrowCapital, escrowSortBy, allowRecycling, pv.loadError]);
 
   React.useEffect(() => {
     loadData();
@@ -274,15 +288,19 @@ export function PortfolioView() {
 
   const handleRemove = async (dealId: string) => {
     try {
-      await fetch("/api/alerts", {
+      const res = await fetch("/api/alerts", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ listingId: dealId }),
         credentials: "same-origin",
       });
+      if (!res.ok) {
+        setError(`Failed to remove saved deal (HTTP ${res.status})`);
+        return;
+      }
       setDeals((prev) => prev.filter((d) => (d.listingId || d.id) !== dealId));
-    } catch {
-      // Ignore delete errors
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to remove saved deal");
     }
   };
 

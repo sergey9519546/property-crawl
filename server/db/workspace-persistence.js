@@ -516,13 +516,20 @@ async function getListingHistory(client, listingIds, options = {}) {
              deal_score::float8  AS "dealScore",
              source,
              recorded_at::text   AS "recordedAt",
-             ROW_NUMBER() OVER (PARTITION BY listing_id ORDER BY source_observed_at DESC) as rn
+             ROW_NUMBER() OVER (PARTITION BY listing_id ORDER BY source_observed_at DESC) as rn,
+             FIRST_VALUE(opening_bid::float8) OVER (PARTITION BY listing_id ORDER BY source_observed_at DESC) as latest_bid
            FROM listing_history
            WHERE listing_id = ANY($1::text[])
+         ),
+         chosen AS (
+           SELECT DISTINCT ON (listing_id)
+             listing_id, "sourceObservedAt", "openingBid", "mid", "dealScore", source, "recordedAt"
+           FROM ranked
+           WHERE rn >= 2
+           ORDER BY listing_id, ("openingBid" IS DISTINCT FROM latest_bid) DESC, rn ASC
          )
          SELECT listing_id, "sourceObservedAt", "openingBid", "mid", "dealScore", source, "recordedAt"
-         FROM ranked
-         WHERE rn = 2
+         FROM chosen
          ORDER BY listing_id`
       : `SELECT DISTINCT ON (listing_id)
            listing_id,
@@ -552,7 +559,12 @@ async function getListingHistory(client, listingIds, options = {}) {
   for (const id of ids) {
     const arr = client.inMemoryData.listingHistory.get(id);
     if (!arr || arr.length === 0) continue;
-    if (prior) { if (arr.length >= 2) result.set(id, arr[1]); } else { result.set(id, arr[0]); }
+    if (prior) {
+      if (arr.length >= 2) {
+        const distinctPrior = arr.find((row, idx) => idx > 0 && row.openingBid !== arr[0].openingBid);
+        result.set(id, distinctPrior || arr[1]);
+      }
+    } else { result.set(id, arr[0]); }
   }
   return result;
 }

@@ -231,6 +231,7 @@ export function AnyAddressUnderwriter() {
   const [saleDate, setSaleDate] = React.useState("");
   const [source, setSource] = React.useState("");
   const [program, setProgram] = React.useState("");
+  const [plaintiff, setPlaintiff] = React.useState("");
   const [noticeText, setNoticeText] = React.useState("");
 
   const [submitting, setSubmitting] = React.useState(false);
@@ -257,6 +258,7 @@ export function AnyAddressUnderwriter() {
         saleDate: saleDate.trim() || undefined,
         source: source || undefined,
         program: program.trim() || undefined,
+        plaintiff: plaintiff.trim() || undefined,
         noticeText: noticeText.trim() ? noticeText : undefined,
       };
 
@@ -508,6 +510,21 @@ export function AnyAddressUnderwriter() {
             </div>
 
             <div>
+              <label htmlFor="uw-plaintiff" className="text-xs font-semibold text-ink">
+                Foreclosing plaintiff / creditor (optional)
+              </label>
+              <input
+                id="uw-plaintiff"
+                type="text"
+                maxLength={160}
+                value={plaintiff}
+                onChange={(e) => setPlaintiff(e.target.value)}
+                placeholder="e.g. Wells Fargo Bank, N.A. or Summit HOA"
+                className={inputClass}
+              />
+            </div>
+
+            <div>
               <label htmlFor="uw-program" className="text-xs font-semibold text-ink">
                 {uw.programLabel}
               </label>
@@ -546,8 +563,8 @@ export function AnyAddressUnderwriter() {
             </Alert>
           )}
 
-          <div className="mt-6">
-            <Button type="submit" disabled={submitting} className="w-full">
+          <div className="mt-6 flex flex-wrap gap-2">
+            <Button type="submit" disabled={submitting} className="flex-1">
               {submitting ? (
                 <>
                   <Loader2 className="size-4 animate-spin" />

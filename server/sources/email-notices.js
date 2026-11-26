@@ -194,7 +194,9 @@ async function standardizeEmailNoticeListing(parsed = {}, meta = {}) {
   const recordId = `email-notice-${stateSlug}-${hash.slice(0, 12)}-${parcelIndex}`;
   const publisherName = feedInfo?.name || feedInfo?.operator || (state === 'UNKNOWN' ? 'Press Association Notice' : `${state} Press Association`);
   const portalUrl = feedInfo?.portalUrl || `https://www.${PRESS_ASSOCIATION_DOMAINS[0]}`;
-  const noticeUrl = `${portalUrl.replace(/\/+$/, '')}/notice/${recordId}`;
+  const noticeUrl = (typeof parsed.source_url === 'string' && /^https?:\/\//i.test(parsed.source_url))
+    ? parsed.source_url
+    : `${portalUrl.replace(/\/+$/, '')}/notice/${recordId}`;
   const observedAt = meta.observedAt || new Date().toISOString();
 
   const openingBid = Number(parsed.opening_bid) > 0 ? Number(parsed.opening_bid) : null;
@@ -378,7 +380,7 @@ class EmailNoticesPipeline {
         for (const uid of uids) {
           let fetchOut;
           try {
-            fetchOut = await client.command(`UID FETCH ${uid} (BODY[HEADER.FIELDS (FROM SUBJECT DATE MESSAGE-ID)] BODY[TEXT])`);
+            fetchOut = await client.command(`UID FETCH ${uid} (BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE MESSAGE-ID)] BODY.PEEK[TEXT])`);
           } catch (_) {
             continue;
           }

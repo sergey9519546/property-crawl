@@ -182,6 +182,21 @@ function createSavedSearchesHandler(dependencies = {}) {
       }
       if (method === 'POST') {
         const body = req.body || {};
+        if (userId !== 'operator') {
+          const { accountServiceFor, tierQuotas } = require('../accounts/store');
+          let searchLimit = tierQuotas('free').maxSavedSearches;
+          if (userId.startsWith('acct_')) {
+            searchLimit = tierQuotas('pro').maxSavedSearches;
+            try {
+              const acct = await accountServiceFor(database).get(userId);
+              if (acct?.entitled) searchLimit = tierQuotas(acct.billingTier || 'pro').maxSavedSearches;
+            } catch (_) {}
+          }
+          const existing = await database.listSavedSearches(userId);
+          if (existing.length >= searchLimit) {
+            return res.status(409).json({ error: `Saved search limit (${searchLimit}) reached for this plan`, code: 'SAVED_SEARCH_LIMIT' });
+          }
+        }
         const label = typeof body.label === 'string' ? body.label.trim().slice(0, 120) : null;
         const filters = (body.filters && typeof body.filters === 'object' && !Array.isArray(body.filters) && body.webhookUrl !== undefined)
           ? { ...body.filters, webhookUrl: body.webhookUrl }

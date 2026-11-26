@@ -502,6 +502,7 @@ function applySecondLookReconsideration(caseId, freshListing, options = {}) {
       titleRiskAlert: evaluation.alerts.includes('JUNIOR_LIEN_SURVIVING_MORTGAGE') ? 'JUNIOR_LIEN_SURVIVING_MORTGAGE' : null,
       irsRedemptionActive: evaluation.flags.includes('IRS_REDEMPTION_WINDOW_ACTIVE'),
       hoaSuperPriorityRisk: evaluation.flags.includes('HOA_SUPER_PRIORITY_RISK'),
+      priorDecidedOpeningBid: existingCase.decision?.decidedOpeningBid ?? existingCase.latestTrigger?.priorDecidedOpeningBid ?? null,
       triggeredAt: new Date().toISOString(),
     },
   };
