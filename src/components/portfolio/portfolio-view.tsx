@@ -465,6 +465,12 @@ export function PortfolioView() {
             {pv.refreshBtn}
           </button>
           <Link
+            href="/bid-sheet"
+            className="flex items-center gap-1.5 rounded-control border border-line-strong bg-card px-3.5 py-2.5 text-xs font-semibold text-ink-2 hover:bg-paper transition"
+          >
+            {m.workspace.nav.bidSheet}
+          </Link>
+          <Link
             href="/listings"
             className="flex items-center gap-1.5 rounded-control bg-ink px-4 py-2.5 text-xs font-semibold text-white hover:bg-ink-2 transition"
           >

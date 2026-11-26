@@ -1297,6 +1297,14 @@ function normalizeArcgisAttributes(attributes, config) {
   ]);
   const inspectedPhoto = rawPhotoCandidate ? inspectImageUrl(String(rawPhotoCandidate).trim()) : null;
   const assessorPhotoUrl = inspectedPhoto && inspectedPhoto.accepted ? inspectedPhoto.url : null;
+  const rawSalePrice = Number(getAttributeCaseInsensitive(attributes, null, ['SALE_PRICE', 'SALE_AMT', 'SALEPRICE', 'LAST_SALE_PRICE', 'CONSIDERATION', 'TASP']));
+  const recordedSalePrice = Number.isFinite(rawSalePrice) && rawSalePrice > 0 ? rawSalePrice : null;
+  const rawDeedDate = getAttributeCaseInsensitive(attributes, null, ['DEED_DATE', 'SALE_DATE', 'SALEDATE', 'LAST_SALE_DATE', 'SALE_DT']);
+  const deedDate = rawDeedDate != null && String(rawDeedDate).trim() !== '' ? String(rawDeedDate).trim() : null;
+  const rawSqft = Number(getAttributeCaseInsensitive(attributes, null, ['SQFT', 'BLDG_SQFT', 'LIVING_AREA', 'HEATED_AREA', 'TOT_LVG_AREA', 'SFLA']));
+  const livingAreaSqft = Number.isFinite(rawSqft) && rawSqft > 0 ? rawSqft : null;
+  const rawNu = getAttributeCaseInsensitive(attributes, null, ['NU_CODE', 'SALE_NU', 'QUAL_CD1', 'QUAL_CODE']);
+  const nuCode = rawNu != null && String(rawNu).trim() !== '' ? String(rawNu).trim().toUpperCase() : null;
 
   return {
     source: 'ARCGIS_REST_PARCEL',
@@ -1309,6 +1317,10 @@ function normalizeArcgisAttributes(attributes, config) {
     landUse: String(getAttributeCaseInsensitive(attributes, config.landUseField) || 'UNKNOWN').trim(),
     legalDescription: String(getAttributeCaseInsensitive(attributes, config.legalDescField) || '').trim(),
     assessorPhotoUrl,
+    recordedSalePrice,
+    deedDate,
+    livingAreaSqft,
+    nuCode,
     assessedValue: {
       total,
       land,
@@ -1376,6 +1388,17 @@ async function queryArcgisParcel(params = {}, init = {}) {
   const config = COUNTY_ARCGIS_REGISTRY[resolved.key] || resolved;
   if (config.source === 'wparcels') {
     return queryWparcelsParcel({ apn, state, county, lat, lng, fetchFn, signal, config });
+  }
+  const cacheDb = options.db;
+  const cacheKey = Number.isFinite(lat) && Number.isFinite(lng)
+    ? `${config.key || resolved.key}:geo:${lat.toFixed(5)},${lng.toFixed(5)}`
+    : `${config.key || resolved.key}:apn:${String(apn || '').trim().toUpperCase()}`;
+  if (cacheDb?.isPg && cacheDb?.pool?.query) {
+    try {
+      const { getDurableCache } = require('./durable-cache');
+      const cached = await getDurableCache('arcgis_parcel', cacheKey, { db: cacheDb });
+      if (cached) return cached;
+    } catch {}
   }
   let queryParams = new URLSearchParams({
     outFields: '*',
@@ -1499,7 +1522,14 @@ async function queryArcgisParcel(params = {}, init = {}) {
     }
 
     const feature = selectBestFeature(validFeatures, lat, lng);
-    return normalizeArcgisAttributes(feature.attributes, config);
+    const normalizedParcel = normalizeArcgisAttributes(feature.attributes, config);
+    if (normalizedParcel && cacheDb?.isPg && cacheDb?.pool?.query) {
+      try {
+        const { setDurableCache } = require('./durable-cache');
+        await setDurableCache('arcgis_parcel', cacheKey, normalizedParcel, { db: cacheDb, ttlMs: 14 * 24 * 60 * 60 * 1000 });
+      } catch {}
+    }
+    return normalizedParcel;
   } catch (err) {
     return null;
   }

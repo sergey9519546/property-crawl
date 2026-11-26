@@ -18,7 +18,10 @@ function createWorkspaceHandler(dependencies = {}) {
   const intakePath = dependencies.intakePath;
   const dossierBuilder = dependencies.buildPropertyDossier || buildPropertyDossier;
   const currentTime = () => typeof dependencies.now === 'function' ? dependencies.now() : dependencies.now;
-  const evidenceById = dependencies.getEvidence || ((id) => {
+  const evidenceById = dependencies.getEvidence || (async (id) => {
+    if (database?.isPg && database?.pool?.query && !intakePath) {
+      return intake.getEvidenceByIdAsync(id, { database });
+    }
     const record = intakeStore.loadStore(intakePath).records.find((item) => item.id === id);
     return record ? intake.getSummary(record) : null;
   });
@@ -137,6 +140,7 @@ function createWorkspaceHandler(dependencies = {}) {
         const maxParcelLookups = allowNetwork ? Math.max(1, Math.min(20, Math.floor(Number(req.body?.maxParcelLookups) || 5))) : 5;
         const { buildAlachuaPilot } = require('../sources/alachua');
         const pilot = await buildAlachuaPilot(intakeId, {
+          database,
           storePath: intakePath,
           allowNetwork,
           maxParcelLookups,
@@ -182,7 +186,7 @@ function createWorkspaceHandler(dependencies = {}) {
           return res.json({ case: updated });
         }
         if (req.method !== 'POST') return res.status(405).json({ error: 'Use POST to link reviewed evidence' });
-        const evidence = evidenceById(req.body?.intakeId);
+        const evidence = await evidenceById(req.body?.intakeId);
         if (!evidence) throw new research.ResearchCaseError('RESEARCH_EVIDENCE_NOT_FOUND', 'Evidence packet was not found');
         const updated = usePg
           ? await researchStore.linkEvidencePg(database, ownerId, id, evidence, req.body || {}, operationOptions())

@@ -217,10 +217,12 @@ function buildAlachuaSignals(record, parcels = []) {
 
 async function buildAlachuaPilot(packetId, options = {}) {
   if (!/^intake_[a-f0-9]{24}$/.test(packetId || '')) reject('ALACHUA_PACKET_REQUIRED', 'A stored county intake packet ID is required.');
-  const store = loadStore(options.storePath);
-  const packet = store.records.find(row => row.id === packetId);
+  const records = (options.database?.isPg && options.database?.pool?.query && !options.storePath)
+    ? await require('./store').listAllRecordsPg(options.database.pool)
+    : loadStore(options.storePath).records;
+  const packet = records.find(row => row.id === packetId);
   const result = normalizeReviewedPacket(packet, options);
-  const history = collectStatusHistory(store.records, packet.capturedAt, packet.review.reviewedAt, options);
+  const history = collectStatusHistory(records, packet.capturedAt, packet.review.reviewedAt, options);
   for (const record of result.records) {
     record.statusHistory = (history.histories.get(record.publisherRecordId.toLowerCase()) || []).filter(item => item.observedAt <= record.observedAt);
     const byObservation = new Map();

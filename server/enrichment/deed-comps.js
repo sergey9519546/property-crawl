@@ -75,6 +75,8 @@ function validateCalendarDate(year, month, day) {
 
 function formatNormalizedSaleDate(record) {
   const props = record?.properties && typeof record.properties === 'object' ? record.properties : null;
+  const rawAttrs = (record?.rawAttributes && typeof record.rawAttributes === 'object' ? record.rawAttributes : null)
+    || (props?.rawAttributes && typeof props.rawAttributes === 'object' ? props.rawAttributes : null);
   const rawDate =
     record?.saleDate ??
     record?.lastSaleDate ??
@@ -83,6 +85,11 @@ function formatNormalizedSaleDate(record) {
     props?.deedDate ??
     props?.lastSaleDate ??
     props?.saleDate ??
+    rawAttrs?.DEED_DATE ??
+    rawAttrs?.SALE_DATE ??
+    rawAttrs?.SALEDATE ??
+    rawAttrs?.LAST_SALE_DATE ??
+    rawAttrs?.SALE_DT ??
     null;
 
   if (rawDate instanceof Date) {
@@ -142,6 +149,8 @@ function formatNormalizedSaleDate(record) {
 
 function parseSaleTimestamp(record) {
   const props = record?.properties && typeof record.properties === 'object' ? record.properties : null;
+  const rawAttrs = (record?.rawAttributes && typeof record.rawAttributes === 'object' ? record.rawAttributes : null)
+    || (props?.rawAttributes && typeof props.rawAttributes === 'object' ? props.rawAttributes : null);
   const rawDate =
     record?.saleDate ??
     record?.lastSaleDate ??
@@ -150,6 +159,11 @@ function parseSaleTimestamp(record) {
     props?.deedDate ??
     props?.lastSaleDate ??
     props?.saleDate ??
+    rawAttrs?.DEED_DATE ??
+    rawAttrs?.SALE_DATE ??
+    rawAttrs?.SALEDATE ??
+    rawAttrs?.LAST_SALE_DATE ??
+    rawAttrs?.SALE_DT ??
     null;
 
   if (rawDate instanceof Date) {
@@ -276,6 +290,8 @@ function normalizeCandidateDeedRecord(record, context = {}) {
   if (!record || typeof record !== 'object') return null;
 
   const props = record.properties && typeof record.properties === 'object' ? record.properties : null;
+  const rawAttrs = (record.rawAttributes && typeof record.rawAttributes === 'object' ? record.rawAttributes : null)
+    || (props?.rawAttributes && typeof props.rawAttributes === 'object' ? props.rawAttributes : null);
   const rawPrice =
     record.salePrice ??
     record.lastSalePrice ??
@@ -286,7 +302,14 @@ function normalizeCandidateDeedRecord(record, context = {}) {
     props?.recordedSalePrice ??
     props?.lastSalePrice ??
     props?.salePrice ??
-    props?.SALE_PRC1;
+    props?.SALE_PRC1 ??
+    rawAttrs?.SALE_PRICE ??
+    rawAttrs?.SALE_AMT ??
+    rawAttrs?.SALEPRICE ??
+    rawAttrs?.LAST_SALE_PRICE ??
+    rawAttrs?.CONSIDERATION ??
+    rawAttrs?.TASP ??
+    rawAttrs?.SALE_PRC1;
 
   const salePrice = parseFinitePositive(rawPrice);
   const saleDate = formatNormalizedSaleDate(record);
@@ -307,7 +330,13 @@ function normalizeCandidateDeedRecord(record, context = {}) {
       record.TOT_LVG_AR ??
       props?.livingAreaSqft ??
       props?.TOT_LVG_AREA ??
-      props?.TOT_LVG_AR
+      props?.TOT_LVG_AR ??
+      rawAttrs?.SQFT ??
+      rawAttrs?.BLDG_SQFT ??
+      rawAttrs?.LIVING_AREA ??
+      rawAttrs?.HEATED_AREA ??
+      rawAttrs?.TOT_LVG_AREA ??
+      rawAttrs?.SFLA
   );
 
   const hasNuField =
@@ -659,7 +688,13 @@ function evaluateDeedRecord(record, { targetZip, cutoffMs, asOfEndMs }) {
       record.TOT_LVG_AR ??
       props?.livingAreaSqft ??
       props?.TOT_LVG_AREA ??
-      props?.TOT_LVG_AR
+      props?.TOT_LVG_AR ??
+      rawAttrs?.SQFT ??
+      rawAttrs?.BLDG_SQFT ??
+      rawAttrs?.LIVING_AREA ??
+      rawAttrs?.HEATED_AREA ??
+      rawAttrs?.TOT_LVG_AREA ??
+      rawAttrs?.SFLA
   );
 
   return { qualified: true, price, sqft, timestampMs };
@@ -840,6 +875,7 @@ module.exports = {
   MIN_QUALIFIED_SALE_PRICE,
   DEED_COMPS_CAVEAT,
   extractCandidateDeedRecords,
+  normalizeCandidateDeedRecord,
   computeQualifiedDeedComps,
   loadPeerListingsForDeedComps,
 };

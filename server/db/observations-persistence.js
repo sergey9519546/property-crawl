@@ -181,15 +181,42 @@ async function loadObservationsForRecord(pool, listing) {
   if (!pool || !listing?.source || !listing?.provenance?.recordId) {
     return { records: {}, signals: [] };
   }
-  const result = await pool.query(
-    `SELECT listing_id, record_id, observed_at, opening_bid, sale_date, status, deposit, address,
-            raw_payload->>'sourceUrl' AS source_url, raw_payload->>'state' AS state, raw_payload->>'county' AS county
-       FROM source_observations
-      WHERE source_key = $1 AND record_id = $2
-      ORDER BY observed_at ASC, id ASC
-      LIMIT 200`,
-    [listing.source, String(listing.provenance.recordId)],
-  );
+  const params = [listing.source, String(listing.provenance.recordId)];
+  let result;
+  try {
+    result = await pool.query(
+      `SELECT DISTINCT ON (id)
+              listing_id, record_id, observed_at, opening_bid, sale_date, status, deposit, address,
+              source_url, state, county
+         FROM (
+           SELECT id, listing_id, record_id, observed_at, opening_bid, sale_date, status, deposit, address,
+                  raw_payload->>'sourceUrl' AS source_url, raw_payload->>'state' AS state, raw_payload->>'county' AS county
+             FROM source_observations
+            WHERE source_key = $1 AND record_id = $2
+           UNION ALL
+           SELECT id, listing_id, record_id, observed_at, opening_bid, sale_date, status, deposit, NULL::text AS address,
+                  NULL::text AS source_url, NULL::text AS state, NULL::text AS county
+             FROM source_observations_archive
+            WHERE source_key = $1 AND record_id = $2
+         ) combined
+        ORDER BY id, observed_at ASC
+        LIMIT 200`,
+      params,
+    );
+    if (result?.rows?.length > 1) {
+      result.rows.sort((a, b) => new Date(a.observed_at).getTime() - new Date(b.observed_at).getTime());
+    }
+  } catch {
+    result = await pool.query(
+      `SELECT listing_id, record_id, observed_at, opening_bid, sale_date, status, deposit, address,
+              raw_payload->>'sourceUrl' AS source_url, raw_payload->>'state' AS state, raw_payload->>'county' AS county
+         FROM source_observations
+        WHERE source_key = $1 AND record_id = $2
+        ORDER BY observed_at ASC, id ASC
+        LIMIT 200`,
+      params,
+    );
+  }
   return buildObservationsBundle(listing.source, listing.provenance.recordId, result.rows);
 }
 

@@ -175,7 +175,17 @@ export const DiscoveryCard = React.memo(function DiscoveryCard({ listing, href, 
       <dl className="mt-4 grid grid-cols-2 gap-3 border-y border-line py-3">
         <div>
           <dt className="text-xs text-ink-3">{m.listingsUi.openingAmountLabel}</dt>
-          <dd className="mt-1 min-h-7 text-xl font-semibold tracking-tight text-ink"><Fact origin={listingFactOrigin(listing, "openingBid")} value={listing.openingBid} format="money" /></dd>
+          <dd className="mt-1 min-h-7 text-xl font-semibold tracking-tight text-ink">
+            <Fact origin={listingFactOrigin(listing, "openingBid")} value={listing.openingBid} format="money" />
+            {(() => {
+              const bid = knownNumber(listing.openingBid);
+              const priorRaw = knownNumber((listing as { peakOpeningBid?: unknown; initialOpeningBid?: unknown }).peakOpeningBid)
+                ?? knownNumber((listing as { initialOpeningBid?: unknown }).initialOpeningBid);
+              return bid !== null && priorRaw !== null && priorRaw > bid ? (
+                <span className="ml-1.5 text-xs font-normal text-ink-3 line-through">${Math.round(priorRaw).toLocaleString("en-US")}</span>
+              ) : null;
+            })()}
+          </dd>
           {knownNumber(listing.openingBid) === null && knownNumber(listing.judgment) !== null ? (
             <p className="mt-1 text-xs text-ink-3">{m.listingsUi.judgmentPrefix} <span className="font-semibold text-ink">${Number(listing.judgment).toLocaleString("en-US")}</span></p>
           ) : knownNumber(listing.assessed) !== null ? (

@@ -155,6 +155,7 @@ function createScrapersHandler(dependencies = {}) {
             : Number(state?.consecutiveFailures || 0),
           averageLatencyMs: Number(state?.averageLatencyMs || 0),
           driftDetected: Boolean(state?.driftDetected),
+          driftAlarm: state?.driftAlarm || null,
           listingServing: disp.isListingServing,
           ...(isAuthorized && state?.lastError ? { lastError: state.lastError } : {}),
         };
@@ -591,11 +592,16 @@ function createScrapersHandler(dependencies = {}) {
         const database = resolveDatabase();
         try {
           const { listCases, getCase } = require('../intelligence/research-cases');
-          const { applySecondLookReconsideration } = require('../intelligence/second-look');
+          const researchStore = require('../intelligence/research-store');
+          const { applySecondLookReconsideration, applySecondLookReconsiderationPg } = require('../intelligence/second-look');
           const targetId = body.caseId ? String(body.caseId).trim() : null;
-          let allCases = [];
-          if (targetId) {
-            allCases = [getCase(targetId)?.case || getCase(targetId)].filter(Boolean);
+          const usePgCases = Boolean(database?.isPg && database?.pool?.query);
+          let allEntries = [];
+          if (usePgCases) {
+            allEntries = await researchStore.listAllCasesByStatePg(database, 'pass', { targetId });
+          } else if (targetId) {
+            const c = getCase(targetId)?.case || getCase(targetId);
+            if (c) allEntries = [{ ownerId: 'operator', case: c }];
           } else {
             let offset = 0;
             let total = Infinity;
@@ -603,7 +609,7 @@ function createScrapersHandler(dependencies = {}) {
               const page = listCases({ limit: 200, offset, state: 'pass' });
               const items = Array.isArray(page?.items) ? page.items : [];
               total = Number.isFinite(Number(page?.total)) ? Number(page.total) : items.length;
-              allCases.push(...items);
+              for (const item of items) allEntries.push({ ownerId: 'operator', case: item });
               if (items.length === 0) break;
               offset += items.length;
             }
@@ -611,15 +617,18 @@ function createScrapersHandler(dependencies = {}) {
           const results = [];
           let triggered = 0;
           let errors = 0;
-          for (const c of allCases) {
+          for (const entry of allEntries) {
+            const c = entry.case;
             try {
               const freshListing = c.listingId && database && typeof database.getListingById === 'function'
                 ? await database.getListingById(c.listingId)
                 : (body.listing || null);
               if (!freshListing) continue;
-              const outcome = applySecondLookReconsideration(c.id, freshListing);
+              const outcome = usePgCases
+                ? await applySecondLookReconsiderationPg(database, entry.ownerId, c.id, freshListing)
+                : applySecondLookReconsideration(c.id, freshListing);
               if (outcome?.triggered) triggered++;
-              results.push({ caseId: c.id, triggered: Boolean(outcome?.triggered) });
+              results.push({ caseId: c.id, ownerId: entry.ownerId, triggered: Boolean(outcome?.triggered) });
             } catch (err) {
               errors++;
               results.push({ caseId: c.id, error: err?.message || 'reconsideration_failed' });
@@ -628,7 +637,7 @@ function createScrapersHandler(dependencies = {}) {
           return res.json({
             status: 'completed',
             action: 'second-look',
-            report: { scanned: allCases.length, triggered, errors, results },
+            report: { scanned: allEntries.length, triggered, errors, results },
           });
         } catch (err) {
           return res.status(err?.status || 500).json({ error: err?.message || 'Second-look reconsideration failed' });

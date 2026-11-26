@@ -182,13 +182,17 @@ function createSavedSearchesHandler(dependencies = {}) {
       }
       if (method === 'POST') {
         const body = req.body || {};
-        if (userId !== 'operator') {
+        const isOperatorIdentity = userId === 'operator' || userId.startsWith('workspace:');
+        if (!isOperatorIdentity) {
           const { accountServiceFor, tierQuotas } = require('../accounts/store');
           let searchLimit = tierQuotas('free').maxSavedSearches;
-          if (userId.startsWith('acct_')) {
+          const accountId = userId.startsWith('account:')
+            ? userId.slice('account:'.length)
+            : (userId.startsWith('acct_') ? userId : null);
+          if (accountId) {
             searchLimit = tierQuotas('pro').maxSavedSearches;
             try {
-              const acct = await accountServiceFor(database).get(userId);
+              const acct = await accountServiceFor(database).get(accountId);
               if (acct?.entitled) searchLimit = tierQuotas(acct.billingTier || 'pro').maxSavedSearches;
             } catch (_) {}
           }

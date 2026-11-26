@@ -379,6 +379,7 @@ function sendOptionsOk(res) {
 }
 
 function createUnderwriteHandler(deps = {}) {
+  const database = deps.database !== undefined ? deps.database : require('../db/client');
   const safmrLookup = deps.getHudSafmrBenchmark || getHudSafmrBenchmark;
   const countyKeyResolver = deps.resolveCountyKey || resolveCountyKey;
   const assessorInterpreter = deps.interpretAssessorParcel || interpretAssessorParcel;
@@ -562,10 +563,21 @@ function createUnderwriteHandler(deps = {}) {
       : basePossession;
 
     // 4. Three-Way Public Benchmark Consensus
+    let deedComps = null;
+    if (database?.isPg && listing.state && listing.zip) {
+      try {
+        const { loadPeerListingsForDeedComps, computeQualifiedDeedComps } = require('../enrichment/deed-comps');
+        const peerListings = await loadPeerListingsForDeedComps(database, listing);
+        deedComps = computeQualifiedDeedComps(listing, { peerListings });
+      } catch {
+        deedComps = null;
+      }
+    }
     const consensus = consensusBuilder(listing, {
       assessorReading,
       assessorParcel: effectiveParcel,
       hudSafmr,
+      deedComps,
     });
 
     const inputSummary = {

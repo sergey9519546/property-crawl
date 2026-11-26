@@ -983,7 +983,7 @@ class DatabaseClient {
       if (filters.missingAssessorRoll) {
         // The durable roll marker is the authority: `assessed_value` alone can
         // pre-exist from other enrichment paths.
-        sql += ` AND provenance #> '{derivedFields,assessorRoll}' IS NULL AND (assessed_value IS NULL OR assessed_value <= 0)`;
+        sql += ` AND provenance #> '{derivedFields,assessorRoll}' IS NULL`;
       }
       if (minScore) {
         sql += ` AND deal_score >= $${paramIdx++}`;

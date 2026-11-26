@@ -211,7 +211,10 @@ function createSourceNetworkHandler(dependencies = {}) {
           });
         }
         try {
-          const result = unbrowseTool.candidateToIntake(req.body, { intake: intakeAdapter });
+          const intakeBridge = usePgIntake && typeof intakeAdapter.submitEvidenceAsync === 'function'
+            ? { ...intakeAdapter, submitEvidence: (payload) => intakeAdapter.submitEvidenceAsync(payload, { database }) }
+            : intakeAdapter;
+          const result = await unbrowseTool.candidateToIntake(req.body, { intake: intakeBridge });
           return res.status(result.deduplicated ? 200 : 201).json({
             ...result,
             schemaVersion: validated.schemaVersion,

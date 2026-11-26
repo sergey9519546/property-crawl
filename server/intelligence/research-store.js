@@ -582,7 +582,8 @@ async function updateCasePg(database, ownerId, id, input, options = {}) {
     throw new ResearchCaseError('RESEARCH_DECISION_INVALID', 'A pass decision requires at least one reason code');
   }
   const note = input.note == null || input.note === '' ? null : String(input.note).replace(/\s+/g, ' ').trim();
-  if (input.state !== 'pass' && input.reconsideration != null) {
+  const preserveSecondLook = Boolean(options && options.preserveSecondLookTrigger === true && input.reconsiderationRequired === true && input.latestTrigger);
+  if (input.state !== 'pass' && input.reconsideration != null && !preserveSecondLook) {
     throw new ResearchCaseError('RESEARCH_RECONSIDERATION_INVALID', 'reconsideration is only available for a pass decision');
   }
   const reconsideration = input.state === 'pass' ? normalizeReconsideration(input.reconsideration) : null;
@@ -614,14 +615,17 @@ async function updateCasePg(database, ownerId, id, input, options = {}) {
       return caseSummary(item);
     }
     const previousState = item.state;
+    const preserveSecondLook = Boolean(options && options.preserveSecondLookTrigger === true && input.reconsiderationRequired === true && input.latestTrigger);
     item.state = input.state;
     item.decision = decision;
-    item.reconsideration = reconsideration;
+    if (!(preserveSecondLook && input.state === 'inbox' && item.reconsideration)) {
+      item.reconsideration = reconsideration;
+    }
     if (scenarioChanged) item.underwriteScenario = sanitizeUnderwriteScenario(input.underwriteScenario);
     item.revision += 1;
     item.updatedAt = timestamp;
-    item.reconsiderationRequired = false;
-    item.latestTrigger = null;
+    item.reconsiderationRequired = preserveSecondLook;
+    item.latestTrigger = preserveSecondLook ? structuredClone(input.latestTrigger) : null;
     item.history.unshift(buildPgHistoryEvent('decision_changed', item, timestamp, { previousState, currentState: item.state, reasonCodes }));
     item.history = item.history.slice(0, MAX_CASE_HISTORY);
 
@@ -823,6 +827,26 @@ async function commitBrowserImportPg(database, ownerId, listingIds, previewHash,
   return { previewHash, created, existing, rejected: preview.rejected };
 }
 
+async function listAllCasesByStatePg(database, state = 'pass', { targetId = null, limit = 500 } = {}) {
+  const db = resolveDatabase(database);
+  await ensurePgTable(db.pool);
+  const safeLimit = Math.min(2000, Math.max(1, Number(limit) || 500));
+  const res = await db.pool.query(
+    `SELECT owner_id, payload, revision, state
+       FROM research_cases
+      WHERE state = $1
+        AND ($2::text IS NULL OR id = $2)
+      ORDER BY updated_at ASC
+      LIMIT $3`,
+    [String(state), targetId || null, safeLimit],
+  );
+  const { caseSummary } = rc();
+  return (res.rows || []).map((row) => {
+    const item = parsePgPayload(row);
+    return { ownerId: row.owner_id, case: caseSummary(item), rawCase: item };
+  });
+}
+
 module.exports = {
   CASE_ID,
   DEFAULT_STORE_PATH,
@@ -840,6 +864,7 @@ module.exports = {
   isPgDatabase,
   linkEvidencePg,
   listCasesPg,
+  listAllCasesByStatePg,
   loadStore,
   mutateStore,
   normalizeOwnerId,

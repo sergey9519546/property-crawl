@@ -822,10 +822,10 @@ class IngestionScheduler {
                 const scope = collectionScope(scraper);
                 try { await this.database.pool.query(
                   `INSERT INTO discovery_checkpoints (source_key, cursor, scope_hash, updated_at)
-                   VALUES ($1, to_jsonb($2::text), $3, NOW())
+                   VALUES ($1, $2::jsonb, $3, NOW())
                    ON CONFLICT (source_key) DO UPDATE
                    SET cursor = EXCLUDED.cursor, scope_hash = EXCLUDED.scope_hash, updated_at = NOW()`,
-                  [scraper.sourceKey, String(cursorToken), scopeHash(scope)]
+                  [scraper.sourceKey, JSON.stringify(checkpointData), scopeHash(scope)]
                 ); } catch (err) { console.warn(`[Scheduler] Could not persist ${scraper.sourceKey} checkpoint to PostgreSQL:`, err?.message || err); }
               } else {
                 try {
@@ -1152,6 +1152,13 @@ scheduler.onCycleComplete = async (result, context = {}) => {
   const id = context.jobId || result.jobId;
   if (id) await collectionCoordinator.finalize(id, result, {owner:context.owner,leaseGuard:context.leaseGuard});
   if (db.isPg && typeof db.purgeStaleListings === 'function' && !(context.slice || result.slice || process.env.VERCEL === '1' || process.env.NOW_REGION)) {
+    try {
+      if (typeof db.reconcileCrossSourceDuplicates === 'function') {
+        await runBgDb(db, () => db.reconcileCrossSourceDuplicates());
+      }
+    } catch (recErr) {
+      console.warn('[Scheduler] Cross-source duplicate reconciliation warning:', recErr?.message || recErr);
+    }
     try {
       const purged = await runBgDb(db, () => db.purgeStaleListings());
       if (purged?.deleted > 0 || purged?.observationsDeleted > 0) {

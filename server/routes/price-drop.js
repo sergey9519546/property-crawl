@@ -70,9 +70,21 @@ function createPriceDropHandler(dependencies = {}) {
 
     const drops = [];
     for (const listing of savedListings) {
-      const previous = historyLookup.get(listing.id) || null;
+      let previous = historyLookup.get(listing.id) || null;
+      if (!previous) {
+        const stickyBaseline = Number(listing.peakOpeningBid ?? listing.initialOpeningBid);
+        const currentBid = Number(listing.openingBid);
+        if (Number.isFinite(stickyBaseline) && stickyBaseline > 0 && Number.isFinite(currentBid) && currentBid > 0 && stickyBaseline > currentBid) {
+          previous = { openingBid: stickyBaseline };
+        }
+      }
       const verdict = detectPriceDrop({ current: listing, previous });
-      drops.push({ listingId: listing.id, ...verdict });
+      drops.push({
+        listingId: listing.id,
+        initialOpeningBid: listing.initialOpeningBid ?? null,
+        peakOpeningBid: listing.peakOpeningBid ?? null,
+        ...verdict,
+      });
     }
 
     const summary = summarizePriceDrops(drops, { nowMs: now() });
@@ -88,6 +100,8 @@ function createPriceDropHandler(dependencies = {}) {
         dropped: d.dropped,
         currentBid: d.currentBid ?? null,
         previousBid: d.previousBid ?? null,
+        initialOpeningBid: d.initialOpeningBid ?? null,
+        peakOpeningBid: d.peakOpeningBid ?? null,
         delta: d.delta ?? null,
         deltaPct: d.deltaPct ?? null,
         severity: d.severity ?? 'none',

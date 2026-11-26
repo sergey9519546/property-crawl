@@ -160,6 +160,11 @@ async function listAllRecordsPg(pool) {
   return (res.rows || []).map((row) => row.record_json);
 }
 
+async function getRecordByIdPg(pool, id) {
+  const res = await pool.query('SELECT record_json FROM source_intake_records WHERE id = $1 LIMIT 1', [id]);
+  return res.rows?.[0]?.record_json || null;
+}
+
 async function updateRecordPg(pool, id, updater) {
   if (typeof updater !== 'function') throw new TypeError('Source intake updater must be a function');
   const existing = await pool.query('SELECT record_json FROM source_intake_records WHERE id = $1 LIMIT 1', [id]);
@@ -193,5 +198,6 @@ module.exports = {
   putRecordPg,
   queryRecordsPg,
   listAllRecordsPg,
+  getRecordByIdPg,
   updateRecordPg,
 };

@@ -483,8 +483,7 @@ async function handleDocumentReview(req, res, dependencies = {}) {
       const state = mergedFields.state || (stateMatch ? stateMatch[1].toUpperCase() : null);
       const feedInfo = FEED_CONFIG && state ? FEED_CONFIG[state] : null;
       const publisherName = feedInfo?.name || (state ? `${state} Press Association` : 'Public Notice Feed');
-      const portalUrl = feedInfo?.portalUrl || 'https://publicnotice.org';
-      const noticeUrl = body.documentUrl || previousRaw?.documentUrl || `${portalUrl}/notice/${listingId}`;
+      const noticeUrl = body.documentUrl || previousRaw?.documentUrl || feedInfo?.portalUrl || null;
       const nowIso = new Date().toISOString();
 
       let existingListing = null;

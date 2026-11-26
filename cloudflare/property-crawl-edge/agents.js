@@ -76,7 +76,7 @@ export async function notifyOperatorFailure(env, action, details) {
         body: JSON.stringify({
           from: env.RESEND_FROM || 'alerts@perfectproperty.bid',
           to: [env.OPERATOR_EMAIL],
-          subject: `[PropertyCrawl Edge Alert] ${action} failed`,
+          subject: `[PerfectProperty Edge Alert] ${action} failed`,
           text: JSON.stringify(details, null, 2),
         }),
         signal: typeof AbortSignal?.timeout === 'function' ? AbortSignal.timeout(8_000) : undefined,

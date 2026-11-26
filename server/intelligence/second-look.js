@@ -516,7 +516,66 @@ function applySecondLookReconsideration(caseId, freshListing, options = {}) {
   };
 }
 
+async function applySecondLookReconsiderationPg(database, ownerId, caseId, freshListing, options = {}) {
+  const researchStore = require('./research-store');
+  const loaded = await researchStore.getCasePg(database, ownerId, caseId, options);
+  const existingCase = loaded && typeof loaded === 'object' && loaded.case ? loaded.case : loaded;
+  if (!existingCase) {
+    throw new Error(`Research case not found: ${caseId}`);
+  }
+
+  const evaluation = evaluateSecondLookTriggers(existingCase, freshListing);
+  if (!evaluation.shouldTrigger) {
+    return {
+      triggered: false,
+      case: existingCase,
+      evaluation,
+    };
+  }
+
+  const expectedRevision = options.expectedRevision !== undefined
+    ? options.expectedRevision
+    : existingCase.revision;
+  const reasonNote = evaluation.primaryReason
+    ? String(evaluation.primaryReason).slice(0, 1950)
+    : 'Second-look reconsideration triggered';
+
+  const updatePayload = {
+    state: 'inbox',
+    expectedRevision,
+    note: reasonNote,
+    reconsiderationRequired: true,
+    latestTrigger: {
+      type: 'second_look_event',
+      reason: evaluation.primaryReason,
+      events: evaluation.triggerEvents,
+      alerts: evaluation.alerts,
+      flags: evaluation.flags,
+      titleRiskAlert: evaluation.alerts.includes('JUNIOR_LIEN_SURVIVING_MORTGAGE') ? 'JUNIOR_LIEN_SURVIVING_MORTGAGE' : null,
+      irsRedemptionActive: evaluation.flags.includes('IRS_REDEMPTION_WINDOW_ACTIVE'),
+      hoaSuperPriorityRisk: evaluation.flags.includes('HOA_SUPER_PRIORITY_RISK'),
+      priorDecidedOpeningBid: existingCase.decision?.decidedOpeningBid ?? existingCase.latestTrigger?.priorDecidedOpeningBid ?? null,
+      triggeredAt: new Date().toISOString(),
+    },
+  };
+
+  const updatedResult = await researchStore.updateCasePg(
+    database,
+    ownerId,
+    caseId,
+    updatePayload,
+    { ...options, preserveSecondLookTrigger: true },
+  );
+
+  return {
+    triggered: true,
+    case: updatedResult,
+    evaluation,
+  };
+}
+
 module.exports = {
   evaluateSecondLookTriggers,
   applySecondLookReconsideration,
+  applySecondLookReconsiderationPg,
 };

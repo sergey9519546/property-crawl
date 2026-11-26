@@ -193,10 +193,9 @@ async function standardizeEmailNoticeListing(parsed = {}, meta = {}) {
   const parcelIndex = Number(meta.parcelIndex || 0);
   const recordId = `email-notice-${stateSlug}-${hash.slice(0, 12)}-${parcelIndex}`;
   const publisherName = feedInfo?.name || feedInfo?.operator || (state === 'UNKNOWN' ? 'Press Association Notice' : `${state} Press Association`);
-  const portalUrl = feedInfo?.portalUrl || `https://www.${PRESS_ASSOCIATION_DOMAINS[0]}`;
   const noticeUrl = (typeof parsed.source_url === 'string' && /^https?:\/\//i.test(parsed.source_url))
     ? parsed.source_url
-    : `${portalUrl.replace(/\/+$/, '')}/notice/${recordId}`;
+    : (feedInfo?.portalUrl || null);
   const observedAt = meta.observedAt || new Date().toISOString();
 
   const openingBid = Number(parsed.opening_bid) > 0 ? Number(parsed.opening_bid) : null;
@@ -504,8 +503,7 @@ class EmailNoticesPipeline {
       );
 
       const snippetFeedInfo = FEED_CONFIG[resolvedState] || feedInfo || null;
-      const portalUrl = snippetFeedInfo?.portalUrl || `https://www.${PRESS_ASSOCIATION_DOMAINS[0]}`;
-      const noticeUrl = listing.sourceUrl || `${portalUrl.replace(/\/+$/, '')}/notice/${listing.id}`;
+      const noticeUrl = listing.sourceUrl || snippetFeedInfo?.portalUrl || null;
 
       if (isConfident) {
         listings.push(listing);

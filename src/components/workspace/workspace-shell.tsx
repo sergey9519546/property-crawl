@@ -117,7 +117,7 @@ export function WorkspaceSessionProvider({ children, includeChrome = false }: { 
       { href: "/underwrite", label: nav.underwrite, icon: Calculator },
       { href: "/sources", label: nav.sources, icon: Database },
       { href: "/activity", label: nav.activity, icon: Activity },
-      { href: "/workspace/documents-review", label: "Reviews", labelText: nav.reviews, icon: FileWarning },
+      { href: "/workspace/documents-review", label: nav.reviews, icon: FileWarning },
       { href: "/workspace/settings", label: nav.status, icon: Settings },
     ],
     [nav],
@@ -245,7 +245,7 @@ export function WorkspaceSessionProvider({ children, includeChrome = false }: { 
             {navigation.map((item) => {
               const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
               const Icon = item.icon;
-              return <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} className={cn("shrink-0 inline-flex flex-col items-center justify-center gap-1 rounded-control px-2 py-2 text-label font-semibold transition sm:shrink-0 sm:flex-row sm:gap-1.5 sm:px-3 sm:text-xs", active ? "bg-ink text-white" : "text-ink-2 hover:bg-line hover:text-ink")}><Icon size={14} />{"labelText" in item ? item.labelText : item.label}</Link>;
+              return <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} className={cn("shrink-0 inline-flex flex-col items-center justify-center gap-1 rounded-control px-2 py-2 text-label font-semibold transition sm:shrink-0 sm:flex-row sm:gap-1.5 sm:px-3 sm:text-xs", active ? "bg-ink text-white" : "text-ink-2 hover:bg-line hover:text-ink")}><Icon size={14} />{item.label}</Link>;
             })}
           </nav>
           <div className="ml-auto flex items-center gap-2">

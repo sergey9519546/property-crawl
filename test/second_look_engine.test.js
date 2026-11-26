@@ -724,6 +724,8 @@ test('P0-6 regressions: HOA_SUPER_PRIORITY_RISK only fires for HOA foreclosures,
     assert.equal(reopened.triggered, true);
     assert.equal(reopened.case.state, 'inbox');
     assert.equal(reopened.case.reconsiderationRequired, true);
+    assert.equal(reopened.case.decidedOpeningBid, 200000);
+    assert.ok(reopened.case.reconsideration);
     assert.equal(reopened.case.latestTrigger.hoaSuperPriorityRisk, false);
     assert.equal(reopened.case.latestTrigger.flags.includes('HOA_SUPER_PRIORITY_RISK'), false);
   } finally {

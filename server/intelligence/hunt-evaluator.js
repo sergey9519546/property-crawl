@@ -4,7 +4,7 @@ const crypto = require('crypto');
 const { matchListingAgainstSearch } = require('./saved-search-alerts');
 const { isEmail, sendOutboundMail } = require('../delivery/outbound-mail');
 
-const PLACEHOLDER_RECIPIENT = 'operator@propertycrawl.com';
+const PLACEHOLDER_RECIPIENT = 'operator@perfectproperty.bid';
 
 function huntRecipient(hunt) {
   const email = isEmail(hunt?.subscriberEmail);

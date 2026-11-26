@@ -291,6 +291,7 @@ export function AnyAddressUnderwriter() {
     setSaleDate("");
     setSource("");
     setProgram("");
+    setPlaintiff("");
     setNoticeText("");
     setResult(null);
     setError(null);

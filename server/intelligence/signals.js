@@ -224,8 +224,16 @@ function evaluateOpportunitySignals(listing = {}, options = {}) {
     .filter((v) => Number.isFinite(v) && v > 0);
   const currentBidNum = Number(listing.openingBid);
   const earliestBid = historicalBids.length > 0 ? historicalBids[0] : null;
+  const stickyPeakBid = Number(listing.peakOpeningBid);
+  const stickyInitBid = Number(listing.initialOpeningBid);
   const sourcePriorBid = Number(sourceFacts.priorOpeningBid || listing.priorOpeningBid);
-  const baselineBid = earliestBid !== null ? earliestBid : (Number.isFinite(sourcePriorBid) && sourcePriorBid > 0 ? sourcePriorBid : null);
+  const baselineBid = earliestBid !== null
+    ? earliestBid
+    : (Number.isFinite(stickyPeakBid) && stickyPeakBid > 0
+      ? stickyPeakBid
+      : (Number.isFinite(stickyInitBid) && stickyInitBid > 0
+        ? stickyInitBid
+        : (Number.isFinite(sourcePriorBid) && sourcePriorBid > 0 ? sourcePriorBid : null)));
   const cumulativeBidDropPct = baselineBid !== null && Number.isFinite(currentBidNum) && currentBidNum > 0 && currentBidNum < baselineBid
     ? Number((((baselineBid - currentBidNum) / baselineBid) * 100).toFixed(1))
     : null;

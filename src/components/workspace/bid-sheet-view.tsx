@@ -277,20 +277,24 @@ export function BidSheetView() {
     setApiVerifyNote(null);
     setApiVerifyError(null);
     try {
-      const apiTargets = ladderTargets.slice(0, 50);
-      const response = await fetch("/api/check-ladder", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ targets: apiTargets, availableCapital: parsedCapital }),
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(payload?.error || bs.apiVerifyError);
+      let checks = 0;
+      let wires = 0;
+      for (let i = 0; i < ladderTargets.length; i += 50) {
+        const chunk = ladderTargets.slice(i, i + 50);
+        const response = await fetch("/api/check-ladder", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ targets: chunk, availableCapital: parsedCapital }),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(payload?.error || bs.apiVerifyError);
+        }
+        checks += Array.isArray(payload?.checkLadder)
+          ? payload.checkLadder.reduce((sum: number, row: { count?: number }) => sum + Number(row?.count || 0), 0)
+          : 0;
+        wires += Array.isArray(payload?.preWireSchedule) ? payload.preWireSchedule.length : 0;
       }
-      const checks = Array.isArray(payload?.checkLadder)
-        ? payload.checkLadder.reduce((sum: number, row: { count?: number }) => sum + Number(row?.count || 0), 0)
-        : 0;
-      const wires = Array.isArray(payload?.preWireSchedule) ? payload.preWireSchedule.length : 0;
       setApiVerifyNote(
         bs.apiVerifiedStatus
           .replace("{checks}", String(checks))

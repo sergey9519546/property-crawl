@@ -549,6 +549,15 @@ export default async function ListingPage({ params, searchParams }: Props) {
               <span data-testid="listing-status" data-status-tone={statusTone} className={`rounded-full px-3 py-1 text-xs font-bold ${statusClass}`}>{statusLabel}</span>
             </div>
             <p className={openingBid !== null ? "mt-4 text-3xl font-bold tracking-tight sm:text-4xl" : "mt-4 text-2xl font-bold tracking-tight text-ink sm:text-3xl"}>{openingBid !== null ? formatMoney(openingBid) : dUi.openingAmountMissing}</p>
+            {(() => {
+              const priorRaw = (listing as { peakOpeningBid?: number | null; initialOpeningBid?: number | null }).peakOpeningBid
+                ?? (listing as { initialOpeningBid?: number | null }).initialOpeningBid;
+              return openingBid !== null && typeof priorRaw === "number" && Number.isFinite(priorRaw) && priorRaw > openingBid ? (
+                <p className="mt-0.5 text-xs font-medium text-ink-3">
+                  <span className="line-through">{formatMoney(priorRaw)}</span>
+                </p>
+              ) : null;
+            })()}
             <p className="mt-1 text-sm text-ink-3">{openingBid !== null ? dUi.openingAmountPublished : dUi.confirmReservePrompt}</p>
             {openingBid === null && (publishedUpsetAmount !== null || publishedJudgmentAmount !== null) && (
               <div data-testid="published-upset-judgment-callout" className="rounded-control border border-line bg-paper p-3.5 mt-3 text-xs space-y-2">

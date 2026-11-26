@@ -690,20 +690,31 @@ async function repairLiveEnrichment(options = {}) {
                 assessed_value::float8 AS "assessed",
                 sale_date::text AS "saleDate",
                 status,
+                lifecycle_status AS "lifecycleStatus",
                 redemption_days AS "redemptionDays",
                 senior_lien_risk AS "seniorLienRisk",
                 occupancy,
                 deposit_terms AS "deposit",
                 judgment_amount::float8 AS "judgment",
+                cash_to_close::float8 AS "cashToClose",
+                has_documents AS "hasDocuments",
                 source_url AS "sourceUrl",
                 source_observed_at::text AS "sourceObservedAt",
                 fetched_at::text AS "fetchedAt",
                 provenance
            FROM listings
-          WHERE triage_priority IS NULL
-             OR triage_priority_refreshed_at IS NULL
-             OR source_key IN ('hud', 'gsa', 'usda', 'fannie', 'freddie', 'fdic')
-          ORDER BY (triage_priority IS NULL) DESC, triage_priority_refreshed_at ASC NULLS FIRST, id ASC
+          WHERE COALESCE(discovery_terminal, FALSE) = FALSE
+            AND (
+              triage_priority IS NULL
+              OR triage_priority = 0
+              OR triage_priority_refreshed_at IS NULL
+              OR triage_priority_refreshed_at < NOW() - INTERVAL '12 hours'
+              OR source_key IN ('hud', 'gsa', 'usda', 'fannie', 'freddie', 'fdic')
+            )
+          ORDER BY (triage_priority IS NULL OR triage_priority = 0) DESC,
+                   (CASE WHEN source_key = 'servicelink' THEN 1 ELSE 0 END) ASC,
+                   triage_priority_refreshed_at ASC NULLS FIRST,
+                   id ASC
           LIMIT $1`,
         [triageLimit],
       );

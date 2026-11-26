@@ -8,6 +8,7 @@ const {
   putRecordPg,
   queryRecordsPg,
   listAllRecordsPg,
+  getRecordByIdPg,
   updateRecordPg,
 } = require('./store');
 const { identifyAdapterForSource } = require('./platform-fingerprinter');
@@ -452,11 +453,22 @@ async function reviewEvidenceAsync(id, review, options = {}) {
   return getSummary(updated);
 }
 
+async function getEvidenceByIdAsync(id, options = {}) {
+  const pool = resolveIntakePgPool(options);
+  if (!pool) {
+    const record = loadStore(options.storePath).records.find((item) => item.id === id);
+    return record ? getSummary(record) : null;
+  }
+  const record = await getRecordByIdPg(pool, id);
+  return record ? getSummary(record) : null;
+}
+
 module.exports = {
   ALLOWED_KINDS,
   MAX_BODY_BYTES,
   MAX_JSON_RECORDS,
   MAX_PAYLOAD_BYTES,
+  getEvidenceByIdAsync,
   getSummary,
   listEvidence,
   listEvidenceAsync,
