@@ -437,6 +437,7 @@ async function handleAssessorLookup(encodedId, req, res, db = defaultDb, options
       apn: publishedApn(listing) || undefined,
       state: listing.state,
       county: listing.county,
+      db,
       fetchFn: typeof options?.fetchFn === 'function' ? options.fetchFn : (url, init = {}) => fetch(url, { ...init, signal: AbortSignal.timeout(8000) }),
     });
   } catch (_) {
@@ -538,6 +539,52 @@ async function handleListings(req, res, dbOverride = null, options = {}) {
         return res.status(404).json({ error: 'Listing not found' });
       }
       return res.json({ ...presentListing(attachMedia(listing, mediaEntries())), documentEvidence: buildDocumentEvidence(listing) });
+    }
+
+    // Batch exact-ID lookup (?ids=A,B,C or ?ids=A&ids=B) for watchlist/bid-sheet hydration
+    const rawIdsParams = url.searchParams.getAll('ids');
+    if (rawIdsParams.length > 0) {
+      const requestedIds = Array.from(new Set(
+        rawIdsParams
+          .flatMap((v) => String(v || '').split(','))
+          .map((v) => v.trim())
+          .filter(Boolean)
+      ));
+      if (requestedIds.length === 0 || requestedIds.length > 250 || requestedIds.some((v) => v.length > 256)) {
+        return res.status(400).json({ error: 'ids must contain between 1 and 250 valid listing IDs' });
+      }
+      if (typeof db.inventoryUnavailableReason === 'function') {
+        const unavailable = db.inventoryUnavailableReason();
+        if (unavailable) {
+          return res.status(503).json({
+            error: 'No inventory is being served.',
+            reason: unavailable,
+            dataMode: typeof db.dataMode === 'function' ? db.dataMode() : null,
+            listings: [],
+            total: 0,
+          });
+        }
+      }
+      const fetched = typeof db.getListingsByIds === 'function'
+        ? await db.getListingsByIds(requestedIds)
+        : (await Promise.all(requestedIds.map((itemId) => db.getListingById(itemId)))).filter(Boolean);
+      const entries = mediaEntries();
+      const admissible = fetched.filter((l) => l && (typeof l.source !== 'string' || l.source === '' || servesListings(l.source)));
+      const presented = admissible.map((l) => presentListing(entries.length ? attachMedia(l, entries) : l));
+      const foundSet = new Set(presented.map((l) => l.id));
+      const missingIds = requestedIds.filter((reqId) => !foundSet.has(reqId));
+      const stripped = presented.map(({ raw, provenance, ...rest }) => {
+        if (!provenance || typeof provenance !== 'object') return rest;
+        const { sourceFields, statusHistory, sourceFacts, ...kept } = provenance;
+        return { ...rest, provenance: kept };
+      });
+      res.setHeader('Cache-Control', 'no-store');
+      return res.json({
+        listings: stripped,
+        total: stripped.length,
+        requestedIds: requestedIds.length,
+        missingIds,
+      });
     }
 
     // Strict input validation. Each reject short-circuits with 400 so the

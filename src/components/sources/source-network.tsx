@@ -1384,25 +1384,27 @@ export function SourceNetwork() {
                 </p>
               ) : null}
             </div>
-            <button
-              onClick={() => {
-                setCustomMode(true);
-                setSelectedId(null);
-                setShowImport(true);
-                setMessage("");
-                setBody("");
-                setSourceUrl("");
-                setCapturedAt(new Date().toISOString());
-                requestAnimationFrame(() =>
-                  document
-                    .getElementById("source-playbook")
-                    ?.scrollIntoView({ behavior: "smooth", block: "start" }),
-                );
-              }}
-              className="inline-flex items-center gap-2 rounded-control bg-ink px-4 py-2.5 text-sm font-semibold text-white"
-            >
-              <FilePlus2 size={16} /> Add a local source
-            </button>
+            {!(session.memberTools && !session.authenticated) && (
+              <button
+                onClick={() => {
+                  setCustomMode(true);
+                  setSelectedId(null);
+                  setShowImport(true);
+                  setMessage("");
+                  setBody("");
+                  setSourceUrl("");
+                  setCapturedAt(new Date().toISOString());
+                  requestAnimationFrame(() =>
+                    document
+                      .getElementById("source-playbook")
+                      ?.scrollIntoView({ behavior: "smooth", block: "start" }),
+                  );
+                }}
+                className="inline-flex items-center gap-2 rounded-control bg-ink px-4 py-2.5 text-sm font-semibold text-white"
+              >
+                <FilePlus2 size={16} /> Add a local source
+              </button>
+            )}
           </div>
           <div className="mb-6 flex flex-col gap-3 md:flex-row">
             <label className="flex flex-1 items-center gap-3 rounded-control border border-line bg-card px-4">
@@ -1654,7 +1656,7 @@ export function SourceNetwork() {
                               Choose a property to investigate
                             </Link>
                           )}
-                          {selected.automated && (
+                          {selected.automated && !(session.memberTools && !session.authenticated) && (
                             <button
                               onClick={() =>
                                 void collectSource(selected.id)
@@ -1667,15 +1669,17 @@ export function SourceNetwork() {
                                 : "Collect this source"}
                             </button>
                           )}
-                          <button
-                            onClick={() => {
-                              setShowImport(!showImport);
-                              setCapturedAt(new Date().toISOString());
-                            }}
-                            className="rounded-control border border-line px-4 py-2.5 text-xs font-semibold"
-                          >
-                            Import evidence
-                          </button>
+                          {!(session.memberTools && !session.authenticated) && (
+                            <button
+                              onClick={() => {
+                                setShowImport(!showImport);
+                                setCapturedAt(new Date().toISOString());
+                              }}
+                              className="rounded-control border border-line px-4 py-2.5 text-xs font-semibold"
+                            >
+                              Import evidence
+                            </button>
+                          )}
                         </div>
                       </>
                     )}
@@ -1802,40 +1806,42 @@ export function SourceNetwork() {
                         </p>
                       </form>
                     )}
-                    <div className="mt-6 border-t border-line pt-4">
-                      <p className="text-xs font-semibold">
-                        Private operator access
-                      </p>
-                      <p className="mt-2 text-xs leading-5 text-ink-2">
-                        The shared eight-hour workspace session protects
-                        collection and reviewed evidence. Credentials are
-                        forwarded only between the application servers.
-                      </p>
-                      <div className="mt-3 flex gap-2">
-                        {session.authenticated ? (
-                          <button
-                            onClick={() => void loadReviewQueue()}
-                            disabled={busy}
-                            className="rounded-control border border-line px-3 py-2 text-xs font-semibold disabled:opacity-50"
+                    {!(session.memberTools && !session.authenticated) && (
+                      <div className="mt-6 border-t border-line pt-4">
+                        <p className="text-xs font-semibold">
+                          Private operator access
+                        </p>
+                        <p className="mt-2 text-xs leading-5 text-ink-2">
+                          The shared eight-hour workspace session protects
+                          collection and reviewed evidence. Credentials are
+                          forwarded only between the application servers.
+                        </p>
+                        <div className="mt-3 flex gap-2">
+                          {session.authenticated ? (
+                            <button
+                              onClick={() => void loadReviewQueue()}
+                              disabled={busy}
+                              className="rounded-control border border-line px-3 py-2 text-xs font-semibold disabled:opacity-50"
+                            >
+                              Open evidence review queue
+                            </button>
+                          ) : (
+                            <button
+                              onClick={session.requestUnlock}
+                              className="rounded-control bg-ink px-3 py-2 text-xs font-semibold text-white"
+                            >
+                              Unlock workspace
+                            </button>
+                          )}
+                          <Link
+                            href="/activity"
+                            className="rounded-control border border-line px-3 py-2 text-xs font-semibold"
                           >
-                            Open evidence review queue
-                          </button>
-                        ) : (
-                          <button
-                            onClick={session.requestUnlock}
-                            className="rounded-control bg-ink px-3 py-2 text-xs font-semibold text-white"
-                          >
-                            Unlock workspace
-                          </button>
-                        )}
-                        <Link
-                          href="/activity"
-                          className="rounded-control border border-line px-3 py-2 text-xs font-semibold"
-                        >
-                          View activity
-                        </Link>
+                            View activity
+                          </Link>
+                        </div>
                       </div>
-                    </div>
+                    )}
                     {reviewItems && (
                       <div className="mt-5 space-y-3">
                         <h3 className="text-sm font-semibold">

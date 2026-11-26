@@ -89,7 +89,7 @@ export const MCP_TOOLS = Object.freeze([
       properties: {
         targets: {
           type: 'array',
-          description: '1 to 50 target auction properties to include in the check ladder.',
+          description: '1 to 250 target auction properties to include in the check ladder.',
           items: {
             type: 'object',
             properties: {
@@ -221,8 +221,8 @@ async function executeMcpTool(name, args, env) {
   }
 
   if (name === 'compute_check_ladder') {
-    if (!Array.isArray(input.targets) || input.targets.length < 1 || input.targets.length > 50) {
-      return { invalidParams: 'compute_check_ladder requires targets as an array of 1 to 50 items.' };
+    if (!Array.isArray(input.targets) || input.targets.length < 1 || input.targets.length > 250) {
+      return { invalidParams: 'compute_check_ladder requires targets as an array of 1 to 250 items.' };
     }
     return fetchJsonUpstream(
       `${apiOrigin}/api/check-ladder`,

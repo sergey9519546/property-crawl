@@ -189,10 +189,14 @@ export async function promoteSavedSearchToHunt(search: SavedSearch, server?: Ser
     throw new Error("Hunt response did not include an id.");
   }
   if (search.id) {
-    void updateSavedSearch(search.id, {
-      isActive: false,
-      filters: { ...(server?.filters || {}), promotedHuntId: hunt.id },
-    }).catch(() => {});
+    try {
+      await updateSavedSearch(search.id, {
+        isActive: false,
+        filters: { ...(server?.filters || {}), promotedHuntId: hunt.id },
+      });
+    } catch {
+      // Hunt was created; deactivation failure does not block promotion
+    }
   }
   void fetch(`/api/hunts/${encodeURIComponent(hunt.id)}/evaluate`, {
     method: "POST",

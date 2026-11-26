@@ -273,6 +273,33 @@ export class OperationsAgent {
       this.recordRun({ action, status: result.status, ok: result.ok, attempt: 1, error: result.error, body: result.body });
 
       if (result.ok) {
+        if (action === 'prune' && this.env?.RESEND_API_KEY && this.env?.OPERATOR_EMAIL) {
+          try {
+            const apiOrigin = String(this.env?.API_ORIGIN || this.env?.ORIGIN_URL || DEFAULT_API_ORIGIN).replace(/\/+$/, '');
+            const edgeSecret = String(this.env?.EDGE_SHARED_SECRET || '').trim();
+            const token = String(this.env?.SCRAPER_ADMIN_TOKEN || this.env?.PROPERTY_OPERATOR_SECRET || '').trim();
+            const healthRes = await fetch(`${apiOrigin}/api/scrapers`, {
+              method: 'GET',
+              headers: {
+                Accept: 'application/json',
+                ...(edgeSecret ? { 'x-edge-secret': edgeSecret } : {}),
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+              },
+              signal: typeof AbortSignal?.timeout === 'function' ? AbortSignal.timeout(5_000) : undefined,
+            });
+            if (healthRes.ok) {
+              const healthData = await healthRes.json().catch(() => null);
+              const detailsObj = healthData?.details && typeof healthData.details === 'object' ? healthData.details : {};
+              const drifted = Object.values(detailsObj)
+                .filter((s) => s && s.listingServing && s.driftAlarm && s.driftAlarm.hasDrift)
+                .map((s) => ({ sourceKey: s.sourceKey || s.key, warning: s.driftAlarm.warning || 'drift_detected' }));
+              if (drifted.length > 0) {
+                this.recordRun({ action: 'scraper-drift', status: 200, ok: false, attempt: 1, error: `Drift on ${drifted.map((d) => d.sourceKey).join(',')}`, body: JSON.stringify(drifted).slice(0, 300) });
+                await notifyOperatorFailure(this.env, 'scraper-drift', { driftedSources: drifted });
+              }
+            }
+          } catch {}
+        }
         return agentJson({ ok: true, action, status: result.status, attempt: 1, body: result.body }, 200);
       }
 

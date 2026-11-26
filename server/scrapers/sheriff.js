@@ -9,6 +9,7 @@ const BaseScraper = require('./base');
 const { extractWithScrapling, isScraplingEnabled } = require('./scrapling-bridge');
 const { createRunReport, recordUnitFailure, recordUnitSuccess, finalizeRunReport, applyEmptyInventoryHonesty } = require('./run-report');
 const { assertFetchableUrl, mapWithConcurrency } = require('./http');
+const { autoThrottle, recordHostLatency, noteRetryAfter } = require('./auto-throttle');
 const {
   REALAUCTION_FLORIDA_COUNTIES,
   REALAUCTION_FLORIDA_TAXDEED_COUNTIES, REALAUCTION_MULTI_STATE_PORTALS,
@@ -535,77 +536,107 @@ class SheriffSaleScraper extends BaseScraper {
     const baseUrl = `https://${county.domain}`;
     const url = `${baseUrl}/index.cfm?zaction=AUCTION&zmethod=PREVIEW`;
     try {
-      const html = await this.requestText(url, {
-        circuitBreaker: this.getCountyCircuitBreaker(county),
-        headers: {
-          'User-Agent': ua,
-          Accept: 'text/html,application/xhtml+xml',
+      const countyBreaker = this.getCountyCircuitBreaker(county);
+      const fetcher = this.fetchImpl || globalThis.fetch;
+      const fetchAjax = async (targetUrl, init = {}) => {
+        if (countyBreaker.isOpen()) {
+          const openErr = new Error(`Circuit breaker open for ${county.name}`);
+          openErr.code = 'CIRCUIT_OPEN';
+          throw openErr;
         }
-      });
+        const urlCheck = assertFetchableUrl(targetUrl);
+        if (!urlCheck.ok) {
+          const err = new Error(`Refused unfetchable RealAuction URL (${urlCheck.reason}): ${targetUrl}`);
+          err.code = 'SSRF_BLOCKED';
+          throw err;
+        }
+        const timeoutMs = Number.isFinite(Number(this.timeoutMs)) && Number(this.timeoutMs) > 0
+          ? Number(this.timeoutMs)
+          : 15000;
+        const maxAttempts = 2;
+        let lastErr = null;
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+          const signal = init.signal || (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
+            ? AbortSignal.timeout(timeoutMs)
+            : undefined);
+          try {
+            await autoThrottle(targetUrl);
+            if (attempt > 1) await this.crawlJitter();
+            const reqStart = Date.now();
+            const res = await fetcher(targetUrl, { ...init, ...(signal ? { signal } : {}) });
+            recordHostLatency(targetUrl, Date.now() - reqStart);
+            const retryHeader = res?.headers?.get?.('retry-after');
+            if (retryHeader) noteRetryAfter(targetUrl, retryHeader);
+            if (res && typeof res.status === 'number' && res.status >= 500 && attempt < maxAttempts) {
+              continue;
+            }
+            if (res && typeof res.status === 'number' && typeof countyBreaker.validateResponse === 'function') {
+              countyBreaker.validateResponse(targetUrl, res.status, '');
+            }
+            return res;
+          } catch (err) {
+            lastErr = err;
+            if (attempt >= maxAttempts || err?.code === 'SSRF_BLOCKED' || err?.code === 'CIRCUIT_OPEN') throw err;
+          }
+        }
+        throw lastErr;
+      };
+
+      let html = '';
+      let cookieHeader = '';
+      let capturedPreviewCookies = false;
+      if (!isScraplingEnabled() && !Object.prototype.hasOwnProperty.call(this, 'requestText') && this.requestText === BaseScraper.prototype.requestText) {
+        const res0 = await fetchAjax(url, {
+          headers: {
+            'User-Agent': ua,
+            Accept: 'text/html,application/xhtml+xml',
+          },
+        });
+        const resOk = res0 && (typeof res0.ok === 'boolean' ? res0.ok : (res0.status >= 200 && res0.status < 300));
+        if (!resOk) {
+          throw new Error(`HTTP ${res0?.status || 'ERR'} fetching ${url}`);
+        }
+        const rawCookies = res0?.headers?.getSetCookie ? res0.headers.getSetCookie() : [res0?.headers?.get?.('set-cookie')];
+        cookieHeader = (rawCookies || []).filter(Boolean).map((c) => c.split(';')[0]).join('; ');
+        capturedPreviewCookies = true;
+        html = await res0.text();
+      } else {
+        html = await this.requestText(url, {
+          circuitBreaker: countyBreaker,
+          headers: {
+            'User-Agent': ua,
+            Accept: 'text/html,application/xhtml+xml',
+          }
+        });
+      }
       if (Array.isArray(this._htmlSamples)) this._htmlSamples.push(html);
       let listings = this.parseRealauctionHtml(html, county);
 
       // If initial page has no parseable rows, execute ColdFusion session + AJAX load protocol
       if (listings.length === 0 && !html.includes('nonstandard skin') && !html.includes('<div id="root">')) {
         try {
-          const countyBreaker = this.getCountyCircuitBreaker(county);
-          const fetcher = this.fetchImpl || globalThis.fetch;
-          const fetchAjax = async (targetUrl, init = {}) => {
-            if (countyBreaker.isOpen()) {
-              const openErr = new Error(`Circuit breaker open for ${county.name}`);
-              openErr.code = 'CIRCUIT_OPEN';
-              throw openErr;
-            }
-            const urlCheck = assertFetchableUrl(targetUrl);
-            if (!urlCheck.ok) {
-              const err = new Error(`Refused unfetchable RealAuction URL (${urlCheck.reason}): ${targetUrl}`);
-              err.code = 'SSRF_BLOCKED';
-              throw err;
-            }
-            const timeoutMs = Number.isFinite(Number(this.timeoutMs)) && Number(this.timeoutMs) > 0
-              ? Number(this.timeoutMs)
-              : 15000;
-            const maxAttempts = 2;
-            let lastErr = null;
-            for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-              const signal = init.signal || (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
-                ? AbortSignal.timeout(timeoutMs)
-                : undefined);
-              try {
-                if (attempt > 1) await this.crawlJitter();
-                const res = await fetcher(targetUrl, { ...init, ...(signal ? { signal } : {}) });
-                if (res && typeof res.status === 'number' && res.status >= 500 && attempt < maxAttempts) {
-                  continue;
-                }
-                if (res && typeof res.status === 'number' && typeof countyBreaker.validateResponse === 'function') {
-                  countyBreaker.validateResponse(targetUrl, res.status, '');
-                }
-                return res;
-              } catch (err) {
-                lastErr = err;
-                if (attempt >= maxAttempts || err?.code === 'SSRF_BLOCKED' || err?.code === 'CIRCUIT_OPEN') throw err;
-              }
-            }
-            throw lastErr;
-          };
-          const res1 = await fetchAjax(url, {
-            headers: {
-              'User-Agent': ua,
-              Accept: 'text/html,application/xhtml+xml',
-            },
-          });
-          const rawCookies = res1?.headers?.getSetCookie ? res1.headers.getSetCookie() : [res1?.headers?.get?.('set-cookie')];
-          const cookieHeader = (rawCookies || []).filter(Boolean).map((c) => c.split(';')[0]).join('; ');
+          if (!capturedPreviewCookies) {
+            const res1 = await fetchAjax(url, {
+              headers: {
+                'User-Agent': ua,
+                Accept: 'text/html,application/xhtml+xml',
+              },
+            });
+            const rawCookies = res1?.headers?.getSetCookie ? res1.headers.getSetCookie() : [res1?.headers?.get?.('set-cookie')];
+            cookieHeader = (rawCookies || []).filter(Boolean).map((c) => c.split(';')[0]).join('; ');
+          }
 
           const nextMatch = html.match(/class="BLHeaderNext[^"]*"[\s\S]*?AuctionDate=([0-9\/]+)/i);
           const todayMatch = html.match(/class="BLHeaderToday[^"]*"[\s\S]*?AuctionDate=([0-9\/]+)/i);
           const allDates = [...html.matchAll(/AuctionDate=([0-9\/]+)/gi)].map((m) => m[1]);
           const candidateDates = [...new Set([todayMatch?.[1], nextMatch?.[1], ...allDates].filter(Boolean))];
 
-          const datesToTry = candidateDates.length > 0 ? candidateDates.slice(0, 2) : [null];
+          const datesToTry = candidateDates.length > 0 ? candidateDates.slice(0, 3) : [null];
           const accumulatedListings = [];
 
-          for (const targetDate of datesToTry) {
+          for (let dateIdx = 0; dateIdx < datesToTry.length; dateIdx++) {
+            const targetDate = datesToTry[dateIdx];
+            if (dateIdx > 0) await this.crawlJitter();
             if (targetDate) {
               try {
                 await fetchAjax(`${url}&AuctionDate=${encodeURIComponent(targetDate)}`, {
@@ -616,6 +647,7 @@ class SheriffSaleScraper extends BaseScraper {
 
             const maxPages = Math.max(1, Math.min(5, Number(process.env.REALAUCTION_MAX_PAGES_PER_DATE) || 3));
             for (let page = 0; page < maxPages; page++) {
+              if (page > 0) await this.crawlJitter();
               const ajaxUrl = `${baseUrl}/index.cfm?zaction=AUCTION&Zmethod=UPDATE&FNC=LOAD&AREA=W&PageDir=${page}&doR=1&tx=${Date.now()}&bypassPage=1&test=1`;
               const res2 = await fetchAjax(ajaxUrl, {
                 headers: {

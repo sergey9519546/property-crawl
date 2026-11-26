@@ -423,10 +423,12 @@ function compileSavedSearchToHuntCriteria(search = {}) {
     : (typeof rawCounty === 'string' && rawCounty.trim() && rawCounty.trim().toLowerCase() !== 'all' ? [rawCounty.trim()] : []);
   if (counties.length > 0) discoveryFilters.county = counties.join(',');
 
-  for (const extraKey of ['program', 'lifecycle', 'freshness', 'hasDocuments', 'saleFrom', 'saleTo']) {
+  for (const extraKey of ['program', 'lifecycle', 'freshness', 'hasDocuments', 'saleFrom', 'saleTo', 'excludeTerminal', 'priceDropped', 'bbox', 'lat', 'lng', 'radiusKm', 'distressStage', 'minQuality']) {
     const val = getVal(extraKey);
     if (typeof val === 'string' && val.trim() && val.trim().toLowerCase() !== 'all') {
       discoveryFilters[extraKey] = val.trim();
+    } else if (typeof val === 'boolean' || (typeof val === 'number' && Number.isFinite(val))) {
+      discoveryFilters[extraKey] = val;
     }
   }
 

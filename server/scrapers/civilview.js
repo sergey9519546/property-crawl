@@ -544,10 +544,12 @@ class CivilViewScraper extends BaseScraper {
 
   async scrapeFeed(options = {}) {
     if (options && typeof options === 'object') {
-      const runOffset = parseCountyOffset(
-        options.countyOffset ?? options.cursor ?? options.continuationToken ?? options.checkpoint
-      );
-      if (runOffset != null) this.countyRotationOffset = runOffset;
+      const rawCursor = options.countyOffset ?? options.cursor ?? options.continuationToken ?? options.checkpoint;
+      if (rawCursor != null) {
+        const parsedCursor = parseCivilViewCursor(rawCursor);
+        this.countyRotationOffset = parsedCursor.countyOffset;
+        this.detailOffset = parsedCursor.detailOffset;
+      }
       if (options.maxCounties) this.maxCounties = positiveInt(options.maxCounties, DEFAULT_MAX_COUNTIES);
       if (options.maxDetailPages) this.maxDetailPages = positiveInt(options.maxDetailPages, DEFAULT_DETAIL_LIMIT);
       if (options.detailConcurrency) this.detailConcurrency = positiveInt(options.detailConcurrency, 3);
@@ -658,8 +660,9 @@ class CivilViewScraper extends BaseScraper {
           const prioritized = this.prioritizeSummaries(discovered.summaries, county);
           const countyDetailOffset = index === 0 ? Math.min(startDetailOffset, prioritized.length) : 0;
           const selected = prioritized.slice(countyDetailOffset, countyDetailOffset + countyBudget);
-          if (index === 0 && (countyDetailOffset + selected.length) < prioritized.length) {
-            nextDetailCursor = { countyOffset: startOffsetSnapshot, detailOffset: countyDetailOffset + selected.length };
+          const countyOffsetForIndex = rotationTotal > 0 ? (startOffsetSnapshot + index) % rotationTotal : startOffsetSnapshot;
+          if (!nextDetailCursor && (countyDetailOffset + selected.length) < prioritized.length) {
+            nextDetailCursor = { countyOffset: countyOffsetForIndex, detailOffset: countyDetailOffset + selected.length };
           }
           countyAborted = false;
           const prefetchedHtml = new Map();

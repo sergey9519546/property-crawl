@@ -141,6 +141,22 @@ function numericFilter(search, key) {
   return Number.isFinite(n) ? n : null;
 }
 
+const DISCOVERY_FILTER_KEYS = Object.freeze([
+  'excludeTerminal', 'priceDropped', 'bbox', 'lat', 'lng', 'radiusKm',
+  'distressStage', 'minQuality', 'program', 'lifecycle', 'freshness',
+  'hasDocuments', 'saleFrom', 'saleTo',
+]);
+
+function hasExtendedDiscoveryFilter(search) {
+  for (const key of DISCOVERY_FILTER_KEYS) {
+    const val = getFilter(search, key);
+    if (typeof val === 'boolean' && val) return true;
+    if (typeof val === 'number' && Number.isFinite(val)) return true;
+    if (typeof val === 'string' && val.trim() && val.trim().toLowerCase() !== 'all') return true;
+  }
+  return false;
+}
+
 // Detect "this search has no real filters at all". We intentionally allow
 // any single non-empty filter; the only failure case is "everything is
 // absent/empty", which would match every listing and spam every user.
@@ -155,7 +171,8 @@ function hasAnyFilter(search) {
     || Number.isFinite(numericFilter(search, 'minEquity'))
     || Boolean(trimmedString(search, 'occupancy'))
     || Boolean(trimmedString(search, 'seniorLien'))
-    || Boolean(trimmedString(search, 'redemption')));
+    || Boolean(trimmedString(search, 'redemption'))
+    || hasExtendedDiscoveryFilter(search));
 }
 
 // Returns one of:
@@ -284,6 +301,25 @@ function matchListingAgainstSearch(listing, search) {
       .toLowerCase();
     if (!keywords.some((kw) => haystack.includes(kw))) {
       return { match: false, reason: 'keywords_no_match' };
+    }
+  }
+
+  if (hasExtendedDiscoveryFilter(search)) {
+    const { queryFromUrl, matches } = require('../discovery/query');
+    const params = new URLSearchParams();
+    for (const key of DISCOVERY_FILTER_KEYS) {
+      const val = getFilter(search, key);
+      if (typeof val === 'boolean') {
+        if (val) params.set(key, 'true');
+      } else if (typeof val === 'number' && Number.isFinite(val)) {
+        params.set(key, String(val));
+      } else if (typeof val === 'string' && val.trim() && val.trim().toLowerCase() !== 'all') {
+        params.set(key, val.trim());
+      }
+    }
+    const query = queryFromUrl(new URL(`http://localhost/api/listings?${params.toString()}`));
+    if (!matches(listing, query)) {
+      return { match: false, reason: 'discovery_filter_mismatch' };
     }
   }
 

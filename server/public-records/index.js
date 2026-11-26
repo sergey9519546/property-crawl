@@ -35,6 +35,7 @@ async function lookupEnrolledCadastralParcel(listing, endpoint, options = {}) {
     allowNetwork: true,
     fetchFn: options.fetchImpl || options.fetchFn || globalThis.fetch,
     signal: options.signal,
+    ...(options.db !== undefined ? { db: options.db } : {}),
   });
 
   if (!parcel) {

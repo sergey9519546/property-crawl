@@ -207,27 +207,38 @@ function parseSaleTimestamp(record) {
 
 function isNjNonUsable(record) {
   const props = record?.properties && typeof record.properties === 'object' ? record.properties : null;
+  const rawAttrs = (record?.rawAttributes && typeof record.rawAttributes === 'object' ? record.rawAttributes : null)
+    || (props?.rawAttributes && typeof props.rawAttributes === 'object' ? props.rawAttributes : null);
   const hasNuField =
     (record &&
       (Object.prototype.hasOwnProperty.call(record, 'nuCode') ||
         Object.prototype.hasOwnProperty.call(record, 'nu_code') ||
         Object.prototype.hasOwnProperty.call(record, 'NU_CODE') ||
         Object.prototype.hasOwnProperty.call(record, 'SALE_NU') ||
+        Object.prototype.hasOwnProperty.call(record, 'SALES_CODE') ||
+        Object.prototype.hasOwnProperty.call(record, 'salesCode') ||
         Object.prototype.hasOwnProperty.call(record, 'saleNuCode') ||
         Object.prototype.hasOwnProperty.call(record, 'nonUsableCode'))) ||
     (props &&
       (Object.prototype.hasOwnProperty.call(props, 'nuCode') ||
-        Object.prototype.hasOwnProperty.call(props, 'NU_CODE')));
+        Object.prototype.hasOwnProperty.call(props, 'NU_CODE') ||
+        Object.prototype.hasOwnProperty.call(props, 'SALES_CODE'))) ||
+    Boolean(rawAttrs && (Object.prototype.hasOwnProperty.call(rawAttrs, 'SALES_CODE') || Object.prototype.hasOwnProperty.call(rawAttrs, 'NU_CODE')));
   if (!hasNuField) return false;
   const raw =
     record.nuCode ??
     record.nu_code ??
     record.NU_CODE ??
     record.SALE_NU ??
+    record.SALES_CODE ??
+    record.salesCode ??
     record.saleNuCode ??
     record.nonUsableCode ??
     props?.nuCode ??
-    props?.NU_CODE;
+    props?.NU_CODE ??
+    props?.SALES_CODE ??
+    rawAttrs?.SALES_CODE ??
+    rawAttrs?.NU_CODE;
   if (raw === null || raw === undefined) return false;
   const normalized = String(raw).trim().toUpperCase();
   return !NJ_USABLE_NU_CODES.has(normalized);
@@ -344,22 +355,31 @@ function normalizeCandidateDeedRecord(record, context = {}) {
     Object.prototype.hasOwnProperty.call(record, 'nu_code') ||
     Object.prototype.hasOwnProperty.call(record, 'NU_CODE') ||
     Object.prototype.hasOwnProperty.call(record, 'SALE_NU') ||
+    Object.prototype.hasOwnProperty.call(record, 'SALES_CODE') ||
+    Object.prototype.hasOwnProperty.call(record, 'salesCode') ||
     Object.prototype.hasOwnProperty.call(record, 'saleNuCode') ||
     Object.prototype.hasOwnProperty.call(record, 'nonUsableCode') ||
     Boolean(
       props &&
         (Object.prototype.hasOwnProperty.call(props, 'nuCode') ||
-          Object.prototype.hasOwnProperty.call(props, 'NU_CODE'))
-    );
+          Object.prototype.hasOwnProperty.call(props, 'NU_CODE') ||
+          Object.prototype.hasOwnProperty.call(props, 'SALES_CODE'))
+    ) ||
+    Boolean(rawAttrs && (Object.prototype.hasOwnProperty.call(rawAttrs, 'SALES_CODE') || Object.prototype.hasOwnProperty.call(rawAttrs, 'NU_CODE')));
   const rawNu =
     record.nuCode ??
     record.nu_code ??
     record.NU_CODE ??
     record.SALE_NU ??
+    record.SALES_CODE ??
+    record.salesCode ??
     record.saleNuCode ??
     record.nonUsableCode ??
     props?.nuCode ??
-    props?.NU_CODE;
+    props?.NU_CODE ??
+    props?.SALES_CODE ??
+    rawAttrs?.SALES_CODE ??
+    rawAttrs?.NU_CODE;
   const nuCode = hasNuField && rawNu !== null && rawNu !== undefined ? String(rawNu).trim().toUpperCase() : null;
 
   const hasQualField =

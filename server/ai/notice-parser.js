@@ -154,7 +154,7 @@ function deterministicParse(rawNotice = '', options = {}) {
   let bidNum = bidMatch ? parseFloat(bidMatch[1].replace(/,/g, '')) : 0;
   // Guard against debt-as-price hallucination:
   // When an ambiguous parse equates bid with judgment debt without explicit distinct opening-bid phrasing, drop bid to 0.
-  if (bidNum > 0 && judgmentNum > 0 && bidNum === judgmentNum && !/\b(?:opening\s+bid|minimum\s+bid|upset\s+price)\s*(?:of|is|:)?\s*\$/i.test(clean)) {
+  if (bidNum > 0 && judgmentNum > 0 && bidNum === judgmentNum && !/\b(?:opening\s+bid|minimum\s+bid|upset\s+price|starting\s+bid)\s*(?:of|is|:)?\s*\$/i.test(clean)) {
     bidNum = 0;
   }
 

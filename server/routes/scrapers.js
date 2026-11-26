@@ -164,7 +164,7 @@ function createScrapersHandler(dependencies = {}) {
 
       let pgHydrated = false;
       if (database?.isPg && database?.pool && typeof database.pool.query === 'function') {
-        const [runsRes, countsRes] = await Promise.all([
+        const [runsRes, countsRes, telemetryRes] = await Promise.all([
           database.pool.query(
             `SELECT source_key, last_run_at, last_success_at, last_non_empty_at,
                     accepted_count, evidence_count, rejected_count, error, duration_ms, runs_count
@@ -177,7 +177,22 @@ function createScrapersHandler(dependencies = {}) {
               WHERE discovery_is_live IS TRUE
               GROUP BY source_key`
           ).catch(() => null),
+          database.pool.query(
+            `SELECT cache_key, payload
+               FROM durable_kv_cache
+              WHERE namespace = 'scraper_telemetry'
+                AND expires_at > NOW()`
+          ).catch(() => null),
         ]);
+
+        const telemetryBySource = new Map();
+        if (Array.isArray(telemetryRes?.rows)) {
+          for (const row of telemetryRes.rows) {
+            if (row?.cache_key && row?.payload && typeof row.payload === 'object') {
+              telemetryBySource.set(row.cache_key, row.payload);
+            }
+          }
+        }
 
         const activeCountMap = new Map();
         if (Array.isArray(countsRes?.rows)) {
@@ -222,6 +237,7 @@ function createScrapersHandler(dependencies = {}) {
             } else {
               mergedStatus = existing.status;
             }
+            const persistedTelemetry = telemetryBySource.get(key) || null;
             const merged = {
               key,
               sourceKey: key,
@@ -241,7 +257,8 @@ function createScrapersHandler(dependencies = {}) {
               averageLatencyMs: preferDb
                 ? Number(row.duration_ms || existing?.averageLatencyMs || 0)
                 : Number(existing?.averageLatencyMs || 0),
-              driftDetected: Boolean(existing?.driftDetected),
+              driftDetected: Boolean(persistedTelemetry?.driftDetected ?? existing?.driftDetected),
+              driftAlarm: persistedTelemetry?.driftAlarm ?? existing?.driftAlarm ?? null,
               listingServing: disp.isListingServing,
               ...(isAuthorized && (existing?.lastError || row.error)
                 ? { lastError: existing?.lastError || row.error }

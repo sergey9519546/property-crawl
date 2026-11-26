@@ -1297,13 +1297,15 @@ function normalizeArcgisAttributes(attributes, config) {
   ]);
   const inspectedPhoto = rawPhotoCandidate ? inspectImageUrl(String(rawPhotoCandidate).trim()) : null;
   const assessorPhotoUrl = inspectedPhoto && inspectedPhoto.accepted ? inspectedPhoto.url : null;
-  const rawSalePrice = Number(getAttributeCaseInsensitive(attributes, null, ['SALE_PRICE', 'SALE_AMT', 'SALEPRICE', 'LAST_SALE_PRICE', 'CONSIDERATION', 'TASP']));
+  const rawSalePrice = Number(getAttributeCaseInsensitive(attributes, ['SALE_PRICE', 'SALE_AMT', 'SALEPRICE', 'LAST_SALE_PRICE', 'CONSIDERATION', 'TASP']));
   const recordedSalePrice = Number.isFinite(rawSalePrice) && rawSalePrice > 0 ? rawSalePrice : null;
-  const rawDeedDate = getAttributeCaseInsensitive(attributes, null, ['DEED_DATE', 'SALE_DATE', 'SALEDATE', 'LAST_SALE_DATE', 'SALE_DT']);
+  const rawDeedDate = getAttributeCaseInsensitive(attributes, ['DEED_DATE', 'SALE_DATE', 'SALEDATE', 'LAST_SALE_DATE', 'SALE_DT']);
   const deedDate = rawDeedDate != null && String(rawDeedDate).trim() !== '' ? String(rawDeedDate).trim() : null;
-  const rawSqft = Number(getAttributeCaseInsensitive(attributes, null, ['SQFT', 'BLDG_SQFT', 'LIVING_AREA', 'HEATED_AREA', 'TOT_LVG_AREA', 'SFLA']));
-  const livingAreaSqft = Number.isFinite(rawSqft) && rawSqft > 0 ? rawSqft : null;
-  const rawNu = getAttributeCaseInsensitive(attributes, null, ['NU_CODE', 'SALE_NU', 'QUAL_CD1', 'QUAL_CODE']);
+  const rawSqft = Number(getAttributeCaseInsensitive(attributes, ['SQFT', 'BLDG_SQFT', 'LIVING_AREA', 'HEATED_AREA', 'TOT_LVG_AREA', 'SFLA']));
+  const bldgDescRaw = getAttributeCaseInsensitive(attributes, ['BLDG_DESC']);
+  const bldgDescSqftMatch = bldgDescRaw ? String(bldgDescRaw).replace(/,/g, '').match(/\b([1-9]\d{2,5})\s*(?:S\.?F\.?|SQ\.?\s*FT\.?)\b/i) : null;
+  const livingAreaSqft = Number.isFinite(rawSqft) && rawSqft > 0 ? rawSqft : (bldgDescSqftMatch ? Number(bldgDescSqftMatch[1]) : null);
+  const rawNu = getAttributeCaseInsensitive(attributes, ['NU_CODE', 'SALE_NU', 'SALES_CODE', 'QUAL_CD1', 'QUAL_CODE']);
   const nuCode = rawNu != null && String(rawNu).trim() !== '' ? String(rawNu).trim().toUpperCase() : null;
 
   return {
@@ -1389,7 +1391,7 @@ async function queryArcgisParcel(params = {}, init = {}) {
   if (config.source === 'wparcels') {
     return queryWparcelsParcel({ apn, state, county, lat, lng, fetchFn, signal, config });
   }
-  const cacheDb = options.db;
+  const cacheDb = options.db !== undefined ? options.db : (!options.fetchFn && process.env.NODE_ENV !== 'test' ? require('../db/client') : null);
   const cacheKey = Number.isFinite(lat) && Number.isFinite(lng)
     ? `${config.key || resolved.key}:geo:${lat.toFixed(5)},${lng.toFixed(5)}`
     : `${config.key || resolved.key}:apn:${String(apn || '').trim().toUpperCase()}`;

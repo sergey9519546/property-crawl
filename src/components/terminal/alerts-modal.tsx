@@ -147,6 +147,7 @@ export function AlertsModal({ isOpen, onClose, availableStates, listings, onAppl
     try {
       const hunt = await promoteSavedSearchToHunt(search, server);
       setPromotedHunts((prev) => ({ ...prev, [search.id]: hunt.id }));
+      await loadAll();
       setFeedback(format(t.alertsPromotedMsg, { name: search.name }));
     } catch (e: any) {
       const status = (e as any)?.status;

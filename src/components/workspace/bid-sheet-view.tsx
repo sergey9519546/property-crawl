@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { computeCashiersCheckLadder } from "@server/intelligence/check-ladder";
 import { readDeviceWatchlistIds, extractAlertDealIds } from "@/lib/watchlist-sync";
-import { readUnderwriteScenario } from "@/lib/underwrite-scenario";
+import { readUnderwriteScenario, writeUnderwriteScenario, syncScenarioToDealFile } from "@/lib/underwrite-scenario";
 import { displayDate, displayMoney, knownNumber, positiveNumber } from "@/lib/listing-display";
 import { sourceDisplayText } from "@/lib/source-display";
 import { useLocale } from "@/components/i18n/locale-provider";
@@ -135,6 +135,20 @@ export function BidSheetView() {
     } catch {
       // Ignore quota errors
     }
+    const entries = Object.entries(manualWalkAwayBids);
+    if (entries.length === 0) return;
+    const timer = window.setTimeout(() => {
+      for (const [targetId, rawVal] of entries) {
+        const parsed = parseNonNegNumber(rawVal);
+        if (parsed === null || parsed <= 0) continue;
+        const current = readUnderwriteScenario(targetId);
+        if (current?.maxAllowableOffer === parsed) continue;
+        writeUnderwriteScenario(targetId, { maxAllowableOffer: parsed });
+        const saved = readUnderwriteScenario(targetId);
+        if (saved) void syncScenarioToDealFile(targetId, saved);
+      }
+    }, 350);
+    return () => window.clearTimeout(timer);
   }, [manualWalkAwayBids]);
   const [availableCapitalInput, setAvailableCapitalInput] = React.useState<string>("150000");
   const [loading, setLoading] = React.useState<boolean>(true);
@@ -173,31 +187,30 @@ export function BidSheetView() {
         return;
       }
 
-      // server/routes/listings.js serves GET /api/listings/:id for exact ID lookup (no ?ids= filter)
       const fetched: PropertyListing[] = [];
-      const missed: string[] = [];
-      await Promise.all(
-        watchlistIds.map(async (id) => {
-          try {
-            const res = await fetch(`/api/listings/${encodeURIComponent(id)}`, {
-              cache: "no-store",
-              credentials: "same-origin",
-            });
-            if (!res.ok) {
-              missed.push(id);
-              return;
+      const foundIds = new Set<string>();
+      for (let i = 0; i < watchlistIds.length; i += 250) {
+        const chunk = watchlistIds.slice(i, i + 250);
+        try {
+          const res = await fetch(`/api/listings?ids=${encodeURIComponent(chunk.join(","))}`, {
+            cache: "no-store",
+            credentials: "same-origin",
+          });
+          if (!res.ok) continue;
+          const data = (await res.json()) as { listings?: PropertyListing[] };
+          if (Array.isArray(data?.listings)) {
+            for (const item of data.listings) {
+              if (item && typeof item.id === "string") {
+                fetched.push(item);
+                foundIds.add(item.id);
+              }
             }
-            const item = (await res.json()) as PropertyListing;
-            if (item && typeof item.id === "string") {
-              fetched.push(item);
-            } else {
-              missed.push(id);
-            }
-          } catch {
-            missed.push(id);
           }
-        }),
-      );
+        } catch {
+          // Ignore network error for this chunk; missing IDs computed below
+        }
+      }
+      const missed = watchlistIds.filter((id) => !foundIds.has(id));
 
       const mergedScenarios: Record<string, LocalScenarioOverride> = {};
       for (const item of fetched) {
@@ -279,12 +292,12 @@ export function BidSheetView() {
     try {
       let checks = 0;
       let wires = 0;
-      for (let i = 0; i < ladderTargets.length; i += 50) {
-        const chunk = ladderTargets.slice(i, i + 50);
+      for (let i = 0; i < ladderTargets.length; i += 250) {
+        const chunk = ladderTargets.slice(i, i + 250);
         const response = await fetch("/api/check-ladder", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ targets: chunk, availableCapital: parsedCapital }),
+          body: JSON.stringify({ targets: chunk, availableCapital: i === 0 ? parsedCapital : null }),
         });
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) {

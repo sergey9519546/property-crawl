@@ -306,6 +306,7 @@ async function harvestAssessorRolls(listings, options = {}) {
         state: candidate.listing.state,
         county: candidate.listing.county,
         fetchFn,
+        ...(options.db !== undefined ? { db: options.db } : {}),
       });
     } catch (_) {
       results.failed += 1;

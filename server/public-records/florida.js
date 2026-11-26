@@ -123,16 +123,34 @@ async function lookupFloridaParcel(listing, options = {}) {
   const countyNo = listing.floridaDorCountyNo || listing.provenance?.floridaDorCountyNo;
   const exactScope = Boolean(parcelId && countyNo);
   if (!exactScope && !observedCoordinates(listing)) throw new PublicRecordError('PARCEL_LINK_REQUIRED', 'Add a source parcel ID with its Florida DOR county code, or source-observed coordinates.');
+  const cacheDb = options.db !== undefined ? options.db : (!options.fetchImpl && process.env.NODE_ENV !== 'test' ? require('../db/client') : null);
+  const cacheKey = exactScope
+    ? `fl:${Number(countyNo)}:${normalizeParcelId(parcelId)}`
+    : `fl:geo:${Number(listing.lat).toFixed(5)},${Number(listing.lng).toFixed(5)}`;
+  if (cacheDb?.isPg && cacheDb?.pool?.query) {
+    try {
+      const { getDurableCache } = require('../enrichment/durable-cache');
+      const cached = await getDurableCache('florida_parcel', cacheKey, { db: cacheDb });
+      if (cached) return cached;
+    } catch {}
+  }
   const result = await collectFloridaParcels(exactScope ? { parcelId, countyNo, pageSize: 10 } : { lat: listing.lat, lng: listing.lng, pageSize: 10 }, { ...options, maxPages: 1, maxRecords: 10 });
   const record = result.records.length === 1 && !result.hasMore ? result.records[0] : null;
   const exact = record && exactScope && normalizeParcelId(parcelId) === record.identity.normalizedParcelId && record.jurisdiction === `fl-dor:${Number(countyNo)}`;
   const status = !result.records.length ? 'not_found' : !record ? 'ambiguous' : exact ? 'matched' : 'candidate';
-  return {
+  const response = {
     status, matchState: exact ? 'exact_scoped_parcel_id' : status === 'candidate' ? 'point_intersection_requires_confirmation' : status,
     rawParcelId: record?.rawParcelId || null, jurisdiction: record?.jurisdiction || null,
     properties: record?.properties || null, geometry: record?.geometry || null,
     records: result.records, hasMore: result.hasMore, source: result.sources[0],
   };
+  if (cacheDb?.isPg && cacheDb?.pool?.query && (status === 'matched' || status === 'candidate')) {
+    try {
+      const { setDurableCache } = require('../enrichment/durable-cache');
+      await setDurableCache('florida_parcel', cacheKey, response, { db: cacheDb, ttlMs: 30 * 24 * 3600 * 1000 });
+    } catch {}
+  }
+  return response;
 }
 
 module.exports = { FLORIDA_LAYER, FLORIDA_FIELDS, buildFloridaQuery, collectFloridaParcels, lookupFloridaParcel, normalizeFloridaFeature, validGeometry, observedCoordinates };

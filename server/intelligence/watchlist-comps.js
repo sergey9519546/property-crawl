@@ -31,6 +31,7 @@ const DEFAULT_SQFT_BAND = 0.30;     // ±30% sqft band
 const DEFAULT_RADIUS_KM = 8;        // ~5 miles, walking-comp distance
 const DEFAULT_MAX_AGE_DAYS = 365;   // ignore candidates > 1 year stale
 const PRICE_BAND_TOLERANCE = 0.40;  // ±40% opening-bid band
+const NOMINAL_UPSET_BID_MAX = 5000; // Nominal sheriff upset bids ($100-$5k) are not value anchors
 const PRICE_LOG_EPSILON = 0.15;     // log-space floor to avoid /0
 
 function finiteOrNull(value) {
@@ -118,11 +119,28 @@ const WEIGHT_SIZE = 0.25;
 const WEIGHT_PRICE = 0.25;
 const WEIGHT_TYPE = 0.10;
 
+function resolveCompValueBasis(target, candidate) {
+  const tBid = finiteOrNull(target?.openingBid);
+  const cBid = finiteOrNull(candidate?.openingBid);
+  const isNominalTarget = Number.isFinite(tBid) && tBid > 0 && tBid <= NOMINAL_UPSET_BID_MAX;
+  const isNominalCand = Number.isFinite(cBid) && cBid > 0 && cBid <= NOMINAL_UPSET_BID_MAX;
+  if (isNominalTarget || isNominalCand) {
+    const tVal = finiteOrNull(target?.mid ?? target?.assessed);
+    const cVal = finiteOrNull(candidate?.mid ?? candidate?.assessed);
+    if (Number.isFinite(tVal) && tVal > 0 && Number.isFinite(cVal) && cVal > 0) {
+      return { targetVal: tVal, candidateVal: cVal };
+    }
+    return { targetVal: null, candidateVal: null };
+  }
+  return { targetVal: tBid, candidateVal: cBid };
+}
+
 function scoreCandidate(target, candidate, distanceKm) {
   const prox = proximityScore(distanceKm);
   const size = sizeScore(target.sqft, candidate.sqft);
-  const price = (Number.isFinite(target.openingBid) && target.openingBid > 0 && Number.isFinite(candidate.openingBid) && candidate.openingBid > 0)
-    ? safeBandPct(candidate.openingBid / target.openingBid, PRICE_BAND_TOLERANCE)
+  const { targetVal, candidateVal } = resolveCompValueBasis(target, candidate);
+  const price = (Number.isFinite(targetVal) && targetVal > 0 && Number.isFinite(candidateVal) && candidateVal > 0)
+    ? safeBandPct(candidateVal / targetVal, PRICE_BAND_TOLERANCE)
     : 0.5;
   const normType = (v) => (typeof v === 'string' ? v.trim().toLowerCase().replace(/\s+/g, ' ') : '');
   const type = target.propType && candidate.propType && normType(target.propType) === normType(candidate.propType) ? 1 : 0;
@@ -194,7 +212,8 @@ function findWatchlistComps(target, pool, options = {}) {
     if (!passesGeo) continue;
 
     if (!withinSqftBand(target.sqft, candidate.sqft, sqftBand)) continue;
-    if (!withinPriceBand(target.openingBid, candidate.openingBid, PRICE_BAND_TOLERANCE)) continue;
+    const { targetVal, candidateVal } = resolveCompValueBasis(target, candidate);
+    if (!withinPriceBand(targetVal, candidateVal, PRICE_BAND_TOLERANCE)) continue;
 
     const score = scoreCandidate(target, candidate, distanceKm);
     candidates.push({

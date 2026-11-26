@@ -1214,6 +1214,31 @@ class DatabaseClient {
     return null;
   }
 
+  async getListingsByIds(ids = [], options = {}) {
+    const cleanIds = Array.from(new Set(
+      (Array.isArray(ids) ? ids : [])
+        .map((v) => (typeof v === 'string' ? v.trim() : ''))
+        .filter((v) => v.length > 0 && v.length <= 256)
+    )).slice(0, 250);
+    if (cleanIds.length === 0) return [];
+    if (this.isPg) {
+      const queryClient = options.client || this.getReadPool();
+      const res = await queryClient.query(`SELECT ${LISTING_SELECT} FROM listings WHERE id = ANY($1::text[])`, [cleanIds]);
+      const byId = new Map();
+      for (const row of res.rows) {
+        const mapped = mapPgListingRow(row);
+        if (mapped && mapped.id) byId.set(mapped.id, mapped);
+      }
+      return cleanIds.map((id) => byId.get(id)).filter(Boolean);
+    }
+    this.refreshLiveCache();
+    const byId = new Map();
+    for (const item of this.inMemoryData.listings) {
+      if (item && item.id) byId.set(item.id, item);
+    }
+    return cleanIds.map((id) => byId.get(id)).filter(Boolean);
+  }
+
   async createListing(listing, options = {}) {
     let enriched = prepareListingForPersistence(listing);
 

@@ -253,6 +253,11 @@ function computeOpportunity(listing = {}, now = Date.now()) {
     ? Number((judgmentNum / mid).toFixed(4))
     : null;
 
+  const bidToMidVal = bidToMid !== null ? Number(bidToMid.toFixed(4)) : null;
+  const discountPct = bidToMidVal !== null && bidToMidVal < 1
+    ? Number(((1 - bidToMidVal) * 100).toFixed(1))
+    : null;
+
   return {
     rank,
     shape,
@@ -260,7 +265,8 @@ function computeOpportunity(listing = {}, now = Date.now()) {
     daysToSale,
     dealScore,
     bidSpread,
-    bidToMidRatio: bidToMid !== null ? Number(bidToMid.toFixed(4)) : null,
+    bidToMidRatio: bidToMidVal,
+    discountPct,
     valuationBasis,
     safmrRentFloor,
     judgmentToMidRatio,

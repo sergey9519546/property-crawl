@@ -537,7 +537,7 @@ async function queryNjCadastralAtPoint(lat, lng, { fetchFn = globalThis.fetch } 
     'PAMS_PIN', 'PCL_MUN', 'MUN_NAME', 'COUNTY', 'PCLBLOCK', 'PCLLOT',
     'ST_ADDRESS', 'PROP_LOC', 'ZIP5', 'PROP_CLASS', 'NET_VALUE', 'LAND_VAL',
     'IMPRVT_VAL', 'YR_CONSTR', 'DWELL', 'COMM_DWELL', 'BLDG_DESC', 'LAND_DESC',
-    'CALC_ACRE', 'LAST_YR_TX', 'DEED_DATE', 'SALE_PRICE',
+    'CALC_ACRE', 'LAST_YR_TX', 'DEED_DATE', 'SALE_PRICE', 'SALES_CODE',
   ].join(',');
   const url = `${NJ_CADASTRAL_URL}?f=json&geometry=${encodeURIComponent(`${lng},${lat}`)}&geometryType=esriGeometryPoint&inSR=4326&spatialRel=esriSpatialRelIntersects&outFields=${outFields}&returnGeometry=false`;
   const response = await fetchFn(url, { signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined });
@@ -700,6 +700,10 @@ function applyNjCadastralData(listing, { candidate = null, feature = null, obser
   const yrConstr = Number(attrs.YR_CONSTR);
   const mappedType = mapNjPropClassToPropType(attrs);
 
+  const rawSalesCode = attrs.SALES_CODE != null && String(attrs.SALES_CODE).trim() !== '' ? String(attrs.SALES_CODE).trim().toUpperCase() : null;
+  const bldgDescStr = attrs.BLDG_DESC ? String(attrs.BLDG_DESC).trim() : '';
+  const bldgSqftMatch = bldgDescStr.replace(/,/g, '').match(/\b([1-9]\d{2,5})\s*(?:S\.?F\.?|SQ\.?\s*FT\.?)\b/i);
+  const parsedBldgSqft = bldgSqftMatch ? Number(bldgSqftMatch[1]) : null;
   const durableParcel = {
     source: 'NJGIN_MODIV_CADASTRAL',
     countyFips,
@@ -711,7 +715,10 @@ function applyNjCadastralData(listing, { candidate = null, feature = null, obser
     situsAddress: String(attrs.PROP_LOC || attrs.ST_ADDRESS || '').trim() || null,
     propClass: attrs.PROP_CLASS ? String(attrs.PROP_CLASS).trim() : null,
     landUse: attrs.PROP_CLASS ? String(attrs.PROP_CLASS).trim() : 'UNKNOWN',
-    legalDescription: attrs.BLDG_DESC ? String(attrs.BLDG_DESC).trim() : '',
+    legalDescription: bldgDescStr,
+    livingAreaSqft: parsedBldgSqft,
+    salesCode: rawSalesCode,
+    nuCode: rawSalesCode,
     assessedValue: {
       total: netValue,
       land: landVal,

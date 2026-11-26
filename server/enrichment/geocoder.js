@@ -496,6 +496,9 @@ async function geocodeExactAddressBatch(items = [], options = {}) {
   const cachePath = options.cachePath || resolveDefaultCachePath();
   const shouldUseCache = !options.skipCache && (Boolean(options.cachePath) || (!options.fetchFn && process.env.NODE_ENV !== 'test'));
   const cache = shouldUseCache ? loadCache(cachePath) : {};
+  const cacheDb = options.db !== undefined ? options.db : (!options.fetchFn && !options.skipCache && process.env.NODE_ENV !== 'test' ? require('../db/client') : null);
+  const useDurableDb = Boolean(cacheDb?.isPg && cacheDb?.pool?.query && !options.skipCache);
+  const { getDurableCache, setDurableCache } = useDurableDb ? require('./durable-cache') : { getDurableCache: null, setDurableCache: null };
   let cacheDirty = false;
 
   const uncached = [];
@@ -509,6 +512,15 @@ async function geocodeExactAddressBatch(items = [], options = {}) {
         results.set(item.id, { ...cache[hash], cached: true, hash });
         continue;
       }
+    }
+    if (useDurableDb) {
+      try {
+        const dbCached = await getDurableCache('geocode_exact', hash, { db: cacheDb });
+        if (dbCached && Number.isFinite(dbCached.lat) && Number.isFinite(dbCached.lng) && isCoordInStateBounds(dbCached.lat, dbCached.lng, expected.state).ok) {
+          results.set(item.id, { ...dbCached, cached: true, hash });
+          continue;
+        }
+      } catch {}
     }
     uncached.push({ id: String(item.id), expected, hash });
   }
@@ -579,6 +591,9 @@ async function geocodeExactAddressBatch(items = [], options = {}) {
         if (shouldUseCache) {
           cache[entry.hash] = record;
           cacheDirty = true;
+        }
+        if (useDurableDb) {
+          await setDurableCache('geocode_exact', entry.hash, record, { db: cacheDb, ttlMs: 90 * 24 * 3600 * 1000 }).catch(() => {});
         }
       }
     } catch (_) {

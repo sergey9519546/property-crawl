@@ -603,6 +603,21 @@ class IngestionScheduler {
               }
             }
           }
+          if (scraper.sourceKey === 'civilview' && this.database?.isPg && this.database?.pool && scraper.observedRecordIds instanceof Set && scraper.observedRecordIds.size === 0) {
+            try {
+              const obsRes = await this.database.pool.query(
+                `SELECT id, provenance->>'recordId' AS record_id
+                   FROM listings
+                  WHERE source_key = 'civilview'
+                    AND COALESCE(discovery_terminal, FALSE) = FALSE
+                  LIMIT 5000`
+              );
+              for (const row of obsRes?.rows || []) {
+                if (row?.id) scraper.observedRecordIds.add(String(row.id));
+                if (row?.record_id) scraper.observedRecordIds.add(String(row.record_id));
+              }
+            } catch (_) {}
+          }
           this.inFlight.set(scraper.sourceKey, Date.now());
           let items;
           try {
@@ -745,6 +760,19 @@ class IngestionScheduler {
             circuitOpen: false,
             driftAlarm: driftAlarm && driftAlarm.hasDrift ? driftAlarm : null
           });
+          if (this.database?.isPg && this.database?.pool) {
+            try {
+              const { setDurableCache } = require('../enrichment/durable-cache');
+              await setDurableCache('scraper_telemetry', scraper.sourceKey, {
+                sourceKey: scraper.sourceKey,
+                driftDetected: Boolean(driftAlarm && driftAlarm.hasDrift),
+                driftAlarm: driftAlarm && driftAlarm.hasDrift ? driftAlarm : null,
+                recordsFound: items.length,
+                acceptedCount: accepted.length,
+                updatedAt: new Date().toISOString(),
+              }, { db: this.database, ttlMs: 7 * 24 * 3600 * 1000 });
+            } catch {}
+          }
           const isPartial = isPartialOrContinuationRun(rawReport, items);
           const nextCursor = rawReport.nextCursor ?? items?.nextCursor ?? null;
           const continuationToken = rawReport.continuationToken ?? rawReport.nextContinuationToken ?? items?.continuationToken ?? items?.nextContinuationToken ?? null;
@@ -1151,14 +1179,15 @@ scheduler.onCycleStart = async ({ jobId, trigger, sourceIds }) => {
 scheduler.onCycleComplete = async (result, context = {}) => {
   const id = context.jobId || result.jobId;
   if (id) await collectionCoordinator.finalize(id, result, {owner:context.owner,leaseGuard:context.leaseGuard});
-  if (db.isPg && typeof db.purgeStaleListings === 'function' && !(context.slice || result.slice || process.env.VERCEL === '1' || process.env.NOW_REGION)) {
+  const ingestedCount = Number(result?.totalIngested ?? result?.accepted ?? 0);
+  if (db.isPg && typeof db.reconcileCrossSourceDuplicates === 'function' && ingestedCount > 0) {
     try {
-      if (typeof db.reconcileCrossSourceDuplicates === 'function') {
-        await runBgDb(db, () => db.reconcileCrossSourceDuplicates());
-      }
+      await runBgDb(db, () => db.reconcileCrossSourceDuplicates());
     } catch (recErr) {
       console.warn('[Scheduler] Cross-source duplicate reconciliation warning:', recErr?.message || recErr);
     }
+  }
+  if (db.isPg && typeof db.purgeStaleListings === 'function' && !(context.slice || result.slice || process.env.VERCEL === '1' || process.env.NOW_REGION)) {
     try {
       const purged = await runBgDb(db, () => db.purgeStaleListings());
       if (purged?.deleted > 0 || purged?.observationsDeleted > 0) {

@@ -90,7 +90,7 @@ function evaluateRuleSpec(field, spec = {}, ctx) {
     }
     if (op === 'dropped_by_pct') {
       const pct = normalizeThresholdPercent(Number(targetVal));
-      const baselineBid = firstFinitePositive(caseItem.decision?.decidedOpeningBid, priorBid);
+      const baselineBid = firstFinitePositive(caseItem.decision?.decidedOpeningBid, caseItem.latestTrigger?.priorDecidedOpeningBid, priorBid);
       if (pct === null || typeof currentBid !== 'number' || !Number.isFinite(currentBid) || baselineBid === null || currentBid >= baselineBid) {
         return { matched: false, label: null };
       }

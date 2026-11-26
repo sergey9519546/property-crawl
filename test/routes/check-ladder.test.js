@@ -72,7 +72,7 @@ test('POST /api/check-ladder: rejects bad JSON, empty/oversize targets, invalid 
     {},
     { targets: [] },
     { targets: 'not-an-array' },
-    { targets: Array.from({ length: 51 }, (_, i) => ({ id: `t-${i}`, openingBid: 50000 })) },
+    { targets: Array.from({ length: 251 }, (_, i) => ({ id: `t-${i}`, openingBid: 50000 })) },
     { targets: [{ id: 't-1', openingBid: 50000 }], availableCapital: -500 },
     { targets: [{ id: 't-1', openingBid: 50000 }], availableCapital: Number.NaN },
     { targets: [{ id: 't-1', openingBid: 50000 }], availableCapital: 'not-a-number' },

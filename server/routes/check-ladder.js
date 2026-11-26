@@ -3,7 +3,7 @@
 const { computeCashiersCheckLadder } = require('../intelligence/check-ladder');
 
 const MAX_BODY_BYTES = 512 * 1024;
-const MAX_TARGETS = 50;
+const MAX_TARGETS = 250;
 const MAX_DENOMINATIONS = 10;
 
 function readJsonBody(req) {
