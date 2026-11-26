@@ -2,13 +2,18 @@ import type { Metadata } from "next";
 import { WorkspaceShell } from "@/components/workspace/workspace-shell";
 import { DataModeBanner } from "@/components/site/data-mode-banner";
 import { BidSheetView } from "@/components/workspace/bid-sheet-view";
+import { getRequestLocale } from "@/lib/i18n/server";
+import { getMessages } from "@/lib/i18n/messages";
 
-export const metadata: Metadata = {
-  title: "Courthouse Bid Sheet & Check Ladder | PerfectProperty",
-  description:
-    "Pre-wire escrow schedule, cashier's check denomination ladder, and walk-away MAO sheet for courthouse auction execution.",
-  robots: { index: false, follow: false },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getRequestLocale();
+  const m = getMessages(locale);
+  return {
+    title: m.meta.bidSheetTitle,
+    description: m.meta.bidSheetDescription,
+    robots: { index: false, follow: false },
+  };
+}
 
 export default function BidSheetPage() {
   return (

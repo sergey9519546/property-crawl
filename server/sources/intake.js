@@ -1,6 +1,15 @@
 const crypto = require('node:crypto');
 const net = require('node:net');
-const { loadStore, putRecord, queryRecords, updateRecord } = require('./store');
+const {
+  loadStore,
+  putRecord,
+  queryRecords,
+  updateRecord,
+  putRecordPg,
+  queryRecordsPg,
+  listAllRecordsPg,
+  updateRecordPg,
+} = require('./store');
 const { identifyAdapterForSource } = require('./platform-fingerprinter');
 const { parseLaDocumentIntake } = require('../scrapers/adapters/la-recorder');
 
@@ -285,7 +294,7 @@ function getSummary(record, options = {}) {
   return summary;
 }
 
-function submitEvidence(input, options = {}) {
+function buildIntakeRecord(input, options = {}) {
   const validation = validateSubmission(input, options);
   if (!validation.isValid) {
     const error = new Error(validation.errors.join('; '));
@@ -331,7 +340,28 @@ function submitEvidence(input, options = {}) {
       };
     }
   }
+  return record;
+}
+
+function submitEvidence(input, options = {}) {
+  const record = buildIntakeRecord(input, options);
   const stored = putRecord(record, { filePath: options.storePath, staleLockMs: options.staleLockMs });
+  return { record: getSummary(stored.record), deduplicated: stored.deduplicated };
+}
+
+function resolveIntakePgPool(options = {}) {
+  if (options.storePath) return null;
+  if (options.pool && typeof options.pool.query === 'function') return options.pool;
+  const database = options.database || require('../db/client');
+  if (database?.isPg && database?.pool && typeof database.pool.query === 'function') return database.pool;
+  return null;
+}
+
+async function submitEvidenceAsync(input, options = {}) {
+  const pool = resolveIntakePgPool(options);
+  if (!pool) return submitEvidence(input, options);
+  const record = buildIntakeRecord(input, options);
+  const stored = await putRecordPg(pool, record);
   return { record: getSummary(stored.record), deduplicated: stored.deduplicated };
 }
 
@@ -340,17 +370,21 @@ function listEvidence(filters = {}, options = {}) {
     .map((record) => getSummary(record, { includeContent: filters.includeContent === true }));
 }
 
-// Coverage needs every enrolled source, including approvals older than the
-// bounded review page. Load the bounded store, but return only public enrollment
-// metadata: original evidence and operator review text never enter this API.
-function listEvidenceSummaries(options = {}) {
+async function listEvidenceAsync(filters = {}, options = {}) {
+  const pool = resolveIntakePgPool(options);
+  if (!pool) return listEvidence(filters, options);
+  const rows = await queryRecordsPg(pool, filters);
+  return rows.map((record) => getSummary(record, { includeContent: filters.includeContent === true }));
+}
+
+function formatEvidenceSummaries(records) {
   const publicText = (value, maximum) => {
     if (typeof value !== 'string' || SENSITIVE_TEXT.test(value)) return null;
     const text = value.trim();
     return text && text.length <= maximum && !/[\u0000-\u001f\u007f]/.test(text) ? text : null;
   };
   const publicUrl = (value) => value ? safeHttpsUrl(value, 'sourceUrl', []) : null;
-  return loadStore(options.storePath).records.slice()
+  return records.slice()
     .sort((left, right) => String(right.submittedAt).localeCompare(String(left.submittedAt)))
     .map((record) => {
       const decision = ['approved', 'rejected'].includes(record.review?.decision) ? record.review.decision : null;
@@ -369,7 +403,21 @@ function listEvidenceSummaries(options = {}) {
     });
 }
 
-function reviewEvidence(id, review, options = {}) {
+// Coverage needs every enrolled source, including approvals older than the
+// bounded review page. Load the bounded store, but return only public enrollment
+// metadata: original evidence and operator review text never enter this API.
+function listEvidenceSummaries(options = {}) {
+  return formatEvidenceSummaries(loadStore(options.storePath).records);
+}
+
+async function listEvidenceSummariesAsync(options = {}) {
+  const pool = resolveIntakePgPool(options);
+  if (!pool) return listEvidenceSummaries(options);
+  const records = await listAllRecordsPg(pool);
+  return formatEvidenceSummaries(records);
+}
+
+function parseReviewPayload(id, review, options = {}) {
   if (!/^intake_[a-f0-9]{24}$/.test(id || '')) throw new Error('A valid source intake id is required');
   if (!review || !['approve', 'reject'].includes(review.decision)) throw new Error('Review decision must be approve or reject');
   const errors = [];
@@ -382,12 +430,25 @@ function reviewEvidence(id, review, options = {}) {
   }
   const now = typeof options.now === 'function' ? options.now() : (options.now || new Date());
   const reviewedAt = new Date(now).toISOString();
-  const updated = updateRecord(id, (record) => ({
+  return (record) => ({
     ...record,
     status: 'reviewed',
     updatedAt: reviewedAt,
     review: { decision: review.decision === 'approve' ? 'approved' : 'rejected', reviewer, note, reviewedAt },
-  }), { filePath: options.storePath, staleLockMs: options.staleLockMs });
+  });
+}
+
+function reviewEvidence(id, review, options = {}) {
+  const updater = parseReviewPayload(id, review, options);
+  const updated = updateRecord(id, updater, { filePath: options.storePath, staleLockMs: options.staleLockMs });
+  return getSummary(updated);
+}
+
+async function reviewEvidenceAsync(id, review, options = {}) {
+  const pool = resolveIntakePgPool(options);
+  if (!pool) return reviewEvidence(id, review, options);
+  const updater = parseReviewPayload(id, review, options);
+  const updated = await updateRecordPg(pool, id, updater);
   return getSummary(updated);
 }
 
@@ -398,9 +459,13 @@ module.exports = {
   MAX_PAYLOAD_BYTES,
   getSummary,
   listEvidence,
+  listEvidenceAsync,
   listEvidenceSummaries,
+  listEvidenceSummariesAsync,
   parseCapturedAt,
   reviewEvidence,
+  reviewEvidenceAsync,
   submitEvidence,
+  submitEvidenceAsync,
   validateSubmission,
 };

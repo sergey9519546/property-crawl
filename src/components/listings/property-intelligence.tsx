@@ -207,6 +207,7 @@ function hasValidUsCoordinates(lat: number | null | undefined, lng: number | nul
 export function PropertyIntelligence({ listingId, documentsShown = false, lat, lng }: { listingId: string; documentsShown?: boolean; lat?: number | null; lng?: number | null }) {
   const { locale, messages } = useLocale();
   const t = messages.intelUi;
+  const d = messages.detailUi;
   const fmtDate = (value: string) => (locale === 'en' ? new Date(value).toLocaleDateString() : formatLocaleDate(locale, value));
   const fmtNum = (n: number) => (locale === 'en' ? n.toLocaleString() : formatLocaleNumber(locale, n));
   const fmtUsdVal = (n: number) => (locale === 'en' ? `$${Math.round(n).toLocaleString()}` : formatUsd(locale, n));
@@ -474,25 +475,25 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
         {dossier.publicBenchmarks?.deedComps?.available === true && (
           <div className="rounded-control border border-line bg-paper p-4" data-testid="deed-comps-benchmark-card">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3 className="text-sm font-bold text-ink">L2 Qualified Deed-Comp Benchmark</h3>
+              <h3 className="text-sm font-bold text-ink">{d.deedCompsTitle}</h3>
               <span className="rounded-full border border-line bg-card px-2 py-0.5 text-xs font-semibold text-ink-2">
-                {fmtNum(dossier.publicBenchmarks.deedComps.sampleSize)} qualified sales
+                {fmtNum(dossier.publicBenchmarks.deedComps.sampleSize)} {d.deedCompsQualifiedSales}
               </span>
             </div>
             <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
               <div className="rounded-control border border-line bg-card p-2.5">
-                <span className="text-label font-bold uppercase text-ink-3">Median Sale Price</span>
+                <span className="text-label font-bold uppercase text-ink-3">{d.deedCompsMedianSalePrice}</span>
                 <p className="mt-1 text-sm font-bold text-ink">
                   {dossier.publicBenchmarks.deedComps.medianSalePrice != null
                     ? fmtUsdVal(dossier.publicBenchmarks.deedComps.medianSalePrice)
                     : t.naLabel}
                 </p>
                 <p className="mt-0.5 text-xs text-ink-3">
-                  {dossier.publicBenchmarks.deedComps.zip ? `ZIP ${dossier.publicBenchmarks.deedComps.zip}` : 'Recorded deed transfers'}
+                  {dossier.publicBenchmarks.deedComps.zip ? `ZIP ${dossier.publicBenchmarks.deedComps.zip}` : d.deedCompsRecordedTransfers}
                 </p>
               </div>
               <div className="rounded-control border border-line bg-card p-2.5">
-                <span className="text-label font-bold uppercase text-ink-3">Median Price / Sq Ft</span>
+                <span className="text-label font-bold uppercase text-ink-3">{d.deedCompsMedianPpsf}</span>
                 <p className="mt-1 text-sm font-bold text-ink">
                   {dossier.publicBenchmarks.deedComps.medianPricePerSqft != null
                     ? `${fmtUsdVal(dossier.publicBenchmarks.deedComps.medianPricePerSqft)}/sq ft`
@@ -500,19 +501,19 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
                 </p>
                 <p className="mt-0.5 text-xs text-ink-3">
                   {dossier.publicBenchmarks.deedComps.sqftSampleSize != null
-                    ? `${fmtNum(dossier.publicBenchmarks.deedComps.sqftSampleSize)} with living area`
-                    : 'Area-verified deeds'}
+                    ? `${fmtNum(dossier.publicBenchmarks.deedComps.sqftSampleSize)} ${d.deedCompsWithArea}`
+                    : d.deedCompsAreaVerified}
                 </p>
               </div>
               <div className="rounded-control border border-line bg-card p-2.5">
-                <span className="text-label font-bold uppercase text-ink-3">Sample &amp; Window</span>
+                <span className="text-label font-bold uppercase text-ink-3">{d.deedCompsSampleWindow}</span>
                 <p className="mt-1 text-sm font-bold text-ink">
-                  {fmtNum(dossier.publicBenchmarks.deedComps.sampleSize)} comps
+                  {fmtNum(dossier.publicBenchmarks.deedComps.sampleSize)} {d.deedCompsCompsLabel}
                 </p>
                 <p className="mt-0.5 text-xs text-ink-3">
                   {dossier.publicBenchmarks.deedComps.windowMonths != null
-                    ? `${dossier.publicBenchmarks.deedComps.windowMonths}-month window`
-                    : 'All qualified window'}
+                    ? `${dossier.publicBenchmarks.deedComps.windowMonths}${d.deedCompsMonthWindow}`
+                    : d.deedCompsAllWindow}
                 </p>
               </div>
             </div>
@@ -767,17 +768,17 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
         {dossier.docketClearingAnalytics && dossier.docketClearingAnalytics.sampleSufficient && dossier.docketClearingAnalytics.totalDockets > 0 && (
           <div className="rounded-control border border-line bg-paper p-4" data-testid="docket-clearing-analytics-card">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3 className="text-sm font-bold text-ink">Empirical County Docket Clearing</h3>
+              <h3 className="text-sm font-bold text-ink">{d.docketClearingTitle}</h3>
               <span className="rounded-full border border-line bg-card px-2 py-0.5 text-xs font-semibold text-ink-2">
-                {fmtNum(dossier.docketClearingAnalytics.totalDockets)} observed dockets
+                {fmtNum(dossier.docketClearingAnalytics.totalDockets)} {d.docketClearingObserved}
               </span>
             </div>
             <p className="mt-1 text-xs text-ink-3">
-              Historical county docket outcome distribution across {fmtNum(dossier.docketClearingAnalytics.totalDockets)} observed auction records.
+              {d.docketClearingSub} {fmtNum(dossier.docketClearingAnalytics.totalDockets)}
             </p>
             <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
               <div className="rounded-control border border-line bg-card p-2.5">
-                <span className="text-label font-bold uppercase text-ink-3">Postponed</span>
+                <span className="text-label font-bold uppercase text-ink-3">{d.docketPostponed}</span>
                 <p className="mt-1 text-sm font-bold text-ink">
                   {dossier.docketClearingAnalytics.postponementRate != null
                     ? `${Math.round(dossier.docketClearingAnalytics.postponementRate * 100)}%`
@@ -785,12 +786,12 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
                 </p>
                 <p className="mt-0.5 text-xs text-ink-3">
                   {dossier.docketClearingAnalytics.outcomeCounts?.postponed != null
-                    ? `${fmtNum(dossier.docketClearingAnalytics.outcomeCounts.postponed)} of ${fmtNum(dossier.docketClearingAnalytics.totalDockets)} dockets`
-                    : 'Adjourned or rescheduled'}
+                    ? `${fmtNum(dossier.docketClearingAnalytics.outcomeCounts.postponed)} / ${fmtNum(dossier.docketClearingAnalytics.totalDockets)}`
+                    : d.docketAdjournedOrResched}
                 </p>
               </div>
               <div className="rounded-control border border-line bg-card p-2.5">
-                <span className="text-label font-bold uppercase text-ink-3">Cleared to 3rd Party</span>
+                <span className="text-label font-bold uppercase text-ink-3">{d.docketCleared3rdParty}</span>
                 <p className="mt-1 text-sm font-bold text-ink">
                   {dossier.docketClearingAnalytics.clearingRate != null
                     ? `${Math.round(dossier.docketClearingAnalytics.clearingRate * 100)}%`
@@ -798,12 +799,12 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
                 </p>
                 <p className="mt-0.5 text-xs text-ink-3">
                   {dossier.docketClearingAnalytics.outcomeCounts?.sold_third_party != null
-                    ? `${fmtNum(dossier.docketClearingAnalytics.outcomeCounts.sold_third_party)} third-party sales`
-                    : 'Share of completed sales'}
+                    ? `${fmtNum(dossier.docketClearingAnalytics.outcomeCounts.sold_third_party)} ${d.docketThirdPartySales}`
+                    : d.docketShareCompleted}
                 </p>
               </div>
               <div className="rounded-control border border-line bg-card p-2.5">
-                <span className="text-label font-bold uppercase text-ink-3">Plaintiff Buyback</span>
+                <span className="text-label font-bold uppercase text-ink-3">{d.docketPlaintiffBuyback}</span>
                 <p className="mt-1 text-sm font-bold text-ink">
                   {dossier.docketClearingAnalytics.plaintiffBuybackRate != null
                     ? `${Math.round(dossier.docketClearingAnalytics.plaintiffBuybackRate * 100)}%`
@@ -811,8 +812,8 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
                 </p>
                 <p className="mt-0.5 text-xs text-ink-3">
                   {dossier.docketClearingAnalytics.outcomeCounts?.sold_plaintiff != null
-                    ? `${fmtNum(dossier.docketClearingAnalytics.outcomeCounts.sold_plaintiff)} credit bids / REO`
-                    : 'Share of completed sales'}
+                    ? `${fmtNum(dossier.docketClearingAnalytics.outcomeCounts.sold_plaintiff)} ${d.docketCreditBids}`
+                    : d.docketShareCompleted}
                 </p>
               </div>
             </div>

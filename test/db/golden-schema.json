@@ -3,6 +3,7 @@
     "account_login_tokens",
     "accounts",
     "ai_cache",
+    "ai_spend_ledger",
     "alert_matches",
     "canonical_parcels",
     "discovery_atlas_ledger",
@@ -27,6 +28,7 @@
     "discovery_source_runs",
     "discovery_worker_health",
     "document_reviews",
+    "durable_kv_cache",
     "form_submissions",
     "ingestion_logs",
     "listing_history",
@@ -35,8 +37,10 @@
     "research_cases",
     "saved_deals",
     "saved_searches",
+    "source_intake_records",
     "source_observation_runs",
     "source_observations",
+    "source_observations_archive",
     "sources",
     "spatial_ref_sys",
     "stripe_webhook_events",
@@ -188,6 +192,62 @@
       "column": "response_text",
       "type": "text",
       "nullable": false,
+      "default": null
+    },
+    {
+      "table": "ai_spend_ledger",
+      "column": "cost_usd",
+      "type": "numeric",
+      "nullable": false,
+      "default": "0"
+    },
+    {
+      "table": "ai_spend_ledger",
+      "column": "id",
+      "type": "bigint",
+      "nullable": false,
+      "default": "nextval('ai_spend_ledger_id_seq'::regclass)"
+    },
+    {
+      "table": "ai_spend_ledger",
+      "column": "input_tokens",
+      "type": "integer",
+      "nullable": false,
+      "default": "0"
+    },
+    {
+      "table": "ai_spend_ledger",
+      "column": "model",
+      "type": "character varying",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "ai_spend_ledger",
+      "column": "output_tokens",
+      "type": "integer",
+      "nullable": false,
+      "default": "0"
+    },
+    {
+      "table": "ai_spend_ledger",
+      "column": "provider",
+      "type": "character varying",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "ai_spend_ledger",
+      "column": "recorded_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "ai_spend_ledger",
+      "column": "route",
+      "type": "character varying",
+      "nullable": true,
       "default": null
     },
     {
@@ -1367,6 +1427,41 @@
       "default": "now()"
     },
     {
+      "table": "durable_kv_cache",
+      "column": "cache_key",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "durable_kv_cache",
+      "column": "expires_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "durable_kv_cache",
+      "column": "namespace",
+      "type": "character varying",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "durable_kv_cache",
+      "column": "payload",
+      "type": "jsonb",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "durable_kv_cache",
+      "column": "updated_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
       "table": "form_submissions",
       "column": "company",
       "type": "text",
@@ -1844,6 +1939,13 @@
     },
     {
       "table": "listings",
+      "column": "initial_opening_bid",
+      "type": "numeric",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "listings",
       "column": "judgment_amount",
       "type": "numeric",
       "nullable": true,
@@ -1902,6 +2004,13 @@
       "table": "listings",
       "column": "parcel_key",
       "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "listings",
+      "column": "peak_opening_bid",
+      "type": "numeric",
       "nullable": true,
       "default": null
     },
@@ -2187,6 +2296,13 @@
     },
     {
       "table": "saved_deals",
+      "column": "pipeline_stage",
+      "type": "character varying",
+      "nullable": false,
+      "default": "'triage'::character varying"
+    },
+    {
+      "table": "saved_deals",
       "column": "user_id",
       "type": "character varying",
       "nullable": false,
@@ -2254,6 +2370,62 @@
       "type": "character varying",
       "nullable": false,
       "default": null
+    },
+    {
+      "table": "source_intake_records",
+      "column": "id",
+      "type": "character varying",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "source_intake_records",
+      "column": "kind",
+      "type": "character varying",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "source_intake_records",
+      "column": "record_json",
+      "type": "jsonb",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "source_intake_records",
+      "column": "source_id",
+      "type": "character varying",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "source_intake_records",
+      "column": "source_url",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "source_intake_records",
+      "column": "status",
+      "type": "character varying",
+      "nullable": false,
+      "default": "'needs_review'::character varying"
+    },
+    {
+      "table": "source_intake_records",
+      "column": "submitted_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "source_intake_records",
+      "column": "updated_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
     },
     {
       "table": "source_observation_runs",
@@ -2425,6 +2597,83 @@
     },
     {
       "table": "source_observations",
+      "column": "status",
+      "type": "character varying",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "source_observations_archive",
+      "column": "archived_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "source_observations_archive",
+      "column": "deposit",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "source_observations_archive",
+      "column": "id",
+      "type": "character varying",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "source_observations_archive",
+      "column": "listing_id",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "source_observations_archive",
+      "column": "notice_sha256",
+      "type": "character",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "source_observations_archive",
+      "column": "observed_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "source_observations_archive",
+      "column": "opening_bid",
+      "type": "numeric",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "source_observations_archive",
+      "column": "record_id",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "source_observations_archive",
+      "column": "sale_date",
+      "type": "date",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "source_observations_archive",
+      "column": "source_key",
+      "type": "character varying",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "source_observations_archive",
       "column": "status",
       "type": "character varying",
       "nullable": true,

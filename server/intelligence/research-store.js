@@ -32,7 +32,7 @@ function resolveStorePath(filePath, ownerId) {
   const safeOwner = owner.replace(/[^a-zA-Z0-9_-]/g, '_');
   const parsed = path.parse(basePath);
   const ext = parsed.ext || '.json';
-  return path.join(parsed.dir, `${parsed.name}.${safeOwner}${ext}`);
+  return path.join(/*turbopackIgnore: true*/ parsed.dir, `${parsed.name}.${safeOwner}${ext}`);
 }
 
 function assertStoreShape(store) {

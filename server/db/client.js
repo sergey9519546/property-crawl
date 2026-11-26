@@ -1230,13 +1230,13 @@ class DatabaseClient {
         price, listing_date, redemption_days, redemption_warning, senior_lien_risk,
         senior_lien_warning, cash_to_close, cash_to_close_details, status,
         auction_program, lifecycle_status, transaction_outcome, has_documents, parcel_key,
-        catch_summary
+        catch_summary, initial_opening_bid, peak_opening_bid
       ) VALUES (
         $1,$2,$3,$4,$5,$6,$7,$8,$9,
         CASE WHEN $8::float8 IS NOT NULL AND $9::float8 IS NOT NULL
           THEN ST_SetSRID(ST_MakePoint($9,$8), 4326)::geography ELSE NULL END,
         $10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,
-        $43, $44, $45, $46, $47, $48
+        $43, $44, $45, $46, $47, $48, $15, $15
       )
       ON CONFLICT (id) DO UPDATE SET
         source_key = EXCLUDED.source_key,
@@ -1254,6 +1254,8 @@ class DatabaseClient {
         year_built = COALESCE(EXCLUDED.year_built, listings.year_built),
         prop_type = COALESCE(CASE WHEN lower(btrim(coalesce(EXCLUDED.prop_type,''))) IN ('', 'unknown', 'n/a', 'none') THEN NULL ELSE btrim(EXCLUDED.prop_type) END, CASE WHEN lower(btrim(coalesce(listings.prop_type,''))) IN ('', 'unknown', 'n/a', 'none') THEN NULL ELSE listings.prop_type END),
         opening_bid = COALESCE(EXCLUDED.opening_bid, listings.opening_bid),
+        initial_opening_bid = COALESCE(listings.initial_opening_bid, EXCLUDED.opening_bid),
+        peak_opening_bid = CASE WHEN listings.peak_opening_bid IS NULL THEN EXCLUDED.opening_bid WHEN EXCLUDED.opening_bid IS NULL THEN listings.peak_opening_bid ELSE GREATEST(listings.peak_opening_bid, EXCLUDED.opening_bid) END,
         est_low = CASE WHEN EXCLUDED.est_low IS NOT NULL AND EXCLUDED.est_high IS NOT NULL THEN EXCLUDED.est_low ELSE listings.est_low END,
         est_high = CASE WHEN EXCLUDED.est_low IS NOT NULL AND EXCLUDED.est_high IS NOT NULL THEN EXCLUDED.est_high ELSE listings.est_high END,
         assessed_value = COALESCE(EXCLUDED.assessed_value, listings.assessed_value),
@@ -1390,7 +1392,7 @@ class DatabaseClient {
           `${p(17)},${p(18)},${p(19)},${p(20)},${p(21)},${p(22)},${p(23)},${p(24)},` +
           `${p(25)},${p(26)},${p(27)},${p(28)},${p(29)},${p(30)},${p(31)},${p(32)},` +
           `${p(33)},${p(34)},${p(35)},${p(36)},${p(37)},${p(38)},${p(39)},${p(40)},` +
-          `${p(41)},${p(42)},${p(43)},${p(44)},${p(45)},${p(46)},${p(47)})`
+          `${p(41)},${p(42)},${p(43)},${p(44)},${p(45)},${p(46)},${p(47)},${p(14)},${p(14)})`
         );
         params.push(
           e.id, e.source, e.state, e.county, e.city, e.zip, e.address, e.lat, e.lng,
@@ -1424,7 +1426,7 @@ class DatabaseClient {
         price, listing_date, redemption_days, redemption_warning, senior_lien_risk,
         senior_lien_warning, cash_to_close, cash_to_close_details, status,
         auction_program, lifecycle_status, transaction_outcome, has_documents, parcel_key,
-        catch_summary
+        catch_summary, initial_opening_bid, peak_opening_bid
       ) VALUES ${valueParts.join(',')}
       ON CONFLICT (id) DO UPDATE SET
         source_key = EXCLUDED.source_key,
@@ -1442,6 +1444,8 @@ class DatabaseClient {
         year_built = COALESCE(EXCLUDED.year_built, listings.year_built),
         prop_type = COALESCE(CASE WHEN lower(btrim(coalesce(EXCLUDED.prop_type,''))) IN ('', 'unknown', 'n/a', 'none') THEN NULL ELSE btrim(EXCLUDED.prop_type) END, CASE WHEN lower(btrim(coalesce(listings.prop_type,''))) IN ('', 'unknown', 'n/a', 'none') THEN NULL ELSE listings.prop_type END),
         opening_bid = COALESCE(EXCLUDED.opening_bid, listings.opening_bid),
+        initial_opening_bid = COALESCE(listings.initial_opening_bid, EXCLUDED.opening_bid),
+        peak_opening_bid = CASE WHEN listings.peak_opening_bid IS NULL THEN EXCLUDED.opening_bid WHEN EXCLUDED.opening_bid IS NULL THEN listings.peak_opening_bid ELSE GREATEST(listings.peak_opening_bid, EXCLUDED.opening_bid) END,
         est_low = ${resolvedEstLowSql},
         est_high = ${resolvedEstHighSql},
         assessed_value = COALESCE(EXCLUDED.assessed_value, listings.assessed_value),
@@ -1571,6 +1575,7 @@ class DatabaseClient {
   async getSavedDeals(userId) { return workspacePersistence.getSavedDeals(this, userId); }
   async saveDeal(userId, listingId) { return workspacePersistence.saveDeal(this, userId, listingId); }
   async removeSavedDeal(userId, listingId) { return workspacePersistence.removeSavedDeal(this, userId, listingId); }
+  async updateSavedDealStage(userId, listingId, stage) { return workspacePersistence.updateSavedDealStage(this, userId, listingId, stage); }
   async createSavedSearch(userId, payload) { return workspacePersistence.createSavedSearch(this, userId, payload); }
   async listSavedSearchUserIds() { return workspacePersistence.listSavedSearchUserIds(this); }
   async listSavedSearches(userId, options) { return workspacePersistence.listSavedSearches(this, userId, options); }

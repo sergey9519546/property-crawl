@@ -77,7 +77,7 @@ async function runSpiderBatch({
   }
 
   const resolvedScript = scriptPath || path.resolve(__dirname, '..', '..', 'scripts', 'crawlers', 'scrapling_spider.py');
-  if (!fs.existsSync(resolvedScript)) {
+  if (!fs.existsSync(/*turbopackIgnore: true*/ resolvedScript)) {
     throw new SpiderExecutionError(`Spider script not found at ${resolvedScript}`, 'SPIDER_SCRIPT_NOT_FOUND');
   }
 

@@ -169,7 +169,7 @@ const DiscoverySearchField = React.memo(function DiscoverySearchField({
       }}
     >
       <label className="flex min-w-0 flex-1 items-center gap-2 rounded-control border border-line-strong bg-card px-3 focus-within:border-yours focus-within:ring-2 focus-within:ring-yours/20">
-        <span className="sr-only">Search properties</span>
+        <span className="sr-only">{searchMessages.listingsUi.searchPropertiesSr}</span>
         <Search size={17} className="text-ink-3" />
         <input
           value={draft}
@@ -871,30 +871,30 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
                 {facetOptions(field).map((facet) => <option key={facet.value} value={facet.value}>{facet.value === "unknown" ? "Unknown" : sourceDisplayText(facet.value).replace(/_/g, " ")}{facet.count !== null ? ` (${facet.count})` : ""}</option>)}
               </select>
             ))}
-            <select aria-label="Sale type" value={filters.distressStage || "all"} onChange={(event) => selectValue("distressStage", event.target.value)} className="min-h-10 rounded-lg border border-line-strong bg-card px-3 text-sm">
-              <option value="all">All sale types</option>
-              <option value="reo">Bank-owned (REO)</option>
-              <option value="pre_foreclosure">Pre-foreclosure</option>
-              <option value="scheduled">Auction scheduled</option>
-              <option value="tax_sale">Tax sale</option>
-              <option value="unknown">Not stated</option>
+            <select aria-label={lUi.saleTypeLabel} value={filters.distressStage || "all"} onChange={(event) => selectValue("distressStage", event.target.value)} className="min-h-10 rounded-lg border border-line-strong bg-card px-3 text-sm">
+              <option value="all">{lUi.allSaleTypes}</option>
+              <option value="reo">{lUi.saleTypeReo}</option>
+              <option value="pre_foreclosure">{lUi.saleTypePreForeclosure}</option>
+              <option value="scheduled">{lUi.saleTypeScheduled}</option>
+              <option value="tax_sale">{lUi.saleTypeTaxSale}</option>
+              <option value="unknown">{lUi.notStated}</option>
             </select>
-            <label className="rounded-control border border-line-strong bg-card px-3 py-2 text-xs font-semibold focus-within:border-yours focus-within:ring-2 focus-within:ring-yours/20">Sale from<input type="date" value={filters.saleFrom || ""} onChange={(event) => setFilters({ saleFrom: event.target.value || undefined })} className="mt-1 block w-full bg-transparent text-sm outline-none focus-visible:shadow-none" /></label>
-            <label className="rounded-control border border-line-strong bg-card px-3 py-2 text-xs font-semibold focus-within:border-yours focus-within:ring-2 focus-within:ring-yours/20">Sale to<input type="date" value={filters.saleTo || ""} onChange={(event) => setFilters({ saleTo: event.target.value || undefined })} className="mt-1 block w-full bg-transparent text-sm outline-none focus-visible:shadow-none" /></label>
-            <label className="rounded-control border border-line-strong bg-card px-3 py-2 text-xs font-semibold focus-within:border-yours focus-within:ring-2 focus-within:ring-yours/20">Max opening bid<input inputMode="numeric" value={filters.maxBid || ""} onChange={(event) => setFilters({ maxBid: event.target.value || undefined })} placeholder="$" className="mt-1 block w-full bg-transparent text-sm outline-none focus-visible:shadow-none" /></label>
-            <label className="rounded-control border border-line-strong bg-card px-3 py-2 text-xs font-semibold focus-within:border-yours focus-within:ring-2 focus-within:ring-yours/20">Min deal score<input type="number" min={0} max={99} value={filters.minScore || ""} onChange={(event) => setFilters({ minScore: event.target.value || undefined })} placeholder="0" className="mt-1 block w-full bg-transparent text-sm outline-none focus-visible:shadow-none" /></label>
-            <label className="rounded-control border border-line-strong bg-card px-3 py-2 text-xs font-semibold focus-within:border-yours focus-within:ring-2 focus-within:ring-yours/20">Min equity (value minus bid) ($)<input type="number" min={0} value={filters.minEquity || ""} onChange={(event) => setFilters({ minEquity: event.target.value || undefined })} placeholder="0" className="mt-1 block w-full bg-transparent text-sm outline-none focus-visible:shadow-none" /></label>
-            <select aria-label="Documents" value={filters.hasDocuments || "all"} onChange={(event) => selectValue("hasDocuments", event.target.value)} className="min-h-10 rounded-lg border border-line-strong bg-card px-3 text-sm">
-              <option value="all">Any documents</option><option value="true">Documents available</option><option value="false">No documents posted</option><option value="unknown">Not stated</option>
+            <label className="rounded-control border border-line-strong bg-card px-3 py-2 text-xs font-semibold focus-within:border-yours focus-within:ring-2 focus-within:ring-yours/20">{lUi.saleFrom}<input type="date" value={filters.saleFrom || ""} onChange={(event) => setFilters({ saleFrom: event.target.value || undefined })} className="mt-1 block w-full bg-transparent text-sm outline-none focus-visible:shadow-none" /></label>
+            <label className="rounded-control border border-line-strong bg-card px-3 py-2 text-xs font-semibold focus-within:border-yours focus-within:ring-2 focus-within:ring-yours/20">{lUi.saleTo}<input type="date" value={filters.saleTo || ""} onChange={(event) => setFilters({ saleTo: event.target.value || undefined })} className="mt-1 block w-full bg-transparent text-sm outline-none focus-visible:shadow-none" /></label>
+            <label className="rounded-control border border-line-strong bg-card px-3 py-2 text-xs font-semibold focus-within:border-yours focus-within:ring-2 focus-within:ring-yours/20">{lUi.maxOpeningBid}<input inputMode="numeric" value={filters.maxBid || ""} onChange={(event) => setFilters({ maxBid: event.target.value || undefined })} placeholder="$" className="mt-1 block w-full bg-transparent text-sm outline-none focus-visible:shadow-none" /></label>
+            <label className="rounded-control border border-line-strong bg-card px-3 py-2 text-xs font-semibold focus-within:border-yours focus-within:ring-2 focus-within:ring-yours/20">{lUi.minDealScore}<input type="number" min={0} max={99} value={filters.minScore || ""} onChange={(event) => setFilters({ minScore: event.target.value || undefined })} placeholder="0" className="mt-1 block w-full bg-transparent text-sm outline-none focus-visible:shadow-none" /></label>
+            <label className="rounded-control border border-line-strong bg-card px-3 py-2 text-xs font-semibold focus-within:border-yours focus-within:ring-2 focus-within:ring-yours/20">{lUi.minEquity}<input type="number" min={0} value={filters.minEquity || ""} onChange={(event) => setFilters({ minEquity: event.target.value || undefined })} placeholder="0" className="mt-1 block w-full bg-transparent text-sm outline-none focus-visible:shadow-none" /></label>
+            <select aria-label={lUi.documentsLabel} value={filters.hasDocuments || "all"} onChange={(event) => selectValue("hasDocuments", event.target.value)} className="min-h-10 rounded-lg border border-line-strong bg-card px-3 text-sm">
+              <option value="all">{lUi.anyDocuments}</option><option value="true">{lUi.docsAvailable}</option><option value="false">{lUi.docsNonePosted}</option><option value="unknown">{lUi.notStated}</option>
             </select>
-            <select aria-label="Property photos" value={filters.hasPhoto || "all"} onChange={(event) => selectValue("hasPhoto", event.target.value)} className="min-h-10 rounded-lg border border-line-strong bg-card px-3 text-sm">
-              <option value="all">Any photo status</option><option value="true">Has publisher photo</option><option value="false">No publisher photo</option>
+            <select aria-label={lUi.photosLabel} value={filters.hasPhoto || "all"} onChange={(event) => selectValue("hasPhoto", event.target.value)} className="min-h-10 rounded-lg border border-line-strong bg-card px-3 text-sm">
+              <option value="all">{lUi.anyPhotoStatus}</option><option value="true">{lUi.hasPublisherPhoto}</option><option value="false">{lUi.noPublisherPhoto}</option>
             </select>
-            <select aria-label="Senior lien risk" value={filters.seniorLien || "all"} onChange={(event) => selectValue("seniorLien", event.target.value)} className="min-h-10 rounded-lg border border-line-strong bg-card px-3 text-sm">
-              <option value="all">Any senior lien status</option><option value="clean">No senior-lien flag posted</option><option value="risk">High senior lien risk</option>
+            <select aria-label={lUi.seniorLienLabel} value={filters.seniorLien || "all"} onChange={(event) => selectValue("seniorLien", event.target.value)} className="min-h-10 rounded-lg border border-line-strong bg-card px-3 text-sm">
+              <option value="all">{lUi.anySeniorLienStatus}</option><option value="clean">{lUi.noSeniorLienFlag}</option><option value="risk">{lUi.highSeniorLienRisk}</option>
             </select>
-            <select aria-label="Redemption period" value={filters.redemption || "all"} onChange={(event) => selectValue("redemption", event.target.value)} className="min-h-10 rounded-lg border border-line-strong bg-card px-3 text-sm">
-              <option value="all">Any redemption timeline</option><option value="immediate">Immediate deed (0 days)</option><option value="redemption_active">Active redemption period</option>
+            <select aria-label={lUi.redemptionLabel} value={filters.redemption || "all"} onChange={(event) => selectValue("redemption", event.target.value)} className="min-h-10 rounded-lg border border-line-strong bg-card px-3 text-sm">
+              <option value="all">{lUi.anyRedemptionTimeline}</option><option value="immediate">{lUi.immediateDeed}</option><option value="redemption_active">{lUi.activeRedemption}</option>
             </select>
           </div>
         )}
@@ -925,19 +925,19 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
               }}
               className="text-xs font-semibold text-ink-3 underline"
             >
-              Clear all
+              {lUi.clearAll}
             </button>
           </div>
         )}
       </div>
-      <div className="mt-4 flex flex-wrap items-center gap-2" role="group" aria-label="Triage filters">
+      <div className="mt-4 flex flex-wrap items-center gap-2" role="group" aria-label={lUi.triageFiltersAria}>
         {([
-          { key: "isNew" as const, label: "New" },
-          { key: "priceDropped" as const, label: "Price dropped" },
-          { key: "hasDocs" as const, label: "Has documents" },
-          { key: "stale" as const, label: "Refresh due / Stale" },
-          { key: "occupancyKnown" as const, label: "Occupancy stated" },
-          { key: "enrolledOnly" as const, label: "Enrolled assessor" },
+          { key: "isNew" as const, label: lUi.chipNew },
+          { key: "priceDropped" as const, label: lUi.chipPriceDropped },
+          { key: "hasDocs" as const, label: lUi.chipHasDocs },
+          { key: "stale" as const, label: lUi.chipStale },
+          { key: "occupancyKnown" as const, label: lUi.chipOccupancyKnown },
+          { key: "enrolledOnly" as const, label: lUi.chipEnrolledOnly },
         ]).map(({ key, label: chipLabel }) => (
           <button
             key={key}

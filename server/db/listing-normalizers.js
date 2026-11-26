@@ -360,6 +360,13 @@ function mergeListingForInMemoryUpsert(existing, incoming) {
   if (incoming.status === 'unknown' && existing.status && existing.status !== 'unknown') {
     merged.status = existing.status;
   }
+  const existingInit = optionalFiniteNumber(existing.initialOpeningBid ?? existing.openingBid, { positive: true });
+  const incomingBid = optionalFiniteNumber(merged.openingBid, { positive: true });
+  merged.initialOpeningBid = existingInit ?? incomingBid;
+  const existingPeak = optionalFiniteNumber(existing.peakOpeningBid ?? existing.openingBid, { positive: true });
+  merged.peakOpeningBid = existingPeak !== null && incomingBid !== null
+    ? Math.max(existingPeak, incomingBid)
+    : (existingPeak ?? incomingBid);
   if ((!incoming.propType || incoming.propType === 'Unknown') && existing.propType && existing.propType !== 'Unknown') {
     merged.propType = existing.propType;
   }

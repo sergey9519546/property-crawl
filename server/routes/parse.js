@@ -5,7 +5,7 @@ const SecuritySanitizer = require('../security/sanitizer');
 const Validator = require('../security/validation');
 const AiCache = require('../ai/cache');
 const ModelRouter = require('../ai/model_router');
-const { CostRecord, CostTracker } = require('../ai/cost_tracker');
+const { CostRecord, CostTracker, recordSpendPg, isOverBudgetDurable } = require('../ai/cost_tracker');
 let runtimeCostTracker = new CostTracker({ budgetLimitUsd: Number(process.env.AI_BUDGET_LIMIT_USD) || 5.00 });
 const { normalizeOcrText, neutralizePromptInjection } = require('../ai/notice-parser');
 const { requireWorkspaceIdentity } = require('../security/workspace-identity');
@@ -616,7 +616,9 @@ async function handleParse(req, res, options = {}) {
   let cost = 0;
   let unverifiedCandidates = {};
 
-  if ((confidence < 0.75 || forceLlm === true) && route.configured && !runtimeCostTracker.isOverBudget) {
+  const spendDb = options?.db || require('../db/client');
+  const spendPool = spendDb?.isPg && spendDb?.pool?.query ? spendDb.pool : null;
+  if ((confidence < 0.75 || forceLlm === true) && route.configured && !(await isOverBudgetDurable(spendPool, runtimeCostTracker))) {
     const llmResult = await callLlmExtraction(cleanNotice, requestedModel, env, fetchFn, oidcToken);
     if (llmResult?.data) {
       model = llmResult.model || model;
@@ -624,13 +626,15 @@ async function handleParse(req, res, options = {}) {
       unverifiedCandidates = sanitizeLlmCandidates(llmResult.data, cleanNotice);
       if (Object.keys(unverifiedCandidates).length > 0) strategy = 'deterministic_with_unverified_llm_candidates';
       cost = CostTracker.calculateCost(model, llmResult.inputTokens, llmResult.outputTokens);
-      runtimeCostTracker = runtimeCostTracker.add(new CostRecord({
+      const costRecord = new CostRecord({
         provider,
         model,
         inputTokens: llmResult.inputTokens,
         outputTokens: llmResult.outputTokens,
         costUsd: cost
-      }));
+      });
+      runtimeCostTracker = runtimeCostTracker.add(costRecord);
+      await recordSpendPg(spendPool, costRecord, { route: 'parse' });
     }
   }
 

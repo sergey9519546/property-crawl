@@ -63,7 +63,7 @@ async function fetchTextWithPolicy(url, options = {}) {
 
   if (active && typeof body === 'string') {
     try {
-      if (!fs.existsSync(cacheDir)) {
+      if (!fs.existsSync(/*turbopackIgnore: true*/ cacheDir)) {
         fs.mkdirSync(cacheDir, { recursive: true });
       }
       const cacheFile = getDevCachePath(url, cacheDir, options);

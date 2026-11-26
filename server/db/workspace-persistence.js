@@ -13,6 +13,14 @@ const {
 } = require('./listing-normalizers');
 
 const WORKSPACE_STORE_VERSION = 1;
+const VALID_PIPELINE_STAGES = new Set([
+  'triage',
+  'title_audit',
+  'bid_approved',
+  'at_auction',
+  'redemption_carry',
+  'settled',
+]);
 
 function loadWorkspaceStore(client) {
   if (!client.workspaceStorePath) return;
@@ -121,6 +129,7 @@ async function getSavedDeals(client, userId) {
       `SELECT
          l.*,
          sd.notes,
+         sd.pipeline_stage AS "pipelineStage",
          sd.created_at AS "savedAt"
        FROM saved_deals sd
        JOIN (SELECT ${LISTING_SELECT} FROM listings) l ON sd.listing_id = l.id
@@ -128,11 +137,45 @@ async function getSavedDeals(client, userId) {
        ORDER BY l."saleDate" ASC NULLS LAST`,
       [userId]
     );
-    return res.rows.map(mapPgListingRow);
+    return res.rows.map((row) => ({
+      ...mapPgListingRow(row),
+      pipelineStage: VALID_PIPELINE_STAGES.has(row.pipelineStage) ? row.pipelineStage : 'triage',
+    }));
   }
   client.refreshLiveCache();
   const ids = client.inMemoryData.savedDeals.get(userId) || new Set();
-  return client.inMemoryData.listings.filter(l => ids.has(l.id));
+  const stageMap = client.inMemoryData.savedDealStages?.get(userId);
+  return client.inMemoryData.listings
+    .filter(l => ids.has(l.id))
+    .map((l) => ({
+      ...l,
+      pipelineStage: (stageMap && VALID_PIPELINE_STAGES.has(stageMap.get(l.id))) ? stageMap.get(l.id) : 'triage',
+    }));
+}
+
+async function updateSavedDealStage(client, userId, listingId, stage) {
+  if (!userId || !listingId || !VALID_PIPELINE_STAGES.has(stage)) return null;
+  if (client.isPg) {
+    const res = await client.pool.query(
+      `UPDATE saved_deals
+          SET pipeline_stage = $3
+        WHERE user_id = $1 AND listing_id = $2
+        RETURNING listing_id AS "listingId", pipeline_stage AS "pipelineStage"`,
+      [userId, listingId, stage],
+    );
+    return res.rows[0] || null;
+  }
+  const ids = client.inMemoryData.savedDeals.get(userId);
+  if (!ids || !ids.has(listingId)) return null;
+  if (!client.inMemoryData.savedDealStages) {
+    client.inMemoryData.savedDealStages = new Map();
+  }
+  if (!client.inMemoryData.savedDealStages.has(userId)) {
+    client.inMemoryData.savedDealStages.set(userId, new Map());
+  }
+  client.inMemoryData.savedDealStages.get(userId).set(listingId, stage);
+  triggerWorkspacePersist(client);
+  return { listingId, pipelineStage: stage };
 }
 
 async function saveDeal(client, userId, listingId) {
@@ -571,6 +614,7 @@ async function getListingHistory(client, listingIds, options = {}) {
 
 module.exports = {
   WORKSPACE_STORE_VERSION,
+  VALID_PIPELINE_STAGES,
   loadWorkspaceStore,
   quarantineWorkspaceStore,
   persistWorkspaceStore,
@@ -579,6 +623,7 @@ module.exports = {
   getSavedDeals,
   saveDeal,
   removeSavedDeal,
+  updateSavedDealStage,
   createSavedSearch,
   listSavedSearchUserIds,
   listSavedSearches,

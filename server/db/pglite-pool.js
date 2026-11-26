@@ -283,7 +283,7 @@ async function schemaIsPresent(db) {
  */
 async function startEmbeddedPostgres(options = {}) {
   const log = options.log || (() => {});
-  const dataDir = path.resolve(options.dataDir || process.env.PROPERTY_PG_DATA_DIR || DEFAULT_DATA_DIR);
+  const dataDir = path.resolve(/*turbopackIgnore: true*/ options.dataDir || process.env.PROPERTY_PG_DATA_DIR || DEFAULT_DATA_DIR);
   const schemaPath = options.schemaPath || DEFAULT_SCHEMA_PATH;
 
   fs.mkdirSync(dataDir, { recursive: true });
@@ -318,7 +318,7 @@ async function startEmbeddedPostgres(options = {}) {
       const migrateFn = options.migrate || require('../../scripts/discovery-migrate').migrate;
       await migrateFn(pool);
     }
-    await db.exec(fs.readFileSync(schemaPath, 'utf8'));
+    await db.exec(fs.readFileSync(/*turbopackIgnore: true*/ schemaPath, 'utf8'));
     log(`[PG] applied schema from ${path.relative(process.cwd(), schemaPath)}${fresh ? '' : ' (idempotent re-apply after pending migrations)'}`);
   }
 

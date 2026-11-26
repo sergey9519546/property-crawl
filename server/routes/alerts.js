@@ -405,10 +405,36 @@ function createAlertsHandler(dependencies = {}) {
           message: `Confirmation required for ${cleanEmail} to activate ${county.trim()}, ${cleanState} alerts`,
         });
       }
+      if (action === 'set_stage') {
+        const stage = typeof req.body?.stage === 'string' ? req.body.stage.trim() : '';
+        if (typeof listingId !== 'string' || !listingId || listingId.length > 256) {
+          return res.status(400).json({ error: 'listingId is required' });
+        }
+        if (!require('../db/workspace-persistence').VALID_PIPELINE_STAGES.has(stage)) {
+          return res.status(400).json({ error: 'Invalid pipeline stage' });
+        }
+        const updated = await database.updateSavedDealStage(userId, listingId, stage);
+        if (!updated) return res.status(404).json({ error: 'Saved deal not found' });
+        return res.json({ ok: true, listingId, pipelineStage: updated.pipelineStage });
+      }
       if (typeof listingId !== 'string' || !listingId || listingId.length > 256) return res.status(400).json({ error: 'listingId is required' });
       if (!await database.getListingById(listingId)) return res.status(404).json({ error: 'Listing not found' });
       await database.saveDeal(userId, listingId);
       return res.status(201).json({ success: true, message: 'Deal saved to watchlist' });
+    }
+
+    if (method === 'PATCH') {
+      const { listingId, stage } = req.body || {};
+      const cleanStage = typeof stage === 'string' ? stage.trim() : '';
+      if (typeof listingId !== 'string' || !listingId || listingId.length > 256) {
+        return res.status(400).json({ error: 'listingId is required' });
+      }
+      if (!require('../db/workspace-persistence').VALID_PIPELINE_STAGES.has(cleanStage)) {
+        return res.status(400).json({ error: 'Invalid pipeline stage' });
+      }
+      const updated = await database.updateSavedDealStage(userId, listingId, cleanStage);
+      if (!updated) return res.status(404).json({ error: 'Saved deal not found' });
+      return res.json({ ok: true, listingId, pipelineStage: updated.pipelineStage });
     }
 
     if (method === 'DELETE') {

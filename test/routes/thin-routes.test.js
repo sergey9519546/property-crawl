@@ -95,12 +95,12 @@ test('alerts: DELETE accepts listingId in query param or body', async () => {
   assert.ok([200, 401, 403, 503].includes(res.statusCode));
 });
 
-test('alerts: non-GET/POST/DELETE method returns 405 when auth passes', async () => {
+test('alerts: non-GET/POST/PATCH/DELETE method returns 405 when auth passes', async () => {
   // With auth failing, the response is 503, not 405 — the auth gate fires
   // first. With auth passing, the trailing 405 branch fires. Accept either
   // shape and assert the error message when 405 is reached.
   const res = captureRes();
-  await handleAlerts(mockReq({ method: 'PATCH' }), res);
+  await handleAlerts(mockReq({ method: 'PUT' }), res);
   assert.ok([401, 403, 405, 503].includes(res.statusCode));
   if (res.statusCode === 405) {
     assert.match(res.payload.error, /Method not allowed/);

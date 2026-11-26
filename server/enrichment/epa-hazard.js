@@ -1,6 +1,6 @@
 'use strict';
 
-const { loadJsonDiskCache, saveJsonDiskCache } = require('./disk-cache');
+const { loadJsonDiskCache, saveJsonDiskCache, getDurableCache, setDurableCache } = require('./disk-cache');
 const path = require('path');
 const crypto = require('crypto');
 
@@ -253,7 +253,8 @@ async function queryEpaHazards({
   cachePath = resolveDefaultCachePath(),
   fetchFn = globalThis.fetch,
   timeoutMs = 8000,
-  now = Date.now()
+  now = Date.now(),
+  db = undefined,
 } = {}) {
   const coords = normalizeCoordinates(lat, lng);
   if (!coords) {
@@ -267,14 +268,16 @@ async function queryEpaHazards({
 
   const key = hashCoords(coords, radiusMiles);
   const cache = loadCache(cachePath);
-  if (cache[key]?.schemaVersion === 2 && cache[key]) {
+  const cachedEntry = (cache[key]?.schemaVersion === 2 && cache[key])
+    || (cachePath === resolveDefaultCachePath() ? await getDurableCache('epa_hazard', key, { db }) : null);
+  if (cachedEntry?.schemaVersion === 2 && cachedEntry) {
     return {
       status: 'success',
       fromCache: true,
-      observedAt: cache[key].observedAt,
+      observedAt: cachedEntry.observedAt,
       coords,
-      environmentalLiability: cache[key].environmentalLiability,
-      facilities: cache[key].facilities,
+      environmentalLiability: cachedEntry.environmentalLiability,
+      facilities: cachedEntry.facilities,
       provenance: 'epa-envirofacts-spatial-query'
     };
   }
@@ -403,6 +406,9 @@ async function queryEpaHazards({
 
     cache[key] = record;
     saveCache(cache, cachePath);
+    if (cachePath === resolveDefaultCachePath()) {
+      await setDurableCache('epa_hazard', key, record, { db });
+    }
 
     return {
       status: 'success',

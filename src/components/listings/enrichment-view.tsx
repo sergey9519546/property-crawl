@@ -125,7 +125,7 @@ export function EnrichmentView({ parcelKey, fetchImpl, showRefreshButton = true 
     return (
       <section className="rounded-card border border-line bg-card p-6 text-sm text-ink-3">
         <header className="mb-2 text-base font-semibold text-ink-2">{m.detailUi.enrichmentTitle}</header>
-        <p>No parcelKey is attached to this listing yet, so the cross-source enrichment view is unavailable.</p>
+        <p>{m.detailUi.enrichmentNoParcelKey}</p>
       </section>
     );
   }
@@ -133,7 +133,7 @@ export function EnrichmentView({ parcelKey, fetchImpl, showRefreshButton = true 
   if (loading && !view) {
     return (
       <section className="rounded-card border border-line bg-card p-6 text-sm text-ink-3">
-        Loading enrichment view for <code>{parcelKey}</code>...
+        {m.detailUi.enrichmentLoading} <code>{parcelKey}</code>...
       </section>
     );
   }
@@ -141,19 +141,19 @@ export function EnrichmentView({ parcelKey, fetchImpl, showRefreshButton = true 
   if (error && !view) {
     return (
       <section className="rounded-card border border-catch/30 bg-catch-wash p-6 text-sm text-catch-ink">
-        <header className="mb-2 text-base font-semibold">Enrichment view failed</header>
+        <header className="mb-2 text-base font-semibold">{m.detailUi.enrichmentFailed}</header>
         <p>{error}</p>
       </section>
     );
   }
 
   const refreshLabel = refreshing
-    ? 'Refreshing...'
-    : (!fetchImpl && !session.authenticated ? 'Unlock to refresh adapters' : 'Refresh from adapters');
+    ? m.detailUi.enrichmentRefreshing
+    : (!fetchImpl && !session.authenticated ? (m.detailUi.enrichmentUnlockRefresh || 'Unlock to refresh adapters') : m.detailUi.enrichmentRefreshAdapters);
 
   const adapterSelector = showRefreshButton && adapters.length > 0 ? (
     <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-ink-3">
-      <span className="font-semibold text-ink-2">Adapters:</span>
+      <span className="font-semibold text-ink-2">{m.detailUi.enrichmentAdaptersLabel}</span>
       {adapters.map((source) => {
         const checked = selectedSources.includes(source);
         return (
@@ -228,7 +228,7 @@ export function EnrichmentView({ parcelKey, fetchImpl, showRefreshButton = true 
         <div className="my-4 rounded-control bg-paper p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-sm font-semibold text-ink-2">
-              Freshest cross-source observation
+              {m.detailUi.enrichmentFreshestObs}
             </p>
             {view.freshestObservation.confidenceBand && (
               <span className={`rounded-full px-2 py-0.5 text-label font-semibold ${confidenceBandColor(view.freshestObservation.confidenceBand)}`}>
@@ -237,10 +237,10 @@ export function EnrichmentView({ parcelKey, fetchImpl, showRefreshButton = true 
             )}
           </div>
           <dl className="mt-2 grid grid-cols-1 gap-x-6 gap-y-1 text-xs text-ink-3 sm:grid-cols-2">
-            <div><dt className="inline font-semibold">Source:</dt> <dd className="inline">{view.freshestObservation.source}</dd></div>
-            <div><dt className="inline font-semibold">Observed:</dt> <dd className="inline">{view.freshestObservation.observedAt || 'unknown'}</dd></div>
-            <div><dt className="inline font-semibold">Address:</dt> <dd className="inline">{[view.freshestObservation.address, view.freshestObservation.city, view.freshestObservation.state, view.freshestObservation.zip].filter(Boolean).join(', ') || 'unknown'}</dd></div>
-            <div><dt className="inline font-semibold">Opening bid:</dt> <dd className="inline">{view.freshestObservation.openingBid == null ? 'unknown' : `$${view.freshestObservation.openingBid}`}</dd></div>
+            <div><dt className="inline font-semibold">{m.detailUi.enrichmentSourceLabel}</dt> <dd className="inline">{view.freshestObservation.source}</dd></div>
+            <div><dt className="inline font-semibold">{m.detailUi.enrichmentObservedLabel}</dt> <dd className="inline">{view.freshestObservation.observedAt || m.detailUi.enrichmentUnknown}</dd></div>
+            <div><dt className="inline font-semibold">{m.detailUi.enrichmentAddressLabel}</dt> <dd className="inline">{[view.freshestObservation.address, view.freshestObservation.city, view.freshestObservation.state, view.freshestObservation.zip].filter(Boolean).join(', ') || m.detailUi.enrichmentUnknown}</dd></div>
+            <div><dt className="inline font-semibold">{m.detailUi.enrichmentOpeningBidLabel}</dt> <dd className="inline">{view.freshestObservation.openingBid == null ? m.detailUi.enrichmentUnknown : `$${view.freshestObservation.openingBid}`}</dd></div>
           </dl>
         </div>
       )}
@@ -249,11 +249,11 @@ export function EnrichmentView({ parcelKey, fetchImpl, showRefreshButton = true 
         <table className="w-full min-w-[480px] text-left text-xs">
           <thead>
             <tr className="border-b border-line bg-paper">
-              <th className="px-3 py-2 font-semibold">Rank</th>
-              <th className="px-3 py-2 font-semibold">Source</th>
-              <th className="px-3 py-2 font-semibold">Observed</th>
-              <th className="px-3 py-2 font-semibold">Evidence</th>
-              <th className="px-3 py-2 font-semibold">Confidence</th>
+              <th className="px-3 py-2 font-semibold">{m.detailUi.enrichmentColRank}</th>
+              <th className="px-3 py-2 font-semibold">{m.detailUi.enrichmentColSource}</th>
+              <th className="px-3 py-2 font-semibold">{m.detailUi.enrichmentColObserved}</th>
+              <th className="px-3 py-2 font-semibold">{m.detailUi.enrichmentColEvidence}</th>
+              <th className="px-3 py-2 font-semibold">{m.detailUi.enrichmentColConfidence}</th>
             </tr>
           </thead>
           <tbody>

@@ -85,10 +85,17 @@ function createSourceNetworkHandler(dependencies = {}) {
             inventoryTruncated = scanned.truncated;
           }
           let packets = [], evidenceQueueError = false, historyUnavailable = false;
-          const completeEvidenceSummaries = typeof intake.listEvidenceSummaries === 'function';
+          const usePgIntake = Boolean(database?.isPg && database?.pool?.query);
+          const completeEvidenceSummaries = (usePgIntake && typeof intake.listEvidenceSummariesAsync === 'function') || typeof intake.listEvidenceSummaries === 'function';
           let history;
           try {
-            packets = completeEvidenceSummaries ? intake.listEvidenceSummaries() : intake.listEvidence({ limit: 200 });
+            packets = usePgIntake && typeof intake.listEvidenceSummariesAsync === 'function'
+              ? await intake.listEvidenceSummariesAsync({ database })
+              : (typeof intake.listEvidenceSummaries === 'function'
+                ? intake.listEvidenceSummaries()
+                : (usePgIntake && typeof intake.listEvidenceAsync === 'function'
+                  ? await intake.listEvidenceAsync({ limit: 200 }, { database })
+                  : intake.listEvidence({ limit: 200 })));
             if (!Array.isArray(packets)) throw new Error('Evidence summaries are unavailable');
           } catch (_) { packets = []; evidenceQueueError = true; }
           try { history = await readStore(database.pool); } catch (_) { historyUnavailable = true; history = { runs: {}, records: {}, signals: [], trackedRecords: 0 }; }
@@ -149,19 +156,31 @@ function createSourceNetworkHandler(dependencies = {}) {
       if (!configuredToken) return res.status(503).json({ error: 'Source operations need SCRAPER_ADMIN_TOKEN on the API server. Public coverage remains available.' });
       if (!tokensMatch(presentedRunToken(req), configuredToken)) return res.status(401).json({ error: 'Source operator credential required' });
       if (req.method !== 'GET') invalidateNetworkCache();
+      const usePgIntake = Boolean(database?.isPg && database?.pool?.query);
       if (url.pathname === '/api/source-network/intake') {
-        if (req.method === 'GET') return res.json({ items: intake.listEvidence({ sourceId: url.searchParams.get('sourceId') || undefined, includeContent: url.searchParams.get('includeContent') === 'true', limit: 50 }) });
+        if (req.method === 'GET') {
+          const filter = { sourceId: url.searchParams.get('sourceId') || undefined, includeContent: url.searchParams.get('includeContent') === 'true', limit: 50 };
+          const items = usePgIntake && typeof intake.listEvidenceAsync === 'function'
+            ? await intake.listEvidenceAsync(filter, { database })
+            : intake.listEvidence(filter);
+          return res.json({ items });
+        }
         if (req.method === 'POST') {
           const validation = intake.validateSubmission(req.body || {});
           if (!validation.isValid) return res.status(400).json({ error: 'Evidence packet needs corrections', details: validation.errors });
-          const result = intake.submitEvidence(req.body);
+          const result = usePgIntake && typeof intake.submitEvidenceAsync === 'function'
+            ? await intake.submitEvidenceAsync(req.body, { database })
+            : intake.submitEvidence(req.body);
           return res.status(result.deduplicated ? 200 : 201).json({ ...result, message: 'Evidence saved for review. It has not been published as a property listing.' });
         }
       }
       if (url.pathname === '/api/source-network/review' && req.method === 'POST') {
         const { id, ...review } = req.body || {};
         if (!/^intake_[a-f0-9]{24}$/.test(id || '') || !['approve', 'reject'].includes(review.decision)) return res.status(400).json({ error: 'Evidence ID and an approve or reject decision are required' });
-        return res.json({ record: intake.reviewEvidence(id, review) });
+        const record = usePgIntake && typeof intake.reviewEvidenceAsync === 'function'
+          ? await intake.reviewEvidenceAsync(id, review, { database })
+          : intake.reviewEvidence(id, review);
+        return res.json({ record });
       }
       if (url.pathname === '/api/source-network/onboarding' && req.method === 'GET') {
         return res.json({ items: (dependencies.onboarding || require('../discovery/onboarding-pass')).listCachedSources() });

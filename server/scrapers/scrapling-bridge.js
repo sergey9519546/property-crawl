@@ -221,7 +221,7 @@ async function extractWithScrapling(profile, { html, url, signal, timeoutMs = DE
     const stdout = [], stderr = [];
     const childEnv = Object.fromEntries(['PATH','Path','SystemRoot','SYSTEMROOT','TEMP','TMP','APPDATA','LOCALAPPDATA','USERPROFILE','HOME','PYTHONPATH'].filter(key => process.env[key] !== undefined).map(key => [key,process.env[key]]));
     childEnv.PYTHONIOENCODING = 'utf-8'; childEnv.PYTHONUTF8 = '1';
-    const child = spawn(python, [script], { shell: false, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'], env: childEnv });
+    const child = spawn(/*turbopackIgnore: true*/ python, [/*turbopackIgnore: true*/ script], { shell: false, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'], env: childEnv });
     const finish = (error, value) => {
       if (settled) return;
       settled = true;

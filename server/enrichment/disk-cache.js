@@ -42,7 +42,12 @@ function saveJsonDiskCache(cache, cachePath) {
   }
 }
 
+const { getDurableCache, setDurableCache, pruneDurableCache } = require('./durable-cache');
+
 module.exports = {
   loadJsonDiskCache,
   saveJsonDiskCache,
+  getDurableCache,
+  setDurableCache,
+  pruneDurableCache,
 };

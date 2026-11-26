@@ -28,7 +28,7 @@ const MAX_LIMIT = 100;
 const cacheRootDir = () => (
   process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.SERVERLESS
     ? path.join(require('node:os').tmpdir(), 'property-crawl-cache')
-    : path.resolve(process.cwd(), '.cache')
+    : path.resolve(/*turbopackIgnore: true*/ process.cwd(), '.cache')
 );
 const DEFAULT_CHECKPOINT_PATH = path.join(cacheRootDir(), 'servicelink-checkpoint.json');
 const rawPublisherRecords = new WeakMap();
@@ -91,9 +91,9 @@ function explicitCheckpointPath(value) {
 
 function readCheckpointFile(filePath) {
   const file = explicitCheckpointPath(filePath);
-  if (!file || !fs.existsSync(file)) return null;
+  if (!file || !fs.existsSync(/*turbopackIgnore: true*/ file)) return null;
   try {
-    const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const parsed = JSON.parse(fs.readFileSync(/*turbopackIgnore: true*/ file, 'utf8'));
     const token = validContinuationToken(parsed?.continuationToken ?? parsed?.cursor ?? parsed?.token);
     if (!token) return null;
     return {
@@ -124,7 +124,7 @@ function writeCheckpointFile(filePath, checkpoint) {
 
 function clearCheckpointFile(filePath) {
   const file = explicitCheckpointPath(filePath);
-  if (file === DEFAULT_CHECKPOINT_PATH) { const sweepFile = path.join(cacheRootDir(), 'sweep-checkpoints', 'servicelink.json'); if (fs.existsSync(sweepFile)) { try { fs.unlinkSync(sweepFile); } catch {} } } if (!file || !fs.existsSync(file)) return false;
+  if (file === DEFAULT_CHECKPOINT_PATH) { const sweepFile = path.join(cacheRootDir(), 'sweep-checkpoints', 'servicelink.json'); if (fs.existsSync(/*turbopackIgnore: true*/ sweepFile)) { try { fs.unlinkSync(sweepFile); } catch {} } } if (!file || !fs.existsSync(/*turbopackIgnore: true*/ file)) return false;
   fs.unlinkSync(file);
   return true;
 }

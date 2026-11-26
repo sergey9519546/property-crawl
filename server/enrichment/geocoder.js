@@ -1,6 +1,6 @@
 'use strict';
 
-const { loadJsonDiskCache, saveJsonDiskCache } = require('./disk-cache');
+const { loadJsonDiskCache, saveJsonDiskCache, getDurableCache, setDurableCache } = require('./disk-cache');
 const { isCoordInStateBounds } = require('../geo/state-bounds');
 const { isUsStateOrTerritoryCode } = require('../state-codes');
 const path = require('path');
@@ -124,7 +124,7 @@ async function geocodeAddress(address, options = {}) {
   const cachePath = options.cachePath || resolveDefaultCachePath();
   const hash = hashAddress(norm);
 
-  // 1. Check local cache
+  // 1. Check local cache, then durable PG cache
   if (!options.skipCache) {
     const cache = loadCache(cachePath);
     if (cache[hash]) {
@@ -133,6 +133,12 @@ async function geocodeAddress(address, options = {}) {
         cached: true,
         hash
       };
+    }
+    if (!options.cachePath) {
+      const durable = await getDurableCache('geocoder', hash, { db: options.db });
+      if (durable) {
+        return { ...durable, cached: true, hash };
+      }
     }
   }
 
@@ -170,6 +176,9 @@ async function geocodeAddress(address, options = {}) {
         const cache = loadCache(cachePath);
         cache[hash] = result;
         saveCache(cache, cachePath);
+        if (!options.cachePath) {
+          await setDurableCache('geocoder', hash, result, { db: options.db });
+        }
       }
       return result;
     }
@@ -340,7 +349,7 @@ async function geocodeExactAddress(observedAddress, options = {}) {
 
   if (shouldUseCache) {
     const cache = loadCache(cachePath);
-    const cached = cache[hash];
+    const cached = cache[hash] || (!options.cachePath ? await getDurableCache('geocoder_exact', hash, { db: options.db }) : null);
     if (cached
         && cached.precision === 'street_interpolated'
         && Number.isFinite(Number(cached.lat))
@@ -416,6 +425,9 @@ async function geocodeExactAddress(observedAddress, options = {}) {
       const cache = loadCache(cachePath);
       cache[hash] = record;
       saveCache(cache, cachePath);
+      if (!options.cachePath) {
+        await setDurableCache('geocoder_exact', hash, record, { db: options.db });
+      }
     }
     return {
       ...record,

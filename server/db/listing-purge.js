@@ -22,6 +22,7 @@ async function purgeStaleListings(db, options = {}) {
   const serviceLinkHardStaleDays = Math.max(serviceLinkStaleDays, Math.trunc(Number(options.serviceLinkHardStaleDays) || 7));
   const concludedGraceDays = Math.max(1, Math.trunc(Number(options.concludedGraceDays) || 1));
   const observationRetentionDays = Math.max(7, Math.trunc(Number(options.observationRetentionDays) || 10));
+  const archiveRetentionDays = Math.max(1, Math.trunc(Number(options.archiveRetentionDays) || 180));
   const purgeQuery = (sql, params = [], timeoutMs = 12_000) => queryWithStatementTimeout(db.pool, sql, params, timeoutMs);
 
   let hasFreshServiceLinkLive = false;
@@ -176,9 +177,39 @@ async function purgeStaleListings(db, options = {}) {
   }
 
   let observationsDeleted = 0;
+  let observationsArchived = 0;
   const obsBatchSize = Math.min(5000, Math.max(1000, batchSize * 40));
+  const archiveObservationsBySql = async (whereSql, params) => {
+    try {
+      const archRes = await purgeQuery(
+        `INSERT INTO source_observations_archive (
+           id, listing_id, source_key, record_id, observed_at,
+           opening_bid, sale_date, status, deposit, notice_sha256, archived_at
+         )
+         SELECT so.id, so.listing_id, so.source_key, so.record_id, so.observed_at,
+                so.opening_bid, so.sale_date, so.status, so.deposit, so.notice_sha256, NOW()
+           FROM source_observations so
+          WHERE ${whereSql}
+         ON CONFLICT (id) DO NOTHING`,
+        params,
+      );
+      observationsArchived += archRes?.rowCount || 0;
+    } catch {
+      // Best-effort: older schemas or unit-test mock pools may omit source_observations_archive
+    }
+  };
   try {
     for (let batch = 0; batch < maxBatches && !budgetExceeded(); batch += 1) {
+      await archiveObservationsBySql(
+        `so.id IN (
+          SELECT so2.id
+            FROM source_observations so2
+           WHERE (so2.source_key = 'servicelink' AND so2.observed_at < NOW() - ($2::int * INTERVAL '1 day'))
+              OR so2.observed_at < NOW() - ($1::int * INTERVAL '1 day')
+           LIMIT $3
+        )`,
+        [observationRetentionDays, serviceLinkFreshWindowDays, obsBatchSize],
+      );
       const obsRes = await purgeQuery(
         `DELETE FROM source_observations
           WHERE id IN (
@@ -198,6 +229,16 @@ async function purgeStaleListings(db, options = {}) {
       }
     }
     for (let batch = 0; batch < Math.min(maxBatches, 15) && !budgetExceeded(); batch += 1) {
+      await archiveObservationsBySql(
+        `so.id IN (
+          SELECT so2.id
+            FROM source_observations so2
+           WHERE so2.listing_id IS NOT NULL
+             AND NOT EXISTS (SELECT 1 FROM listings l WHERE l.id = so2.listing_id)
+           LIMIT $1
+        )`,
+        [obsBatchSize],
+      );
       const orphanRes = await purgeQuery(
         `DELETE FROM source_observations
           WHERE id IN (
@@ -344,7 +385,7 @@ async function purgeStaleListings(db, options = {}) {
           WHERE id IN (
             SELECT id
               FROM listing_history
-             WHERE recorded_at < NOW() - INTERVAL '21 days'
+             WHERE recorded_at < NOW() - INTERVAL '90 days'
              LIMIT $1
           )`,
         [histBatchSize],
@@ -360,10 +401,24 @@ async function purgeStaleListings(db, options = {}) {
     console.warn('[DB] purgeStaleListings listing_history cleanup failed:', histErr?.message || histErr);
   }
 
+  try {
+    await purgeQuery(
+      `DELETE FROM source_observations_archive
+        WHERE archived_at < NOW() - ($1::int * INTERVAL '1 day')`,
+      [archiveRetentionDays],
+    );
+  } catch {
+    // Non-fatal on mock pools or pre-046 schemas
+  }
+  try {
+    await purgeQuery('DELETE FROM durable_kv_cache WHERE expires_at < NOW()');
+  } catch {
+    // Non-fatal on mock pools or pre-046 schemas
+  }
   if (deleted > 0) {
     await db.pool.query("SELECT nextval('discovery_listing_revision_seq')").catch(() => {});
   }
-  return { deleted, observationsDeleted, snapshotsDeleted, historyDeleted };
+  return { deleted, observationsDeleted, observationsArchived, snapshotsDeleted, historyDeleted };
 }
 
 module.exports = {

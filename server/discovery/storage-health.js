@@ -11,7 +11,7 @@ function inspectCollectionStorage({ env = process.env, statfs = fs.statfsSync } 
   if (!Number.isSafeInteger(minimum) || minimum < 1) {
     return { ready: false, code: 'DISCOVERY_STORAGE_CONFIG', reason: 'DISCOVERY_MIN_FREE_BYTES must be a positive integer' };
   }
-  const storagePath = path.resolve(env.DISCOVERY_STORAGE_PATH || process.cwd());
+  const storagePath = path.resolve(/*turbopackIgnore: true*/ env.DISCOVERY_STORAGE_PATH || process.cwd());
   try {
     const stats = statfs(storagePath, { bigint: true });
     const available = BigInt(stats.bavail) * BigInt(stats.bsize);

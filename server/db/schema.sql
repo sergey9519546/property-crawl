@@ -63,6 +63,8 @@ CREATE TABLE IF NOT EXISTS listings (
     year_built INT,
     prop_type VARCHAR(64),
     opening_bid NUMERIC(14, 2),
+    initial_opening_bid NUMERIC(14, 2),
+    peak_opening_bid NUMERIC(14, 2),
     est_low NUMERIC(14, 2),
     est_high NUMERIC(14, 2),
     assessed_value NUMERIC(14, 2),
@@ -139,6 +141,7 @@ CREATE TABLE IF NOT EXISTS saved_deals (
     user_id VARCHAR(128) NOT NULL,
     listing_id TEXT NOT NULL REFERENCES listings(id) ON DELETE CASCADE,
     notes TEXT,
+    pipeline_stage VARCHAR(32) NOT NULL DEFAULT 'triage',
     is_alert_enabled BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE(user_id, listing_id)
@@ -536,3 +539,62 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_mv_neighborhood_stats_key ON mv_neighborho
 CREATE INDEX IF NOT EXISTS idx_mv_neighborhood_stats_state ON mv_neighborhood_stats(state);
 CREATE INDEX IF NOT EXISTS idx_mv_neighborhood_stats_count_label ON mv_neighborhood_stats(count DESC, label ASC);
 CREATE INDEX IF NOT EXISTS idx_listings_state_parcel_key ON listings(state, parcel_key) WHERE parcel_key IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS source_observations_archive (
+    id VARCHAR(64) PRIMARY KEY,
+    listing_id TEXT NOT NULL,
+    source_key VARCHAR(32) NOT NULL,
+    record_id TEXT NOT NULL,
+    observed_at TIMESTAMPTZ NOT NULL,
+    opening_bid NUMERIC(14, 2),
+    sale_date DATE,
+    status VARCHAR(64),
+    deposit TEXT,
+    notice_sha256 CHAR(64),
+    archived_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_source_observations_archive_listing_obs
+    ON source_observations_archive(listing_id, observed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_source_observations_archive_archived_at
+    ON source_observations_archive(archived_at);
+
+CREATE TABLE IF NOT EXISTS durable_kv_cache (
+    namespace VARCHAR(64) NOT NULL,
+    cache_key TEXT NOT NULL,
+    payload JSONB NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (namespace, cache_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_durable_kv_cache_expires
+    ON durable_kv_cache(expires_at);
+
+CREATE TABLE IF NOT EXISTS ai_spend_ledger (
+    id BIGSERIAL PRIMARY KEY,
+    provider VARCHAR(64) NOT NULL,
+    model VARCHAR(128) NOT NULL,
+    route VARCHAR(64),
+    input_tokens INT NOT NULL DEFAULT 0,
+    output_tokens INT NOT NULL DEFAULT 0,
+    cost_usd NUMERIC(12, 6) NOT NULL DEFAULT 0,
+    recorded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_spend_ledger_recorded_at
+    ON ai_spend_ledger(recorded_at DESC);
+
+CREATE TABLE IF NOT EXISTS source_intake_records (
+    id VARCHAR(64) PRIMARY KEY,
+    source_id VARCHAR(64) NOT NULL,
+    source_url TEXT NOT NULL,
+    kind VARCHAR(16) NOT NULL,
+    status VARCHAR(32) NOT NULL DEFAULT 'needs_review',
+    submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    record_json JSONB NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_source_intake_records_source_submitted
+    ON source_intake_records(source_id, submitted_at DESC);

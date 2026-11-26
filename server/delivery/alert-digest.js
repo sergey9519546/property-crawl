@@ -181,7 +181,7 @@ function generateInvestorDigestReport({ hunt, evaluation, listings = [], options
     <div style="padding:24px 28px;background:linear-gradient(180deg,#1e293b 0%,#0f172a 100%);border-bottom:1px solid #334155;">
       <div style="font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#94a3b8;">PerfectProperty Hunt Digest</div>
       <h1 style="margin:8px 0 0 0;font-size:20px;font-weight:700;color:#ffffff;">${matchedListings.length} Matches for &quot;${escapeHtml(huntName)}&quot;</h1>
-      <div style="margin-top:4px;font-size:12px;color:#94a3b8;">Evaluated ${new Date(evaluatedAt).toLocaleString('en-US', { timeZone: 'America/New_York' })} EST</div>
+      <div style="margin-top:4px;font-size:12px;color:#94a3b8;">Evaluated ${new Date(evaluatedAt).toLocaleString('en-US', { timeZone: 'America/New_York', timeZoneName: 'short' })}</div>
     </div>
     <div style="padding:24px 20px;">
       <table style="width:100%;border-collapse:collapse;">

@@ -106,6 +106,81 @@ function updateRecord(id, updater, options = {}) {
   }, options);
 }
 
+async function putRecordPg(pool, record) {
+  if (!record || typeof record !== 'object' || !record.id) throw new TypeError('A source intake record with an id is required');
+  const insertRes = await pool.query(
+    `INSERT INTO source_intake_records (id, source_id, source_url, kind, status, submitted_at, updated_at, record_json)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
+     ON CONFLICT (id) DO NOTHING
+     RETURNING record_json`,
+    [
+      record.id,
+      record.sourceId,
+      record.sourceUrl,
+      record.kind,
+      record.status || 'needs_review',
+      record.submittedAt || new Date().toISOString(),
+      record.updatedAt || record.submittedAt || new Date().toISOString(),
+      JSON.stringify(record),
+    ],
+  );
+  if (insertRes.rows?.length > 0) {
+    return { record: insertRes.rows[0].record_json, deduplicated: false };
+  }
+  const existing = await pool.query('SELECT record_json FROM source_intake_records WHERE id = $1 LIMIT 1', [record.id]);
+  return { record: existing.rows?.[0]?.record_json || record, deduplicated: true };
+}
+
+async function queryRecordsPg(pool, filters = {}) {
+  const limit = Math.min(200, Math.max(1, Number(filters.limit) || 50));
+  const conds = [];
+  const params = [];
+  if (filters.status) {
+    params.push(String(filters.status));
+    conds.push(`status = $${params.length}`);
+  }
+  if (filters.sourceId) {
+    params.push(String(filters.sourceId));
+    conds.push(`source_id = $${params.length}`);
+  }
+  params.push(limit);
+  const where = conds.length > 0 ? `WHERE ${conds.join(' AND ')}` : '';
+  const res = await pool.query(
+    `SELECT record_json FROM source_intake_records ${where} ORDER BY submitted_at DESC LIMIT $${params.length}`,
+    params,
+  );
+  return (res.rows || []).map((row) => row.record_json);
+}
+
+async function listAllRecordsPg(pool) {
+  const res = await pool.query(
+    `SELECT record_json FROM source_intake_records ORDER BY submitted_at DESC LIMIT $1`,
+    [MAX_RECORDS],
+  );
+  return (res.rows || []).map((row) => row.record_json);
+}
+
+async function updateRecordPg(pool, id, updater) {
+  if (typeof updater !== 'function') throw new TypeError('Source intake updater must be a function');
+  const existing = await pool.query('SELECT record_json FROM source_intake_records WHERE id = $1 LIMIT 1', [id]);
+  if (!existing.rows || existing.rows.length === 0) {
+    const error = new Error(`Source intake record not found: ${id}`);
+    error.code = 'SOURCE_INTAKE_NOT_FOUND';
+    throw error;
+  }
+  const updated = updater(structuredClone(existing.rows[0].record_json));
+  if (!updated || updated.id !== id) throw new Error('Source intake updater cannot remove or change a record id');
+  await pool.query(
+    `UPDATE source_intake_records
+        SET status = $2,
+            updated_at = $3,
+            record_json = $4::jsonb
+      WHERE id = $1`,
+    [id, updated.status || 'reviewed', updated.updatedAt || new Date().toISOString(), JSON.stringify(updated)],
+  );
+  return updated;
+}
+
 module.exports = {
   DEFAULT_STORE_PATH,
   MAX_RECORDS,
@@ -115,4 +190,8 @@ module.exports = {
   queryRecords,
   resolveStorePath,
   updateRecord,
+  putRecordPg,
+  queryRecordsPg,
+  listAllRecordsPg,
+  updateRecordPg,
 };

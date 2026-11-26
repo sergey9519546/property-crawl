@@ -3,7 +3,7 @@ const db = require('../db/client');
 const SecuritySanitizer = require('../security/sanitizer');
 const ModelRouter = require('../ai/model_router');
 const { requireWorkspaceIdentity } = require('../security/workspace-identity');
-const { CostRecord, CostTracker } = require('../ai/cost_tracker');
+const { CostRecord, CostTracker, recordSpendPg, isOverBudgetDurable } = require('../ai/cost_tracker');
 
 let runtimeCostTracker = new CostTracker({ budgetLimitUsd: Number(process.env.AI_BUDGET_LIMIT_USD) || 5.0 });
 
@@ -456,7 +456,8 @@ async function handleEnrich(req, res, deps = {}) {
   if (!identity) return;
 
   const activeTracker = deps.costTracker || runtimeCostTracker;
-  if (activeTracker && activeTracker.isOverBudget) {
+  const spendPool = targetDb?.isPg && targetDb?.pool?.query ? targetDb.pool : null;
+  if (activeTracker && (await isOverBudgetDurable(spendPool, activeTracker))) {
     return res.status(429).json({
       error: 'AI narrative budget exceeded',
       analysis,
@@ -489,14 +490,16 @@ async function handleEnrich(req, res, deps = {}) {
     && !ai?.cached
     && (Number(ai?.costUsd) > 0 || Number(ai?.inputTokens) > 0 || Number(ai?.outputTokens) > 0)
   ) {
-    const updatedTracker = activeTracker.add(new CostRecord({
+    const spendRecord = new CostRecord({
       provider: ai.provider || 'vercel_gateway',
       model: ai.model || SUMMARY_MODEL,
       inputTokens: Number(ai.inputTokens) || 0,
       outputTokens: Number(ai.outputTokens) || 0,
       costUsd: Number(ai.costUsd) || 0,
-    }));
+    });
+    const updatedTracker = activeTracker.add(spendRecord);
     if (!deps.costTracker) runtimeCostTracker = updatedTracker;
+    await recordSpendPg(spendPool, spendRecord, { route: 'enrich' });
   }
 
   return res.json({

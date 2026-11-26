@@ -581,7 +581,7 @@ class IngestionScheduler {
             }
             if (!saved) {
               try {
-                const cacheRoot = (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.SERVERLESS) ? path.join(require('node:os').tmpdir(), 'property-crawl-cache') : path.resolve(process.cwd(), '.cache'); const cacheFile = path.join(cacheRoot, `${scraper.sourceKey}-checkpoint.json`); const sweepFile = path.join(cacheRoot, 'sweep-checkpoints', `${scraper.sourceKey}.json`);
+                const cacheRoot = (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.SERVERLESS) ? path.join(require('node:os').tmpdir(), 'property-crawl-cache') : path.resolve(/*turbopackIgnore: true*/ process.cwd(), '.cache'); const cacheFile = path.join(cacheRoot, `${scraper.sourceKey}-checkpoint.json`); const sweepFile = path.join(cacheRoot, 'sweep-checkpoints', `${scraper.sourceKey}.json`);
                 const activeFile = fs.existsSync(cacheFile) ? cacheFile : (fs.existsSync(sweepFile) ? sweepFile : null); if (activeFile) {
                   saved = JSON.parse(fs.readFileSync(activeFile, 'utf8'));
                   if (saved) this.sourceCheckpoints.set(scraper.sourceKey, saved);
@@ -829,7 +829,7 @@ class IngestionScheduler {
                 ); } catch (err) { console.warn(`[Scheduler] Could not persist ${scraper.sourceKey} checkpoint to PostgreSQL:`, err?.message || err); }
               } else {
                 try {
-                  const cacheDir = (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.SERVERLESS) ? path.join(require('node:os').tmpdir(), 'property-crawl-cache') : path.resolve(process.cwd(), '.cache');
+                  const cacheDir = (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.SERVERLESS) ? path.join(require('node:os').tmpdir(), 'property-crawl-cache') : path.resolve(/*turbopackIgnore: true*/ process.cwd(), '.cache');
                   if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
                   atomicWriteJsonSync(path.join(cacheDir, `${scraper.sourceKey}-checkpoint.json`), checkpointData);
                 } catch (_) {}
@@ -840,7 +840,7 @@ class IngestionScheduler {
                 try { await this.database.pool.query('DELETE FROM discovery_checkpoints WHERE source_key = $1', [scraper.sourceKey]); } catch (_) {}
               }
               try {
-                const cacheDir = (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.SERVERLESS) ? path.join(require('node:os').tmpdir(), 'property-crawl-cache') : path.resolve(process.cwd(), '.cache');
+                const cacheDir = (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.SERVERLESS) ? path.join(require('node:os').tmpdir(), 'property-crawl-cache') : path.resolve(/*turbopackIgnore: true*/ process.cwd(), '.cache');
                 const file = path.join(cacheDir, `${scraper.sourceKey}-checkpoint.json`);
                 if (fs.existsSync(file)) fs.unlinkSync(file); const sweepFile = path.join(cacheDir, 'sweep-checkpoints', `${scraper.sourceKey}.json`); if (fs.existsSync(sweepFile)) fs.unlinkSync(sweepFile);
               } catch (_) {}

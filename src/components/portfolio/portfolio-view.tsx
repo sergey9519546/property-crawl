@@ -137,6 +137,7 @@ type SavedDeal = {
   saleDate?: string | null;
   source?: string;
   propType?: string;
+  pipelineStage?: PipelineStage;
 };
 
 function formatMoney(amount: number | null | undefined, locale: Locale): string {
@@ -190,6 +191,14 @@ export function PortfolioView() {
         // Ignore
       }
       return next;
+    });
+    void fetch("/api/alerts", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ listingId: dealId, stage: newStage }),
+    }).catch(() => {
+      // Optimistic local cache remains intact if offline
     });
   }, []);
 
@@ -246,9 +255,42 @@ export function PortfolioView() {
             saleDate: d.saleDate,
             source: d.source,
             propType: d.propType,
+            pipelineStage: d.pipelineStage,
           };
         });
         setDeals(mappedDeals);
+        const validStages = new Set<PipelineStage>(PIPELINE_STAGES.map((s) => s.id));
+        const toMigrate: Array<{ id: string; stage: PipelineStage }> = [];
+        setPipelineStages((prev) => {
+          const next: Record<string, PipelineStage> = { ...prev };
+          for (const deal of mappedDeals) {
+            const dealKey = deal.listingId || deal.id;
+            const serverStage = deal.pipelineStage;
+            if (serverStage && validStages.has(serverStage)) {
+              if (serverStage !== "triage") {
+                next[dealKey] = serverStage;
+              } else if (prev[dealKey] && validStages.has(prev[dealKey]) && prev[dealKey] !== "triage") {
+                toMigrate.push({ id: dealKey, stage: prev[dealKey] });
+              } else {
+                next[dealKey] = serverStage;
+              }
+            }
+          }
+          try {
+            localStorage.setItem(STORAGE_PIPELINE_KEY, JSON.stringify(next));
+          } catch {
+            // Ignore
+          }
+          return next;
+        });
+        for (const item of toMigrate) {
+          void fetch("/api/alerts", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+            body: JSON.stringify({ listingId: item.id, stage: item.stage }),
+          }).catch(() => {});
+        }
       }
 
       if (dropsRes.ok) {

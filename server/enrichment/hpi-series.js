@@ -65,7 +65,7 @@ function loadObservedHpiSeries() {
   let rawText;
   let parsed;
   try {
-    rawText = fs.readFileSync(seriesPath, 'utf8');
+    rawText = fs.readFileSync(/*turbopackIgnore: true*/ seriesPath, 'utf8');
     parsed = JSON.parse(rawText);
   } catch {
     return null; // missing file, unreadable, or malformed JSON -> fail closed

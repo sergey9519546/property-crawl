@@ -18,7 +18,7 @@ function emptyStore() {
 }
 
 function resolveStorePath(filePath) {
-  return path.resolve(filePath || process.env.PROPERTY_HUNTS_PATH || DEFAULT_STORE_PATH);
+  return path.resolve(/*turbopackIgnore: true*/ filePath || process.env.PROPERTY_HUNTS_PATH || DEFAULT_STORE_PATH);
 }
 
 function assertStoreShape(store) {
@@ -61,10 +61,10 @@ function assertStoreShape(store) {
 
 function loadStore(filePath) {
   const resolved = resolveStorePath(filePath);
-  if (!fs.existsSync(resolved)) return emptyStore();
-  const stats = fs.statSync(resolved);
+  if (!fs.existsSync(/*turbopackIgnore: true*/ resolved)) return emptyStore();
+  const stats = fs.statSync(/*turbopackIgnore: true*/ resolved);
   if (!stats.isFile() || stats.size > MAX_STORE_BYTES) throw new Error('Saved-hunt store exceeds its safe size limit');
-  return assertStoreShape(JSON.parse(fs.readFileSync(resolved, 'utf8')));
+  return assertStoreShape(JSON.parse(fs.readFileSync(/*turbopackIgnore: true*/ resolved, 'utf8')));
 }
 
 function mutateStore(filePath, mutate, options = {}) {

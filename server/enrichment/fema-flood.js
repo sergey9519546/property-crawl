@@ -1,6 +1,6 @@
 'use strict';
 
-const { loadJsonDiskCache, saveJsonDiskCache } = require('./disk-cache');
+const { loadJsonDiskCache, saveJsonDiskCache, getDurableCache, setDurableCache } = require('./disk-cache');
 const path = require('path');
 const crypto = require('crypto');
 
@@ -177,7 +177,8 @@ async function queryFemaFloodZone({
   cachePath = resolveDefaultCachePath(),
   fetchFn = globalThis.fetch,
   timeoutMs = 8000,
-  now = Date.now()
+  now = Date.now(),
+  db = undefined,
 } = {}) {
   const coords = normalizeCoordinates(lat, lng);
   if (!coords) {
@@ -191,15 +192,17 @@ async function queryFemaFloodZone({
 
   const key = hashCoords(coords);
   const cache = loadCache(cachePath);
-  if (cache[key]?.schemaVersion === 2 && cache[key]) {
+  const cachedEntry = (cache[key]?.schemaVersion === 2 && cache[key])
+    || (cachePath === resolveDefaultCachePath() ? await getDurableCache('fema_flood', key, { db }) : null);
+  if (cachedEntry?.schemaVersion === 2 && cachedEntry) {
     return {
       status: 'success',
       fromCache: true,
-      observedAt: cache[key].observedAt,
+      observedAt: cachedEntry.observedAt,
       coords,
-      floodRisk: cache[key].floodRisk,
-      nfipReserve: cache[key].nfipReserve,
-      rawAttributes: cache[key].rawAttributes,
+      floodRisk: cachedEntry.floodRisk,
+      nfipReserve: cachedEntry.nfipReserve,
+      rawAttributes: cachedEntry.rawAttributes,
       provenance: 'fema-nfhl-spatial-query'
     };
   }
@@ -309,6 +312,9 @@ async function queryFemaFloodZone({
 
     cache[key] = record;
     saveCache(cache, cachePath);
+    if (cachePath === resolveDefaultCachePath()) {
+      await setDurableCache('fema_flood', key, record, { db });
+    }
 
     return {
       status: 'success',

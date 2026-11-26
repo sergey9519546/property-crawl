@@ -1,7 +1,8 @@
 const crypto = require('crypto');
 
 class CostRecord {
-  constructor({ model, inputTokens = 0, outputTokens = 0, costUsd = 0, timestamp = new Date() }) {
+  constructor({ provider = 'unknown', model, inputTokens = 0, outputTokens = 0, costUsd = 0, timestamp = new Date() }) {
+    this.provider = provider;
     this.model = model;
     this.inputTokens = inputTokens;
     this.outputTokens = outputTokens;
@@ -67,4 +68,57 @@ class CostTracker {
   }
 }
 
-module.exports = { CostRecord, CostTracker, MODEL_RATES };
+async function recordSpendPg(pool, record, { route = null } = {}) {
+  if (!pool || typeof pool.query !== 'function' || !record) return false;
+  try {
+    await pool.query(
+      `INSERT INTO ai_spend_ledger (provider, model, route, input_tokens, output_tokens, cost_usd, recorded_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [
+        String(record.provider || 'unknown').slice(0, 64),
+        String(record.model || 'unknown').slice(0, 128),
+        route ? String(route).slice(0, 64) : null,
+        Math.max(0, Math.trunc(Number(record.inputTokens) || 0)),
+        Math.max(0, Math.trunc(Number(record.outputTokens) || 0)),
+        Number(record.costUsd) || 0,
+        record.timestamp instanceof Date ? record.timestamp.toISOString() : new Date().toISOString(),
+      ],
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function getRollingSpendUsdPg(pool, { windowHours = 24 } = {}) {
+  if (!pool || typeof pool.query !== 'function') return 0;
+  const hours = Math.max(1, Math.trunc(Number(windowHours) || 24));
+  try {
+    const res = await pool.query(
+      `SELECT COALESCE(SUM(cost_usd), 0)::float8 AS total_usd
+         FROM ai_spend_ledger
+        WHERE recorded_at >= NOW() - ($1::int * INTERVAL '1 hour')`,
+      [hours],
+    );
+    return Number(res.rows?.[0]?.total_usd) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+async function isOverBudgetDurable(pool, tracker, { windowHours = 24 } = {}) {
+  if (tracker?.isOverBudget) return true;
+  const limit = Number(tracker?.budgetLimitUsd);
+  if (!pool || !Number.isFinite(limit) || limit <= 0) return false;
+  const rollingSpend = await getRollingSpendUsdPg(pool, { windowHours });
+  return rollingSpend >= limit;
+}
+
+module.exports = {
+  CostRecord,
+  CostTracker,
+  MODEL_RATES,
+  recordSpendPg,
+  getRollingSpendUsdPg,
+  isOverBudgetDurable,
+};

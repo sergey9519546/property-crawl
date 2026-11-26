@@ -1,6 +1,6 @@
 'use strict';
 
-const { loadJsonDiskCache, saveJsonDiskCache } = require('./disk-cache');
+const { loadJsonDiskCache, saveJsonDiskCache, getDurableCache, setDurableCache } = require('./disk-cache');
 const path = require('path');
 const crypto = require('crypto');
 
@@ -121,7 +121,8 @@ async function queryTerrainSlope({
   cachePath = resolveDefaultCachePath(),
   fetchFn = globalThis.fetch,
   timeoutMs = 8000,
-  now = Date.now()
+  now = Date.now(),
+  db = undefined,
 } = {}) {
   const coords = normalizeCoordinates(lat, lng);
   if (!coords) {
@@ -135,15 +136,16 @@ async function queryTerrainSlope({
 
   const key = hashCoords(coords);
   const cache = loadCache(cachePath);
-  if (cache[key]) {
+  const cachedEntry = cache[key] || (cachePath === resolveDefaultCachePath() ? await getDurableCache('usgs_terrain', key, { db }) : null);
+  if (cachedEntry) {
     return {
       status: 'success',
       fromCache: true,
-      observedAt: cache[key].observedAt,
+      observedAt: cachedEntry.observedAt,
       coords,
-      slopeAnalysis: cache[key].slopeAnalysis,
-      elevationMeters: cache[key].elevationMeters,
-      samples: cache[key].samples,
+      slopeAnalysis: cachedEntry.slopeAnalysis,
+      elevationMeters: cachedEntry.elevationMeters,
+      samples: cachedEntry.samples,
       provenance: 'usgs-3dep-elevation-query'
     };
   }
@@ -241,6 +243,9 @@ async function queryTerrainSlope({
     };
     cache[key] = record;
     saveCache(cache, cachePath);
+    if (cachePath === resolveDefaultCachePath()) {
+      await setDurableCache('usgs_terrain', key, record, { db });
+    }
 
     return {
       status: 'success',

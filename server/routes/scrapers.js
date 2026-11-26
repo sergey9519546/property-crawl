@@ -893,7 +893,8 @@ function createScrapersHandler(dependencies = {}) {
             generateAiNarrative,
             readCachedNarrative,
           } = require('./enrich');
-          const { CostRecord, CostTracker } = require('../ai/cost_tracker');
+          const { CostRecord, CostTracker, recordSpendPg, isOverBudgetDurable } = require('../ai/cost_tracker');
+          const spendPool = database?.isPg && database?.pool?.query ? database.pool : null;
 
           const rawLimit = Number(body.limit ?? url.searchParams.get('limit') ?? 10);
           const limit = Math.min(20, Math.max(1, Number.isFinite(rawLimit) ? Math.floor(rawLimit) : 10));
@@ -938,7 +939,7 @@ function createScrapersHandler(dependencies = {}) {
 
           for (const listing of activeListings) {
             if (attempted >= limit) break;
-            if (costTracker.isOverBudget) {
+            if (await isOverBudgetDurable(spendPool, costTracker)) {
               stoppedEarly = true;
               stopReason = 'budget_exceeded';
               break;
@@ -973,12 +974,15 @@ function createScrapersHandler(dependencies = {}) {
               const callCost = Number(resNarrative.costUsd) || 0;
               totalCostUsd = Number((totalCostUsd + callCost).toFixed(6));
               if (resNarrative.model) modelsUsedSet.add(resNarrative.model);
-              costTracker = costTracker.add(new CostRecord({
+              const spendRecord = new CostRecord({
+                provider: resNarrative.provider || 'vercel_gateway',
                 model: resNarrative.model || 'unknown',
                 inputTokens: Number(resNarrative.inputTokens) || 0,
                 outputTokens: Number(resNarrative.outputTokens) || 0,
                 costUsd: callCost,
-              }));
+              });
+              costTracker = costTracker.add(spendRecord);
+              await recordSpendPg(spendPool, spendRecord, { route: 'ai-enrich-batch' });
             } else if (resNarrative?.reason === 'ungrounded_claim') {
               rejectedUngrounded += 1;
             } else {
