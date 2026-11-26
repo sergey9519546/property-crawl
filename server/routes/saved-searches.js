@@ -9,7 +9,7 @@
 //   PATCH  /api/saved-searches/:id      update label/filters/isActive
 //   DELETE /api/saved-searches/:id      remove
 //
-//   GET    /api/saved-searches/:id/run  run the search against the
+//   POST   /api/saved-searches/:id/run  run the search against the
 //                                       live listing pool right now and
 //                                       persist any new matches
 //   GET    /api/alerts/matches          list alert_matches for the user
@@ -199,7 +199,7 @@ function createSavedSearchesHandler(dependencies = {}) {
       const id = segments[2];
       const action = segments[3];
       if (action === 'run') {
-        if (method !== 'POST' && method !== 'GET') { res.setHeader('Allow', 'POST, GET'); return res.status(405).json({ error: 'method_not_allowed' }); }
+        if (method !== 'POST') { res.setHeader('Allow', 'POST'); return res.status(405).json({ error: 'method_not_allowed' }); }
         const search = await database.getSavedSearchById(userId, id);
         if (!search) return res.status(404).json({ error: 'saved_search_not_found' });
         const result = await runSearchAgainstPool(database, search);

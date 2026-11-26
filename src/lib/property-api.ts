@@ -6,7 +6,7 @@ const MAX_BYTES = 2 * 1024 * 1024;
 // "Unknown API route" while the server implementation sits unused.
 //
 // saved-searches accepts an optional trailing /run: server/routes/saved-searches.js
-// serves GET /api/saved-searches/:id/run and the alerts modal's "Run now"
+// serves POST /api/saved-searches/:id/run (it mutates alert_matches, so it is never a GET) and the alerts modal's "Run now"
 // button calls it (src/lib/saved-searches.ts runSavedSearch). The optional
 // segment is restricted to the literal "run" so an arbitrary sub-path still
 // fails closed rather than being waved through the gate.

@@ -175,7 +175,7 @@ export async function deleteSavedSearch(id: string): Promise<{ success: boolean;
 }
 
 export async function runSavedSearch(id: string): Promise<{ searchId: string; label: string | null; newMatches: number; scanned: number }> {
-  return api(`/api/saved-searches/${encodeURIComponent(id)}/run`);
+  return api(`/api/saved-searches/${encodeURIComponent(id)}/run`, { method: "POST" });
 }
 
 export async function promoteSavedSearchToHunt(search: SavedSearch, server?: ServerSavedSearch): Promise<{ id: string; name: string }> {

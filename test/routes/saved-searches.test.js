@@ -226,7 +226,7 @@ test('saved-searches: POST creates, GET lists, PATCH updates, DELETE removes', a
   assert.equal(res4.body.success, true);
 });
 
-test('saved-searches: GET /:id/run executes against pool and records matches', async () => {
+test('saved-searches: POST /:id/run executes against pool and records matches', async () => {
   const db = stubDb();
   const handlers = createSavedSearchesHandler({ database: db });
   const handler = handlers.handleSavedSearches;
@@ -237,7 +237,7 @@ test('saved-searches: GET /:id/run executes against pool and records matches', a
   const id = resCreate.body.id;
 
   const resRun = makeRes();
-  await handler(makeReq('GET', `/api/saved-searches/${id}/run`), resRun, new URL(`http://localhost/api/saved-searches/${id}/run`));
+  await handler(makeReq('POST', `/api/saved-searches/${id}/run`), resRun, new URL(`http://localhost/api/saved-searches/${id}/run`));
   assert.equal(resRun.statusCode, 200);
   assert.ok(resRun.body.newMatches >= 0);
   assert.ok(resRun.body.scanned > 0);
@@ -683,7 +683,7 @@ test('run: finds a match that sits past the first 1,000 rows', async () => {
   }).handleSavedSearches;
   const res = makeRes();
   await handler(
-    makeReq('GET', '/api/saved-searches/S1/run'),
+    makeReq('POST', '/api/saved-searches/S1/run'),
     res,
     new URL('http://localhost/api/saved-searches/S1/run')
   );
@@ -712,7 +712,7 @@ test('run: says so when the search could not cover the whole store', async () =>
   }).handleSavedSearches;
   const res = makeRes();
   await handler(
-    makeReq('GET', '/api/saved-searches/S1/run'),
+    makeReq('POST', '/api/saved-searches/S1/run'),
     res,
     new URL('http://localhost/api/saved-searches/S1/run')
   );
@@ -878,3 +878,23 @@ test('AlertsModal and saved-searches client library expose one-click Promote to 
 // end promote test
 });
 
+
+test('run: GET is refused with 405 and Allow: POST because the run mutates alert_matches', async () => {
+  let ran = false;
+  const handler = createSavedSearchesHandler({
+    database: {
+      async getSavedSearchById() { ran = true; return { id: 'S1', userId: 'operator', label: 'tx', filters: { states: ['TX'] } }; },
+      async getListings() { ran = true; return { total: 0, listings: [] }; },
+      async recordAlertMatches() { ran = true; return []; },
+    },
+  }).handleSavedSearches;
+  const res = makeRes();
+  await handler(
+    makeReq('GET', '/api/saved-searches/S1/run'),
+    res,
+    new URL('http://localhost/api/saved-searches/S1/run')
+  );
+
+  assert.equal(res.statusCode, 405);
+  assert.equal(ran, false, 'a refused GET must not touch the database');
+});

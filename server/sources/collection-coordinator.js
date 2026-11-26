@@ -210,7 +210,7 @@ class CollectionCoordinator {
     this.scheduler = options.scheduler;
     this.database = options.database;
     this.hunts = options.hunts || require('../intelligence/hunts');
-    this.durableHunts = options.durableHunts || (this.database?.isPg && (options.env||process.env).DISCOVERY_MODE==='advanced'
+    this.durableHunts = options.durableHunts || (this.database?.isPg
       ? require('../discovery/hunt-store').createPgHuntStore(this.database) : null);
     this.huntFilePath = options.huntFilePath;
     this.caseSink = options.caseSink === undefined ? optionalCaseSink() : options.caseSink;
