@@ -29,6 +29,7 @@ const {
   splitMultiParcelNotice,
   deterministicParse,
   parseLegalNotice,
+  parseLegalNoticeAsync,
 } = require('../ai/notice-parser');
 const { detectNoticeState, evaluateNoticeConfidence, CONFIDENCE_THRESHOLD } = require('./email-notice-collector');
 const { getStore, documentId } = require('../routes/document-review');
@@ -277,6 +278,10 @@ class EmailNoticesPipeline {
     this.vault = options.vault !== undefined ? options.vault : defaultVault;
     this.documentReviewStore = options.documentReviewStore || options.store || null;
     this._activeImapClient = null;
+    this.allowAiFallback = options.allowAiFallback !== undefined
+      ? Boolean(options.allowAiFallback)
+      : this.env.EMAIL_NOTICE_AI_FALLBACK === '1';
+    this.aiParser = typeof options.aiParser === 'function' ? options.aiParser : null;
 
     const host = options.host || this.env.IMAP_HOST || '';
     const user = options.user || this.env.IMAP_USER || '';
@@ -456,7 +461,15 @@ class EmailNoticesPipeline {
 
     for (let i = 0; i < parcelSnippets.length; i++) {
       const snippet = parcelSnippets[i];
-      const parsed = deterministicParse(snippet, {
+      const preCheckAdversarial = hasAdversarialPayload ||
+        injectionPatterns.some((p) => p.test(snippet)) ||
+        snippet.includes('[REDACTED_ADVERSARIAL_PAYLOAD]');
+      const parseFn = (this.allowAiFallback && !preCheckAdversarial)
+        ? (this.aiParser || parseLegalNoticeAsync)
+        : deterministicParse;
+      const parsed = await parseFn(snippet, {
+        allowAiFallback: Boolean(this.allowAiFallback && !preCheckAdversarial),
+        database: this.db,
         defaultState: state !== 'UNKNOWN' ? state : null,
       });
 

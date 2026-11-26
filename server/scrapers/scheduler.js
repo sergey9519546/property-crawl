@@ -618,12 +618,21 @@ class IngestionScheduler {
               }
             } catch (_) {}
           }
+          if (scraper.circuitBreaker && typeof scraper.circuitBreaker.hydrateFromDurableCache === 'function' && this.database?.isPg) {
+            await scraper.circuitBreaker.hydrateFromDurableCache(this.database, scraper.sourceKey);
+            if (scraper.circuitBreaker.isOpen()) {
+              throw new Error(`${scraper.name} circuit breaker is OPEN (persisted): ${scraper.circuitBreaker.lastFailureReason || 'cooldown active'}`);
+            }
+          }
           this.inFlight.set(scraper.sourceKey, Date.now());
           let items;
           try {
             items = await withScraperTimeout(scraper, effectiveTimeoutMs, scrapeOptions);
           } finally {
             this.inFlight.delete(scraper.sourceKey);
+            if (scraper.circuitBreaker && typeof scraper.circuitBreaker.persistToDurableCache === 'function' && this.database?.isPg) {
+              await scraper.circuitBreaker.persistToDurableCache(this.database, scraper.sourceKey).catch(() => {});
+            }
           }
           // sourceLastRun is finalized after ingestion or in catch on error
           await assertLease('Collection job lease was lost after source execution');
@@ -893,6 +902,16 @@ class IngestionScheduler {
             circuitOpen: Boolean(scraper.circuitBreaker && scraper.circuitBreaker.isOpen()),
             circuitReason: scraper.circuitBreaker && scraper.circuitBreaker.lastFailureReason
           });
+          if (this.database?.isPg && scraper.circuitBreaker && scraper.circuitBreaker.isOpen()) {
+            try {
+              const { setDurableCache } = require('../enrichment/durable-cache');
+              await setDurableCache('scraper_telemetry', scraper.sourceKey, {
+                circuitBreakerTripped: true,
+                circuitBreakerReason: scraper.circuitBreaker.lastFailureReason || err.message || null,
+                updatedAt: new Date().toISOString()
+              }, { db: this.database, ttlMs: 3600 * 1000 });
+            } catch (_) {}
+          }
           const errorDetails=err&&err.transportCode?{code:err.transportCode,hostname:err.hostname||null,retryable:err.retryable===true}:null;
           sourceResults.push({ sourceId: scraper.sourceKey, accepted: 0, rejected: rejectedForScraper, error: err.message, ...(errorDetails?{errorDetails}:{}) });
           if(this.discoveryStore&&discoveryRun)try{await assertLease();await this.discoveryStore.finishRun(discoveryRun.id,{status:'failed',rejected:rejectedForScraper,error:err.message},ownership);}catch(finishError){if(finishError?.code==='DISCOVERY_JOB_LEASE_LOST')throw finishError;}

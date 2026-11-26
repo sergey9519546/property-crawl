@@ -90,7 +90,7 @@ class BaseScraper {
     this.sourceKey = sourceKey;
     this.timeoutMs = normalizeRequestTimeout(timeoutMs);
     this.maxRetries = maxRetries;
-    this.circuitBreaker = new ScraperCircuitBreaker();
+    this.circuitBreaker = new ScraperCircuitBreaker({ sourceKey });
     this.fetchImpl = fetchImpl;
     this.random = random;
     this.sleepImpl = sleep;
