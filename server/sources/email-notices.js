@@ -467,11 +467,13 @@ class EmailNoticesPipeline {
       const parseFn = (this.allowAiFallback && !preCheckAdversarial)
         ? (this.aiParser || parseLegalNoticeAsync)
         : deterministicParse;
-      const parsed = await parseFn(snippet, {
+      const rawParsed = await parseFn(snippet, {
         allowAiFallback: Boolean(this.allowAiFallback && !preCheckAdversarial),
+        db: this.db,
         database: this.db,
         defaultState: state !== 'UNKNOWN' ? state : null,
       });
+      const parsed = Array.isArray(rawParsed) ? (rawParsed[0] || {}) : (rawParsed || {});
 
       const resolvedState = String(parsed.state || state || 'UNKNOWN').trim().toUpperCase() || 'UNKNOWN';
       if (!parsed.state && resolvedState !== 'UNKNOWN') {

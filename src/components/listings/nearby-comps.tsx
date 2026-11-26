@@ -26,7 +26,7 @@ export function NearbyComps({
   targetSqft,
   targetOpeningBid,
 }: NearbyCompsProps) {
-  const { messages: m, plural, format } = useLocale();
+  const { locale, messages: m, plural, format } = useLocale();
   const [data, setData] = React.useState<WatchlistCompsResponse | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -44,14 +44,14 @@ export function NearbyComps({
       })
       .catch((err) => {
         if (!active) return;
-        setError(err instanceof Error ? err.message : m.detailUi.nearbyCompsFailedLoad);
+        setError(err instanceof Error && err.message ? err.message : "__FAILED_LOAD__");
         setLoading(false);
       });
 
     return () => {
       active = false;
     };
-  }, [listingId, m.detailUi.nearbyCompsFailedLoad]);
+  }, [listingId]);
 
   if (loading) {
     return (
@@ -67,7 +67,7 @@ export function NearbyComps({
   if (error) {
     return (
       <div className="rounded-card border border-line bg-card p-6 shadow-sm">
-        <p className="text-xs font-medium text-catch-ink">{m.detailUi.compsFailed}: {error}</p>
+        <p className="text-xs font-medium text-catch-ink">{m.detailUi.compsFailed}: {error === "__FAILED_LOAD__" ? m.detailUi.nearbyCompsFailedLoad : error}</p>
       </div>
     );
   }
@@ -123,7 +123,8 @@ export function NearbyComps({
             const openingBid = comp.openingBid ?? comp.listing?.openingBid;
             const dealScore = comp.dealScore ?? comp.listing?.dealScore;
             const sqft = comp.sqft ?? comp.listing?.sqft;
-            const distance = typeof comp.distanceKm === "number" ? `${comp.distanceKm.toFixed(1)} km` : null;
+            const kmUnit = locale === "ru" ? "км" : locale === "hy" ? "կմ" : "km";
+            const distance = typeof comp.distanceKm === "number" ? `${comp.distanceKm.toFixed(1)} ${kmUnit}` : null;
 
             if (!id) return null;
 

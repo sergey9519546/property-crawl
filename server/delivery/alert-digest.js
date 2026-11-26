@@ -24,11 +24,12 @@ const PRICE_DROP_CACHE_TTL_MS = 90 * 24 * 60 * 60 * 1000;
 
 function resolvePriorOpeningBid(listing) {
   if (!listing || typeof listing !== 'object') return null;
+  let best = null;
   for (const key of ['peakOpeningBid', 'initialOpeningBid', 'priorOpeningBid']) {
     const n = Number(listing[key]);
-    if (Number.isFinite(n) && n > 0) return n;
+    if (Number.isFinite(n) && n > 0 && (best === null || n > best)) best = n;
   }
-  return null;
+  return best;
 }
 
 function formatCurrency(amount) {

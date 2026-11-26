@@ -676,6 +676,7 @@ function evaluateDeedRecord(record, { targetZip, cutoffMs, asOfEndMs }) {
   }
 
   const props = record.properties && typeof record.properties === 'object' ? record.properties : null;
+  const rawAttrs = record.rawAttributes || record.rawAttrs || props?.rawAttributes || props?.rawAttrs || null;
   const price = parseFinitePositive(
     record.salePrice ??
       record.lastSalePrice ??

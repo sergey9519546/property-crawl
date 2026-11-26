@@ -601,7 +601,7 @@ async function handleParse(req, res, options = {}) {
   const requestedModel = route.model;
   let model = requestedModel;
   let provider = route.provider;
-  const cacheKey = `${CACHE_VERSION}\n${cleanNotice}`;
+  const cacheKey = `${CACHE_VERSION}\n${allowAiFallback === true ? 'hybrid' : 'standard'}\n${cleanNotice}`;
   const cachedResponse = await cache.get(cacheKey, requestedModel);
   if (cachedResponse) {
     try {
@@ -620,7 +620,7 @@ async function handleParse(req, res, options = {}) {
   const spendPool = spendDb?.isPg && spendDb?.pool?.query ? spendDb.pool : null;
   let hybridParcels = null;
   if (allowAiFallback === true) {
-    hybridParcels = await parseLegalNoticeAsync(noticeText, {
+    hybridParcels = await parseLegalNoticeAsync(cleanNotice, {
       ...(options?.parseOptions || {}),
       allowAiFallback: true,
       db: spendDb,
@@ -629,7 +629,7 @@ async function handleParse(req, res, options = {}) {
       oidcToken,
       llmExtractFn: options?.llmExtractFn,
     });
-    if (hybridParcels?.[0]?._strategy === 'hybrid_citation_locked') {
+    if (Array.isArray(hybridParcels) && hybridParcels.some((p) => p?._strategy === 'hybrid_citation_locked')) {
       strategy = 'hybrid_citation_locked';
     }
   } else if ((confidence < 0.75 || forceLlm === true) && route.configured && !(await isOverBudgetDurable(spendPool, runtimeCostTracker))) {

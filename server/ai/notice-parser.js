@@ -259,7 +259,8 @@ function parseLegalNotice(rawNotice = '', options = {}) {
     ? options.defaultState
     : (options.state ? String(options.state).trim().toUpperCase() : null);
   const parseOptions = { ...options, defaultState: explicitState };
-  const parcels = splitMultiParcelNotice(rawNotice, parseOptions);
+  const safeNotice = neutralizePromptInjection(rawNotice);
+  const parcels = splitMultiParcelNotice(safeNotice, parseOptions);
   return parcels.map(parcelText => deterministicParse(parcelText, parseOptions));
 }
 
@@ -297,7 +298,8 @@ async function callHybridLlmEndpoint(parcelText, options = {}) {
   const openaiKey = env?.OPENAI_API_KEY || null;
   if (!gatewayToken && !geminiKey && !openaiKey) return null;
 
-  const spendPool = options.db?.isPg && options.db?.pool?.query ? options.db.pool : null;
+  const spendDb = options.db || options.database;
+  const spendPool = spendDb?.isPg && spendDb?.pool?.query ? spendDb.pool : null;
   if (await isOverBudgetDurable(spendPool, runtimeParserCostTracker)) {
     return null;
   }
@@ -469,6 +471,17 @@ function applyCitationLockedCandidates(parcelText, baseParsed, rawPayload) {
     } else {
       const val = typeof entry.value === 'string' ? entry.value.trim() : String(entry.value ?? '').trim();
       if (!val) continue;
+      const normQuote = span.quote.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+      const normVal = val.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+      let corroborated = Boolean(normVal && normQuote.includes(normVal));
+      if (!corroborated && field === 'sale_date') {
+        const isoMatch = val.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (isoMatch) {
+          const [, y, , d] = isoMatch;
+          corroborated = normQuote.includes(y) && normQuote.includes(String(Number(d)));
+        }
+      }
+      if (!corroborated) continue;
       if (!mergedSpans[field] || !merged[field]) {
         merged[field] = val;
         mergedSpans[field] = span;
@@ -505,7 +518,8 @@ async function parseLegalNoticeAsync(rawNotice = '', options = {}) {
     ? options.defaultState
     : (options.state ? String(options.state).trim().toUpperCase() : null);
   const parseOptions = { ...options, defaultState: explicitState };
-  const parcels = splitMultiParcelNotice(rawNotice, parseOptions);
+  const safeNotice = neutralizePromptInjection(rawNotice);
+  const parcels = splitMultiParcelNotice(safeNotice, parseOptions);
   const deterministic = parcels.map((parcelText) => deterministicParse(parcelText, parseOptions));
 
   if (options.allowAiFallback !== true || deterministic.every((p) => p.confidence_score >= 0.8)) {
@@ -524,7 +538,7 @@ async function parseLegalNoticeAsync(rawNotice = '', options = {}) {
     const hash = crypto.createHash('sha256').update(String(parcelText)).digest('hex');
 
     try {
-      const cached = await getDurableCache(NOTICE_AI_CACHE_NAMESPACE, hash, { db: options.db });
+      const cached = await getDurableCache(NOTICE_AI_CACHE_NAMESPACE, hash, { db: options.db || options.database });
       if (cached && typeof cached === 'object' && cached.evidenceSpans) {
         results.push(cached);
         continue;
@@ -557,7 +571,7 @@ async function parseLegalNoticeAsync(rawNotice = '', options = {}) {
 
     try {
       await setDurableCache(NOTICE_AI_CACHE_NAMESPACE, hash, hybrid, {
-        db: options.db,
+        db: options.db || options.database,
         ttlMs: NOTICE_AI_CACHE_TTL_MS,
       });
     } catch {

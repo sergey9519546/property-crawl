@@ -19,11 +19,12 @@ const { notifySavedSearchWebhook } = require('../delivery/webhook-notify');
 
 function resolvePriorOpeningBid(listing) {
   if (!listing || typeof listing !== 'object') return null;
+  let best = null;
   for (const key of ['peakOpeningBid', 'initialOpeningBid', 'priorOpeningBid']) {
     const n = Number(listing[key]);
-    if (Number.isFinite(n) && n > 0) return n;
+    if (Number.isFinite(n) && n > 0 && (best === null || n > best)) best = n;
   }
-  return null;
+  return best;
 }
 
 // Run every active saved search for a user against a batch of

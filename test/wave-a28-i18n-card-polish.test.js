@@ -105,8 +105,8 @@ test('Wave A28: discovery-card.tsx renders prior/peak bid strikethrough and neve
   const src = fs.readFileSync(path.join(ROOT, 'src/components/listings/discovery-card.tsx'), 'utf8');
   assert.ok(src.includes('peakOpeningBid'), 'discovery-card.tsx must check peakOpeningBid');
   assert.ok(src.includes('initialOpeningBid'), 'discovery-card.tsx must check initialOpeningBid');
-  assert.ok(src.includes('bid !== null && bid > 0 && priorRaw !== null && priorRaw > bid'), 'discovery-card.tsx must guard openingBid > 0 and prior > openingBid');
-  assert.ok(src.includes('ml-1.5 text-xs font-normal text-ink-3 line-through'), 'discovery-card.tsx must render inline strikethrough span with Evidence Ink token');
+  assert.ok(src.includes('bid !== null && bid > 0 && priorRaw !== null && Math.round(priorRaw) > Math.round(bid)'), 'discovery-card.tsx must guard openingBid > 0 and rounded prior > openingBid');
+  assert.ok(src.includes('<del className="ml-1.5 text-xs font-normal text-ink-3 line-through">'), 'discovery-card.tsx must render semantic <del> strikethrough with Evidence Ink token');
   assert.equal(/\blisting\.raw\b/.test(src), false, 'discovery-card.tsx must never reference listing.raw');
 });
 

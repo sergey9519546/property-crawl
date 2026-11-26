@@ -178,18 +178,23 @@ function createScrapersHandler(dependencies = {}) {
               GROUP BY source_key`
           ).catch(() => null),
           database.pool.query(
-            `SELECT cache_key, payload
+            `SELECT namespace, cache_key, payload
                FROM durable_kv_cache
-              WHERE namespace = 'scraper_telemetry'
+              WHERE namespace IN ('scraper_telemetry', 'scraper_breaker')
                 AND expires_at > NOW()`
           ).catch(() => null),
         ]);
 
         const telemetryBySource = new Map();
+        const breakerBySource = new Map();
         if (Array.isArray(telemetryRes?.rows)) {
           for (const row of telemetryRes.rows) {
             if (row?.cache_key && row?.payload && typeof row.payload === 'object') {
-              telemetryBySource.set(row.cache_key, row.payload);
+              if (row.namespace === 'scraper_breaker') {
+                breakerBySource.set(row.cache_key, row.payload);
+              } else {
+                telemetryBySource.set(row.cache_key, row.payload);
+              }
             }
           }
         }
@@ -238,6 +243,8 @@ function createScrapersHandler(dependencies = {}) {
               mergedStatus = existing.status;
             }
             const persistedTelemetry = telemetryBySource.get(key) || null;
+            const persistedBreaker = breakerBySource.get(key) || null;
+            const persistedBreakerOpen = Boolean(persistedBreaker && persistedBreaker.state === 'OPEN');
             const merged = {
               key,
               sourceKey: key,
@@ -259,6 +266,8 @@ function createScrapersHandler(dependencies = {}) {
                 : Number(existing?.averageLatencyMs || 0),
               driftDetected: Boolean(persistedTelemetry?.driftDetected ?? existing?.driftDetected),
               driftAlarm: persistedTelemetry?.driftAlarm ?? existing?.driftAlarm ?? null,
+              circuitBreakerTripped: Boolean(existing?.circuitBreakerTripped || persistedBreakerOpen),
+              ...(persistedBreakerOpen && persistedBreaker?.lastFailureReason ? { circuitBreakerReason: persistedBreaker.lastFailureReason } : {}),
               listingServing: disp.isListingServing,
               ...(isAuthorized && (existing?.lastError || row.error)
                 ? { lastError: existing?.lastError || row.error }

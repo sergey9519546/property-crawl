@@ -248,7 +248,7 @@ class ScraperCircuitBreaker {
       const { setDurableCache } = require('../enrichment/durable-cache');
       return await setDurableCache('scraper_breaker', String(cacheKey || this.sourceKey || 'default'), this.toJSON(), {
         db,
-        ttlMs: 3600 * 1000
+        ttlMs: Math.max(3600 * 1000, Number(this.cooldownMs) || 3600 * 1000)
       });
     } catch {
       return false;

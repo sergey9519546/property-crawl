@@ -33,7 +33,7 @@ const ADAPTER_LABELS: Record<string, string> = {
 };
 
 export function EnrichmentView({ parcelKey, fetchImpl, showRefreshButton = true }: EnrichmentViewProps) {
-  const { locale, messages: m } = useLocale();
+  const { messages: m } = useLocale();
   const session = useWorkspaceSession();
   const [view, setView] = useState<EnrichmentAggregateResponse | null>(null);
   const [adapters, setAdapters] = useState<string[]>(() => Object.keys(ADAPTER_LABELS));
