@@ -15,6 +15,7 @@ import { sourceDisplayText } from "@/lib/source-display";
 import { bandForScore } from "@/lib/score-bands";
 import { useLocale } from "@/components/i18n/locale-provider";
 import { localizeDisplayDate, localizeNumberText } from "@/lib/i18n/domain";
+import { formatUsd } from "@/lib/i18n/translator";
 
 const DISTRESS_STAGE_BADGE: Record<string, { label: string; className: string }> = {
   reo: { label: "REO", className: "bg-paper text-ink-2" },
@@ -144,7 +145,7 @@ export const DiscoveryCard = React.memo(function DiscoveryCard({ listing, href, 
         {listing.crossSourceMatches && listing.crossSourceMatches.length > 0 ? (
           <span
             className="rounded bg-paper px-1.5 py-0.5 text-xs font-semibold text-ink"
-            title={listing.crossSourceMatches.map((item) => `${sourceDisplayText(item.source)}${item.openingBid != null ? ` ($${Number(item.openingBid).toLocaleString("en-US")})` : ""}`).join("\n")}
+            title={listing.crossSourceMatches.map((item) => `${sourceDisplayText(item.source)}${item.openingBid != null ? ` (${formatUsd(locale, Number(item.openingBid))})` : ""}`).join("\n")}
           >
             {format(m.listingsUi.sourcesCount, { count: listing.crossSourceMatches.length + 1 })}
           </span>
@@ -182,14 +183,14 @@ export const DiscoveryCard = React.memo(function DiscoveryCard({ listing, href, 
               const priorRaw = knownNumber((listing as { peakOpeningBid?: unknown; initialOpeningBid?: unknown }).peakOpeningBid)
                 ?? knownNumber((listing as { initialOpeningBid?: unknown }).initialOpeningBid);
               return bid !== null && bid > 0 && priorRaw !== null && Math.round(priorRaw) > Math.round(bid) ? (
-                <del className="ml-1.5 text-xs font-normal text-ink-3 line-through">${Math.round(priorRaw).toLocaleString("en-US")}</del>
+                <del className="ml-1.5 text-xs font-normal text-ink-3 line-through">{formatUsd(locale, Math.round(priorRaw))}</del>
               ) : null;
             })()}
           </dd>
           {knownNumber(listing.openingBid) === null && knownNumber(listing.judgment) !== null ? (
-            <p className="mt-1 text-xs text-ink-3">{m.listingsUi.judgmentPrefix} <span className="font-semibold text-ink">${Number(listing.judgment).toLocaleString("en-US")}</span></p>
+            <p className="mt-1 text-xs text-ink-3">{m.listingsUi.judgmentPrefix} <span className="font-semibold text-ink">{formatUsd(locale, Number(listing.judgment))}</span></p>
           ) : knownNumber(listing.assessed) !== null ? (
-            <p className="mt-1 text-xs text-ink-3">{m.listingsUi.assessedPrefix} <span className="font-medium text-ink-2">${Number(listing.assessed).toLocaleString("en-US")}</span></p>
+            <p className="mt-1 text-xs text-ink-3">{m.listingsUi.assessedPrefix} <span className="font-medium text-ink-2">{formatUsd(locale, Number(listing.assessed))}</span></p>
           ) : null}
         </div>
         <div>

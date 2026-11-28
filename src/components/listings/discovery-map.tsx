@@ -7,6 +7,7 @@ import type { Feature, FeatureCollection, Point } from "geojson";
 import type { DiscoveryFilters } from "@/lib/discovery-query";
 import { discoverySearchParams } from "@/lib/discovery-query";
 import { useLocale } from "@/components/i18n/locale-provider";
+import { formatUsd } from "@/lib/i18n/translator";
 import { AERIAL_IMAGERY_STYLE, OPENFREEMAP_POSITRON_STYLE, RASTER_STREET_STYLE } from "@/lib/map-style";
 import { attachBasemapFallback, switchBasemapStyle, toggleFemaFloodOverlay } from "@/lib/map-controller";
 import { SOURCES } from "@/components/terminal/property-data";
@@ -69,7 +70,7 @@ function ensureDiscoveryLayers(
     const existingSource = map.getSource(DISCOVERY_SOURCE_ID) as GeoJSONSource | undefined;
     if (existingSource) {
       existingSource.setData(collection);
-    } else if (map.isStyleLoaded()) {
+    } else if (map.isStyleLoaded() || Boolean(map.getStyle()?.layers)) {
       map.addSource(DISCOVERY_SOURCE_ID, { type: "geojson", data: collection });
       map.addLayer({
         id: DISCOVERY_CLUSTER_LAYER_ID,
@@ -226,7 +227,7 @@ export function DiscoveryMap({
           sub.textContent = [
             [item.city, item.state].filter(Boolean).join(", "),
             typeof item.openingBid === "number" && Number.isFinite(item.openingBid) && item.openingBid > 0
-              ? `$${Math.round(item.openingBid).toLocaleString("en-US")}`
+              ? formatUsd(locale, item.openingBid)
               : null,
           ].filter(Boolean).join(" · ");
           row.append(link, sub);
@@ -236,7 +237,7 @@ export function DiscoveryMap({
       .catch(() => {
         status.textContent = "Unable to expand cluster records.";
       });
-  }, [m.listingsUi.openRecordBtn]);
+  }, [locale, m.listingsUi.openRecordBtn]);
 
   const openPinPopup = React.useCallback((coords: [number, number], props: MapFeatureProps) => {
     const map = mapRef.current;
@@ -260,7 +261,7 @@ export function DiscoveryMap({
       const metaParts = [
         [props.city, props.state].filter(Boolean).join(", "),
         typeof props.openingBid === "number" && Number.isFinite(props.openingBid) && props.openingBid > 0
-          ? `$${Math.round(props.openingBid).toLocaleString("en-US")}`
+          ? formatUsd(locale, props.openingBid)
           : null,
       ].filter(Boolean);
       if (metaParts.length > 0) {
@@ -300,7 +301,7 @@ export function DiscoveryMap({
       .setLngLat(coords)
       .setDOMContent(root)
       .addTo(map);
-  }, [m.listingsUi.compareBtn, m.listingsUi.compareFullBtn, m.listingsUi.inCompareBtn, m.listingsUi.openRecordBtn]);
+  }, [locale, m.listingsUi.compareBtn, m.listingsUi.compareFullBtn, m.listingsUi.inCompareBtn, m.listingsUi.openRecordBtn]);
 
   const load = React.useCallback(async () => {
     const map = mapRef.current;
@@ -364,7 +365,10 @@ export function DiscoveryMap({
 
       const rehydrate = () => {
         if (!disposed) {
+          if (fallbackTimer !== null) { window.clearTimeout(fallbackTimer); fallbackTimer = null; }
+          if (secondaryTimer !== null) { window.clearTimeout(secondaryTimer); secondaryTimer = null; }
           ensureDiscoveryLayers(map, collectionRef.current, floodOverlayRef.current);
+          if (collectionRef.current.features.length > 0) setError("");
         }
       };
 
@@ -389,7 +393,7 @@ export function DiscoveryMap({
           return;
         }
         secondaryTimer = window.setTimeout(() => {
-          if (!disposed && !map.isStyleLoaded() && !map.loaded()) setError(m.listingsUi.mapUnavailable);
+          if (!disposed && !map.isStyleLoaded() && !map.loaded() && !map.getStyle()?.layers && collectionRef.current.features.length === 0) setError(m.listingsUi.mapUnavailable);
         }, 5_000);
       };
 
@@ -420,6 +424,7 @@ export function DiscoveryMap({
       map.on("mouseleave", DISCOVERY_PIN_LAYER_ID, clearPointer);
 
       const requestPins = () => { if (!disposed) void loadRef.current?.(); };
+      map.on("style.load", rehydrate);
       map.once("load", () => {
         rehydrate();
         requestPins();

@@ -6,7 +6,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { CheckCircle2, CreditCard, Loader2, LogOut, Mail } from "lucide-react";
 import { useWorkspaceSession } from "@/components/workspace/workspace-shell";
 import { useLocale } from "@/components/i18n/locale-provider";
-import { formatLocaleDate } from "@/lib/i18n/translator";
+import type { Locale } from "@/lib/i18n/config";
+import { formatLocaleDate, formatUsd } from "@/lib/i18n/translator";
 
 type BillingTier = "pro" | "desk";
 
@@ -26,9 +27,13 @@ async function json(response: Response) {
   return (await response.json().catch(() => ({}))) as Record<string, unknown>;
 }
 
-function priceLabel(price: Price, intlLocale: string) {
+function priceLabel(price: Price, locale: Locale, intlLocale: string) {
   if (!price || price.unitAmount === null || !price.currency) return null;
-  const amount = new Intl.NumberFormat(intlLocale === "hy-AM" ? "en-US" : intlLocale, { style: "currency", currency: price.currency.toUpperCase() }).format(price.unitAmount / 100);
+  const value = price.unitAmount / 100;
+  const amount =
+    price.currency.toUpperCase() === "USD"
+      ? formatUsd(locale, value, { maximumFractionDigits: price.unitAmount % 100 === 0 ? 0 : 2 })
+      : new Intl.NumberFormat(intlLocale === "hy-AM" ? "en-US" : intlLocale, { style: "currency", currency: price.currency.toUpperCase() }).format(value);
   return price.interval ? `${amount} / ${price.interval}` : amount;
 }
 
@@ -194,7 +199,7 @@ export function AccountPanel() {
     );
   }
 
-  const label = priceLabel(price, intlLocale);
+  const label = priceLabel(price, locale, intlLocale);
   const periodEnd = account.currentPeriodEnd ? formatLocaleDate(locale, account.currentPeriodEnd, { dateStyle: "medium", timeZone: "UTC" }) : null;
   const activeTierLabel = account.billingTier === "desk" ? "Desk" : account.billingTier === "pro" ? "Pro" : null;
   return (
@@ -234,14 +239,14 @@ export function AccountPanel() {
                   onClick={() => setSelectedTier("pro")}
                   className={`rounded-control px-3 py-1.5 transition ${selectedTier === "pro" ? "bg-ink text-white" : "text-ink-2 hover:text-ink"}`}
                 >
-                  Pro ($39/mo)
+                  Pro ({formatUsd(locale, 39)}/mo)
                 </button>
                 <button
                   type="button"
                   onClick={() => setSelectedTier("desk")}
                   className={`rounded-control px-3 py-1.5 transition ${selectedTier === "desk" ? "bg-ink text-white" : "text-ink-2 hover:text-ink"}`}
                 >
-                  Desk ($149/mo)
+                  Desk ({formatUsd(locale, 149)}/mo)
                 </button>
               </div>
               <button type="button" disabled={Boolean(pending)} onClick={async () => { const body = await post("/api/checkout", "checkout", "POST", { tier: selectedTier }); if (typeof body?.url === "string") window.location.assign(body.url); }} className={`${button} bg-ink text-white hover:bg-ink-2`}>

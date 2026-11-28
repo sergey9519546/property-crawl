@@ -41,9 +41,11 @@ export function PropertyDocuments({ evidence, publisherUrl, id = 'property-docum
   const items = evidence?.items || [];
   const status = evidence?.status || 'unknown';
   const countText = evidence?.count != null
-    ? (labels
-        ? selectPlural(locale, evidence.count, labels.docsRefsCount)
-        : `${evidence.count} ${evidence.count === 1 ? 'reference' : 'references'}`)
+    ? selectPlural(
+        locale,
+        evidence.count,
+        labels ? labels.docsRefsCount : { one: '{count} reference', other: '{count} references' },
+      )
     : null;
   const accessLabels: Record<DocumentEvidence['items'][number]['accessState'], string> = labels
     ? {

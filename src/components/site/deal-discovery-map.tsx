@@ -76,7 +76,7 @@ function finite(value: unknown): number | null {
 function moneyOrDash(value: unknown, locale: Locale): string {
   const n = finite(value);
   if (n === null || n <= 0) return "—";
-  return locale === "en" ? `$${Math.round(n).toLocaleString()}` : formatUsd(locale, n);
+  return formatUsd(locale, n);
 }
 
 function isClevelandCoord(lat: number, lng: number): boolean {

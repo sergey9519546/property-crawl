@@ -19,6 +19,7 @@ import {
 } from "@/lib/enrichment-api";
 import { useWorkspaceSession } from "@/components/workspace/workspace-shell";
 import { useLocale } from "@/components/i18n/locale-provider";
+import { formatUsd } from "@/lib/i18n/translator";
 
 interface EnrichmentViewProps {
   parcelKey: string | null | undefined;
@@ -32,8 +33,15 @@ const ADAPTER_LABELS: Record<string, string> = {
   'ca-controller-tax-sale': 'CA Controller tax-sale',
 };
 
+const OUTCOME_LABELS: Record<string, string> = {
+  success: "succeeded",
+  empty: "no records",
+  failed: "failed",
+  skipped: "skipped",
+};
+
 export function EnrichmentView({ parcelKey, fetchImpl, showRefreshButton = true }: EnrichmentViewProps) {
-  const { messages: m } = useLocale();
+  const { locale, messages: m, plural } = useLocale();
   const session = useWorkspaceSession();
   const [view, setView] = useState<EnrichmentAggregateResponse | null>(null);
   const [adapters, setAdapters] = useState<string[]>(() => Object.keys(ADAPTER_LABELS));
@@ -111,8 +119,11 @@ export function EnrichmentView({ parcelKey, fetchImpl, showRefreshButton = true 
         acc[outcome.outcome] = (acc[outcome.outcome] || 0) + 1;
         return acc;
       }, {});
-      const parts = Object.entries(counts).map(([k, v]) => `${v} ${k}`);
-      const unit = refreshed.adapterOutcomes.length === 1 ? m.detailUi.enrichmentAdapterSingular : m.detailUi.enrichmentAdapterPlural;
+      const parts = Object.entries(counts).map(([k, v]) => `${v} ${OUTCOME_LABELS[k] || k.replace(/_/g, " ")}`);
+      const unit = plural(refreshed.adapterOutcomes.length, {
+        one: m.detailUi.enrichmentAdapterSingular,
+        other: m.detailUi.enrichmentAdapterPlural,
+      });
       const elapsed = typeof refreshed.durationMs === 'number'
         ? m.detailUi.enrichmentInMs.replace('{ms}', String(refreshed.durationMs))
         : '';
@@ -128,7 +139,7 @@ export function EnrichmentView({ parcelKey, fetchImpl, showRefreshButton = true 
     } finally {
       setRefreshing(false);
     }
-  }, [parcelKey, fetchImpl, isValidKey, session, selectedSources, adapters, m.detailUi]);
+  }, [parcelKey, fetchImpl, isValidKey, session, selectedSources, adapters, m.detailUi, plural]);
 
   if (!isValidKey) {
     return (
@@ -192,6 +203,7 @@ export function EnrichmentView({ parcelKey, fetchImpl, showRefreshButton = true 
         {adapterSelector}
         {showRefreshButton && (
           <button
+            type="button"
             onClick={onRefresh}
             disabled={refreshing || selectedSources.length === 0}
             className="mt-3 rounded-control border border-line bg-card px-3 py-1.5 text-sm font-semibold disabled:opacity-50"
@@ -214,11 +226,12 @@ export function EnrichmentView({ parcelKey, fetchImpl, showRefreshButton = true 
             {m.detailUi.crossSourceEnrichment}
           </h2>
           <p className="mt-1 text-xs text-ink-3">
-            parcelKey <code>{parcelKey}</code> · {(view.listingCount === 1 ? m.detailUi.enrichmentListingSingular : m.detailUi.enrichmentListingPlural).replace('{count}', String(view.listingCount))} {m.detailUi.enrichmentAcrossWord} {(view.sourceCount === 1 ? m.detailUi.enrichmentSourceSingular : m.detailUi.enrichmentSourcePlural).replace('{count}', String(view.sourceCount))}
+            parcelKey <code>{parcelKey}</code> · {plural(view.listingCount, { one: m.detailUi.enrichmentListingSingular, other: m.detailUi.enrichmentListingPlural })} {m.detailUi.enrichmentAcrossWord} {plural(view.sourceCount, { one: m.detailUi.enrichmentSourceSingular, other: m.detailUi.enrichmentSourcePlural })}
           </p>
         </div>
         {showRefreshButton && (
           <button
+            type="button"
             onClick={onRefresh}
             disabled={refreshing || selectedSources.length === 0}
             className="rounded-control border border-line bg-card px-3 py-1.5 text-sm font-semibold disabled:opacity-50"
@@ -249,7 +262,7 @@ export function EnrichmentView({ parcelKey, fetchImpl, showRefreshButton = true 
             <div><dt className="inline font-semibold">{m.detailUi.enrichmentSourceLabel}</dt> <dd className="inline">{view.freshestObservation.source}</dd></div>
             <div><dt className="inline font-semibold">{m.detailUi.enrichmentObservedLabel}</dt> <dd className="inline">{view.freshestObservation.observedAt || m.detailUi.enrichmentUnknown}</dd></div>
             <div><dt className="inline font-semibold">{m.detailUi.enrichmentAddressLabel}</dt> <dd className="inline">{[view.freshestObservation.address, view.freshestObservation.city, view.freshestObservation.state, view.freshestObservation.zip].filter(Boolean).join(', ') || m.detailUi.enrichmentUnknown}</dd></div>
-            <div><dt className="inline font-semibold">{m.detailUi.enrichmentOpeningBidLabel}</dt> <dd className="inline">{view.freshestObservation.openingBid == null ? m.detailUi.enrichmentUnknown : `$${view.freshestObservation.openingBid}`}</dd></div>
+            <div><dt className="inline font-semibold">{m.detailUi.enrichmentOpeningBidLabel}</dt> <dd className="inline">{view.freshestObservation.openingBid == null ? m.detailUi.enrichmentUnknown : formatUsd(locale, Number(view.freshestObservation.openingBid))}</dd></div>
           </dl>
         </div>
       )}
@@ -271,13 +284,13 @@ export function EnrichmentView({ parcelKey, fetchImpl, showRefreshButton = true 
                 <td className="px-3 py-2 align-top font-mono text-label text-ink-3">#{entry.rank ?? '?'}</td>
                 <td className="px-3 py-2 align-top font-medium text-ink-2">
                   {ADAPTER_LABELS[entry.source] || entry.source}
-                  <p className="mt-0.5 text-meta font-normal text-ink-3">{(entry.listingIds.length === 1 ? m.detailUi.enrichmentListingSingular : m.detailUi.enrichmentListingPlural).replace('{count}', String(entry.listingIds.length))}</p>
+                  <p className="mt-0.5 text-meta font-normal text-ink-3">{plural(entry.listingIds.length, { one: m.detailUi.enrichmentListingSingular, other: m.detailUi.enrichmentListingPlural })}</p>
                 </td>
                 <td className="px-3 py-2 align-top text-ink-3">{entry.summary.observedAt || m.detailUi.enrichmentUnknown}</td>
                 <td className="px-3 py-2 align-top text-ink-3">{entry.summary.evidenceCount}</td>
                 <td className="px-3 py-2 align-top">
                   <span className={`rounded-full px-2 py-0.5 text-label font-semibold ${confidenceBandColor(entry.confidenceBand)}`}>
-                    {formatConfidence(entry.confidence)} · {entry.confidenceBand || m.detailUi.enrichmentUnknown}
+                    {formatConfidence(entry.confidence)} · {entry.confidenceBand ? confidenceBandLabel(entry.confidenceBand) : m.detailUi.enrichmentUnknown}
                   </span>
                 </td>
               </tr>

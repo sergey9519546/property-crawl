@@ -5,6 +5,8 @@ import Link from "next/link";
 import { ArrowRight, Check, Clock3, ExternalLink, GitCompareArrows, RotateCcw, SearchCheck } from "lucide-react";
 import { useResolvedWorkspaceSession } from "@/components/workspace/workspace-shell";
 import { useLocale } from "@/components/i18n/locale-provider";
+import type { Locale } from "@/lib/i18n/config";
+import { formatUsd } from "@/lib/i18n/translator";
 
 type ChangeItem = {
   id: string;
@@ -16,14 +18,14 @@ type ChangeItem = {
   observedAt?: string | null;
 };
 
-function formatCurrency(val: number | null | undefined, notListedLabel: string, intlLocale: string): string {
+function formatCurrency(val: number | null | undefined, notListedLabel: string, locale: Locale): string {
   if (val === null || val === undefined) return notListedLabel;
-  return new Intl.NumberFormat(intlLocale === "hy-AM" ? "en-US" : intlLocale, { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(val);
+  return formatUsd(locale, val);
 }
 
 export function SecondLookShowcase() {
   const session = useResolvedWorkspaceSession();
-  const { intlLocale, messages } = useLocale();
+  const { locale, messages, format } = useLocale();
   const sl = messages.home.secondLook;
   const demoItems: ChangeItem[] = React.useMemo(
     () => sl.demoItems.map((d) => ({ ...d })),
@@ -44,12 +46,12 @@ export function SecondLookShowcase() {
         if (liveDrops.length > 0 && !unmounted) {
           const mapped: ChangeItem[] = liveDrops.slice(0, 4).map((drop: { listingId: string; previousBid: number | null; currentBid: number | null; deltaPct: number | null; delta: number | null; reason: string | null }, idx: number) => ({
             id: drop.listingId || `drop-${idx}`,
-            label: `Opening bid dropped ${Math.abs(Math.round((drop.deltaPct || 0) * 100))}%`,
-            before: formatCurrency(drop.previousBid, messages.common.notPublished, intlLocale),
-            after: formatCurrency(drop.currentBid, messages.common.notPublished, intlLocale),
-            reason: drop.reason || `The opening bid went down by ${formatCurrency(Math.abs(drop.delta || 0), messages.common.notPublished, intlLocale)}.`,
+            label: format(sl.liveDropLabel, { pct: Math.abs(Math.round((drop.deltaPct || 0) * 100)) }),
+            before: formatCurrency(drop.previousBid, messages.common.notPublished, locale),
+            after: formatCurrency(drop.currentBid, messages.common.notPublished, locale),
+            reason: drop.reason || format(sl.liveDropReason, { amount: formatCurrency(Math.abs(drop.delta || 0), messages.common.notPublished, locale) }),
             listingId: drop.listingId,
-            observedAt: "Recently",
+            observedAt: sl.observedRecently,
           }));
           setLiveItems(mapped);
           setActive(mapped[0].id);
@@ -60,7 +62,7 @@ export function SecondLookShowcase() {
     }
     void loadLiveFeed();
     return () => { unmounted = true; };
-  }, [session?.memberTools, session?.authenticated, intlLocale, messages.common.notPublished]);
+  }, [session?.memberTools, session?.authenticated, locale, format, messages.common.notPublished, sl.liveDropLabel, sl.liveDropReason, sl.observedRecently]);
 
   const isLive = liveItems !== null && liveItems.length > 0;
   const items = isLive ? liveItems : demoItems;

@@ -243,7 +243,11 @@ export function WorkspaceSettingsView() {
             <div className="rounded-control bg-paper p-4">
               <dt className="text-xs font-medium text-ink-3 uppercase tracking-wider">{t.invModeLabel}</dt>
               <dd className="mt-1 font-semibold text-ink">
-                {loading ? t.checking : healthData?.dataMode || t.unknown}
+                {loading
+                  ? t.checking
+                  : healthData?.dataMode
+                    ? (t.dataModeLabels[healthData.dataMode as keyof typeof t.dataModeLabels] ?? healthData.dataMode)
+                    : t.unknown}
               </dd>
             </div>
             <div className="rounded-control bg-paper p-4">

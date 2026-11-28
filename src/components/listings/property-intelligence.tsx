@@ -185,16 +185,39 @@ function valueLabel(value: unknown, key: string | undefined, locale: Locale, not
   if (value === null || value === undefined || value === '') return notEstablished;
   if (typeof value === 'number') {
     if (key && moneyFields.has(key)) {
-      return locale === 'en'
-        ? value.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
-        : formatUsd(locale, value);
+      return formatUsd(locale, value);
     }
     if (key === 'vacancyRate') return `${(value * 100).toFixed(1)}%`;
-    return locale === 'en' ? value.toLocaleString() : formatLocaleNumber(locale, value);
+    return formatLocaleNumber(locale, value);
   }
   return sourceDisplayText(String(value));
 }
-const humanize = (value: string) => value.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase());
+const SCHEMA_CODE_LABELS: Record<string, string> = {
+  PUBLIC_RECORD_BENCHMARK: 'Public record benchmark',
+  PA_COMMON_LEVEL_RATIO: 'PA common level ratio',
+  NON_AUCTION_DISPOSITION: 'Non-auction disposition',
+  annualPropertyTax_or_annualTaxRate: 'Annual property tax or tax rate',
+  monthlyInsurance: 'Monthly insurance',
+  minimum_floor: 'Minimum floor',
+  Minimum_floor: 'Minimum floor',
+};
+const humanize = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  if (SCHEMA_CODE_LABELS[trimmed]) return SCHEMA_CODE_LABELS[trimmed];
+  const isAllUpper = /^[A-Z0-9_ -]+$/.test(trimmed);
+  const spaced = trimmed
+    .replace(/_/g, ' ')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const normalized = isAllUpper ? spaced.toLowerCase() : spaced;
+  return normalized
+    .replace(/^./, (c) => c.toUpperCase())
+    .replace(/\b(pa|nj|fl|oh|ca|ny|tx|hud|fema|epa|usgs|hoa|apn|gis|safmr|hpi|grm)\b/gi, (m) => m.toUpperCase());
+};
+const formatSchemaText = (value: string) =>
+  value.replace(/\b(?:PUBLIC_RECORD_BENCHMARK|PA_COMMON_LEVEL_RATIO|annualPropertyTax_or_annualTaxRate|monthlyInsurance|Minimum_floor|minimum_floor)\b/g, (token) => SCHEMA_CODE_LABELS[token] || humanize(token));
 const signedPct = (n: number) => `${n > 0 ? '+' : ''}${n}%`;
 
 function hasValidUsCoordinates(lat: number | null | undefined, lng: number | null | undefined): boolean {
@@ -205,12 +228,12 @@ function hasValidUsCoordinates(lat: number | null | undefined, lng: number | nul
 }
 
 export function PropertyIntelligence({ listingId, documentsShown = false, lat, lng }: { listingId: string; documentsShown?: boolean; lat?: number | null; lng?: number | null }) {
-  const { locale, messages } = useLocale();
+  const { locale, messages, plural } = useLocale();
   const t = messages.intelUi;
   const d = messages.detailUi;
-  const fmtDate = (value: string) => (locale === 'en' ? new Date(value).toLocaleDateString() : formatLocaleDate(locale, value));
-  const fmtNum = (n: number) => (locale === 'en' ? n.toLocaleString() : formatLocaleNumber(locale, n));
-  const fmtUsdVal = (n: number) => (locale === 'en' ? `$${Math.round(n).toLocaleString()}` : formatUsd(locale, n));
+  const fmtDate = (value: string) => formatLocaleDate(locale, value);
+  const fmtNum = (n: number) => formatLocaleNumber(locale, n);
+  const fmtUsdVal = (n: number) => formatUsd(locale, n);
 
   const session = useWorkspaceSession();
   const [dossier, setDossier] = useState<Dossier | null>(null);
@@ -298,7 +321,7 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
             <div className="mt-2 flex flex-wrap items-center gap-2 text-xs" data-testid="dossier-trajectory-summary">
               {dossier.trajectory.priorPostponements > 0 && (
                 <span className="rounded-full border border-line bg-card px-2.5 py-0.5 font-semibold text-ink-2">
-                  {interpolate(dossier.trajectory.priorPostponements === 1 ? t.priorPostponementSingle : t.priorPostponementPlural, { count: dossier.trajectory.priorPostponements })}
+                  {plural(dossier.trajectory.priorPostponements, { one: t.priorPostponementSingle, other: t.priorPostponementPlural })}
                 </span>
               )}
               {dossier.trajectory.statutoryStayExhausted && (
@@ -325,7 +348,7 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
               </button>
             )}
             {dossier.contradictions.map((item) => <div key={item.id}><p className="text-sm font-semibold">{item.title}</p><p className="mt-1 text-sm">{interpolate(t.contradictionLine, { listingVal: fmtNum(item.listingValue), publicVal: fmtNum(item.publicRecordValue), unit: item.unit })}</p><p className="mt-2 text-xs leading-6 text-ink-3">{item.explanation}</p><p className="mt-1 text-xs font-semibold">{t.nextPrefix} {item.nextAction}</p></div>)}
-          </div> : <p className="mt-2 text-sm leading-6 text-ink-3">{dossier.historyUnavailable ? t.historyUnavailable : dossier.history ? interpolate(dossier.history.observations === 1 ? t.noChangesObsSingle : t.noChangesObsPlural, { count: dossier.history.observations, date: fmtDate(dossier.history.firstObservedAt) }) : t.noComparisonHistory}</p>}
+          </div> : <p className="mt-2 text-sm leading-6 text-ink-3">{dossier.historyUnavailable ? t.historyUnavailable : dossier.history ? plural(dossier.history.observations, { one: t.noChangesObsSingle, other: t.noChangesObsPlural }, { date: fmtDate(dossier.history.firstObservedAt) }) : t.noComparisonHistory}</p>}
         </div>
         <details className="border-b border-line pb-4"><summary className="cursor-pointer text-sm font-semibold text-ink-2">{interpolate(t.allFactsSummary, { count: dossier.facts.length })}</summary><dl className="mt-3 divide-y divide-line">{dossier.facts.map((fact) => <div key={fact.key} className="grid gap-1 py-2.5 text-sm sm:grid-cols-[1fr_1.4fr]"><dt className="text-ink-3">{fact.title}</dt><dd className="break-words font-medium">{valueLabel(fact.value, fact.key, locale, t.notEstablished)}{fact.evidenceClass === 'unverified_snapshot' && <span className="ml-2 text-catch-ink">{t.unverifiedSnapshot}</span>}</dd></div>)}</dl></details>
         {dossier.publicRecords && <details className="border-b border-line pb-4"><summary className="cursor-pointer text-sm font-semibold text-ink-2">{t.publicRecordsSummary}</summary><div className="mt-4 space-y-4">
@@ -340,7 +363,10 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h3 className="text-sm font-bold text-ink">{t.benchHeading}</h3>
               <span className="rounded-full border border-line bg-card px-2.5 py-0.5 text-xs font-semibold text-ink-2">
-                {interpolate(t.benchObservedPct, { pct: Math.round((dossier.publicBenchmarks.evidenceAvailabilityRatio ?? 0) * 100), count: dossier.publicBenchmarks.availableSourceCount })}
+                {plural(dossier.publicBenchmarks.availableSourceCount, {
+                  one: t.benchObservedPct.replace(/\bsources\b/i, 'source'),
+                  other: t.benchObservedPct,
+                }, { pct: Math.round((dossier.publicBenchmarks.evidenceAvailabilityRatio ?? 0) * 100) })}
               </span>
             </div>
             <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -354,7 +380,7 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
                 <p className="mt-0.5 text-xs text-ink-3">
                   {dossier.publicBenchmarks.assessorRoll?.apn
                     ? `${interpolate(t.apnPrefix, { apn: dossier.publicBenchmarks.assessorRoll.apn })}${dossier.publicBenchmarks.assessorRoll.county ? ` · ${dossier.publicBenchmarks.assessorRoll.county}` : ''}`
-                    : (dossier.publicBenchmarks.assessorRoll?.citation || t.assessorAbsent)}
+                    : (dossier.publicBenchmarks.assessorRoll?.citation ? formatSchemaText(dossier.publicBenchmarks.assessorRoll.citation) : t.assessorAbsent)}
                 </p>
               </div>
               <div className="rounded-control border border-line bg-card p-2.5">
@@ -365,7 +391,7 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
                     : t.notItemized}
                 </p>
                 <p className="mt-0.5 text-xs text-ink-3">
-                  {dossier.publicBenchmarks.benchmarkType || t.publicBenchFallback}
+                  {dossier.publicBenchmarks.benchmarkType ? humanize(dossier.publicBenchmarks.benchmarkType) : t.publicBenchFallback}
                 </p>
               </div>
               <div className="rounded-control border border-line bg-card p-2.5">
@@ -536,17 +562,25 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
               {t.hudRentDesc}
             </p>
             <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
-              {(['0br', '1br', '2br', '3br', '4br'] as const).map((br) => (
-                <div key={br} className="rounded-control border border-line bg-card p-2 text-center">
-                  <span className="text-xs font-bold uppercase text-ink-3">{br.toUpperCase()}</span>
-                  <p className="mt-0.5 text-sm font-bold text-ink">
-                    {fmtUsdVal(dossier.hudSafmr?.rents?.[br] ?? 0)}
-                  </p>
-                  <p className="mt-0.5 text-xs text-ink-3">
-                    {fmtUsdVal(dossier.hudSafmr?.paymentStandard90?.[br] ?? 0)} – {fmtUsdVal(dossier.hudSafmr?.paymentStandard110?.[br] ?? 0)}
-                  </p>
-                </div>
-              ))}
+              {(['0br', '1br', '2br', '3br', '4br'] as const).map((br) => {
+                const rawRent = dossier.hudSafmr?.rents?.[br] ?? dossier.hudSafmr?.rents?.[br.toUpperCase()];
+                const rent = typeof rawRent === 'number' && Number.isFinite(rawRent) && rawRent > 0 ? rawRent : null;
+                const rawP90 = dossier.hudSafmr?.paymentStandard90?.[br] ?? dossier.hudSafmr?.paymentStandard90?.[br.toUpperCase()];
+                const rawP110 = dossier.hudSafmr?.paymentStandard110?.[br] ?? dossier.hudSafmr?.paymentStandard110?.[br.toUpperCase()];
+                const p90 = typeof rawP90 === 'number' && Number.isFinite(rawP90) && rawP90 > 0 ? rawP90 : null;
+                const p110 = typeof rawP110 === 'number' && Number.isFinite(rawP110) && rawP110 > 0 ? rawP110 : null;
+                return (
+                  <div key={br} className="rounded-control border border-line bg-card p-2 text-center">
+                    <span className="text-xs font-bold uppercase text-ink-3">{br.toUpperCase()}</span>
+                    <p className="mt-0.5 text-sm font-bold text-ink">
+                      {rent !== null ? fmtUsdVal(rent) : t.notPublished}
+                    </p>
+                    <p className="mt-0.5 text-xs text-ink-3">
+                      {p90 !== null && p110 !== null ? `${fmtUsdVal(p90)} – ${fmtUsdVal(p110)}` : '—'}
+                    </p>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
@@ -700,8 +734,8 @@ export function PropertyIntelligence({ listingId, documentsShown = false, lat, l
                 </p>
                 <p className="mt-0.5 text-xs text-ink-3">
                   {dossier.possessionTimeline.carryCost?.missingInputs && dossier.possessionTimeline.carryCost.missingInputs.length > 0
-                    ? interpolate(t.missingInputsLine, { fields: dossier.possessionTimeline.carryCost.missingInputs.join(', ') })
-                    : interpolate(t.basisLine, { basis: dossier.possessionTimeline.carryCost?.basis || t.observedCarryFallback })}
+                    ? interpolate(t.missingInputsLine, { fields: dossier.possessionTimeline.carryCost.missingInputs.map(humanize).join(', ') })
+                    : interpolate(t.basisLine, { basis: dossier.possessionTimeline.carryCost?.basis ? humanize(dossier.possessionTimeline.carryCost.basis) : t.observedCarryFallback })}
                 </p>
               </div>
             </div>

@@ -49,8 +49,7 @@ type MenuLink = {
 type MenuGroup = {
   key: string;
   label: string;
-  columns?: MenuLink[][];
-  simple?: { label: string; href: string }[];
+  columns: MenuLink[][];
 };
 
 // Product nav maps to shipped beta surfaces. Keep exact hrefs visible for route checks.
@@ -97,27 +96,10 @@ function buildMenuGroups(m: Messages): MenuGroup[] {
 }
 
 function MegaPanel({ group }: { group: MenuGroup }) {
-  if (group.simple) {
-    return (
-      <div className="mx-auto max-w-[640px] px-6 py-6">
-        <div className="grid grid-cols-2 gap-1 sm:grid-cols-3">
-          {group.simple.map((l) => (
-            <Link
-              key={l.href}
-              href={l.href}
-              className="rounded-control px-3 py-2 text-meta font-medium text-ink hover:bg-paper"
-            >
-              {l.label}
-            </Link>
-          ))}
-        </div>
-      </div>
-    );
-  }
   return (
     <div className="mx-auto max-w-[760px] px-6 py-6">
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-        {group.columns?.map((col, ci) => (
+        {group.columns.map((col, ci) => (
           <div key={ci} className="grid gap-1.5">
             {col.map((l) => (
               <Link
@@ -177,26 +159,28 @@ export function SiteHeader() {
     >
       <div className="mx-auto w-[calc(100%-32px)] sm:w-[calc(100%-48px)] lg:w-[calc(100%-64px)]">
         <header
-          className={`relative flex items-center justify-between gap-4 xl:grid xl:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] rounded-control px-4 py-3 sm:px-8 transition-all duration-500 ease-[cubic-bezier(0.25,0.46,0.45,0.94)] ${
+          className={`relative flex w-full max-w-full items-center justify-between gap-2 overflow-hidden sm:gap-4 xl:grid xl:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] rounded-control px-3 py-2.5 sm:px-8 sm:py-3 transition-all duration-500 ease-[cubic-bezier(0.25,0.46,0.45,0.94)] ${
             scrolled || open
               ? "bg-card/70 backdrop-blur-2xl backdrop-saturate-[2] border border-white/40 shadow-[0_8px_32px_rgba(0,0,0,0.08),inset_0_1px_0_rgba(255,255,255,0.8)]"
               : "bg-transparent shadow-none border border-transparent"
           }`}
           style={{ willChange: scrolled || open ? "backdrop-filter" : "auto" }}
         >
-        <div className="flex min-w-0 shrink-0 items-center xl:justify-self-start">
-          <Link href="/" className="flex min-w-0 items-center gap-3" aria-label={messages.common.homeAria}>
+        <div className="flex min-w-0 shrink items-center xl:justify-self-start">
+          <Link href="/" className="flex min-w-0 items-center gap-2 sm:gap-3" aria-label={messages.common.homeAria}>
             <Logo className="text-sm min-[375px]:text-base sm:text-lg" />
           </Link>
         </div>
 
         <nav
+          aria-label={messages.header.navMenuAria}
           className="hidden items-center justify-center gap-6 xl:flex xl:justify-self-center 2xl:gap-8"
           onMouseLeave={() => setOpen(null)}
         >
             {groups.map((g) => (
               <button
                 key={g.key}
+                type="button"
                 onMouseEnter={() => setOpen(g.key)}
                 onFocus={() => setOpen(g.key)}
                 onClick={() => setOpen(g.key)}
@@ -208,7 +192,7 @@ export function SiteHeader() {
               </button>
             ))}
             <Link
-              href="/#pricing"
+              href="/pricing"
               onMouseEnter={() => setOpen(null)}
               className="inline-flex h-10 shrink-0 items-center whitespace-nowrap text-meta font-semibold text-ink-2 transition-colors hover:text-ink"
             >
@@ -236,10 +220,11 @@ export function SiteHeader() {
         </div>
 
         {/* Mobile actions */}
-        <div className="flex items-center gap-1.5 xl:hidden">
+        <div className="flex shrink-0 items-center gap-1 xl:hidden">
           <LanguageSwitcher />
           <button
-            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-control text-ink hover:bg-paper"
+            type="button"
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-control text-ink hover:bg-paper"
             aria-label={messages.header.openMenu}
             onClick={() => setMobileOpen(true)}
           >
@@ -295,45 +280,34 @@ export function SiteHeader() {
                   </AccordionTrigger>
                   <AccordionContent className="pb-2 pt-1">
                     <div className="grid gap-1 px-1">
-                      {g.simple
-                        ? g.simple.map((l) => (
-                            <Link
-                              key={l.href}
-                              href={l.href}
-                              onClick={() => setMobileOpen(false)}
-                              className="rounded-control px-3 py-2 text-meta text-ink-2 hover:bg-paper"
-                            >
+                      {g.columns.flat().map((l) => (
+                        <Link
+                          key={l.href}
+                          href={l.href}
+                          onClick={() => setMobileOpen(false)}
+                          className="flex items-start gap-3 rounded-control px-3 py-2 hover:bg-paper"
+                        >
+                          <span
+                            className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-control"
+                            style={{ backgroundColor: l.tint ?? "#F3F4F6" }}
+                          >
+                            <l.icon className="h-4 w-4 text-ink" />
+                          </span>
+                          <span>
+                            <span className="block text-meta font-semibold text-ink">
                               {l.label}
-                            </Link>
-                          ))
-                        : g.columns?.flat().map((l) => (
-                            <Link
-                              key={l.href}
-                              href={l.href}
-                              onClick={() => setMobileOpen(false)}
-                              className="flex items-start gap-3 rounded-control px-3 py-2 hover:bg-paper"
-                            >
-                              <span
-                                className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-control"
-                                style={{ backgroundColor: l.tint ?? "#F3F4F6" }}
-                              >
-                                <l.icon className="h-4 w-4 text-ink" />
-                              </span>
-                              <span>
-                                <span className="block text-meta font-semibold text-ink">
-                                  {l.label}
-                                </span>
-                                <span className="block text-xs text-ink-3">
-                                  {l.desc}
-                                </span>
-                              </span>
-                            </Link>
-                          ))}
+                            </span>
+                            <span className="block text-xs text-ink-3">
+                              {l.desc}
+                            </span>
+                          </span>
+                        </Link>
+                      ))}
                     </div>
                   </AccordionContent>
                 </AccordionItem>
               ))}
-              <Link href="/#pricing" onClick={() => setMobileOpen(false)} className="block rounded-control px-3 py-3 text-body font-semibold text-ink hover:bg-paper">
+              <Link href="/pricing" onClick={() => setMobileOpen(false)} className="block rounded-control px-3 py-3 text-body font-semibold text-ink hover:bg-paper">
                 {messages.common.pricing}
               </Link>
             </Accordion>

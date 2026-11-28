@@ -55,7 +55,7 @@ export default async function ResourcesPage() {
   return (
     <div className="min-h-screen bg-paper text-ink">
       <SiteHeader />
-      <main id="main-content" tabIndex={-1} className="mx-auto max-w-4xl px-6 py-16 text-ink outline-none sm:px-8">
+      <main id="main-content" tabIndex={-1} className="mx-auto max-w-4xl px-6 pb-16 pt-28 text-ink outline-none sm:px-8 sm:pt-32">
       <Link
         href="/"
         className="inline-flex items-center gap-2 text-sm font-semibold text-ink-2 transition-colors hover:text-ink"
@@ -77,7 +77,7 @@ export default async function ResourcesPage() {
       </header>
 
       <div className="mt-14 space-y-20">
-        <section id="knowledge-base" className="scroll-mt-12 space-y-16">
+        <section id="knowledge-base" className="scroll-mt-28 space-y-16">
           {/* 1. Kinds of sales */}
           <div className="space-y-8">
             <SectionHeading eyebrow={r.step1Eyebrow} title={r.step1Title} align="left">
@@ -144,7 +144,16 @@ export default async function ResourcesPage() {
                       <td className="p-3">{row.type}</td>
                       <td className="p-3">{row.deposit}</td>
                       <td className="p-3">{row.window}</td>
-                      <td className="p-3">{row.redemption}</td>
+                      <td className="p-3">
+                        {row.redemption.includes("(R. 4:65-5)") ? (
+                          <>
+                            {row.redemption.replace("(R. 4:65-5)", "")}
+                            <span className="whitespace-nowrap">(R. 4:65-5)</span>
+                          </>
+                        ) : (
+                          row.redemption
+                        )}
+                      </td>
                       <td className="p-3">{row.fees}</td>
                     </tr>
                   ))}
@@ -208,7 +217,7 @@ export default async function ResourcesPage() {
         </section>
 
         {/* Changelog */}
-        <section id="changelog" className="scroll-mt-12 space-y-8 border-t border-line pt-14">
+        <section id="changelog" className="scroll-mt-28 space-y-8 border-t border-line pt-14">
           <SectionHeading eyebrow={r.changelogEyebrow} title={r.changelogTitle} align="left" />
           <div className="space-y-4">
             {r.changelogEntries.map((entry) => (

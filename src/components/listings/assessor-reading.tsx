@@ -3,6 +3,8 @@
 import * as React from "react";
 import { EnrichmentView } from "@/components/listings/enrichment-view";
 import { useLocale } from "@/components/i18n/locale-provider";
+import type { Locale } from "@/lib/i18n/config";
+import { formatLocaleNumber, formatUsd } from "@/lib/i18n/translator";
 
 export type AssessorReadingResponse = {
   enrolled?: boolean;
@@ -43,13 +45,13 @@ export function fetchAssessorReadingCached(listingId: string): Promise<AssessorR
   return request;
 }
 
-function money(value: number | null | undefined): string {
+function money(value: number | null | undefined, locale: Locale): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return "—";
-  return `$${Math.round(value).toLocaleString()}`;
+  return formatUsd(locale, value);
 }
 
 export function AssessorReading({ listingId, hasServerParcelKey = false }: { listingId: string; hasServerParcelKey?: boolean }) {
-  const { messages: m } = useLocale();
+  const { locale, messages: m } = useLocale();
   const [reading, setReading] = React.useState<AssessorReadingResponse | null>(null);
   const [status, setStatus] = React.useState<"loading" | "ready" | "error">("loading");
 
@@ -92,16 +94,16 @@ export function AssessorReading({ listingId, hasServerParcelKey = false }: { lis
       <dl className="grid gap-3 sm:grid-cols-3">
         <div className="rounded-2xl bg-paper p-4">
           <dt className="text-xs font-bold uppercase tracking-wide text-ink-3">{m.detailUi.countyFigureLabel}{reading.field ? ` · ${reading.field}` : ""}</dt>
-          <dd className="mt-1 text-lg font-bold text-ink">{money(reading.rawFigure)}</dd>
+          <dd className="mt-1 text-lg font-bold text-ink">{money(reading.rawFigure, locale)}</dd>
         </div>
         <div className="rounded-2xl bg-paper p-4">
           <dt className="text-xs font-bold uppercase tracking-wide text-ink-3">{m.detailUi.marketCompLabel}</dt>
-          <dd className="mt-1 text-lg font-bold text-ink">{money(reading.marketComparison)}</dd>
+          <dd className="mt-1 text-lg font-bold text-ink">{money(reading.marketComparison, locale)}</dd>
         </div>
         <div className="rounded-2xl bg-paper p-4">
           <dt className="text-xs font-bold uppercase tracking-wide text-ink-3">{m.detailUi.openingDivCompLabel}</dt>
           <dd className="mt-1 text-lg font-bold text-ink">
-            {reading.dealScore != null ? reading.dealScore : "—"}
+            {reading.dealScore != null ? formatLocaleNumber(locale, reading.dealScore) : "—"}
             {reading.ratio != null ? <span className="ml-2 text-sm font-semibold text-ink-3">{reading.ratio.toFixed(2)}</span> : null}
           </dd>
         </div>

@@ -187,7 +187,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
 
     def wait_for_live_feed(self):
         self.page.get_by_role(
-            "button", name=f"Deal Grid ({self.live_count} records)"
+            "button", name=re.compile(rf"Deal Grid \((?:{self.live_count:,}|{self.live_count}) records\)")
         ).wait_for(state="visible", timeout=30_000)
 
     def grid_record_count(self):
@@ -666,7 +666,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         try:
             reduced_page.goto(BASE_URL, wait_until="domcontentloaded")
             reduced_page.get_by_role(
-                "button", name=f"Deal Grid ({self.live_count} records)"
+                "button", name=re.compile(rf"Deal Grid \((?:{self.live_count:,}|{self.live_count}) records\)")
             ).wait_for(state="visible")
             market_map = self.open_live_market_map(reduced_page)
             expect(reduced_page.get_by_test_id("market-map")).to_have_attribute("data-map-motion", "reduced")
@@ -728,7 +728,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         try:
             offline_page.goto(BASE_URL, wait_until="domcontentloaded")
             offline_page.get_by_role(
-                "button", name=f"Deal Grid ({self.live_count} records)"
+                "button", name=re.compile(rf"Deal Grid \((?:{self.live_count:,}|{self.live_count}) records\)")
             ).wait_for(state="visible")
             market_map = self.open_live_market_map(offline_page)
             self.assertEqual(market_map.get_attribute("data-map-engine"), "maplibre")
@@ -1405,9 +1405,9 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         self.page.get_by_role("button", name="Refresh inventory").click()
         # The honesty claim itself: observed and unverified are reported
         # separately and account for every record on the page.
-        split = self.page.get_by_text(re.compile(r"^\d+ observed\s*.\s*\d+ demo/unverified$"))
+        split = self.page.get_by_text(re.compile(r"^[\d,]+ observed\s*.\s*[\d,]+ demo/unverified$"))
         expect(split).to_be_visible(timeout=20_000)
-        observed, unverified = (int(n) for n in re.findall(r"\d+", split.inner_text()))
+        observed, unverified = (int(n.replace(",", "")) for n in re.findall(r"[\d,]+", split.inner_text()))
         self.assertEqual(
             observed + unverified, self.live_count,
             "the feed must account for every record it shows",

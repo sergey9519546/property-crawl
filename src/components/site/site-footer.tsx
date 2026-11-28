@@ -87,9 +87,7 @@ export function SiteFooter() {
       setNewsletterStatus(
         payload?.delivery === "forwarded" || payload?.delivery === "sent"
           ? messages.footer.newsletterSent
-          : (locale === "en"
-              ? "Saved. We can't send email yet, so you won't get a confirmation."
-              : messages.footer.newsletterSavedNoEmail),
+          : locale === "en" ? "Saved. We can't send email yet, so you won't get a confirmation." : messages.footer.newsletterSavedNoEmail,
       );
     } catch {
       setNewsletterStatus(messages.footer.newsletterError);

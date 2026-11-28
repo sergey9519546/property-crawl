@@ -32,9 +32,22 @@ function buildAlternativeMetadata(chosen: AlternativeCandidate, t: Messages["med
   };
 }
 
-type Props = { listingId: string; address: string; propType?: string | null; source?: string | null; photo?: string | null; photoCount?: number; observed: boolean; photoProvider?: string | null; photoSourceUrl?: string | null; layout?: "fill" | "card" };
+function hasObservedCoordinates(lat?: number | null, lng?: number | null): boolean | null {
+  if (lat === undefined && lng === undefined) return null;
+  return (
+    typeof lat === "number" &&
+    typeof lng === "number" &&
+    Number.isFinite(lat) &&
+    Number.isFinite(lng) &&
+    Math.abs(lat) <= 90 &&
+    Math.abs(lng) <= 180 &&
+    !(lat === 0 && lng === 0)
+  );
+}
 
-export function ListingThumbnail({ listingId, address, propType, source, photo, photoCount, observed, photoProvider, photoSourceUrl, layout = "fill" }: Props) {
+type Props = { listingId: string; address: string; propType?: string | null; source?: string | null; photo?: string | null; photoCount?: number; observed: boolean; lat?: number | null; lng?: number | null; photoProvider?: string | null; photoSourceUrl?: string | null; layout?: "fill" | "card" };
+
+export function ListingThumbnail({ listingId, address, propType, source, photo, photoCount, observed, lat, lng, photoProvider, photoSourceUrl, layout = "fill" }: Props) {
   const placeholder = getPropertyPlaceholder(propType, { address, source });
   const { messages, format } = useLocale();
   const t = messages.mediaUi;
@@ -68,8 +81,9 @@ export function ListingThumbnail({ listingId, address, propType, source, photo, 
     return () => { generation.current++; };
   }, [listingId, publisherPhoto]);
 
+  const coordsAvailable = hasObservedCoordinates(lat, lng);
   useEffect(() => {
-    if (!observed || (publisherPhoto && !photoFailed) || status !== "idle" || autoAerialAttempted.current) return;
+    if (!observed || coordsAvailable === false || (publisherPhoto && !photoFailed) || status !== "idle" || autoAerialAttempted.current) return;
     const node = containerRef.current;
     if (!node || typeof IntersectionObserver === "undefined") {
       autoAerialAttempted.current = true;
@@ -88,7 +102,20 @@ export function ListingThumbnail({ listingId, address, propType, source, photo, 
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, [observed, photoFailed, publisherPhoto, status]);
+  }, [observed, coordsAvailable, photoFailed, publisherPhoto, status]);
+
+  useEffect(() => {
+    if (status !== "aerial") return;
+    const timer = window.setTimeout(() => {
+      if (aerialUserRequested.current) {
+        setReason("Aerial satellite imagery is unavailable for this location.");
+        setStatus("unavailable");
+      } else {
+        setStatus("idle");
+      }
+    }, 6_000);
+    return () => window.clearTimeout(timer);
+  }, [status]);
 
   function applyAlternativeCandidate(chosen: AlternativeCandidate) {
     setAltImageFailed(false);
@@ -284,7 +311,7 @@ export function ListingThumbnail({ listingId, address, propType, source, photo, 
               }
             }}
           />
-          {status === "aerial" ? <p role="status" className="absolute inset-0 grid place-items-center text-xs text-ink-3">Loading aerial parcel view…</p> : null}
+          {status === "aerial" ? <p role="status" className="absolute inset-0 flex items-center justify-center px-4 pt-12 text-center text-xs text-ink-3">Loading aerial parcel view…</p> : null}
         </div>
         <div className={caption}>
           <div className="flex flex-wrap items-center justify-between gap-1.5">
@@ -309,7 +336,7 @@ export function ListingThumbnail({ listingId, address, propType, source, photo, 
           style={{ backgroundImage: `url("${placeholder.imageSrc}")` }}
         />
         <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-gradient-to-b from-paper/20 via-paper/55 to-paper/85" />
-        <div className={layout === "fill" ? "relative z-10 flex h-full flex-col items-center justify-end gap-1.5 px-3 pb-2.5 pt-11 text-center" : "relative z-10 flex h-full flex-col items-center justify-end gap-1.5 px-4 pb-3 pt-12 text-center"}>
+        <div className={layout === "fill" ? "relative z-10 flex h-full flex-col items-center justify-end gap-1.5 px-3 pb-2.5 pt-14 text-center" : "relative z-10 flex h-full flex-col items-center justify-end gap-1.5 px-4 pb-3 pt-14 text-center"}>
           <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-label font-semibold shadow-sm backdrop-blur-sm ${placeholder.accentClass}`}>
             {placeholder.typeLabel} · Placeholder
           </span>

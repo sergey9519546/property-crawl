@@ -134,12 +134,12 @@ function withOperatorScenario(packet: any) {
 export function DecisionPacketView({ packet }: DecisionPacketViewProps) {
   const { locale, messages } = useLocale();
   const msg = messages.researchB2;
-  const fmtMoney = (value: number) => (locale === 'en' ? `$${value.toLocaleString()}` : formatUsd(locale, value));
+  const fmtMoney = (value: number) => formatUsd(locale, value);
   const moneyOrBlank = (value: unknown, blank = msg.dpNotEntered) =>
     typeof value === 'number' && Number.isFinite(value) ? fmtMoney(value) : blank;
   const fmtDeadlineDate = (value: string | null | undefined) => {
     if (!value) return msg.dpPendingLower;
-    return locale === 'en' ? value : formatLocaleDate(locale, value, { dateStyle: 'medium', timeZone: 'UTC' });
+    return formatLocaleDate(locale, value, { dateStyle: 'medium', timeZone: 'UTC' });
   };
 
   const [downloading, setDownloading] = useState(false);
@@ -526,7 +526,7 @@ export function DecisionPacketView({ packet }: DecisionPacketViewProps) {
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line pb-2">
           <div className="flex items-center gap-2">
             <FileText className="w-4 h-4 text-ink-2" />
-            <h3 className="font-bold text-sm text-ink">{msg.dpAssumptionsHeading || <>Underwriting Assumptions &amp; Strategy</>}</h3>
+            <h3 className="font-bold text-sm text-ink">{msg.dpAssumptionsHeading}</h3>
           </div>
           <span className="text-label font-bold uppercase tracking-wider text-ink-2 bg-paper px-2 py-0.5 rounded border border-line">
             {msg.dpBuyerParamsBadge}

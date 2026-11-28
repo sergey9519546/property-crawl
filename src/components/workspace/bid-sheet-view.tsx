@@ -167,7 +167,11 @@ export function BidSheetView() {
 
       let serverIds: string[] = [];
       try {
-        const alertsRes = await fetch("/api/alerts", { cache: "no-store", credentials: "same-origin" });
+        const alertsRes = await fetch("/api/alerts", {
+          cache: "no-store",
+          credentials: "same-origin",
+          signal: typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function" ? AbortSignal.timeout(4_000) : undefined,
+        });
         if (alertsRes.ok) {
           const alertsPayload = await alertsRes.json().catch(() => ({}));
           serverIds = extractAlertDealIds(alertsPayload);
@@ -195,6 +199,7 @@ export function BidSheetView() {
           const res = await fetch(`/api/listings?ids=${encodeURIComponent(chunk.join(","))}`, {
             cache: "no-store",
             credentials: "same-origin",
+            signal: typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function" ? AbortSignal.timeout(6_000) : undefined,
           });
           if (!res.ok) continue;
           const data = (await res.json()) as { listings?: PropertyListing[] };
@@ -329,15 +334,15 @@ export function BidSheetView() {
 
   if (loading) {
     return (
-      <div className="mx-auto max-w-6xl px-6 py-20 text-center">
-        <Loader2 className="mx-auto mb-3 h-8 w-8 animate-spin text-ink-3" />
+      <div className="mx-auto max-w-6xl px-6 py-10 text-center">
+        <Loader2 className="mx-auto mb-3 h-7 w-7 animate-spin text-ink-3" />
         <p className="text-sm font-medium text-ink-3">{bs.loading}</p>
       </div>
     );
   }
 
   return (
-    <div className="mx-auto max-w-7xl px-6 py-10 text-ink sm:px-8">
+    <div className="mx-auto max-w-7xl px-6 py-6 text-ink sm:px-8">
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4 border-b border-line pb-6">
         <div>
@@ -392,8 +397,9 @@ export function BidSheetView() {
 
           <button
             type="button"
+            disabled={ladderTargets.length === 0}
             onClick={() => window.print()}
-            className="mt-5 inline-flex items-center gap-1.5 rounded-control bg-ink px-4 py-2 text-xs font-semibold text-card transition hover:bg-ink-2"
+            className="mt-5 inline-flex items-center gap-1.5 rounded-control bg-ink px-4 py-2 text-xs font-semibold text-card transition hover:bg-ink-2 disabled:opacity-50"
           >
             <Printer className="h-3.5 w-3.5" />
             {bs.printBtn}
@@ -436,7 +442,7 @@ export function BidSheetView() {
 
       {/* Empty Watchlist State */}
       {listings.length === 0 ? (
-        <div className="mt-10 rounded-card border border-dashed border-line-strong bg-card p-12 text-center shadow-sm">
+        <div className="mt-6 rounded-card border border-dashed border-line-strong bg-card p-8 text-center shadow-sm">
           <Banknote className="mx-auto mb-3 h-10 w-10 text-ink-3" />
           <h2 className="text-lg font-bold text-ink">{bs.emptyTitle}</h2>
           <p className="mx-auto mt-2 max-w-md text-meta text-ink-3">

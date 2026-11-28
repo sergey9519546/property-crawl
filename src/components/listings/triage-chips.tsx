@@ -40,15 +40,8 @@ export function TriageChips({ listing, className, iconSize = 11 }: Props) {
     );
   });
 
-  if (locale === "en") {
-    return (
-      <ul aria-label="Listing triage flags" className={listClass}>
-        {items}
-      </ul>
-    );
-  }
-
   return (
+    // Localized equivalent of aria-label="Listing triage flags"
     <ul aria-label={m.listingsUi.triageChips.groupAria} className={listClass}>
       {items}
     </ul>

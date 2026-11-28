@@ -80,6 +80,7 @@ import { DEAL_SCORE_MEANING, SCORE_BANDS, bandForScore } from "@/lib/score-bands
 import { terminalFiltersToDiscovery } from "@/lib/discovery-query";
 import { useLocale } from "@/components/i18n/locale-provider";
 import { localizeDisplayDate } from "@/lib/i18n/domain";
+import { formatLocaleNumber } from "@/lib/i18n/translator";
 
 function isObservedSourceRecord(listing: PropertyListing) {
   const provenance = listing.provenance;
@@ -695,7 +696,7 @@ export function InteractiveTerminal() {
                 type="button"
                 aria-pressed={activeView === "grid"}
                 onClick={() => dispatchFilters({ type: "setView", view: "grid" })}
-                aria-label={locale === "en" ? `Deal Grid (${displayCount} records)` : format(tUi.dealGridCount, { count: displayCount })}
+                aria-label={locale === "en" ? `Deal Grid (${formatLocaleNumber(locale, displayCount)} records)` : format(tUi.dealGridCount, { count: formatLocaleNumber(locale, displayCount) })}
                 className={cn(
                   "px-3.5 py-1.5 rounded-control text-xs font-bold transition flex items-center gap-1.5",
                   activeView === "grid"
@@ -704,14 +705,14 @@ export function InteractiveTerminal() {
                 )}
               >
                 <LayoutGrid className="w-3.5 h-3.5" />
-                <span>{locale === "en" ? `Deal Grid (${displayCount} records)` : format(tUi.dealGridCount, { count: displayCount })}</span>
+                <span>{locale === "en" ? `Deal Grid (${formatLocaleNumber(locale, displayCount)} records)` : format(tUi.dealGridCount, { count: formatLocaleNumber(locale, displayCount) })}</span>
               </button>
 
               <button
                 type="button"
                 aria-pressed={activeView === "map"}
                 onClick={() => dispatchFilters({ type: "setView", view: "map" })}
-                aria-label={locale === "en" ? `Map (${displayCount} records)` : format(tUi.mapCount, { count: displayCount })}
+                aria-label={locale === "en" ? `Map (${formatLocaleNumber(locale, displayCount)} records)` : format(tUi.mapCount, { count: formatLocaleNumber(locale, displayCount) })}
                 className={cn(
                   "px-3.5 py-1.5 rounded-control text-xs font-bold transition flex items-center gap-1.5",
                   activeView === "map"
@@ -720,7 +721,7 @@ export function InteractiveTerminal() {
                 )}
               >
                 <MapIcon className="w-3.5 h-3.5" />
-                <span>{locale === "en" ? `Map (${displayCount} records)` : format(tUi.mapCount, { count: displayCount })}</span>
+                <span>{locale === "en" ? `Map (${formatLocaleNumber(locale, displayCount)} records)` : format(tUi.mapCount, { count: formatLocaleNumber(locale, displayCount) })}</span>
               </button>
 
               <button
@@ -804,7 +805,7 @@ export function InteractiveTerminal() {
                 <span className="text-ink-3 hidden sm:inline">· confirm title, liens, and sale terms with the source</span>
               </div>
               <div className="flex items-center gap-3 font-mono text-label text-ink-3">
-                {syncStatus === "ready" && <span className={cn("font-bold", observedCount > 0 ? "text-ink" : "text-catch-ink")}>{observedCount} observed · {syncCount - observedCount} demo/unverified</span>}
+                {syncStatus === "ready" && <span className={cn("font-bold", observedCount > 0 ? "text-ink" : "text-catch-ink")}>{formatLocaleNumber(locale, observedCount)} observed · {formatLocaleNumber(locale, syncCount - observedCount)} demo/unverified</span>}
                 {syncStatus === "loading" && <span>Connecting to property API…</span>}
                 {syncStatus === "error" && <span>{syncCount > 0 ? "Last loaded inventory retained" : "No inventory loaded"}</span>}
                 <button
@@ -1162,7 +1163,7 @@ export function InteractiveTerminal() {
                 </div>
                 <div>
                   <p className="text-ink-3 text-label font-bold uppercase tracking-wider">Filtered Pipeline</p>
-                  <p className="text-base font-extrabold text-ink">{displayCount} Records</p>
+                  <p className="text-base font-extrabold text-ink">{formatLocaleNumber(locale, displayCount)} Records</p>
                 </div>
               </div>
 
@@ -1182,7 +1183,7 @@ export function InteractiveTerminal() {
                 </div>
                 <div>
                   <p className="text-ink-3 text-label font-bold uppercase tracking-wider">Avg Bid Spread</p>
-                  <p className="text-base font-extrabold text-ink">{avgEquity === null ? "Not modeled" : `+${avgEquity.toLocaleString()}`}</p>
+                  <p className="text-base font-extrabold text-ink">{avgEquity === null ? tUi.notModeled : `+${formatLocaleNumber(locale, avgEquity)}`}</p>
                 </div>
               </div>
 
@@ -1320,7 +1321,7 @@ export function InteractiveTerminal() {
                       {/* Photo + Tags */}
                       <div className="relative z-20 h-48 w-full bg-paper overflow-hidden">
                         <ListingThumbnail listingId={listing.id} address={listing.address} propType={listing.propType} source={listing.source} photo={cardPhoto} observed={isObserved} photoProvider={secondaryMedia?.accepted ? secondaryMedia.provider : undefined} photoSourceUrl={secondaryMedia?.accepted ? secondaryMedia.sourceRecordUrl : undefined} />
-                        <div className="absolute top-3 left-3 z-20 flex items-center gap-1.5">
+                        <div className="absolute top-3 left-3 z-20 flex max-w-[calc(100%-4.75rem)] flex-wrap items-center gap-1.5">
                           <span
                             className="text-label font-extrabold uppercase px-2 py-0.5 rounded-md text-white shadow-sm"
                             style={{ backgroundColor: src.color }}
@@ -1370,7 +1371,7 @@ export function InteractiveTerminal() {
                             }}
                           >
                             {knownNumber(listing.dealScore) === null
-                              ? "Not modeled"
+                              ? tUi.notModeled
                               : `${listing.dealScore}/99 ${bandForScore(listing.dealScore)?.label ?? ""}`.trim()}
                           </span>
                         </div>
@@ -1383,7 +1384,7 @@ export function InteractiveTerminal() {
                           </div>
                           <div>
                             <span className="text-ink-3 font-semibold block">Modeled Bid Spread:</span>
-                            <span className="font-bold text-ink text-sm">{knownNumber(listing.equity) === null ? "Not modeled" : `+${listing.equity?.toLocaleString()}`}</span>
+                            <span className="font-bold text-ink text-sm">{knownNumber(listing.equity) === null ? tUi.notModeled : `+${formatLocaleNumber(locale, listing.equity!)}`}</span>
                           </div>
                         </div>
 
@@ -1407,22 +1408,22 @@ export function InteractiveTerminal() {
                       </button>
                     </div>
                     {/* Card Action */}
-                    <div className="relative z-20 grid grid-cols-1 sm:grid-cols-3 gap-2 px-5 pb-5 pt-1">
+                    <div className="relative z-20 grid grid-cols-1 sm:grid-cols-2 gap-2 px-5 pb-5 pt-1">
                       <button
                         onClick={() => setSelectedListing(listing)}
-                        className="w-full inline-flex h-10 items-center justify-center rounded-control bg-ink text-white text-xs font-bold hover:bg-ink-2 transition gap-1 shadow-sm"
+                        className="sm:col-span-2 w-full inline-flex h-10 items-center justify-center whitespace-nowrap rounded-control bg-ink px-3 text-white text-xs font-bold hover:bg-ink-2 transition gap-1.5 shadow-sm"
                       >
-                        <span>Underwrite Deal</span>
-                        <ArrowRight className="w-3.5 h-3.5" />
+                        <span>{tUi.underwriteDealBtn}</span>
+                        <ArrowRight className="w-3.5 h-3.5 shrink-0" />
                       </button>
                       <Link
                         href={`/listings/${encodeURIComponent(listing.id)}?returnTo=${encodeURIComponent("/#live-feed")}`}
                         data-testid="listing-detail-link"
                         aria-label={`Open listing page for ${listing.address}`}
-                        className="w-full inline-flex h-10 items-center justify-center rounded-control border border-line-strong bg-card text-ink text-xs font-bold hover:bg-paper transition gap-1 shadow-sm"
+                        className="w-full inline-flex h-10 items-center justify-center whitespace-nowrap rounded-control border border-line-strong bg-card px-3 text-ink text-xs font-bold hover:bg-paper transition gap-1 shadow-sm"
                       >
                         <span>{lUi.viewPropertyBtn}</span>
-                        <ArrowRight className="w-3.5 h-3.5" />
+                        <ArrowRight className="w-3.5 h-3.5 shrink-0" />
                       </Link>
                       <CaseAction listingId={listing.id} />
                     </div>
@@ -1438,7 +1439,7 @@ export function InteractiveTerminal() {
             <div className="mt-10 rounded-card border border-line bg-card p-6 sm:p-8 text-center shadow-card flex flex-col items-center gap-4">
               <div className="max-w-xl space-y-1.5">
                 <span className="text-label font-mono font-bold tracking-wider text-ink-2 uppercase">
-                  INSTITUTIONAL WORKBENCH // {syncTotal > 0 || syncCount > 0 || listings.length > 0 ? `${(syncTotal || syncCount || listings.length).toLocaleString()}+ DISPOSITIONS` : "LIVE DISPOSITION DESK"}
+                  INSTITUTIONAL WORKBENCH // {syncTotal > 0 || syncCount > 0 || listings.length > 0 ? `${formatLocaleNumber(locale, syncTotal || syncCount || listings.length)}+ DISPOSITIONS` : "LIVE DISPOSITION DESK"}
                 </span>
                 <h3 className="text-2xl font-bold text-ink">Need the full institutional triage desk?</h3>
                 <p className="text-xs text-ink-3">
@@ -1470,14 +1471,14 @@ export function InteractiveTerminal() {
               </div>
             </div>
 
-            {remaining > 0 ? (
+            {visible.length < displayCount && remaining > 0 ? (
               <div className="mt-8 flex flex-col items-center gap-3">
                 <button
                   type="button"
                   onClick={() => setVisibleCount((n) => n + PAGE_SIZE)}
                   className="px-6 py-3 rounded-control bg-ink text-white text-sm font-bold transition hover:bg-ink-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2"
                 >
-                  {format(tUi.showMoreBtn, { count: Math.min(remaining, PAGE_SIZE).toLocaleString() })}
+                  {format(tUi.showMoreBtn, { count: formatLocaleNumber(locale, Math.min(remaining, PAGE_SIZE)) })}
                 </button>
                 {/* ink-3 is the lightest text the palette allows, not a
                     guess: it measures 5.9:1 on the paper page background, and
@@ -1485,7 +1486,10 @@ export function InteractiveTerminal() {
                     here, so this stays ink-3 rather than a paler token for
                     the sake of hierarchy. */}
                 <p className="text-xs text-ink-3">
-                  Showing {visible.length.toLocaleString()} of {filtered.length.toLocaleString()} matching listings
+                  {format(tUi.showingMatchingOf, {
+                    shown: formatLocaleNumber(locale, visible.length),
+                    total: formatLocaleNumber(locale, displayCount),
+                  })}
                 </p>
               </div>
             ) : null}

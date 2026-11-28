@@ -5,6 +5,8 @@ import Link from "next/link";
 import { ArrowRight, CheckCircle2, Clock3, Download, Eye, FileWarning, Inbox, Loader2, RefreshCw, RotateCcw, Sparkles } from "lucide-react";
 import { PrivateWorkspaceGate, useWorkspaceSession } from "@/components/workspace/workspace-shell";
 import { useLocale } from "@/components/i18n/locale-provider";
+import type { Locale } from "@/lib/i18n/config";
+import { formatLocaleDate, formatUsd } from "@/lib/i18n/translator";
 import type { ResearchCaseSummary } from "@/lib/workspace-types";
 import { sourceDisplayText } from "@/lib/source-display";
 import { createRequestGate } from "@/lib/latest-request";
@@ -18,9 +20,9 @@ const tabs = [
   { value: "pass", label: "Passed" },
 ] as const;
 
-function formatDate(value?: string | null) {
-  if (!value || !Number.isFinite(Date.parse(value))) return "No published deadline";
-  return new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+function formatDate(value: string | null | undefined, locale: Locale, emptyLabel: string) {
+  if (!value || !Number.isFinite(Date.parse(value))) return emptyLabel;
+  return formatLocaleDate(locale, value, { dateStyle: "medium", timeStyle: "short" });
 }
 
 function eventLabel(item: ResearchCaseSummary) {
@@ -34,7 +36,7 @@ function eventLabel(item: ResearchCaseSummary) {
 }
 
 export function ResearchInbox() {
-  const { messages: m } = useLocale();
+  const { locale, messages: m, plural } = useLocale();
   const session = useWorkspaceSession();
   const [state, setState] = React.useState<"inbox" | "pursue" | "pass">("inbox");
   const [data, setData] = React.useState<CaseList | null>(null);
@@ -114,7 +116,7 @@ export function ResearchInbox() {
       const response = await fetch("/api/workspace/import/commit", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ listingIds: importIds, previewHash: preview.previewHash }) });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Browser import could not be committed");
-      setMessage(`${result.result.created.length} durable case${result.result.created.length === 1 ? "" : "s"} created; ${result.result.existing.length} already existed. Browser originals were retained.`);
+      setMessage(plural(result.result.created.length, m.workspacePages.researchImportSummary, { existing: result.result.existing.length }));
       setPreview(null); setState("inbox"); await refresh();
     } catch (caught) { setMessage(caught instanceof Error ? caught.message : "Browser import could not be committed"); }
     finally { setImporting(false); }
@@ -130,8 +132,8 @@ export function ResearchInbox() {
       <PrivateWorkspaceGate allowMember title={m.workspacePages.researchUnlockTitle}>
         <section>
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-card p-3">
-            <div className="flex gap-1" role="tablist" aria-label="Case status">{tabs.map((tab) => <button key={tab.value} type="button" role="tab" aria-selected={state === tab.value} onClick={() => setState(tab.value)} className={`rounded-control px-4 py-2 text-xs font-semibold ${state === tab.value ? "bg-ink text-white" : "text-ink-3 hover:bg-paper"}`}>{tab.value === "inbox" ? m.workspacePages.researchTabInbox : tab.value === "pursue" ? m.workspacePages.researchTabPursuing : m.workspacePages.researchTabPassed}</button>)}</div>
-            <p className="text-xs text-ink-3">{m.workspacePages.researchAutoChecks}{lastUpdated ? ` · ${m.workspacePages.researchUpdated} ${lastUpdated.toLocaleTimeString()}` : ""}</p>
+            <div className="flex gap-1" role="tablist" aria-label={m.workspacePages.researchCaseStatusAria}>{tabs.map((tab) => <button key={tab.value} type="button" role="tab" aria-selected={state === tab.value} onClick={() => setState(tab.value)} className={`rounded-control px-4 py-2 text-xs font-semibold ${state === tab.value ? "bg-ink text-white" : "text-ink-3 hover:bg-paper"}`}>{tab.value === "inbox" ? m.workspacePages.researchTabInbox : tab.value === "pursue" ? m.workspacePages.researchTabPursuing : m.workspacePages.researchTabPassed}</button>)}</div>
+            <p className="text-xs text-ink-3">{m.workspacePages.researchAutoChecks}{lastUpdated ? ` · ${m.workspacePages.researchUpdated} ${formatLocaleDate(locale, lastUpdated, { timeStyle: "medium" })}` : ""}</p>
           </div>
           {error && <p role="alert" className="mt-4 rounded-control bg-catch-wash p-4 text-sm text-catch-ink">{error}</p>}
           {loading && !data ? <p className="mt-5 flex items-center gap-2 rounded-card border border-line bg-card p-6 text-sm"><Loader2 size={17} className="animate-spin" />{m.workspacePages.researchLoadingCases}</p> : <div className="mt-4 space-y-3">
@@ -141,8 +143,8 @@ export function ResearchInbox() {
                 <Link href={`/research/${encodeURIComponent(item.id)}`} className="inline-flex items-center gap-2 rounded-control bg-ink px-4 py-2.5 text-xs font-semibold text-white hover:bg-ink-2">{m.workspacePages.researchInvestigate} <ArrowRight size={14} /></Link>
               </div>
               <div className="mt-4 grid gap-3 border-t border-line pt-4 text-xs sm:grid-cols-4">
-                <div><p className="text-ink-3">{m.workspacePages.researchPublishedDeadline}</p><p className="mt-1 flex items-center gap-1 font-semibold"><Clock3 size={13} />{formatDate(item.saleDate)}</p></div>
-                <div><p className="text-ink-3">{m.workspacePages.researchOpeningAmount}</p><p className="mt-1 font-semibold">{typeof item.openingBid === "number" ? item.openingBid.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }) : m.workspacePages.researchUnknown}</p></div>
+                <div><p className="text-ink-3">{m.workspacePages.researchPublishedDeadline}</p><p className="mt-1 flex items-center gap-1 font-semibold"><Clock3 size={13} />{formatDate(item.saleDate, locale, m.workspacePages.researchNoDeadline)}</p></div>
+                <div><p className="text-ink-3">{m.workspacePages.researchOpeningAmount}</p><p className="mt-1 font-semibold">{typeof item.openingBid === "number" ? formatUsd(locale, item.openingBid) : m.workspacePages.researchUnknown}</p></div>
                 <div><p className="text-ink-3">{m.workspacePages.researchTriggeringEvidence}</p><p className="mt-1 font-semibold">{item.latestOrigin?.changes && Object.keys(item.latestOrigin.changes).length ? Object.entries(item.latestOrigin.changes).map(([field, values]) => `${field}: ${String(values.previous ?? 'unknown')} → ${String(values.current ?? 'unknown')}`).join(" · ") : item.latestOrigin?.changedFields?.length ? item.latestOrigin.changedFields.join(", ") : eventLabel(item)}</p></div>
                 <div><p className="text-ink-3">{m.workspacePages.researchCaseMaterial}</p><p className="mt-1 font-semibold">{item.originCount} · {item.evidenceCount}</p></div>
               </div>

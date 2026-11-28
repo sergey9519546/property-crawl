@@ -183,7 +183,7 @@ const DiscoverySearchField = React.memo(function DiscoverySearchField({
   );
 });
 export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?: DiscoveryPayload | null }) {
-  const { locale, intlLocale, messages: m, format } = useLocale();
+  const { locale, intlLocale, messages: m, format, plural } = useLocale();
   const lUi = m.listingsUi;
   const localizedDefaults: Record<string, string> = locale === "en" ? defaults : {
     state: lUi.allStates,
@@ -820,12 +820,12 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
 
   return (
     <section className="mx-auto max-w-[1440px] px-4 py-7 sm:px-6 lg:px-8">
-      <header className="mb-4 flex flex-wrap items-end justify-between gap-3">
-        <div>
+      <header className="mb-4 flex flex-wrap items-start justify-between gap-3 sm:items-end">
+        <div className="min-w-0 flex-1">
           <h1 className="text-2xl font-bold tracking-tight text-ink sm:text-3xl">{lUi.title}</h1>
           <p className="mt-1 text-sm text-ink-3">{lUi.subtitle}</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2 text-xs font-semibold">
+        <div className="flex shrink-0 flex-wrap items-center gap-2 text-xs font-semibold">
           <Link
             href="/underwrite"
             className="rounded-control border border-line-strong bg-card px-3 py-1.5 text-ink transition hover:border-line hover:bg-paper"
@@ -903,21 +903,37 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
             <Filter size={14} className="text-ink-3" />
             {Object.entries(filters)
               .filter(([key, value]) => key !== "view" && key !== "sort" && value)
-              .map(([key, value]) => (
-                <button
-                  key={key}
-                  onClick={() =>
-                    setFilters({
-                      [key]: undefined,
-                    } as Partial<DiscoveryFilters>)
-                  }
-                  className="inline-flex items-center gap-1 rounded-full bg-line px-2.5 py-1 text-label font-semibold text-ink"
-                >
-                  {filterLabels[key] || key}: {key === "hasDocuments" ? value === "true" ? "Available" : value === "false" ? "None posted" : "Not stated" : key === "hasPhoto" ? value === "true" ? "Has photo" : "No photo" : key === "seniorLien" ? value === "clean" ? "No senior-lien flag" : "High risk" : key === "redemption" ? value === "immediate" ? "Immediate deed" : "Active redemption" : key === "enrolledOnly" ? value === "true" ? "Enrolled counties only" : "Unenrolled counties" : sourceDisplayText(value!).replace(/_/g, " ")}
-                  <X size={12} />
-                </button>
-              ))}
+              .map(([key, value]) => {
+                const booleanChipLabel =
+                  value === "true"
+                    ? key === "priceDropped"
+                      ? lUi.chipPriceDropped
+                      : key === "isNew"
+                        ? lUi.chipNew
+                        : key === "stale"
+                          ? lUi.chipStale
+                          : key === "occupancyKnown"
+                            ? lUi.chipOccupancyKnown
+                            : null
+                    : null;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() =>
+                      setFilters({
+                        [key]: undefined,
+                      } as Partial<DiscoveryFilters>)
+                    }
+                    className="inline-flex items-center gap-1 rounded-full bg-line px-2.5 py-1 text-label font-semibold text-ink"
+                  >
+                    {booleanChipLabel || `${localizedFilterLabels[key] || filterLabels[key] || key}: ${key === "hasDocuments" ? (value === "true" ? "Available" : value === "false" ? "None posted" : "Not stated") : key === "hasPhoto" ? (value === "true" ? "Has photo" : "No photo") : key === "seniorLien" ? (value === "clean" ? "No senior-lien flag" : "High risk") : key === "redemption" ? (value === "immediate" ? "Immediate deed" : "Active redemption") : key === "enrolledOnly" ? (value === "true" ? "Enrolled counties only" : "Unenrolled counties") : sourceDisplayText(value!).replace(/_/g, " ")}`}
+                    <X size={12} />
+                  </button>
+                );
+              })}
             <button
+              type="button"
               onClick={() => {
                 setCursor(undefined);
                 setCursorStack([]);
@@ -979,7 +995,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
             from a block that had not changed height at all.
 
             Layout must not be a function of how long a sentence is. */}
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 basis-[320px] flex flex-wrap items-center gap-x-2 gap-y-1">
           {/* A loaded payload keeps its count during a refetch. "Updating
               results…" is only the empty state, so the server-rendered total
               cannot disappear while the browser request is in flight. The
@@ -1061,12 +1077,12 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
                 : "Checking which listings have a Deal Score…"}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <select
             aria-label="Sort results"
             value={filters.sort || "triage"}
             onChange={(event) => setFilters({ sort: event.target.value })}
-            className="min-h-10 rounded-lg border border-line-strong bg-card px-3 text-xs font-semibold"
+            className="h-10 rounded-lg border border-line-strong bg-card px-3 py-1.5 text-xs font-semibold leading-normal"
           >
             <option value="score">Deal Score</option>
             <option value="quality">{lUi.sortOptions.quality}</option>
@@ -1081,7 +1097,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
             aria-label="Minimum listing detail"
             value={filters.minQuality || ""}
             onChange={(event) => setFilters({ minQuality: event.target.value || undefined })}
-            className="min-h-10 rounded-lg border border-line-strong bg-card px-3 text-xs font-semibold"
+            className="h-10 rounded-lg border border-line-strong bg-card px-3 py-1.5 text-xs font-semibold leading-normal"
           >
             <option value="">{lUi.detailAny}</option>
             <option value="25">{lUi.detail25}</option>
@@ -1163,6 +1179,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
           <ShieldAlert size={18} />
           {error}
           <button
+            type="button"
             onClick={() => void refresh()}
             className="font-bold underline"
           >
@@ -1265,13 +1282,24 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
                         // emptied a 20-row page over a store of 9,798, and this
                         // line would have claimed "this search returns 0
                         // matching listings". Say what was actually examined.
-                        ? `This page loaded ${formatLocaleNumber(locale, evaluated)} ${evaluated === 1 ? "listing" : "listings"}, and none of them met the ranking or quality threshold applied here. Later pages have not been loaded, so matches may be on them.`
-                        : `This search returns ${payload.total.toLocaleString(intlLocale)} matching listing${
-                            payload.total === 1 ? "" : "s"
-                          }, but only ${formatLocaleNumber(locale, pageLength)} ${pageLength === 1 ? "is" : "are"} loaded here. Later pages have not been loaded, so matches may be on them.`
-                      : `Only ${formatLocaleNumber(locale, pageLength)} ${pageLength === 1 ? "listing is" : "listings are"} loaded here. Later pages have not been loaded, so matches may be on them.`}
+                        ? plural(evaluated, {
+                            one: "This page loaded {formatted} listing, and none of them met the ranking or quality threshold applied here. Later pages have not been loaded, so matches may be on them.",
+                            other: "This page loaded {formatted} listings, and none of them met the ranking or quality threshold applied here. Later pages have not been loaded, so matches may be on them.",
+                          }, { formatted: formatLocaleNumber(locale, evaluated) })
+                        : `${plural(payload.total, {
+                            one: "This search returns {formatted} matching listing",
+                            other: "This search returns {formatted} matching listings",
+                          }, { formatted: payload.total.toLocaleString(intlLocale) })}, ${plural(pageLength, {
+                            one: "but only {formatted} is loaded here. Later pages have not been loaded, so matches may be on them.",
+                            other: "but only {formatted} are loaded here. Later pages have not been loaded, so matches may be on them.",
+                          }, { formatted: formatLocaleNumber(locale, pageLength) })}`
+                      : plural(pageLength, {
+                          one: "Only {formatted} listing is loaded here. Later pages have not been loaded, so matches may be on them.",
+                          other: "Only {formatted} listings are loaded here. Later pages have not been loaded, so matches may be on them.",
+                        }, { formatted: formatLocaleNumber(locale, pageLength) })}
                   </p>
                   <button
+                    type="button"
                     onClick={clearLocalFilters}
                     className="mt-4 text-sm font-semibold text-ink underline"
                   >
@@ -1318,7 +1346,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
               ))}
             </div>
           )}
-          {!watchlistWholeCatalogActive ? (
+          {!watchlistWholeCatalogActive && (filteredListings.length > 0 || cursorStack.length > 0) ? (
             <div className="mt-7 flex items-center justify-between rounded-xl border border-line bg-card p-3">
               <button
                 type="button"
@@ -1534,7 +1562,7 @@ function DiscoveryCalendar({
                     {cUi.medianPrefix}{" "}
                     {week.medianOpeningBid !== null
                       ? displayMoney(week.medianOpeningBid)
-                      : "Not published"}
+                      : m.common.notPublished}
                   </span>
                 </div>
               ))}
@@ -1664,7 +1692,7 @@ function DiscoveryCalendar({
                   <strong className="mt-0.5 block text-sm text-ink">
                     {typeof bucket.medianOpeningBid === "number"
                       ? displayMoney(bucket.medianOpeningBid)
-                      : "Not published"}
+                      : m.common.notPublished}
                   </strong>
                 </div>
                 <div>
@@ -1672,7 +1700,7 @@ function DiscoveryCalendar({
                   <strong className="mt-0.5 block text-sm text-ink">
                     {typeof bucket.medianSqft === "number"
                       ? `${formatLocaleNumber(locale, bucket.medianSqft)} sqft`
-                      : "Not published"}
+                      : m.common.notPublished}
                   </strong>
                 </div>
                 <div>

@@ -32,7 +32,7 @@ interface AlertsModalProps {
 }
 
 export function AlertsModal({ isOpen, onClose, availableStates, listings, onApply }: AlertsModalProps) {
-  const { locale, messages, format } = useLocale();
+  const { locale, messages, format, plural } = useLocale();
   const t = messages.modalsAndParser;
   const [serverSearches, setServerSearches] = useState<ServerSavedSearch[]>([]);
   const [alertMatches, setAlertMatches] = useState<AlertMatch[]>([]);
@@ -320,7 +320,7 @@ export function AlertsModal({ isOpen, onClose, availableStates, listings, onAppl
                       </a>
                     )}
                     {matchCountForSearch > 0 && (
-                      <span className="text-label text-ink-3">· {format(matchCountForSearch === 1 ? t.alertsMatchesSingular : t.alertsMatchesPlural, { count: matchCountForSearch })}</span>
+                      <span className="text-label text-ink-3">· {plural(matchCountForSearch, t.alertsRecordedMatches)}</span>
                     )}
                   </div>
                   <p className="mt-1 text-label text-ink-3">{t.alertsDemoNotice}</p>

@@ -38,7 +38,7 @@ export default function ContactPage() {
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
         setStatus("success");
-        setResponseMsg(locale === "en" && data.message ? data.message : m.contact.successTitle);
+        setResponseMsg(locale === "en" && data.message ? data.message : m.contact.savedNote);
         setName("");
         setEmail("");
         setCompany("");
@@ -57,7 +57,7 @@ export default function ContactPage() {
     <div className="relative min-h-screen max-w-full overflow-x-hidden bg-paper text-ink">
       <SiteHeader />
       <main id="main-content" tabIndex={-1} className="outline-none">
-        <section className="px-5 pt-40 pb-10 sm:pt-48 sm:pb-12">
+        <section className="px-5 pt-28 pb-8 sm:pt-32 sm:pb-10">
           <div className="mx-auto max-w-3xl">
             <Link
               href="/"
@@ -72,15 +72,15 @@ export default function ContactPage() {
               </p>
             </div>
             <h1 className="mt-6 text-balance text-4xl font-semibold leading-[1.08] tracking-[-0.03em] sm:text-5xl">
-              {locale === "en" ? "Contact PerfectProperty" : m.contact.title}
+              {m.contact.title}
             </h1>
             <p className="mt-5 max-w-[620px] text-pretty text-lg leading-8 text-ink-2">
-              {locale === "en" ? "Tell us about a listing that looks wrong, a county you want added, a question about membership, or a team that wants to use PerfectProperty. Your message is saved and read. We can't promise a reply time." : `${m.contact.lead} ${m.contact.savedNote}`}
+              {`${m.contact.lead} ${m.contact.savedNote}`}
             </p>
           </div>
         </section>
 
-        <section className="px-5 pb-20 sm:pb-28">
+        <section className="px-5 pb-12 sm:pb-16">
           <div className="mx-auto max-w-3xl">
             <div>
               {status === "success" ? (
@@ -88,7 +88,7 @@ export default function ContactPage() {
                   <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-go-fill/20 text-go">
                     <CheckCircle2 className="h-6 w-6" />
                   </div>
-                  <h2 className="text-xl font-bold text-go">Message received</h2>
+                  <h2 className="text-xl font-bold text-go">{m.contact.successTitle}</h2>
                   <p className="text-sm text-ink-2 max-w-md mx-auto">{responseMsg}</p>
                   <div className="pt-2">
                     <button

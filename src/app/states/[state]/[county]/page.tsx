@@ -27,7 +27,7 @@ import { sourceDisplayText } from "@/lib/source-display";
 import { SOURCES } from "@/data/listings";
 import { getRequestLocale } from "@/lib/i18n/server";
 import { getMessages } from "@/lib/i18n/messages";
-import { formatLocaleNumber, formatUsd, interpolate } from "@/lib/i18n/translator";
+import { formatLocaleNumber, formatUsd, interpolate, selectPlural } from "@/lib/i18n/translator";
 import { localizeDisplayDate, localizePropType } from "@/lib/i18n/domain";
 
 export const dynamic = "force-dynamic";
@@ -222,8 +222,8 @@ export default async function CountyDocketPage({ params }: PageProps) {
           <p className="mt-3 max-w-3xl text-sm leading-relaxed text-ink-3 sm:text-base">
             {locale === "en" ? (
               upcomingCount > 0
-                ? `${stats.totalCount} listing${stats.totalCount === 1 ? "" : "s"} in ${formalCounty}. ${upcomingCount} ${upcomingCount === 1 ? "sale is" : "sales are"} coming up, ${thisWeekCount} in the next 7 days. Next sale: ${nextSaleDisplay}.`
-                : `No upcoming sales listed here right now. ${stats.totalCount} past or undated listing${stats.totalCount === 1 ? "" : "s"} below.`
+                ? `${selectPlural(locale, stats.totalCount, { one: "{formatted} listing", other: "{formatted} listings" }, { formatted: formatLocaleNumber(locale, stats.totalCount) })} in ${formalCounty}. ${selectPlural(locale, upcomingCount, { one: "{formatted} sale is", other: "{formatted} sales are" }, { formatted: formatLocaleNumber(locale, upcomingCount) })} coming up, ${formatLocaleNumber(locale, thisWeekCount)} in the next 7 days. Next sale: ${nextSaleDisplay}.`
+                : `No upcoming sales listed here right now. ${selectPlural(locale, stats.totalCount, { one: "{formatted} past or undated listing", other: "{formatted} past or undated listings" }, { formatted: formatLocaleNumber(locale, stats.totalCount) })} below.`
             ) : (
               upcomingCount > 0
                 ? interpolate(m.states.countyUpcomingSummary, {

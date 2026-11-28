@@ -5,6 +5,8 @@ import Link from "next/link";
 import { displayMoney } from "@/lib/listing-display";
 import { sourceDisplayText } from "@/lib/source-display";
 import { useLocale } from "@/components/i18n/locale-provider";
+import type { Locale } from "@/lib/i18n/config";
+import { formatLocaleNumber, formatUsd } from "@/lib/i18n/translator";
 import {
   COMPARE_LIMIT,
   makeCompareTarget,
@@ -148,32 +150,32 @@ function finite(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-function showValue(value: unknown, kind: FieldKind): string {
+function showValue(value: unknown, kind: FieldKind, locale: Locale): string {
   if (kind === "text") {
     if (typeof value !== "string" || !value.trim()) return "—";
     return value.trim();
   }
   const numeric = finite(value);
   if (numeric === null) return "—";
-  if (kind === "money") return displayMoney(numeric);
+  if (kind === "money") return formatUsd(locale, numeric);
   if (kind === "percent") return `${(numeric * 100).toFixed(1)}%`;
-  return numeric.toLocaleString();
+  return formatLocaleNumber(locale, numeric);
 }
 
-function showDelta(value: number | null, kind: FieldKind): string | null {
+function showDelta(value: number | null, kind: FieldKind, locale: Locale, ptSuffix: string): string | null {
   if (value === null || !Number.isFinite(value) || kind === "text") return null;
   const sign = value > 0 ? "+" : value < 0 ? "−" : "";
   const magnitude = Math.abs(value);
-  if (kind === "money") return `${sign}${displayMoney(magnitude)}`;
-  if (kind === "percent") return `${sign}${(magnitude * 100).toFixed(1)} pt`;
-  return `${sign}${magnitude.toLocaleString()}`;
+  if (kind === "money") return `${sign}${formatUsd(locale, magnitude)}`;
+  if (kind === "percent") return `${sign}${(magnitude * 100).toFixed(1)} ${ptSuffix}`;
+  return `${sign}${formatLocaleNumber(locale, magnitude)}`;
 }
 
-function rowLabel(row: CompareRow, labels: Record<string, string>): string {
+function rowLabel(row: CompareRow, labels: Record<string, string>, fallback: string): string {
   const id = row.id || "";
   if (id && labels[id]) return labels[id];
   const place = [row.city, row.state].filter((part) => typeof part === "string" && part.trim()).join(", ");
-  return place || id || "Listing";
+  return place || id || fallback;
 }
 
 export function CompareTray({
@@ -190,13 +192,7 @@ export function CompareTray({
   onClear: () => void;
 }) {
   const { locale, messages: m, format } = useLocale();
-  const fieldNames: Record<string, string> = locale === "en" ? {} : {
-    openingBid: m.listingsUi.openingAmountLabel,
-    dealScore: "Deal Score",
-    sqft: m.detailUi.livingAreaLabel,
-    year: m.detailUi.yearBuiltLabel,
-    propType: m.detailUi.typeLabel,
-  };
+  const fieldNames = m.listingsUi.compareFields as Record<string, string>;
   const [payload, setPayload] = React.useState<ComparePayload | null>(null);
   const [error, setError] = React.useState("");
   const [loading, setLoading] = React.useState(false);
@@ -242,7 +238,7 @@ export function CompareTray({
   const rows = payload?.rows ?? [];
 
   return (
-    <section aria-label="Listing comparison" data-testid="listing-compare" className="mt-5 rounded-card border border-line bg-card p-4 shadow-sm sm:p-5">
+    <section aria-label={m.listingsUi.compareRegionAria} data-testid="listing-compare" className="mt-5 rounded-card border border-line bg-card p-4 shadow-sm sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-lg font-bold text-ink">{m.listingsUi.compareTitle}</h2>
@@ -256,7 +252,7 @@ export function CompareTray({
             <span className="max-w-[16rem] truncate font-semibold text-ink">{labels[id] || id}</span>
             <span className="text-ink-3">{index === 0 ? m.listingsUi.targetTag : `#${index + 1}`}</span>
             {index > 0 ? <button type="button" onClick={() => onMakeTarget(id)} className="rounded-full px-2 py-1 font-semibold text-ink-2 hover:bg-card">{m.listingsUi.makeTargetBtn}</button> : null}
-            <button type="button" onClick={() => onRemove(id)} aria-label={`Remove ${labels[id] || id} from compare`} className="rounded-full px-2 py-1 font-semibold text-ink-2 hover:bg-card">{m.listingsUi.removeBtn}</button>
+            <button type="button" onClick={() => onRemove(id)} aria-label={format(m.listingsUi.compareRemoveAddressAria, { address: labels[id] || id })} className="rounded-full px-2 py-1 font-semibold text-ink-2 hover:bg-card">{m.listingsUi.removeBtn}</button>
           </li>
         ))}
       </ul>
@@ -266,13 +262,13 @@ export function CompareTray({
       {rows.length >= 2 ? (
         <div className="mt-4 overflow-x-auto">
           <table className="min-w-full border-collapse text-left text-sm">
-            <caption className="sr-only">Side-by-side listing comparison. The first column is the target.</caption>
+            <caption className="sr-only">{m.listingsUi.compareTableCaption}</caption>
             <thead>
               <tr className="border-b border-line">
                 <th scope="col" className="py-2 pr-4 text-xs font-semibold text-ink-3">{m.listingsUi.fieldCol}</th>
                 {rows.map((row, index) => {
                   const id = row.id || "";
-                  const label = rowLabel(row, labels);
+                  const label = rowLabel(row, labels, m.listingsUi.compareListingFallback);
                   return (
                     <th key={id || index} scope="col" className="min-w-[10rem] py-2 pr-4 align-bottom">
                       {id ? <Link href={`/listings/${encodeURIComponent(id)}`} className="font-semibold text-ink underline-offset-2 hover:underline">{label}</Link> : <span className="font-semibold">{label}</span>}
@@ -291,10 +287,10 @@ export function CompareTray({
                     const winnerId = payload?.winnerByField?.[field.key];
                     const winner = field.kind !== "text" && winnerId != null && winnerId === row.id;
                     const delta = index === 0 ? null : finite(payload?.deltas?.[field.key]?.deltas?.[index - 1]);
-                    const deltaLabel = showDelta(delta, field.kind);
+                    const deltaLabel = showDelta(delta, field.kind, locale, m.listingsUi.comparePtSuffix);
                     const text = field.kind === "text" && field.key === "source" && typeof raw === "string" && raw.trim()
                       ? sourceDisplayText(raw)
-                      : showValue(raw, field.kind);
+                      : showValue(raw, field.kind, locale);
                     return (
                       <td key={`${row.id || index}-${field.key}`} className="py-2 pr-4 align-top">
                         <span className="font-semibold text-ink">{text}</span>

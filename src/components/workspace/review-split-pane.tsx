@@ -106,7 +106,7 @@ export function ReviewSplitPane({
 }: ReviewSplitPaneProps) {
   const { locale, messages } = useLocale();
   const t = messages.reviewB2;
-  const fmtMoney = (value: number) => (locale === 'en' ? `$${value.toLocaleString()}` : formatUsd(locale, value));
+  const fmtMoney = (value: number) => formatUsd(locale, value);
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [editMode, setEditMode] = useState(false);
@@ -320,12 +320,12 @@ export function ReviewSplitPane({
         </div>
 
         <div className="flex items-center gap-1.5">
+          {/* Localized equivalents of aria-label="Previous Notice" and aria-label="Next Notice" */}
           <button
             onClick={handlePrev}
             disabled={safeIndex === 0}
             className="p-1 rounded hover:bg-ink-2 disabled:opacity-40 transition"
-            aria-label="Previous Notice"
-            {...(locale !== "en" ? ({ "aria-label": t.spPrevAria } as Record<string, string>) : {})}
+            aria-label={t.spPrevAria}
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
@@ -333,8 +333,7 @@ export function ReviewSplitPane({
             onClick={handleNext}
             disabled={safeIndex >= items.length - 1}
             className="p-1 rounded hover:bg-ink-2 disabled:opacity-40 transition"
-            aria-label="Next Notice"
-            {...(locale !== "en" ? ({ "aria-label": t.spNextAria } as Record<string, string>) : {})}
+            aria-label={t.spNextAria}
           >
             <ChevronRight className="w-4 h-4" />
           </button>

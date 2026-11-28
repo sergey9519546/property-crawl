@@ -589,72 +589,35 @@ export function SavedHunts() {
         <p className="mt-5 max-w-2xl text-base leading-7 text-ink-3">
           {m.workspacePages.huntsSub}
         </p>
-        <div className="mt-8 flex max-w-xl items-center justify-between gap-4 rounded-card border border-line bg-card p-5">
-          <div>
-            <p className="text-sm font-semibold">
-              {session.member?.entitled && !session.authenticated
-                ? fmt(sh.yourHuntsWithEmail, { email: session.member.email })
-                : session.member && !session.memberTools
-                  ? fmt(sh.memberAccountWithEmail, { email: session.member.email })
+        {(session.loading || session.memberTools) && (
+          <div className="mt-8 flex max-w-xl items-center justify-between gap-4 rounded-card border border-line bg-card p-5">
+            <div>
+              <p className="text-sm font-semibold">
+                {session.member?.entitled && !session.authenticated
+                  ? fmt(sh.yourHuntsWithEmail, { email: session.member.email })
                   : sh.huntsCardTitle}
-            </p>
-            <p className="mt-1 text-xs leading-5 text-ink-3">
-              {session.loading
-                ? sh.checkingSession
-                : session.memberTools
-                  ? sh.huntsActiveDesc
-                  : session.member
-                    ? sh.huntsInactiveMemberDesc
-                    : sh.huntsSignedOutDesc}
-            </p>
-          </div>
-          {session.loading ? null : session.memberTools ? (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() =>
-                void run(async () => {
-                  await refreshAll();
-                  setMessage(sh.refreshedToast);
-                })
-              }
-              className="shrink-0 rounded-lg border border-line-strong px-4 py-2 text-xs font-semibold disabled:opacity-50"
-            >
-              {m.workspacePages.huntsRefreshBtn}
-            </button>
-          ) : session.member ? (
-            <div className="flex shrink-0 flex-wrap items-center gap-2">
-              <Link
-                href="/pricing"
-                className="rounded-control bg-ink px-4 py-2 text-xs font-semibold text-white hover:bg-ink-2"
-              >
-                {sh.viewPlans}
-              </Link>
-              <Link
-                href="/account"
-                className="rounded-control border border-line-strong bg-card px-4 py-2 text-xs font-semibold text-ink-2 hover:bg-paper"
-              >
-                {sh.accountBtn}
-              </Link>
+              </p>
+              <p className="mt-1 text-xs leading-5 text-ink-3">
+                {session.loading ? sh.checkingSession : sh.huntsActiveDesc}
+              </p>
             </div>
-          ) : (
-            <div className="flex shrink-0 flex-wrap items-center gap-2">
-              <Link
-                href="/sign-in"
-                className="rounded-control bg-ink px-4 py-2 text-xs font-semibold text-white hover:bg-ink-2"
-              >
-                {m.workspacePages.huntsMemberBtn}
-              </Link>
+            {session.loading ? null : (
               <button
                 type="button"
-                onClick={session.requestUnlock}
-                className="rounded-control border border-line-strong bg-card px-4 py-2 text-xs font-semibold text-ink-2 hover:bg-paper"
+                disabled={busy}
+                onClick={() =>
+                  void run(async () => {
+                    await refreshAll();
+                    setMessage(sh.refreshedToast);
+                  })
+                }
+                className="shrink-0 rounded-lg border border-line-strong px-4 py-2 text-xs font-semibold disabled:opacity-50"
               >
-                {m.common.unlock}
+                {m.workspacePages.huntsRefreshBtn}
               </button>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
         {error && (
           <p
             role="alert"
@@ -691,6 +654,12 @@ export function SavedHunts() {
                     {sh.upgradeMembership} <ArrowRight size={15} />
                   </Link>
                   <Link
+                    href="/account"
+                    className="inline-flex items-center gap-2 rounded-control border border-line-strong bg-paper px-4 py-2.5 text-sm font-semibold text-ink-2 hover:bg-card"
+                  >
+                    {sh.accountBtn}
+                  </Link>
+                  <Link
                     href="/listings"
                     className="inline-flex items-center gap-2 rounded-control border border-line-strong bg-paper px-4 py-2.5 text-sm font-semibold text-ink-2 hover:bg-card"
                   >
@@ -711,6 +680,13 @@ export function SavedHunts() {
                   >
                     {sh.viewPlans}
                   </Link>
+                  <button
+                    type="button"
+                    onClick={session.requestUnlock}
+                    className="inline-flex items-center gap-2 rounded-control border border-line-strong bg-paper px-4 py-2.5 text-sm font-semibold text-ink-2 hover:bg-card"
+                  >
+                    {m.common.unlock}
+                  </button>
                 </>
               )}
             </div>

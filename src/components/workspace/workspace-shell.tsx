@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { Logo } from "@/components/site/logo";
 import { LanguageSwitcher } from "@/components/i18n/language-switcher";
 import { useLocale } from "@/components/i18n/locale-provider";
+import { formatLocaleDate } from "@/lib/i18n/translator";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 
 export type MemberState = { email: string; entitled: boolean } | null;
@@ -105,7 +106,7 @@ export function useResolvedWorkspaceSession(): SessionState | null {
 
 export function WorkspaceSessionProvider({ children, includeChrome = false }: { children: React.ReactNode; includeChrome?: boolean }) {
   const pathname = usePathname();
-  const { messages } = useLocale();
+  const { locale, messages } = useLocale();
   const nav = messages.workspace.nav;
   const navigation = React.useMemo(
     () => [
@@ -238,26 +239,26 @@ export function WorkspaceSessionProvider({ children, includeChrome = false }: { 
 
   return <SessionContext.Provider value={context}>
     <div className="workspace-shell min-h-screen bg-paper text-ink">
-      {includeChrome ? (<header className="sticky top-0 z-40 border-b border-line bg-card/95 px-4 py-3 shadow-sm backdrop-blur sm:px-8">
-        <div className="mx-auto flex max-w-[1480px] flex-wrap items-center gap-3">
-          <Link href="/" className="mr-2 flex items-center" aria-label={messages.common.homeAria}><Logo className="text-body" /></Link>
-          <nav aria-label="Research workspace" data-i18n-label={messages.workspace.navAria} className="order-3 flex w-full flex-nowrap overflow-x-auto gap-1 sm:order-none sm:w-auto sm:flex-1">
+      {includeChrome ? (<header className="sticky top-0 z-40 border-b border-line bg-card/95 px-3 py-2.5 shadow-sm backdrop-blur sm:px-6 lg:px-8">
+        <div className="mx-auto flex max-w-[1480px] flex-wrap items-center gap-2 sm:gap-3">
+          <Link href="/" className="mr-1 flex shrink-0 items-center" aria-label={messages.common.homeAria}><Logo className="text-body" /></Link>
+          <nav aria-label={messages.workspace.navAria} className="order-3 flex w-full min-w-0 flex-nowrap items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden xl:order-none xl:w-auto xl:flex-1">
             {navigation.map((item) => {
               const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
               const Icon = item.icon;
-              return <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} className={cn("shrink-0 inline-flex flex-col items-center justify-center gap-1 rounded-control px-2 py-2 text-label font-semibold transition sm:shrink-0 sm:flex-row sm:gap-1.5 sm:px-3 sm:text-xs", active ? "bg-ink text-white" : "text-ink-2 hover:bg-line hover:text-ink")}><Icon size={14} />{item.label}</Link>;
+              return <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} className={cn("shrink-0 inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-control px-2.5 py-1.5 text-xs font-semibold transition", active ? "bg-ink text-white" : "text-ink-2 hover:bg-line hover:text-ink")}><Icon size={14} className="shrink-0" />{item.label}</Link>;
             })}
           </nav>
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
             <LanguageSwitcher />
-            <Link href="/" className="hidden items-center gap-1 rounded-control px-2 py-2 text-xs font-semibold text-ink-3 hover:bg-line md:flex"><Home size={14} />{messages.common.site}</Link>
-            <Link href={member ? "/account" : "/sign-in"} className="inline-flex items-center gap-1 rounded-control border border-line-strong px-3 py-2 text-xs font-semibold text-ink hover:bg-line"><UserRound size={14} />{member ? (member.entitled ? messages.common.account : messages.common.subscribe) : messages.common.signIn}</Link>
-            {authenticated ? <button type="button" disabled={submitting} onClick={() => void logout()} className="inline-flex items-center gap-1.5 rounded-control border border-line-strong bg-card px-3 py-2 text-xs font-semibold disabled:opacity-50"><LogOut size={14} />{submitting ? messages.common.locking : messages.common.lock}</button>
-              : <button type="button" onClick={openUnlock} className="inline-flex items-center gap-1.5 rounded-control bg-ink px-3 py-2 text-xs font-semibold text-white hover:bg-ink-2"><LockKeyhole size={14} />{loading ? messages.common.checking : messages.common.unlock}</button>}
+            <Link href="/" className="hidden items-center gap-1 whitespace-nowrap rounded-control px-2 py-1.5 text-xs font-semibold text-ink-3 hover:bg-line 2xl:flex"><Home size={14} />{messages.common.site}</Link>
+            <Link href={member ? "/account" : "/sign-in"} className="inline-flex items-center gap-1 whitespace-nowrap rounded-control border border-line-strong px-2.5 py-1.5 text-xs font-semibold text-ink hover:bg-line"><UserRound size={14} className="shrink-0" />{member ? (member.entitled ? messages.common.account : messages.common.subscribe) : messages.common.signIn}</Link>
+            {authenticated ? <button type="button" disabled={submitting} onClick={() => void logout()} className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-control border border-line-strong bg-card px-2.5 py-1.5 text-xs font-semibold disabled:opacity-50"><LogOut size={14} className="shrink-0" />{submitting ? messages.common.locking : messages.common.lock}</button>
+              : <button type="button" onClick={openUnlock} className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-control bg-ink px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-ink-2"><LockKeyhole size={14} className="shrink-0" />{loading ? messages.common.checking : messages.common.unlock}</button>}
           </div>
         </div>
       </header>) : null}
-      {authenticated && expiresAt && <p className="sr-only">Private operator session expires {new Date(expiresAt).toLocaleString()}.</p>}
+      {authenticated && expiresAt && <p className="sr-only">Private operator session expires {formatLocaleDate(locale, expiresAt, { dateStyle: "medium", timeStyle: "short" })}.</p>}
       {shellError ? <p role="alert" className="mx-auto my-3 max-w-[1440px] rounded-control bg-catch-wash px-5 py-3 text-sm text-catch-ink">{shellError}</p> : null}
       {children}
     </div>

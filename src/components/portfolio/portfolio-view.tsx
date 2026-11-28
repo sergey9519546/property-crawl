@@ -142,7 +142,6 @@ type SavedDeal = {
 
 function formatMoney(amount: number | null | undefined, locale: Locale): string {
   if (amount == null || !Number.isFinite(amount)) return "—";
-  if (locale === "en") return `$${Math.round(amount).toLocaleString()}`;
   return formatUsd(locale, amount);
 }
 

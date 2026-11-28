@@ -58,7 +58,7 @@ export default async function PricingPage() {
     <WorkspaceSessionProvider>
       <div className="min-h-screen bg-paper text-ink">
         <SiteHeader />
-        <main id="main-content" tabIndex={-1} className="mx-auto max-w-6xl px-5 py-16 outline-none sm:px-8 lg:px-12">
+        <main id="main-content" tabIndex={-1} className="mx-auto max-w-6xl px-5 pb-16 pt-28 outline-none sm:px-8 sm:pt-32 lg:px-12">
           <div className="max-w-2xl">
             <p className="text-label font-bold uppercase tracking-widest text-ink-3">{p.eyebrow}</p>
             <h1 className="mt-2 text-display font-semibold tracking-tight text-ink">{p.heading}</h1>

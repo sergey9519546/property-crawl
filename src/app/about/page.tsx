@@ -35,32 +35,11 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-const STEPS = [
-  {
-    title: "Find",
-    body: "Search a city, county or ZIP and see upcoming sales from public sources. It is free and needs no account.",
-  },
-  {
-    title: "Read the catch",
-    body: "Each listing shows the catch: redemption period, liens that may survive the sale, occupancy and deposit. It also names anything the notice leaves out, and links to the original notice.",
-  },
-  {
-    title: "Get alerts",
-    body: "Members start a hunt and get an email when a new listing fits, or when a saved one changes its date or opening bid.",
-  },
-  {
-    title: "Check before you bid",
-    body: "We point you to what to verify yourself: title, condition and sale terms.",
-  },
-];
-
-const PROMISES = ["Zero Cold Calls or Robocalls", "We never contact homeowners", "Public sources only"];
-
 export default async function AboutPage() {
   const locale = await getRequestLocale();
   const m = getMessages(locale);
-  const steps = locale === "en" ? STEPS : m.about.steps;
-  const promises = locale === "en" ? PROMISES : m.about.promises;
+  const steps = m.about.steps;
+  const promises = m.about.promises;
   return (
     <div className="relative min-h-screen max-w-full overflow-x-hidden bg-paper text-ink">
       <SiteHeader />
@@ -80,17 +59,17 @@ export default async function AboutPage() {
               </p>
             </div>
             <h1 className="mt-6 text-balance text-4xl font-semibold leading-[1.08] tracking-[-0.03em] sm:text-5xl">
-              {locale === "en" ? "Every deal has a catch. We show it first." : m.about.title}
+              {m.about.title}
             </h1>
             <p className="mt-5 max-w-[620px] text-pretty text-lg leading-8 text-ink-2">
-              {locale === "en" ? "PerfectProperty lists foreclosure, sheriff, tax and government-sold property for first-time auction buyers, small landlords and flippers. Each listing comes with its risks in plain English." : m.about.lead}
+              {m.about.lead}
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Link
                 href="/listings"
                 className="inline-flex h-12 items-center justify-center gap-2 rounded-control bg-ink px-6 text-sm font-semibold text-white transition-colors hover:bg-ink-2"
               >
-                {locale === "en" ? "Browse listings" : m.about.ctaBrowse} <ArrowRight className="h-4 w-4" aria-hidden />
+                {m.about.ctaBrowse} <ArrowRight className="h-4 w-4" aria-hidden />
               </Link>
             </div>
           </div>
@@ -122,11 +101,11 @@ export default async function AboutPage() {
         </section>
 
         <section className="px-5 pb-16">
-          <div className="mx-auto max-w-4xl rounded-card border border-line bg-card p-6 shadow-card sm:p-10">
+          <div className="mx-auto max-w-4xl rounded-card border border-line bg-card p-6 shadow-card sm:p-8">
             <SectionHeading eyebrow={m.about.limitsEyebrow} align="left" title={m.about.limitsTitle}>
-              {locale === "en" ? "We help you find and size up a property. We don't replace a title search or an inspection, we don't bid for you, and we don't cover every county." : m.about.limitsBody}
+              {m.about.limitsBody}
             </SectionHeading>
-            <ul className="mt-8 grid gap-3 sm:grid-cols-3">
+            <ul className="mt-6 grid gap-3 sm:grid-cols-3">
               {promises.map((p) => (
                 <li
                   key={p}

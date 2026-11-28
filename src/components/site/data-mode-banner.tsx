@@ -27,7 +27,7 @@ type Health = {
  * serve, and file-only reviews are not a production-durable deployment.
  */
 export function DataModeBanner() {
-  const { locale, messages } = useLocale();
+  const { locale, messages, format } = useLocale();
   const dm = messages.workspace.dataModeBanner;
   // `undefined` = not yet loaded, `null` = the health probe FAILED. The two must
   // not collapse: a failed probe used to set health to null, and the
@@ -70,14 +70,14 @@ export function DataModeBanner() {
       <div
         role="status"
         data-testid="data-mode-banner-pending"
-        className="border-b border-line-strong bg-paper px-4 py-2 text-sm text-ink-2"
+        className="border-b border-line-strong bg-paper px-4 py-1.5 text-sm text-ink-2"
       >
         {/* Same reserved box as the real banner. A one-line placeholder against
             a two-line real message still moved the page 24px, because the
             banner copy wraps at desktop widths. Both states therefore
             claim two lines up front, so the answer to the probe can change the
             words without changing the geometry. */}
-        <div className="mx-auto flex min-h-[65px] max-w-[1380px] items-start justify-between gap-4">
+        <div className="mx-auto flex min-h-[65px] max-w-[1380px] items-center justify-between gap-4">
           <p className="leading-6">{locale === "en" ? "Checking for the latest listings…" : dm.checking}</p>
         </div>
       </div>
@@ -91,9 +91,9 @@ export function DataModeBanner() {
       <div
         role="status"
         data-testid="data-mode-banner"
-        className="border-b border-catch/30 bg-catch-wash px-4 py-2 text-sm text-catch-ink"
+        className="border-b border-catch/30 bg-catch-wash px-4 py-1.5 text-sm text-catch-ink"
       >
-        <div className="mx-auto flex min-h-[65px] max-w-[1380px] items-start justify-between gap-4">
+        <div className="mx-auto flex min-h-[65px] max-w-[1380px] items-center justify-between gap-4">
           <p className="leading-6">
             <strong className="font-semibold">{dm.failedTitle}</strong>{" "}
             {dm.failedBody}
@@ -102,9 +102,10 @@ export function DataModeBanner() {
           <button
             type="button"
             onClick={() => setDismissed(true)}
+            aria-label={dm.dismissAria}
             className="shrink-0 rounded border border-catch/30 px-2 py-1 text-xs font-medium"
           >
-            Dismiss
+            {dm.dismissBtn}
           </button>
         </div>
       </div>
@@ -125,7 +126,7 @@ export function DataModeBanner() {
     // Not dismissible: there is no inventory behind this page. A warning the
     // user can wave away would leave an empty result looking like a finding.
     // The internal reason (health.inventoryUnavailableReason) is never shown to buyers.
-    parts.push("Listings are not available right now. Please try again soon.");
+    parts.push(dm.unavailableBody);
   } else if (stale) {
     // A database full of rows is not the same claim as an inventory somebody
     // checked today. "Active" on a record nobody has re-observed in three weeks
@@ -134,10 +135,7 @@ export function DataModeBanner() {
     // Say how much is stale, not how fresh the newest row is. Collection is
     // bounded, so a fresh sweep makes the newest record minutes old while the
     // rest is untouched - "last observed 0 hours ago" would be true and useless.
-    parts.push(
-      `These listings have not been refreshed in the last ${freshness?.staleAfterHours ?? 24} hours.` +
-        " Sale dates and availability may have changed, so check each sale at its source."
-    );
+    parts.push(format(dm.staleBody, { hours: freshness?.staleAfterHours ?? 24 }));
   }
   return (
     <div
@@ -145,14 +143,15 @@ export function DataModeBanner() {
       data-testid="data-mode-banner"
       className={
         health.dataMode === "unavailable"
-          ? "border-b border-line-strong bg-paper px-4 py-2 text-sm text-ink-2"
-          : "border-b border-catch/30 bg-catch-wash px-4 py-2 text-sm text-catch-ink"
+          ? "border-b border-line-strong bg-paper px-4 py-1.5 text-sm text-ink-2"
+          : "border-b border-catch/30 bg-catch-wash px-4 py-1.5 text-sm text-catch-ink"
       }
     >
-      <div className="mx-auto flex min-h-[65px] max-w-[1380px] items-start justify-between gap-4">
+      <div className="mx-auto flex min-h-[65px] max-w-[1380px] items-center justify-between gap-4">
         <p className="leading-6">
+          {/* Localized equivalent of "Listings may be out of date:" */}
           <strong className="font-semibold">
-            {health.dataMode === "unavailable" ? "No listings:" : "Listings may be out of date:"}
+            {health.dataMode === "unavailable" ? dm.unavailableTitle : dm.staleTitle}
           </strong>{" "}
           {parts.join(" ")}
         </p>

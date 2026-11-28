@@ -23,7 +23,7 @@ const relationships = ["sale_terms", "title_research", "occupancy_research", "va
 
 function show(value: unknown, locale: Locale, unknownLabel: string) {
   if (value === null || value === undefined || value === "") return unknownLabel;
-  if (typeof value === "number") return locale === "en" ? value.toLocaleString() : formatLocaleNumber(locale, value);
+  if (typeof value === "number") return formatLocaleNumber(locale, value);
   if (typeof value === "string") return sourceDisplayText(value);
   return sourceDisplayText(JSON.stringify(value));
 }
@@ -31,18 +31,16 @@ function show(value: unknown, locale: Locale, unknownLabel: string) {
 function claimName(claim: Claim, fallback: string) { return sourceDisplayText(claim.title || claim.key || fallback); }
 
 export function ResearchCase({ caseId }: { caseId: string }) {
-  const { locale, messages } = useLocale();
+  const { locale, messages, plural } = useLocale();
   const t = messages.researchB2;
   const d = messages.designB2;
-  const fmtMoney = (n: number) => (locale === "en" ? `$${Math.round(n).toLocaleString()}` : formatUsd(locale, n));
+  const fmtMoney = (n: number) => formatUsd(locale, n);
   const fmtMoneyStr = (raw: string | number | null | undefined) => {
     const n = Number(raw || 0);
-    return Number.isFinite(n) ? fmtMoney(n) : "$0";
+    return Number.isFinite(n) ? fmtMoney(n) : formatUsd(locale, 0);
   };
   const fmtDateTime = (value: string) =>
-    locale === "en"
-      ? new Date(value).toLocaleString()
-      : formatLocaleDate(locale, value, { dateStyle: "medium", timeStyle: "short" });
+    formatLocaleDate(locale, value, { dateStyle: "medium", timeStyle: "short" });
 
   const reasonChoices = [
     ["price_above_target", t.rcReasonPriceAbove],
@@ -158,7 +156,7 @@ export function ResearchCase({ caseId }: { caseId: string }) {
       setIntake(approved); if (approved[0]) setSelectedEvidence(approved[0].id);
       setMessage(
         approved.length
-          ? interpolate(approved.length === 1 ? t.rcMsgEvidenceAvailSingle : t.rcMsgEvidenceAvailPlural, { count: approved.length })
+          ? plural(approved.length, t.rcMsgEvidenceAvail)
           : t.rcMsgEvidenceNone,
       );
     } catch (caught) { setError(caught instanceof Error ? caught.message : t.rcErrLoadEvidence); }
@@ -286,7 +284,7 @@ export function ResearchCase({ caseId }: { caseId: string }) {
             return (
               <section data-testid="case-catch" className="mt-5 rounded-control bg-card/5 p-4 text-sm leading-6 text-paper">
                 <p className="font-semibold">
-                  {band ? interpolate(t.rcDealScoreBand, { score: Math.round(Number(snap.dealScore)), label: bandLabel }) : t.rcDealScoreUnavail} · {catchSummary.flags.length ? interpolate(catchSummary.flags.length === 1 ? t.rcCatchFlagSingle : t.rcCatchFlagPlural, { count: catchSummary.flags.length }) : t.rcCatchNoFlags}
+                  {band ? interpolate(t.rcDealScoreBand, { score: Math.round(Number(snap.dealScore)), label: bandLabel }) : t.rcDealScoreUnavail} · {catchSummary.flags.length ? plural(catchSummary.flags.length, t.rcCatchFlags) : t.rcCatchNoFlags}
                 </p>
                 <p className="mt-1 text-xs text-paper/80">{sourceDisplayText([...catchSummary.notes, ...catchSummary.flags].join(" "))}</p>
               </section>

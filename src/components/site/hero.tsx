@@ -251,7 +251,7 @@ export function Hero() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45, delay: 0.24, ease: EASE_OUT }}
           onSubmit={handleSubmit}
-          className="hero-search-shell relative z-20 mt-8 flex h-[68px] items-center self-center rounded-card px-6 sm:mt-16 xl:mt-4"
+          className="hero-search-shell relative z-20 mt-8 flex h-[68px] items-center self-center rounded-card pl-4 pr-3 sm:mt-16 sm:pl-6 sm:pr-4 xl:mt-4"
           style={{
             width: "100%",
             maxWidth: "min(620px, calc(100vw - 40px))",
@@ -314,12 +314,12 @@ export function Hero() {
             }
             placeholder={placeholder}
             autoComplete="off"
-            className="min-w-0 flex-1 bg-transparent text-lead leading-none text-ink placeholder:text-ink-3 focus:outline-none"
+            className="min-w-0 flex-1 bg-transparent pr-14 text-lead leading-none text-ink placeholder:text-ink-3 focus:outline-none"
           />
           <button
             type="submit"
             aria-label={h.searchMarketAria}
-            className="inline-flex h-[44px] w-[44px] sm:h-[34px] sm:w-[34px] shrink-0 items-center justify-center rounded-full bg-ink text-white transition-colors hover:bg-ink-2"
+            className="absolute right-3 top-1/2 -translate-y-1/2 inline-flex h-[44px] w-[44px] sm:h-[34px] sm:w-[34px] shrink-0 items-center justify-center rounded-full bg-ink text-white transition-colors hover:bg-ink-2"
             style={{
               boxShadow: "0 0 0 1px rgb(24,21,41), 0 4px 8px rgba(24,21,41,0.18)",
             }}

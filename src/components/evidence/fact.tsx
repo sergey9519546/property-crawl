@@ -44,7 +44,7 @@ export function Fact({
   if (text === null) {
     return (
       <span data-evidence="unknown" className={`ev-unknown inline-block text-[0.8em] font-semibold ${className}`}>
-        <span className="sr-only">Unknown: </span>
+        <span className="sr-only">{m.detailUi.factSrUnknown}</span>
         {displayReason}
       </span>
     );
@@ -52,14 +52,14 @@ export function Fact({
   if (origin === "yours") {
     return (
       <span data-evidence="yours" className={`ev-yours ${className}`}>
-        <span className="sr-only">Your estimate: </span>
+        <span className="sr-only">{m.detailUi.factSrYours}</span>
         {text}
       </span>
     );
   }
   return (
-    <span data-evidence={origin} title={origin === "unverified" ? "Source provenance has not been verified" : undefined} className={`${origin === "printed" ? "ev-printed" : "ev-unknown"} ${className}`}>
-      {origin === "unverified" && <span className="sr-only">Unverified: </span>}
+    <span data-evidence={origin} title={origin === "unverified" ? m.detailUi.factUnverifiedTitle : undefined} className={`${origin === "printed" ? "ev-printed" : "ev-unknown"} ${className}`}>
+      {origin === "unverified" && <span className="sr-only">{m.detailUi.factSrUnverified}</span>}
       {text}
     </span>
   );

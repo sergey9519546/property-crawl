@@ -31,8 +31,8 @@ import { bandForScore, scoreBandLabel, DEAL_SCORE_MEANING } from "@/lib/score-ba
 import { listingCatch } from "@/lib/listing-catch";
 import { getRequestLocale } from "@/lib/i18n/server";
 import { getMessages } from "@/lib/i18n/messages";
-import { LOCALE_META } from "@/lib/i18n/config";
-import { formatLocaleNumber, interpolate, selectPlural } from "@/lib/i18n/translator";
+import { LOCALE_META, type Locale } from "@/lib/i18n/config";
+import { formatLocaleDate, formatLocaleNumber, formatUsd, interpolate, selectPlural } from "@/lib/i18n/translator";
 import { localizeOccupancy, localizePropType, localizeSaleKind, localizedListingCatch } from "@/lib/i18n/domain";
 import { WorkspaceShell } from "@/components/workspace/workspace-shell";
 import { CaseAction } from "@/components/research/case-action";
@@ -59,9 +59,34 @@ function positiveNumber(value: unknown): number | null {
   return numeric !== null && numeric > 0 ? numeric : null;
 }
 
-function formatMoney(value: unknown, fallback = "Not published") {
+function formatMoney(value: unknown, locale: Locale = "en", fallback = "Not published") {
   const numeric = finiteNumber(value);
-  return numeric === null ? fallback : `$${Math.round(numeric).toLocaleString()}`;
+  return numeric === null ? fallback : formatUsd(locale, numeric);
+}
+
+function humanizeTitleToken(value: string | null | undefined, fallback = "Unknown") {
+  if (!value || !value.trim()) return fallback;
+  const key = value.trim().toUpperCase();
+  const labels: Record<string, string> = {
+    UNKNOWN: "Unknown",
+    HOA_CONDO: "HOA / Condo",
+    HOA: "HOA",
+    TAX_LIEN: "Tax lien",
+    TAX_DEED: "Tax deed",
+    MUNICIPAL_LIEN: "Municipal lien",
+    JUNIOR_MORTGAGE: "Junior mortgage",
+    SENIOR_MORTGAGE: "Senior mortgage",
+    FIRST_MORTGAGE: "First mortgage",
+    MECHANICS_LIEN: "Mechanic's lien",
+    JUDGMENT_LIEN: "Judgment lien",
+    LOW: "Low",
+    MODERATE: "Moderate",
+    MEDIUM: "Medium",
+    HIGH: "High",
+    CRITICAL: "Critical",
+  };
+  if (labels[key]) return labels[key];
+  return value.trim().replace(/_/g, " ").toLowerCase().replace(/^./, (c) => c.toUpperCase());
 }
 
 function publishedText(value: unknown, fallback = "Not published") {
@@ -77,11 +102,11 @@ function observedBoolean(value: unknown): boolean | null {
   return typeof value === "boolean" ? value : null;
 }
 
-function formatObservedAt(value: unknown) {
+function formatObservedAt(value: unknown, locale: Locale = "en") {
   if (typeof value !== "string" || !value.trim()) return null;
   const timestamp = Date.parse(value);
   return Number.isFinite(timestamp)
-    ? new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }).format(timestamp)
+    ? formatLocaleDate(locale, timestamp, { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" })
     : value;
 }
 
@@ -254,7 +279,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const publisherPhoto = verifiedPublisherPhoto(listing);
   const description = [
     isDemo ? `Demonstration property profile for ${listing.address}.` : `Auction-source record for ${listing.address}.`,
-    positiveNumber(listing.openingBid) !== null ? `Published opening amount: ${formatMoney(listing.openingBid)}.` : null,
+    positiveNumber(listing.openingBid) !== null ? `Published opening amount: ${formatMoney(listing.openingBid, locale)}.` : null,
     finiteNumber(listing.dealScore) !== null
       ? `Modeled Deal Score: ${finiteNumber(listing.dealScore)}/99${scoreBandLabel(listing.dealScore) ? ` (${scoreBandLabel(listing.dealScore)})` : ""}. Triage only, not an appraisal.`
       : null,
@@ -385,7 +410,7 @@ export default async function ListingPage({ params, searchParams }: Props) {
   const detailPhoto = publisherPhoto ?? (secondaryMedia.accepted ? secondaryMedia.url : undefined);
   const detailGallery = publisherPhoto ? gallery : (secondaryMedia.accepted ? secondaryMedia.gallery : []);
   const mapLocation = inspectMapLocation(listing);
-  const observedAt = isDemo ? null : formatObservedAt(listing.sourceObservedAt ?? provenance.observedAt);
+  const observedAt = isDemo ? null : formatObservedAt(listing.sourceObservedAt ?? provenance.observedAt, locale);
   const saleTime = optionalPublishedText(sourceFacts.tpsSaleTime ?? sourceFacts.saleTime);
   const saleTimezone = optionalPublishedText(sourceFacts.publisherTimeZone ?? sourceFacts.saleTimezone);
   const saleLocation = optionalPublishedText(sourceFacts.tpsSaleLocation ?? sourceFacts.saleLocation);
@@ -396,7 +421,8 @@ export default async function ListingPage({ params, searchParams }: Props) {
   const accessNeedsAttention = interiorAccessAvailable === false || Boolean(occupancy && /occupied/i.test(occupancy) && !/unoccupied/i.test(occupancy));
   const localizedOccupancy = localizeOccupancy(occupancy, m, locale);
   const accessHeadline = [localizedOccupancy, interiorAccessAvailable === null ? null : interiorAccessAvailable ? dUi.interiorAccessYes : dUi.interiorAccessNo].filter(Boolean).join(" · ");
-  const statusLabel = isDemo ? dUi.verifyAtSource : publishedText(listing.lifecycleStatus || listing.status, dUi.verifyAtSource).replace(/^Status:\s*/i, "").replace(/_/g, " ");
+  const rawStatusLabel = isDemo ? dUi.verifyAtSource : publishedText(listing.lifecycleStatus || listing.status, dUi.verifyAtSource).replace(/^Status:\s*/i, "").replace(/_/g, " ");
+  const statusLabel = rawStatusLabel ? rawStatusLabel.replace(/^([a-z])/, (c) => c.toUpperCase()) : rawStatusLabel;
   const statusTone = isDemo ? "neutral" : combineStatusTones([listingStatusTone(statusLabel), listingStatusTone(String(listing.status || ""))]);
   const statusClass = listingStatusClass(statusTone);
   const citySuffix = optionalPublishedText(listing.city);
@@ -408,11 +434,11 @@ export default async function ListingPage({ params, searchParams }: Props) {
     ["County", <Fact key="county" origin={listingFactOrigin(listing, "county")} value={listing.county} />],
   ] as [string, React.ReactNode][];
   const optionalPropertyFacts: [string, string | null][] = [
-    ["Bedrooms", positiveNumber(listing.beds)?.toLocaleString() ?? null],
-    ["Bathrooms", positiveNumber(listing.baths)?.toLocaleString() ?? null],
-    ["Interior area", positiveNumber(listing.sqft) !== null ? `${positiveNumber(listing.sqft)?.toLocaleString()} sq ft` : null],
+    ["Bedrooms", positiveNumber(listing.beds) !== null ? formatLocaleNumber(locale, positiveNumber(listing.beds)!) : null],
+    ["Bathrooms", positiveNumber(listing.baths) !== null ? formatLocaleNumber(locale, positiveNumber(listing.baths)!) : null],
+    ["Interior area", positiveNumber(listing.sqft) !== null ? `${formatLocaleNumber(locale, positiveNumber(listing.sqft)!)} ${dUi.sqFtUnit}` : null],
     ["Year built", positiveNumber(listing.year)?.toString() ?? null],
-    ["Assessed value", positiveNumber(listing.assessed) !== null ? formatMoney(positiveNumber(listing.assessed)) : null],
+    ["Assessed value", positiveNumber(listing.assessed) !== null ? formatMoney(positiveNumber(listing.assessed), locale, m.common.notPublished) : null],
   ];
   const missingOptionalPropertyFacts = optionalPropertyFacts.filter(([, value]) => value === null).map(([label]) => label.toLowerCase());
   propertyFacts.push(...optionalPropertyFacts.filter((fact): fact is [string, string] => fact[1] !== null).map(([label, value]): [string, React.ReactNode] => [label, <Fact key={label} value={value} />]));
@@ -432,13 +458,13 @@ export default async function ListingPage({ params, searchParams }: Props) {
   const hasStateHpi = Boolean(stateCode && /^[A-Z]{2}$/.test(stateCode) && !["PR", "VI", "GU", "MP", "AS"].includes(stateCode));
   const benchmarkHints: string[] = [];
   if (assessedValue !== null) {
-    benchmarkHints.push(`Assessed value ${formatMoney(assessedValue)}`);
+    benchmarkHints.push(`Assessed value ${formatMoney(assessedValue, locale, m.common.notPublished)}`);
   } else if (hasAssessorEnrollment) {
     benchmarkHints.push("County assessor roll lookup available");
   }
   if (safmrRent !== null) {
     const isNonRes = /\b(office|commercial|warehouse|lab|industrial|parking|courthouse|land)\b/i.test(String(listing.propType || ""));
-    benchmarkHints.push(`${isNonRes ? "Residential 2BR " : ""}HUD SAFMR ${formatMoney(safmrRent)}/mo${listing.hudSafmr?.zip ? ` (ZIP ${listing.hudSafmr.zip})` : ""}`);
+    benchmarkHints.push(`${isNonRes ? "Residential 2BR " : ""}HUD SAFMR ${formatMoney(safmrRent, locale, m.common.notPublished)}/mo${listing.hudSafmr?.zip ? ` (ZIP ${listing.hudSafmr.zip})` : ""}`);
   }
   if (hasStateHpi && stateCode) {
     benchmarkHints.push(`FHFA ${stateCode} HPI context`);
@@ -548,13 +574,13 @@ export default async function ListingPage({ params, searchParams }: Props) {
               <h2 className="text-lg font-bold">{dUi.auctionDetailsTitle}</h2>
               <span data-testid="listing-status" data-status-tone={statusTone} className={`rounded-full px-3 py-1 text-xs font-bold ${statusClass}`}>{statusLabel}</span>
             </div>
-            <p className={openingBid !== null ? "mt-4 text-3xl font-bold tracking-tight sm:text-4xl" : "mt-4 text-2xl font-bold tracking-tight text-ink sm:text-3xl"}>{openingBid !== null ? formatMoney(openingBid) : dUi.openingAmountMissing}</p>
+            <p className={openingBid !== null ? "mt-4 text-3xl font-bold tracking-tight sm:text-4xl" : "mt-4 text-2xl font-bold tracking-tight text-ink sm:text-3xl"}>{openingBid !== null ? formatMoney(openingBid, locale, m.common.notPublished) : dUi.openingAmountMissing}</p>
             {(() => {
               const priorRaw = (listing as { peakOpeningBid?: number | null; initialOpeningBid?: number | null }).peakOpeningBid
                 ?? (listing as { initialOpeningBid?: number | null }).initialOpeningBid;
-              return openingBid !== null && typeof priorRaw === "number" && Number.isFinite(priorRaw) && priorRaw > openingBid ? (
+              return openingBid !== null && typeof priorRaw === "number" && Number.isFinite(priorRaw) && Math.round(priorRaw) > Math.round(openingBid) ? (
                 <p className="mt-0.5 text-xs font-medium text-ink-3">
-                  <span className="line-through">{formatMoney(priorRaw)}</span>
+                  <del className="line-through"><span className="sr-only">Prior opening bid </span>{formatMoney(priorRaw, locale, m.common.notPublished)}</del>
                 </p>
               ) : null;
             })()}
@@ -565,17 +591,17 @@ export default async function ListingPage({ params, searchParams }: Props) {
                   <div>
                     <div className="flex items-baseline justify-between gap-2">
                       <span className="font-semibold text-ink-2">{dUi.approxUpsetEstimate}</span>
-                      <span className="text-sm font-bold text-ink">{formatMoney(publishedUpsetAmount)}</span>
+                      <span className="text-sm font-bold text-ink">{formatMoney(publishedUpsetAmount, locale, m.common.notPublished)}</span>
                     </div>
                     <p className="mt-0.5 text-ink-3 leading-relaxed">
-                      {dUi.qualifiedUpsetNote}{publishedUpsetSource ? ` (${sourceDisplayText(publishedUpsetSource)})` : ""}.
+                      {dUi.qualifiedUpsetNote}{publishedUpsetSource ? ` (${sourceDisplayText(publishedUpsetSource)})` : ""}
                     </p>
                   </div>
                 )}
                 {publishedJudgmentAmount !== null && (
                   <div className={publishedUpsetAmount !== null ? "border-t border-line pt-2 flex items-baseline justify-between gap-2" : "flex items-baseline justify-between gap-2"}>
                     <span className="font-semibold text-ink-2">{dUi.executionJudgmentLabel}</span>
-                    <span className="text-sm font-bold text-ink">{formatMoney(publishedJudgmentAmount)}</span>
+                    <span className="text-sm font-bold text-ink">{formatMoney(publishedJudgmentAmount, locale, m.common.notPublished)}</span>
                   </div>
                 )}
               </div>
@@ -743,8 +769,8 @@ export default async function ListingPage({ params, searchParams }: Props) {
             <h2 className="mt-1 text-xl font-bold">{dUi.marketEvidenceTitle}</h2>
             {positiveNumber(listing.assessed) !== null || (estLow !== null && estHigh !== null) ? (
               <dl className="mt-5 grid gap-3 sm:grid-cols-2">
-                <div className="rounded-control bg-paper p-4"><dt className="text-xs font-bold uppercase tracking-wide text-ink-3">{dUi.storedAssessedValue}</dt><dd className="mt-1 text-lg font-bold text-ink">{formatMoney(positiveNumber(listing.assessed))}</dd></div>
-                <div className="rounded-control bg-paper p-4"><dt className="text-xs font-bold uppercase tracking-wide text-ink-3">{dUi.storedValuationRange}</dt><dd className="mt-1 text-lg font-bold text-ink">{estLow !== null && estHigh !== null ? `${formatMoney(estLow)}–${formatMoney(estHigh)}` : "—"}</dd></div>
+                <div className="rounded-control bg-paper p-4"><dt className="text-xs font-bold uppercase tracking-wide text-ink-3">{dUi.storedAssessedValue}</dt><dd className="mt-1 text-lg font-bold text-ink">{formatMoney(positiveNumber(listing.assessed), locale, m.common.notPublished)}</dd></div>
+                <div className="rounded-control bg-paper p-4"><dt className="text-xs font-bold uppercase tracking-wide text-ink-3">{dUi.storedValuationRange}</dt><dd className="mt-1 text-lg font-bold text-ink">{estLow !== null && estHigh !== null ? `${formatMoney(estLow, locale, m.common.notPublished)}–${formatMoney(estHigh, locale, m.common.notPublished)}` : "—"}</dd></div>
               </dl>
             ) : null}
             <AssessorReading listingId={listing.id} hasServerParcelKey={Boolean(listing.parcelKey)} />
@@ -756,7 +782,7 @@ export default async function ListingPage({ params, searchParams }: Props) {
               {titleRules ? (
                 <>
                 <ul className="mt-3 space-y-2">
-                  <li>Classifier: {titleRules.plaintiffType}. Risk label: {titleRules.riskLevel}.</li>
+                  <li>Classifier: {humanizeTitleToken(titleRules.plaintiffType)}. Risk label: {humanizeTitleToken(titleRules.riskLevel)}.</li>
                   {(titleRules.instrumentPriority?.instrumentNumber || titleRules.instrumentPriority?.bookPage || titleRules.instrumentPriority?.recordedDate) ? (
                     <li data-testid="title-instrument-reference">
                       Recorded instrument reference: {[
@@ -815,14 +841,14 @@ export default async function ListingPage({ params, searchParams }: Props) {
               <dl className="mt-4 space-y-3">
                 <div className="rounded-control border border-line bg-card p-3">
                   <dt className="text-xs font-semibold text-ink-3">{sourceDisplayText(publishedText(provenance.publisher, source?.label ?? listing.source))}{listing.bakeOff?.preferredSource === listing.source ? <span className="ml-2 rounded-control bg-line px-1.5 py-0.5 text-label font-bold text-ink-2">Preferred</span> : null}</dt>
-                  <dd className="mt-1 text-lg font-bold text-ink">{formatMoney(listing.openingBid)}</dd>
+                  <dd className="mt-1 text-lg font-bold text-ink">{formatMoney(listing.openingBid, locale, m.common.notPublished)}</dd>
                   {observedAt ? <dd className="mt-0.5 text-xs text-ink-3">Observed {observedAt} UTC</dd> : null}
                 </div>
                 {listing.crossSourceMatches.map((match) => (
                   <div key={match.listingId} className="rounded-control border border-line bg-card p-3">
                     <dt className="text-xs font-semibold text-ink-3"><Link href={`/listings/${encodeURIComponent(match.listingId)}?returnTo=${encodeURIComponent(returnTo)}`} className="underline underline-offset-2 hover:text-ink">{sourceDisplayText(match.source)} ({match.listingId})</Link>{listing.bakeOff?.preferredSource === match.source ? <span className="ml-2 rounded-control bg-line px-1.5 py-0.5 text-label font-bold text-ink-2">Preferred</span> : null}</dt>
-                    <dd className="mt-1 text-lg font-bold text-ink">{formatMoney(match.openingBid)}</dd>
-                    {match.observedAt ? <dd className="mt-0.5 text-xs text-ink-3">Observed {formatObservedAt(match.observedAt)}</dd> : null}
+                    <dd className="mt-1 text-lg font-bold text-ink">{formatMoney(match.openingBid, locale, m.common.notPublished)}</dd>
+                    {match.observedAt ? <dd className="mt-0.5 text-xs text-ink-3">Observed {formatObservedAt(match.observedAt, locale)}</dd> : null}
                   </div>
                 ))}
               </dl>

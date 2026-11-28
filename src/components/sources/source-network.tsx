@@ -419,7 +419,7 @@ function liveCoverageForSource(
   return { recordCount, stateCount, countyCount: counties.size };
 }
 const label = (value: string) =>
-  value.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  value.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase()).replace(/\b(Reo|Hud|Irs|Gsa|Usda|Va|Fdic|Hoa|Gis)\b/g, (m) => m.toUpperCase());
 const date = (value: string | null) =>
   value ? new Date(value).toLocaleString() : "Not yet observed";
 const moneyOrText = (signal: Signal, value: string | number) =>
@@ -432,8 +432,8 @@ const moneyOrText = (signal: Signal, value: string | number) =>
     : String(value);
 
 function coverageSummary(source: Source) {
-  if (source.observedRecords) return `${source.observedRecords} observed records · ${source.observedStates.join(", ") || "state not published"}`;
-  if (source.evidencePackets) return `${source.evidencePackets} evidence packets · review required`;
+  if (source.observedRecords) return `${source.observedRecords.toLocaleString()} observed records · ${source.observedStates.join(", ") || "state not published"}`;
+  if (source.evidencePackets) return `${source.evidencePackets.toLocaleString()} evidence packets · review required`;
   const status = source.discoveryStatus || source.status;
   if (status === "awaiting_run") return "Collector registered; no successful collection has been recorded.";
   if (status === "manual" || status === "lookup_available") return "Manual lookup; no collected property records are claimed.";
@@ -451,7 +451,7 @@ function coverageDescription(coverage: Source["coverage"]) {
   const rejected = Number.isFinite(coverage.rejected) ? coverage.rejected : null;
   const completion = coverage.error ? "Collection error" : coverage.complete === true ? "Collection completed" : "Collection incomplete";
   const counts = discovered !== null || accepted !== null || rejected !== null
-    ? `${accepted ?? 0} accepted · ${rejected ?? 0} rejected · ${discovered ?? 0} discovered`
+    ? `${(accepted ?? 0).toLocaleString()} accepted · ${(rejected ?? 0).toLocaleString()} rejected · ${(discovered ?? 0).toLocaleString()} discovered`
     : "Record counts not reported";
   return `${completion} · ${counts} · ${formatSourceScopeSummary(coverage.acquisitionScope ?? coverage.scope)}`;
 }
@@ -1238,7 +1238,7 @@ export function SourceNetwork() {
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-paper/70 px-4 py-3 text-xs text-ink-2">
                 <div>
                   <span className="font-semibold text-ink">Live state coverage matrix:</span>{" "}
-                  {liveCoverage?.liveByState ? `${liveCoverage.liveByState.countedRecords ?? 0} live records across ${Object.keys(liveCoverage.liveByState.byStateTotal || {}).length} active states (${Object.values(liveCoverage.liveByState.byCounty || {}).reduce((acc, rows) => acc + rows.length, 0)} live counties; ${liveCoverage.states?.length ?? 0} schema jurisdictions)${liveCoverage.liveByState.readError ? ` — Store error: ${liveCoverage.liveByState.readError}` : ""}` : liveCoverage?.states
+                  {liveCoverage?.liveByState ? `${(liveCoverage.liveByState.countedRecords ?? 0).toLocaleString()} live records across ${Object.keys(liveCoverage.liveByState.byStateTotal || {}).length.toLocaleString()} active states (${Object.values(liveCoverage.liveByState.byCounty || {}).reduce((acc, rows) => acc + rows.length, 0).toLocaleString()} live counties; ${(liveCoverage.states?.length ?? 0).toLocaleString()} schema jurisdictions)${liveCoverage.liveByState.readError ? ` — Store error: ${liveCoverage.liveByState.readError}` : ""}` : liveCoverage?.states
                     ? `${liveCoverage.states.length} states tracked in live/catalog matrix`
                     : "Loading state coverage summary…"}
                 </div>
@@ -1300,8 +1300,8 @@ export function SourceNetwork() {
                                 title={preset.countyLabel}
                               >
                                 {preset.countyCount > 0
-                                  ? `${preset.countyCount} catalog counties${liveStats ? ` · ${liveStats.countyCount > 0 ? `${liveStats.countyCount} live counties` : liveStats.recordCount > 0 ? `${liveStats.stateCount} live states` : "0 live records"} (${liveStats.recordCount.toLocaleString()} records)` : ""}`
-                                  : `${preset.countyLabel}${liveStats ? ` · ${liveStats.recordCount > 0 ? `${liveStats.countyCount > 0 ? `${liveStats.countyCount} live counties · ` : ""}${liveStats.stateCount} live states (${liveStats.recordCount.toLocaleString()} records)` : "0 live records"}` : ""}`}
+                                  ? `${preset.countyCount.toLocaleString()} catalog ${preset.countyCount === 1 ? "county" : "counties"}${liveStats ? ` · ${liveStats.countyCount > 0 ? `${liveStats.countyCount.toLocaleString()} live ${liveStats.countyCount === 1 ? "county" : "counties"}` : liveStats.recordCount > 0 ? `${liveStats.stateCount.toLocaleString()} live ${liveStats.stateCount === 1 ? "state" : "states"}` : "0 live records"} (${liveStats.recordCount.toLocaleString()} ${liveStats.recordCount === 1 ? "record" : "records"})` : ""}`
+                                  : `${preset.countyLabel}${liveStats ? ` · ${liveStats.recordCount > 0 ? `${liveStats.countyCount > 0 ? `${liveStats.countyCount.toLocaleString()} live ${liveStats.countyCount === 1 ? "county" : "counties"} · ` : ""}${liveStats.stateCount.toLocaleString()} live ${liveStats.stateCount === 1 ? "state" : "states"} (${liveStats.recordCount.toLocaleString()} ${liveStats.recordCount === 1 ? "record" : "records"})` : "0 live records"}` : ""}`}
                               </span>
                             ) : (
                               <span
@@ -1309,7 +1309,7 @@ export function SourceNetwork() {
                                 title={derived.label}
                               >
                                 {liveStats && liveStats.recordCount > 0
-                                  ? `${liveStats.countyCount > 0 ? `${liveStats.countyCount} live counties · ` : ""}${liveStats.stateCount} live states (${liveStats.recordCount.toLocaleString()} records)`
+                                  ? `${liveStats.countyCount > 0 ? `${liveStats.countyCount.toLocaleString()} live ${liveStats.countyCount === 1 ? "county" : "counties"} · ` : ""}${liveStats.stateCount.toLocaleString()} live ${liveStats.stateCount === 1 ? "state" : "states"} (${liveStats.recordCount.toLocaleString()} ${liveStats.recordCount === 1 ? "record" : "records"})`
                                   : derived.hasMapping
                                     ? derived.label
                                     : liveStats
@@ -1469,13 +1469,12 @@ export function SourceNetwork() {
           {data?.observationStore && (
             <p className="mb-4 text-sm text-ink-2">
               Observation history: {data.observationStore.rows.toLocaleString()} snapshots
-              across {data.observationStore.trackedRecords.toLocaleString()} publisher
-              records in Postgres
+              across {data.observationStore.trackedRecords.toLocaleString()} tracked publisher
+              records
               {data.observationStore.newestObservedAt
                 ? `, newest observed ${new Date(data.observationStore.newestObservedAt).toLocaleString()}`
-                : ""}
-              {" "}({Math.max(1, Math.round(data.observationStore.tableBytes / (1024 * 1024)))} MB).
-              History is durable — there is no file ceiling it can overflow.
+                : ""}.
+              Historical snapshots are durably archived for longitudinal change tracking.
             </p>
           )}
           {data?.observationStore?.newestObservedAt && (
@@ -1496,8 +1495,18 @@ export function SourceNetwork() {
               coverage…
             </p>
           ) : (
-            <div className="grid min-w-0 items-start gap-6 xl:grid-cols-[1fr_420px]">
-              <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+            <>
+              {!selected && !customMode && (
+                <div className="mb-5 flex flex-wrap items-center gap-3 rounded-card border border-line bg-card px-5 py-4 text-sm text-ink-2">
+                  <ShieldCheck size={20} className="shrink-0 text-ink" />
+                  <p className="min-w-0 flex-1">
+                    <strong className="font-semibold text-ink">Every find needs a trail.</strong>{" "}
+                    Choose any source below to inspect its collection playbook, publisher link, and required evidence.
+                  </p>
+                </div>
+              )}
+              <div className={selected || customMode ? "grid min-w-0 items-start gap-6 xl:grid-cols-[1fr_420px]" : "min-w-0"}>
+                <div className={selected || customMode ? "grid min-w-0 gap-3 sm:grid-cols-2" : "grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-3"}>
                 {sources.map((source) => {
                   const exactScope = coverageScopeDetails(source.coverage);
                   const status = sourceStatus(source);
@@ -1569,17 +1578,29 @@ export function SourceNetwork() {
                   </p>
                 )}
               </div>
-              <aside
-                id="source-playbook"
-                className="min-w-0 scroll-mt-5 rounded-card border border-line bg-card p-6 xl:sticky xl:top-6"
-              >
-                {selected || customMode ? (
-                  <>
+              {(selected || customMode) && (
+                <aside
+                  id="source-playbook"
+                  className="min-w-0 scroll-mt-24 rounded-card border border-line bg-card p-6 xl:sticky xl:top-24"
+                >
+                  <div className="flex items-start justify-between gap-3">
                     <p className="text-xs font-bold uppercase tracking-widest text-ink-2">
                       {customMode
                         ? "Extend your coverage"
                         : "The collection playbook"}
                     </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedId(null);
+                        setCustomMode(false);
+                        setShowImport(false);
+                      }}
+                      className="rounded-control border border-line px-2.5 py-1 text-xs font-semibold text-ink-2 hover:bg-paper hover:text-ink"
+                    >
+                      Close
+                    </button>
+                  </div>
                     <h2 className="mt-2 text-xl font-semibold">
                       {customMode ? "Bring in a local source" : selected?.label}
                     </h2>
@@ -1925,27 +1946,10 @@ export function SourceNetwork() {
                         {message}
                       </p>
                     )}
-                  </>
-                ) : (
-                  <div className="py-8">
-                    <ShieldCheck size={32} className="text-ink" />
-                    <h3 className="mt-5 text-xl font-semibold">
-                      Every find needs a trail.
-                    </h3>
-                    <p className="mt-3 text-sm leading-7 text-ink-2">
-                      Choose a source to see its workflow, publisher link,
-                      collection status, and the evidence you need to bring
-                      back.
-                    </p>
-                    <p className="mt-5 border-t border-line pt-5 text-xs leading-6 text-ink-2">
-                      A registered collector indicates a collection path. Review
-                      its observed records and latest run to assess actual
-                      coverage.
-                    </p>
-                  </div>
-                )}
-              </aside>
-            </div>
+                </aside>
+              )}
+              </div>
+            </>
           )}
         </section>
         <footer className="mt-10 border-t border-line py-6 text-xs leading-6 text-ink-2">

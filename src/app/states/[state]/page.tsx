@@ -27,7 +27,93 @@ function parseValidStateCode(raw?: string): string | null {
   return /^[A-Z]{2}$/.test(code) && VALID_STATE_CODES.has(code) ? code : null;
 }
 
-const getCachedStateCounties = cache(async (state: string) => loadStateCountiesImpl(state));
+const REJECTED_COUNTY_KEYS = new Set(["unknown", "n/a", "na", "none", "null", "notice"]);
+
+function normalizeCountyMergeKey(raw: string): string {
+  return raw
+    .trim()
+    .toLowerCase()
+    .replace(/['’]/g, "")
+    .replace(/\.+/g, " ")
+    .replace(/\s+(?:county|parish|borough)\s*$/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function cleanCountyDisplay(raw: string): string {
+  const stripped = raw.trim().replace(/\s+(?:county|parish|borough)\s*$/i, "").trim();
+  return stripped || raw.trim();
+}
+
+function mergeCountyRows(rows: CountyRow[], sourceMap?: Map<string, Set<string>>): CountyRow[] {
+  const merged = new Map<string, { county: string; count: number; sources: Set<string> }>();
+  for (const row of rows) {
+    const key = normalizeCountyMergeKey(row.county);
+    if (!key || key.length < 2 || REJECTED_COUNTY_KEYS.has(key) || !/[a-z]/.test(key)) continue;
+    const display = cleanCountyDisplay(row.county);
+    const existing = merged.get(key);
+    if (existing) {
+      existing.count += row.count;
+      for (const s of row.sources) existing.sources.add(s);
+    } else {
+      merged.set(key, { county: display, count: row.count, sources: new Set(row.sources) });
+    }
+  }
+  if (sourceMap) {
+    for (const [key, bucket] of merged.entries()) {
+      const extra = sourceMap.get(key);
+      if (extra) {
+        for (const s of extra) bucket.sources.add(s);
+      }
+    }
+  }
+  return Array.from(merged.values())
+    .map((b) => ({ county: b.county, count: b.count, sources: [...b.sources].sort() }))
+    .sort((l, r) => r.count - l.count || l.county.localeCompare(r.county));
+}
+
+const getCachedStateCounties = cache(async (state: string): Promise<{ total: number; counties: CountyRow[]; error: string | null }> => {
+  const apiUrl = process.env.PROPERTY_API_URL || "http://localhost:3000";
+  const [coverageResult, liveFacetResult] = await Promise.all([
+    loadStateCountiesImpl(state),
+    fetch(`${apiUrl}/api/listings?state=${encodeURIComponent(state)}&limit=1&facets=county`, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(4_000),
+    })
+      .then(async (res) => (res.ok ? (await res.json()) as { total?: unknown; facets?: { county?: Array<{ value?: unknown; count?: unknown }> } } : null))
+      .catch(() => null),
+  ]);
+
+  const sourceMap = new Map<string, Set<string>>();
+  for (const row of coverageResult.counties) {
+    const key = normalizeCountyMergeKey(row.county);
+    if (!key) continue;
+    const set = sourceMap.get(key) || new Set<string>();
+    for (const s of row.sources) set.add(s);
+    sourceMap.set(key, set);
+  }
+
+  if (liveFacetResult && typeof liveFacetResult.total === "number" && Number.isFinite(liveFacetResult.total)) {
+    const rawFacets = Array.isArray(liveFacetResult.facets?.county) ? liveFacetResult.facets.county : [];
+    const facetRows: CountyRow[] = rawFacets.flatMap((entry) => {
+      if (typeof entry?.value !== "string" || typeof entry?.count !== "number" || !Number.isFinite(entry.count) || entry.count <= 0) {
+        return [];
+      }
+      return [{ county: entry.value, count: entry.count, sources: [] }];
+    });
+    return {
+      total: liveFacetResult.total,
+      counties: mergeCountyRows(facetRows, sourceMap),
+      error: null,
+    };
+  }
+
+  return {
+    total: coverageResult.total,
+    counties: mergeCountyRows(coverageResult.counties),
+    error: coverageResult.error,
+  };
+});
 
 export async function generateMetadata({ params }: { params: Promise<{ state: string }> }): Promise<Metadata> {
   const { state: raw } = await params;
@@ -168,7 +254,7 @@ export default async function StateCountiesPage({ params }: { params: Promise<{ 
       <div className="min-h-screen bg-paper text-ink">
       <SiteHeader />
       <main id="main-content" tabIndex={-1} className="mx-auto max-w-4xl px-6 pb-20 pt-28 outline-none sm:pt-32">
-        <nav aria-label="Breadcrumb" className="mb-6 flex flex-wrap items-center gap-2 text-xs font-medium text-ink-3">
+        <nav aria-label={m.states.breadcrumbAria} className="mb-6 flex flex-wrap items-center gap-2 text-xs font-medium text-ink-3">
           <Link href="/" className="hover:text-ink transition-colors">{m.states.homeCrumb}</Link>
           <span>/</span>
           <Link href="/states" className="hover:text-ink transition-colors">{m.states.statesCrumb}</Link>

@@ -1,10 +1,10 @@
 import { CalendarClock, FileText, GitCompareArrows, ShieldCheck } from "lucide-react";
 import type { PropertyListing } from "@/components/terminal/property-data";
-import { displayDate, displayText } from "@/lib/listing-display";
+import { displayText } from "@/lib/listing-display";
 import { sourceDisplayText } from "@/lib/source-display";
 import type { Messages } from "@/lib/i18n/messages/en";
 import type { Locale } from "@/lib/i18n/config";
-import { formatLocaleDate, formatUsd, interpolate } from "@/lib/i18n/translator";
+import { formatLocaleDate, formatUsd, selectPlural } from "@/lib/i18n/translator";
 
 function optionalText(raw: unknown): string | null {
   const rendered = displayText(raw, "");
@@ -12,7 +12,7 @@ function optionalText(raw: unknown): string | null {
 }
 
 function formatMoney(amount: number, locale: Locale = "en"): string {
-  return locale === "en" ? `$${Math.round(amount).toLocaleString("en-US")}` : formatUsd(locale, amount);
+  return formatUsd(locale, amount);
 }
 
 function publishedBoolean(raw: unknown, yesLabel = "Yes", noLabel = "No"): string | null {
@@ -33,9 +33,10 @@ export function SaleMechanics({ listing, exactSourceUrl, labels, locale = "en" }
   const no = labels ? labels.noLabel : "No";
   const docCount = documents?.count;
   const docsValue = docCount != null
-    ? (labels
-        ? interpolate(docCount === 1 ? labels.smRefsCapturedSingle : labels.smRefsCapturedPlural, { count: docCount })
-        : `${docCount} reference${docCount === 1 ? "" : "s"} captured`)
+    ? selectPlural(locale, docCount, {
+        one: labels ? labels.smRefsCapturedSingle : "{count} reference captured",
+        other: labels ? labels.smRefsCapturedPlural : "{count} references captured",
+      })
     : null;
   const publishedUpsetAmount = Number((provenance.approximateUpsetPrice as { amount?: unknown } | null | undefined)?.amount ?? sourceFacts.upsetPrice);
   const factCandidates: [string, unknown][] = [
@@ -68,10 +69,10 @@ export function SaleMechanics({ listing, exactSourceUrl, labels, locale = "en" }
   return <section id="auction-details" className="mt-8 scroll-mt-6 rounded-card border border-line bg-card p-5 shadow-sm sm:p-6" aria-labelledby="sale-mechanics-heading">
     <div className="flex items-start gap-3"><CalendarClock className="mt-0.5 h-5 w-5 shrink-0 text-ink-3" /><div><p className="text-label font-bold uppercase tracking-[.16em] text-ink-3">{labels ? labels.saleMechanicsEyebrow : "Publisher-reported auction terms"}</p><h2 id="sale-mechanics-heading" className="mt-1 text-xl font-bold">{labels ? labels.saleMechanicsHeading : "What affects the sale"}</h2><p className="mt-1 text-sm leading-relaxed text-ink-3">{labels ? labels.saleMechanicsSub : "Review timing, location, access, and funds requirements before attending."}</p></div></div>
     {facts.length ? <dl className="mt-5 grid gap-x-8 gap-y-4 text-sm sm:grid-cols-2">{facts.map(([label, rendered]) => <Fact key={label} label={label} value={rendered} />)}</dl> : <p className="mt-5 rounded-control bg-catch-wash p-4 text-sm text-catch-ink">{labels ? labels.noAdditionalSaleTerms : "No additional auction terms were supplied in the normalized publisher record."}</p>}
-    {moneyGaps.length || accessGap ? <p className="mt-5 rounded-control border border-catch/30 bg-catch-wash px-4 py-3 text-sm leading-relaxed text-catch-ink"><strong>{labels ? labels.stillUnconfirmedLabel : "Still unconfirmed:"}</strong> {[...moneyGaps, accessGap ? (labels ? labels.smGapInterior : "interior access terms") : null].filter(Boolean).join(", ")}. {labels ? labels.stillUnconfirmedSuffix : "Verify these items at the exact publisher listing."}</p> : null}
+    {moneyGaps.length || accessGap ? <p className="mt-5 rounded-control border border-catch/30 bg-catch-wash px-4 py-3 text-sm leading-relaxed text-catch-ink"><strong>{labels ? labels.stillUnconfirmedLabel : "Still unconfirmed:"}</strong> {[...moneyGaps, accessGap ? (labels ? labels.smGapInterior : "interior access terms") : null].filter(Boolean).join(", ")} — {labels ? labels.stillUnconfirmedSuffix : "Verify these items at the exact publisher listing."}</p> : null}
     <details className="mt-5 border-t border-line pt-4">
       <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-bold text-ink"><ShieldCheck size={15} />{labels ? labels.evidenceTimingSummary : "Evidence timing and source verification"}</summary>
-      <div className="pt-4"><p className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-ink-3"><GitCompareArrows size={14} />{labels ? labels.evidenceTimelineLabel : "Evidence timeline"}</p><ol className="mt-3 space-y-3">{events.map(([label, date]) => <li key={label} className="flex gap-3 text-xs"><span className="mt-1 h-2.5 w-2.5 rounded-full bg-ink" /><div><strong>{label}</strong><p className="mt-0.5 text-ink-3">{typeof date === "string" ? (locale === "en" ? displayDate(date, date) : formatLocaleDate(locale, date)) : (labels ? labels.notEstablished : "Not established")}</p></div></li>)}</ol>
+      <div className="pt-4"><p className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-ink-3"><GitCompareArrows size={14} />{labels ? labels.evidenceTimelineLabel : "Evidence timeline"}</p><ol className="mt-3 space-y-3">{events.map(([label, date]) => <li key={label} className="flex gap-3 text-xs"><span className="mt-1 h-2.5 w-2.5 rounded-full bg-ink" /><div><strong>{label}</strong><p className="mt-0.5 text-ink-3">{typeof date === "string" ? formatLocaleDate(locale, date) : (labels ? labels.notEstablished : "Not established")}</p></div></li>)}</ol>
       {exactSourceUrl ? <a href={exactSourceUrl} target="_blank" rel="noreferrer" className="mt-5 inline-flex items-center gap-2 text-xs font-bold text-ink underline hover:text-ink-2"><FileText size={14} />{labels ? labels.openExactPublisherRecord : "Open the exact publisher record"}</a> : <p className="mt-5 text-xs text-catch-ink">{labels ? labels.exactPublisherMissingWarning : "An exact publisher record has not been captured, so the sale terms need source verification."}</p>}</div>
     </details>
   </section>;

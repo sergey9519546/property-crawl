@@ -27,8 +27,8 @@ export function Reveal({
       className={className}
       initial={{ opacity: 0, y }}
       whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: "-80px" }}
-      transition={{ duration: 1, delay, ease: EASE_OUT }}
+      viewport={{ once: true, amount: 0.01, margin: "120px 0px 120px 0px" }}
+      transition={{ duration: 0.65, delay: Math.min(delay, 0.25), ease: EASE_OUT }}
     >
       {children}
     </MotionTag>

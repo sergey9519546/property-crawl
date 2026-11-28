@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Fact } from "@/components/evidence/fact";
 import { cn } from "@/lib/utils";
 import { useLocale } from "@/components/i18n/locale-provider";
+import { formatUsd } from "@/lib/i18n/translator";
+import type { Locale } from "@/lib/i18n/config";
 
 const US_STATES = [
   "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "DC", "FL",
@@ -195,9 +197,15 @@ type UnderwriteResponse = {
   };
 };
 
-function fmtUsd(value: number | null | undefined): string {
-  if (typeof value !== "number" || !Number.isFinite(value)) return "Not published";
-  return `$${Math.round(value).toLocaleString("en-US")}`;
+function fmtUsd(value: number | null | undefined, locale: Locale, notPublished: string): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) return notPublished;
+  return formatUsd(locale, value);
+}
+
+function formatRentSuffix(locale: Locale, bedrooms: number): string {
+  if (locale === "ru") return `/мес (${bedrooms} сп.)`;
+  if (locale === "hy") return `/ամիս (${bedrooms} ննջ.)`;
+  return `/mo (${bedrooms}BR)`;
 }
 
 function originBadge(
@@ -210,7 +218,7 @@ function originBadge(
 }
 
 export function AnyAddressUnderwriter() {
-  const { messages } = useLocale();
+  const { locale, messages } = useLocale();
   const uw = messages.underwritePage;
   const [address, setAddress] = React.useState("");
   const [state, setState] = React.useState("OH");
@@ -291,6 +299,8 @@ export function AnyAddressUnderwriter() {
   }
 
   const inputClass =
+    "mt-1.5 h-10 w-full rounded-control border border-line-strong bg-card px-3 py-2 text-sm text-ink placeholder:text-ink-3";
+  const textareaClass =
     "mt-1.5 w-full rounded-control border border-line-strong bg-card px-3 py-2 text-sm text-ink placeholder:text-ink-3";
 
   const citationsList = result
@@ -329,7 +339,7 @@ export function AnyAddressUnderwriter() {
         >
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-lead font-semibold text-ink">{uw.formTitle}</h2>
-            <Button type="button" variant="ghost" size="sm" onClick={handleReset} aria-label="Clear underwriting form">
+            <Button type="button" variant="ghost" size="sm" onClick={handleReset} aria-label={uw.clearBtn}>
               <RotateCcw className="size-3.5" />
               {uw.clearBtn}
             </Button>
@@ -352,7 +362,7 @@ export function AnyAddressUnderwriter() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 items-end gap-3">
               <div>
                 <label htmlFor="uw-state" className="text-xs font-semibold text-ink">
                   {uw.stateLabel} <span className="text-catch-ink">*</span>
@@ -387,7 +397,7 @@ export function AnyAddressUnderwriter() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 items-end gap-3">
               <div>
                 <label htmlFor="uw-county" className="text-xs font-semibold text-ink">
                   {uw.countyLabel}
@@ -422,7 +432,7 @@ export function AnyAddressUnderwriter() {
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-3 items-end gap-3">
               <div>
                 <label htmlFor="uw-bid" className="text-xs font-semibold text-ink">
                   {uw.openingBidLabel}
@@ -470,7 +480,7 @@ export function AnyAddressUnderwriter() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 items-end gap-3">
               <div>
                 <label htmlFor="uw-sale-date" className="text-xs font-semibold text-ink">
                   {uw.saleDateLabel}
@@ -543,7 +553,7 @@ export function AnyAddressUnderwriter() {
                 value={noticeText}
                 onChange={(e) => setNoticeText(e.target.value)}
                 placeholder={uw.noticePlaceholder}
-                className={cn(inputClass, "font-mono text-xs leading-relaxed")}
+                className={cn(textareaClass, "font-mono text-xs leading-relaxed")}
               />
             </div>
           </div>
@@ -572,7 +582,7 @@ export function AnyAddressUnderwriter() {
 
         <div className="space-y-6">
           {!result ? (
-            <section className="rounded-card border border-line bg-card p-6 shadow-card">
+            <section className="rounded-card border border-line bg-card p-6 shadow-card lg:sticky lg:top-24">
               <h2 className="text-lead font-semibold text-ink">{uw.emptyTitle}</h2>
               <p className="mt-2 text-meta text-ink-2">
                 {uw.emptyBody}
@@ -731,15 +741,15 @@ export function AnyAddressUnderwriter() {
                     {result.publicBenchmarks.hudSafmr ? (
                       <>
                         <p className="mt-1.5 font-mono text-title font-bold tabular-nums text-ink">
-                          {fmtUsd(result.publicBenchmarks.hudSafmr.fairMarketRent)}
-                          <span className="text-meta font-normal text-ink-3"> /mo ({result.publicBenchmarks.hudSafmr.bedrooms}BR)</span>
+                          {fmtUsd(result.publicBenchmarks.hudSafmr.fairMarketRent, locale, messages.common.notPublished)}
+                          <span className="text-meta font-normal text-ink-3"> {formatRentSuffix(locale, result.publicBenchmarks.hudSafmr.bedrooms)}</span>
                         </p>
                         <p className="mt-1 text-meta text-ink-2">
                           {result.publicBenchmarks.hudSafmr.hudAreaName} ({result.publicBenchmarks.hudSafmr.asOfFiscalYear})
                         </p>
                         <p className="mt-2 font-mono text-xs tabular-nums text-ink-3">
-                          {uw.safmrPaymentStd} {fmtUsd(result.publicBenchmarks.hudSafmr.paymentStandard90Pct)} –{" "}
-                          {fmtUsd(result.publicBenchmarks.hudSafmr.paymentStandard110Pct)}
+                          {uw.safmrPaymentStd} {fmtUsd(result.publicBenchmarks.hudSafmr.paymentStandard90Pct, locale, messages.common.notPublished)} –{" "}
+                          {fmtUsd(result.publicBenchmarks.hudSafmr.paymentStandard110Pct, locale, messages.common.notPublished)}
                         </p>
                       </>
                     ) : (
@@ -753,7 +763,7 @@ export function AnyAddressUnderwriter() {
                     <p className="text-label font-bold uppercase text-ink-3">{uw.dscrCeilingTitle}</p>
                     <p className="mt-1.5 font-mono text-title font-bold tabular-nums text-ink">
                       {result.publicBenchmarks.safmrRentFloor120Dscr !== null
-                        ? fmtUsd(result.publicBenchmarks.safmrRentFloor120Dscr)
+                        ? fmtUsd(result.publicBenchmarks.safmrRentFloor120Dscr, locale, messages.common.notPublished)
                         : uw.dscrUnavailable}
                     </p>
                     <p className="mt-1 text-meta text-ink-2">
@@ -772,8 +782,8 @@ export function AnyAddressUnderwriter() {
                       <>
                         <p className="mt-1.5 font-mono text-title font-bold tabular-nums text-ink">
                           {result.publicBenchmarks.assessorReading.marketComparison !== null
-                            ? fmtUsd(result.publicBenchmarks.assessorReading.marketComparison)
-                            : fmtUsd(result.publicBenchmarks.assessorReading.rawFigure)}
+                            ? fmtUsd(result.publicBenchmarks.assessorReading.marketComparison, locale, messages.common.notPublished)
+                            : fmtUsd(result.publicBenchmarks.assessorReading.rawFigure, locale, messages.common.notPublished)}
                         </p>
                         <p className="mt-1 text-meta text-ink-2">
                           {result.publicBenchmarks.assessorReading.countyName || result.publicBenchmarks.assessorReading.countyKey || uw.assessorUnenrolled}

@@ -498,7 +498,7 @@ export function MarketMap({ listings, onUnderwrite, returnTo }: MarketMapProps) 
           )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <div role="group" aria-label="Map layer" className="inline-flex rounded-control border border-line bg-card p-1 shadow-sm">
+          <div role="group" aria-label={t.mmLayerGroupAria} className="inline-flex rounded-control border border-line bg-card p-1 shadow-sm">
             <button
               type="button"
               aria-pressed={mapLayer === "street"}
@@ -507,7 +507,7 @@ export function MarketMap({ listings, onUnderwrite, returnTo }: MarketMapProps) 
                 mapLayer === "street" ? "bg-ink text-white" : "text-ink-2 hover:bg-paper hover:text-ink"
               }`}
             >
-              Street
+              {t.mmLayerStreet}
             </button>
             <button
               type="button"
@@ -517,7 +517,7 @@ export function MarketMap({ listings, onUnderwrite, returnTo }: MarketMapProps) 
                 mapLayer === "aerial" ? "bg-ink text-white" : "text-ink-2 hover:bg-paper hover:text-ink"
               }`}
             >
-              Aerial
+              {t.mmLayerAerial}
             </button>
           </div>
           <div className="flex items-center gap-1 rounded-control border border-line bg-card p-1 shadow-sm">

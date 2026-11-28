@@ -40,7 +40,7 @@ export default async function PrivacyPage() {
   return (
     <div className="min-h-screen bg-paper text-ink">
       <SiteHeader />
-      <main id="main-content" tabIndex={-1} className="mx-auto max-w-4xl px-6 py-16 text-ink outline-none sm:px-8">
+      <main id="main-content" tabIndex={-1} className="mx-auto max-w-4xl px-6 pb-16 pt-28 text-ink outline-none sm:px-8 sm:pt-32">
       <div className="mb-8">
         <Link
           href="/"
